@@ -1,0 +1,17 @@
+# @package _group_
+
+# https://wandb.ai
+
+wandb:
+  _target_: pytorch_lightning.loggers.wandb.WandbLogger
+  project: "findzebra-qa" # project id
+  name: null
+  save_dir: "."
+  offline: False # set True to store all logs only locally
+  id: null # pass correct id to resume experiment!
+  entity: null # set to name of your wandb team or just remove it
+  log_model: False
+  prefix: ""
+  job_type: "train"
+  group: "sandbox" # experiment group
+  tags: []

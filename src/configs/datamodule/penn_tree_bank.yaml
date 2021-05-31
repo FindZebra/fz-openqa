@@ -1,0 +1,9 @@
+_target_: src.datamodules.penn_tree_bank.PennTreeBank
+
+data_dir: ${data_dir} # data_dir is specified in config.yaml
+train_batch_size: 64
+eval_batch_size: 128
+num_workers: 2
+pin_memory: False
+max_length: 512
+use_subset: False

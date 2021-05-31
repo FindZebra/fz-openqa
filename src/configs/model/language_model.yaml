@@ -1,0 +1,9 @@
+defaults:
+  - evaluator: mle_seq.yaml
+
+_target_: src.models.language_model.LanguageModel
+
+hidden_size: 256
+lr: 0.001
+weight_decay: 0.0005
+max_length: ${datamodule.max_length}
