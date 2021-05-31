@@ -1,16 +1,15 @@
-from typing import *
-
 import torch
-from rich import print
 from datasets import load_dataset, DatasetDict
 from pytorch_lightning import LightningDataModule
+from rich import print
 from torch.utils.data import DataLoader, Dataset
 from transformers import PreTrainedTokenizerFast, BatchEncoding
+from typing import *
 
 
-class PennTreeBank(LightningDataModule):
+class BaseDatamodule(LightningDataModule):
     """
-    Example of LightningDataModule for the PennTreeBank dataset.
+    A base LightningDataModule for the PennTreeBank dataset as example.
     A DataModule implements 5 key methods:
         - prepare_data (things to do on 1 GPU/TPU, not on every GPU/TPU in distributed mode)
         - setup (things to do on every accelerator in distributed mode)
@@ -23,7 +22,10 @@ class PennTreeBank(LightningDataModule):
         https://pytorch-lightning.readthedocs.io/en/latest/extensions/datamodules.html
     """
 
-    dset_id = "ptb_text_only"
+    dset_id = "ptb_text_only"  # HuggingFace dataset id
+    text_fields = ["sentence"]  # text fields that should be tokenized
+    split_id = ["train", "validation", "test"]  # split names
+    pt_attributes = ["input_ids", "attention_mask"]  # attributes to be converted into Tensors
 
     def __init__(
             self,
@@ -49,14 +51,13 @@ class PennTreeBank(LightningDataModule):
 
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.pad_token_id = tokenizer.pad_token_id
 
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
 
     def encode(self, examples: Dict[str, Any]) -> BatchEncoding:
-        return self.tokenizer(examples["sentence"])
+        return self.tokenizer(*(examples[field] for field in self.text_fields))
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -73,7 +74,7 @@ class PennTreeBank(LightningDataModule):
                         self.dset_id, cache_dir=self.data_dir, split=f"{split}[:{n}]"
                     )
                     for split, n in zip(
-                    ["train", "validation", "test"], [1000, 100, 100]
+                    self.split_ids, [1000, 100, 100]
                 )
                 }
             )
@@ -85,12 +86,12 @@ class PennTreeBank(LightningDataModule):
         dsets = self.load_datasets()
         # tokenize and format as PyTorch tensors
         dsets = dsets.map(self.encode, batched=True)
-        dsets.set_format(type="torch", columns=["input_ids", "attention_mask"])
+        dsets.set_format(type="torch", columns=self.pt_attributes)
 
         # assign splits
-        self.data_train = dsets["train"]
-        self.data_val = dsets["validation"]
-        self.data_test = dsets["test"]
+        self.data_train = dsets[self.split_id[0]]
+        self.data_val = dsets[self.split_id[1]]
+        self.data_test = dsets[self.split_id[2]]
 
         self.pprint()
 
