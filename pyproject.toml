@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "nlp-lightning"
+name = "fz-openqa"
 version = "0.0.1"
-description = "A template for NLP project with Pytorch Lightning, Hydra and Transformers"
+description = "Medical Open Domain Quetion Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 packages = [
     { include = "src" },
@@ -20,7 +20,7 @@ datasets = "^1.6.2"
 hydra-colorlog = {version="^1.0.1", allow-prereleases = true}
 
 [tool.poetry.scripts]
-nlp-lightning = "src.cli:main"
+fzqa = "src.cli:main"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
