@@ -5,6 +5,7 @@ train_batch_size: 64
 eval_batch_size: 128
 num_workers: 2
 pin_memory: False
+persistent_workers: False
 max_length: 512
 use_subset: False
 update_cache: True

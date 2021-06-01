@@ -55,6 +55,7 @@ class BaseDataModule(LightningDataModule):
         eval_batch_size: int = 128,
         num_workers: int = 0,
         pin_memory: bool = False,
+        persistent_workers:bool=False,
         max_length: Optional[int] = 512,
         use_subset: bool = False,
         update_cache: bool = False,
@@ -68,6 +69,7 @@ class BaseDataModule(LightningDataModule):
         self.eval_batch_size = eval_batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.persistent_workers = persistent_workers
         self.use_subset = use_subset
         self.update_cache = update_cache
 
@@ -214,6 +216,7 @@ class BaseDataModule(LightningDataModule):
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
+            persistent_workers=self.persistent_workers,
             shuffle=True,
             collate_fn=self.collate_fn,
         )
@@ -224,6 +227,7 @@ class BaseDataModule(LightningDataModule):
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
+            persistent_workers=self.persistent_workers,
             shuffle=False,
             collate_fn=self.collate_fn,
         )
@@ -234,6 +238,7 @@ class BaseDataModule(LightningDataModule):
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
+            persistent_workers=self.persistent_workers,
             shuffle=False,
             collate_fn=self.collate_fn,
         )
