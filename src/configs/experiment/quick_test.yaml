@@ -29,6 +29,7 @@ datamodule:
   train_batch_size: 32
   max_length: 100
   use_subset: True
+  update_cache: True
 
 #logger:
 #  wandb:

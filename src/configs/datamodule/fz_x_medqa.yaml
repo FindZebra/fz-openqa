@@ -8,4 +8,4 @@ num_workers: 2
 pin_memory: False
 max_length: 512
 use_subset: False
-update_cache: False
+update_cache: True
