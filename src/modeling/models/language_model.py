@@ -12,7 +12,7 @@ from src.modeling.evaluators import Evaluator
 
 class LanguageModel(LightningModule):
     """
-    Example of LightningModule for LanguageModel classification.
+    Example of LightningModule for language modelling.
     A LightningModule organizes your PyTorch code into 5 sections:
         - Computations (init).
         - Train loop (training_step)

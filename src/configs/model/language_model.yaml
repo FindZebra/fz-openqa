@@ -1,5 +1,5 @@
 defaults:
-  - evaluator: mle_seq.yaml
+  - evaluator: seq_mle.yaml
 
 _target_: src.modeling.models.language_model.LanguageModel
 

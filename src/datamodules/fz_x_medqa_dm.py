@@ -9,7 +9,12 @@ from transformers import BatchEncoding, PreTrainedTokenizerFast
 from .base_dm import BaseDataModule, HgDataset
 from .datasets import fz_x_medqa
 
-class FZxMedQA(BaseDataModule):
+
+class FZxMedQADataModule(BaseDataModule):
+    """A PyTorch Lightning DataModule wrapping the FZxMedQA dataset."""
+    # TODO: Query and Document tokenizers with special tokens:
+    #  see https://github.com/stanford-futuredata/ColBERT/blob/master/colbert/modeling/tokenization/doc_tokenization.py
+
     dset_script_path_or_id = (
         fz_x_medqa.__file__
     )  # HuggingFace dataset id or local path to script
@@ -25,13 +30,31 @@ class FZxMedQA(BaseDataModule):
         super().__init__(**kwargs)
         self.filter_gold = filter_gold
 
-    def encode(
-            self,
-            examples: Dict[str, Any],
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            max_length: Optional[int],
+    def tokenize_examples(
+        self,
+        examples: Dict[str, List[Any]],
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        max_length: Optional[int],
     ) -> Union[Dict, BatchEncoding]:
+        """Tokenize a batch of examples and truncate if `max_length` is provided.
+        examples = {
+            attribute_name: list of attribute values
+        }
+        the output if of the form:
+        output = {
+            document.input_ids: [e.document.tokens for e in examples]
+            document.attention_mask: [e.document.mask for e in examples]
+            question.input_ids: [e.question.tokens for e in examples]
+            question.attention_mask: [e.question.mask for e in examples]
+            answer_0.input_ids: [e.answer_0.tokens for e in examples]
+            answer_0.attention_mask: [e.answer_0.mask for e in examples]
+            answer_1.input_ids: [e.answer_1.tokens for e in examples]
+            answer_1.attention_mask: [e.answer_1.mask for e in examples]
+            [...]
+        }
+
+        """
 
         tokenizer_kwargs = {
             "max_length": max_length,
@@ -66,8 +89,11 @@ class FZxMedQA(BaseDataModule):
         return output
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+        """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
         # tokenize and format as PyTorch tensors
-        fn = partial(self.encode, tokenizer=self.tokenizer, max_length=self.max_length)
+        fn = partial(
+            self.tokenize_examples, tokenizer=self.tokenizer, max_length=self.max_length
+        )
         dataset = dataset.map(fn, batched=True)
         # transform attributes to tensors
         attrs = ["input_ids", "attention_mask"]
@@ -84,10 +110,27 @@ class FZxMedQA(BaseDataModule):
         return dataset
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
-        # keep only gold passages
-        return dataset.filter(lambda x: x["is_gold"])
+        """Apply filtering operations"""
+        if self.filter_gold:
+            dataset = dataset.filter(lambda x: x["is_gold"])
+
+        return dataset
 
     def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+        """The function that is used to merge examples into a batch.
+        Concatenating sequences with different length requires padding them.
+        Returns a dictionary with attributes:
+        output = {
+                is_gold: tensor of shape [N,],
+                question.input_ids: tensor of shape [N, T],
+                question.attention_mask: tensor of shape [N, T],
+                document.input_ids: tensor of shape [N, T],
+                document.attention_mask: tensor of shape [N, T],
+                answer_choices.input_ids: tensor of shape [N, N_a, T]
+                answer_choices.attention_mask: tensor of shape [N, N_a, T]
+                answer_idx: tensor of shape [N,]
+        }
+        """
         attrs = ["input_ids", "attention_mask"]
         output = {}
 
@@ -127,20 +170,22 @@ class FZxMedQA(BaseDataModule):
         return output
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
-        decode_kwargs = {'skip_special_tokens': True}
+        """Decode and print one example from the batch"""
+        decode_kwargs = {"skip_special_tokens": True}
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
         print("* Question:")
+        print(self.tokenizer.decode(example["question.input_ids"], **decode_kwargs))
         print(console_width * "-")
-        print(self.tokenizer.decode(example['question.input_ids'], **decode_kwargs))
         print(f"* Document (is_gold={example['is_gold']})")
+        print(self.tokenizer.decode(example["document.input_ids"], **decode_kwargs))
         print(console_width * "-")
-        print(self.tokenizer.decode(example['document.input_ids'], **decode_kwargs))
         print("* Answer Choices:")
-        print(console_width * "-")
-        idx = example['answer_idx']
-        for i, an in enumerate(example['answer_choices.input_ids'], **decode_kwargs):
-            print(f"   - [{'x' if idx == i else ' '}] "
-                  f"{self.tokenizer.decode(an)}")
+        idx = example["answer_idx"]
+        for i, an in enumerate(example["answer_choices.input_ids"]):
+            print(
+                f"   - [{'x' if idx == i else ' '}] "
+                f"{self.tokenizer.decode(an, **decode_kwargs)}"
+            )
         print(console_width * "=")

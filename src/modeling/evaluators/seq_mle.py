@@ -4,10 +4,10 @@ from .abstract import *
 from torch.nn import functional as F
 
 
-class MaximumLikelihoodSeq(Evaluator):
+class SeqMaximumLikelihood(Evaluator):
     text_key = "question"
 
-    def forward(self, model: nn.Module, batch: Any, **kwargs: Any) -> Dict[str, Tensor]:
+    def forward(self, model: nn.Module, batch: Any, split: str, **kwargs: Any) -> Dict[str, Tensor]:
         assert isinstance(
             batch,
             (

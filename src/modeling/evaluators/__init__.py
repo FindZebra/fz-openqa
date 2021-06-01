@@ -1,2 +1,3 @@
 from .abstract import Evaluator
-from .maximum_likelihood_seq import MaximumLikelihoodSeq
+from .seq_mle import SeqMaximumLikelihood
+from .multiple_choice_qa_mle import MultipleChoiceQaMaximumLikelihood

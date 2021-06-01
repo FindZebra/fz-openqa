@@ -1,4 +1,4 @@
-_target_: src.datamodules.fz_x_medqa_dm.FZxMedQA
+_target_: src.datamodules.fz_x_medqa_dm.FZxMedQADataModule
 
 data_dir: ${data_dir} # data_dir is specified in config.yaml
 is_gold: True

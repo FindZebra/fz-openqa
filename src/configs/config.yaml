@@ -4,7 +4,7 @@ defaults:
   - trainer: minimal.yaml
   - datamodule: fz_x_medqa.yaml
   - tokenizer: pretrained.yaml
-  - model: language_model.yaml
+  - model: multiple_choice_qa_reader.yaml
   - callbacks: default.yaml # set this to null if you don't want to use callbacks
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)
 
@@ -14,7 +14,7 @@ defaults:
 
 
 # base pretrained model
-pretrained_model: openai-gpt
+pretrained_model: dmis-lab/biobert-base-cased-v1.1
 
 # path to original working directory
 # hydra hijacks working directory by changing it to the current log directory,
