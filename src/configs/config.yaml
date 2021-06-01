@@ -3,7 +3,7 @@
 defaults:
   - trainer: minimal.yaml
   - datamodule: fz_x_medqa.yaml
-  - tokenizer: char.yaml
+  - tokenizer: pretrained.yaml
   - model: language_model.yaml
   - callbacks: default.yaml # set this to null if you don't want to use callbacks
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)

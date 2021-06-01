@@ -1,18 +1,23 @@
 from typing import *
 
+import datasets
 import torch
 from datasets import load_dataset, DatasetDict
-from rich import print
 from transformers import BatchEncoding
 
-from .base import BaseDatamodule
+from .base import BaseDataModule, HgDataset
+from .datasets import fz_x_medqa
 
 _SCRIPT_PATH = 'datasets/fz_x_medqa.py'
 
 
-class FZxMedQA(BaseDatamodule):
-    dset_id = "fz_x_medqa"  # HuggingFace dataset id (not used for now)
-    split_ids = ["train", "test"]  # split names
+class FZxMedQA(BaseDataModule):
+    dset_script_path_or_id = fz_x_medqa.__file__  # HuggingFace dataset id or local path to script
+    split_ids = [datasets.Split.TRAIN, datasets.Split.VALIDATION, datasets.Split.TEST]  # split names
+    text_fields = ["question",
+                   "answer",
+                   "document"]
+    pt_attributes = None # to be generated
 
     def __init__(self,
                  *,
@@ -46,56 +51,40 @@ class FZxMedQA(BaseDatamodule):
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        self.load_datasets()
+        self.load_dataset()
 
-    def load_datasets(self, ) -> DatasetDict:
-        # TODO: subset
-
-        return DatasetDict(
-            {
-                split: load_dataset(
-                    self.dset_id, cache_dir=self.data_dir, split=f"{slic}"
+    def load_dataset(self) -> DatasetDict:
+        if self.use_subset:
+            return DatasetDict(
+                {
+                    split: load_dataset(
+                        self.dset_script_path_or_id, cache_dir=self.data_dir, split=f"{split}[:{n}]"
+                    )
+                    for split, n in zip(
+                    self.split_ids, [1000, 100, 100]
                 )
-                for split, slic in zip(
-                self.split_ids, ["train[:50%]", "train[50%:]"]
+                }
             )
-            }
-        )
+        else:
+            return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
 
-    def setup(self, stage: Optional[str] = None):
-        """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        dsets = self.load_datasets()
-
-        print(100 * "~")
-        print(dsets['train'])
-
+    def preprocess(self, dataset: HgDataset) -> HgDataset:
         # keep only gold passages
-        dsets = dsets.filter(lambda x: x['is_gold'])
-
+        dataset = dataset.filter(lambda x: x['is_gold'])
         # tokenize and format as PyTorch tensors
-        for k in dsets.keys():
-            dsets[k] = dsets[k].map(self.encode, batched=True)
-
+        dataset = dataset.map(self.encode, batched=True)
+        # transform attributes to tensors
         attrs = ['input_ids', 'attention_mask']
         columns = ['question', 'document', 'answer_']
-        all_columns = [c for c in dsets.column_names['train'] if
+        all_columns = [c for c in dataset.column_names['train'] if
                        (any(a in c for a in attrs) and any(a in c for a in columns))]
         all_columns += ['answer_idx', 'is_gold']
-        for k in dsets.keys():
-            dsets[k].set_format(type="torch", columns=all_columns, output_all_columns=False)
-
-        # assign splits
-        self.data_train = dsets[self.split_ids[0]]
-        self.data_val = dsets[self.split_ids[1]]
-        self.data_test = dsets[self.split_ids[1]]
-
-        self.pprint()
+        dataset.set_format(type="torch", columns=all_columns, output_all_columns=False)
+        return dataset
 
     def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         attrs = ['input_ids', 'attention_mask']
         output = {}
-        print(100 * "~")
-        print(batch[0].keys())
 
         # answer_idx & is_gold attributes
         output['answer_idx'] = torch.tensor([b['answer_idx'] for b in batch])
@@ -113,8 +102,7 @@ class FZxMedQA(BaseDatamodule):
         ans_encoding = self.tokenizer.pad(
             {attr: [b[f"{ans}.{attr}"] for ans in ans_cols for b in batch] for attr in attrs})
         for k, v in ans_encoding.items():
-            output[f"answer_choices.{k}"] = v.view(len(ans_cols), len(output['answer_idx']), -1).permute(1, 0,
-                                                                                                         2).contiguous()
+            n_pts, n_ans = len(ans_cols), len(output['answer_idx'])
+            output[f"answer_choices.{k}"] = v.view(n_pts, n_ans, -1).permute(1, 0, 2).contiguous()
 
         return output
-    
