@@ -6,11 +6,11 @@
 defaults:
   - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
   - override /model: language_model.yaml
-  - override /datamodule: penn_tree_bank.yaml
+  - override /datamodule: fz_x_medqa.yaml
   - override /callbacks:
       - default
       - sample_lm
-  - override /logger: wandb.yaml
+  - override /logger: null # wandb.yaml
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
@@ -30,6 +30,6 @@ datamodule:
   max_length: 100
   use_subset: True
 
-logger:
-  wandb:
-    group: quick_test
+#logger:
+#  wandb:
+#    group: quick_test
