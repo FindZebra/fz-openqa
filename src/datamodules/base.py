@@ -112,7 +112,7 @@ class BaseDatamodule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=True,
-            collate_fn=self.tokenizer.pad,
+            collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
@@ -122,7 +122,7 @@ class BaseDatamodule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
-            collate_fn=self.tokenizer.pad,
+            collate_fn=self.collate_fn,
         )
 
     def test_dataloader(self):
@@ -132,5 +132,9 @@ class BaseDatamodule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
-            collate_fn=self.tokenizer.pad,
+            collate_fn=self.collate_fn,
         )
+
+
+    def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+        return self.tokenizer.pad(batch)

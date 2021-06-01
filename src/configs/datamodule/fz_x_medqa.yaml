@@ -1,6 +1,7 @@
-_target_: src.datamodules.base.BaseDataModule
+_target_: src.datamodules.fz_x_medqa.FZxMedQA
 
 data_dir: ${data_dir} # data_dir is specified in config.yaml
+is_gold: True
 train_batch_size: 64
 eval_batch_size: 128
 num_workers: 2

@@ -60,7 +60,7 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
             name=datasets.Split.TRAIN,
             gen_kwargs={
                 "filepath": downloaded_file,
-                "split": "all"
+                "split": "train"
             },
         ), ]
 

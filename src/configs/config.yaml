@@ -2,7 +2,7 @@
 
 defaults:
   - trainer: minimal.yaml
-  - datamodule: penn_tree_bank.yaml
+  - datamodule: fz_x_medqa.yaml
   - tokenizer: char.yaml
   - model: language_model.yaml
   - callbacks: default.yaml # set this to null if you don't want to use callbacks
