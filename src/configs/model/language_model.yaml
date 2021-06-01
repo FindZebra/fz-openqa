@@ -1,7 +1,7 @@
 defaults:
   - evaluator: mle_seq.yaml
 
-_target_: src.models.language_model.LanguageModel
+_target_: src.modeling.models.language_model.LanguageModel
 
 hidden_size: 256
 lr: 0.001
