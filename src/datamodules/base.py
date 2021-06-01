@@ -30,24 +30,33 @@ class BaseDataModule(LightningDataModule):
         https://pytorch-lightning.readthedocs.io/en/latest/extensions/datamodules.html
     """
 
-    dset_script_path_or_id = "ptb_text_only"  # HuggingFace dataset id or local path to script
+    dset_script_path_or_id = (
+        "ptb_text_only"  # HuggingFace dataset id or local path to script
+    )
     text_fields = ["sentence"]  # text fields that should be tokenized
-    split_ids = [datasets.Split.TRAIN, datasets.Split.VALIDATION, datasets.Split.TEST]  # split names
-    pt_attributes = ["input_ids", "attention_mask"]  # attributes to be converted into Tensors
+    split_ids = [
+        datasets.Split.TRAIN,
+        datasets.Split.VALIDATION,
+        datasets.Split.TEST,
+    ]  # split names
+    pt_attributes = [
+        "input_ids",
+        "attention_mask",
+    ]  # attributes to be converted into Tensors
 
     def __init__(
-            self,
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            data_dir: str = "data/",
-            train_batch_size: int = 64,
-            eval_batch_size: int = 128,
-            num_workers: int = 0,
-            pin_memory: bool = False,
-            max_length: Optional[int] = 512,
-            use_subset: bool = False,
-            update_cache: bool = False,
-            **kwargs,
+        self,
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        data_dir: str = "data/",
+        train_batch_size: int = 64,
+        eval_batch_size: int = 128,
+        num_workers: int = 0,
+        pin_memory: bool = False,
+        max_length: Optional[int] = 512,
+        use_subset: bool = False,
+        update_cache: bool = False,
+        **kwargs,
     ):
         super().__init__()
 
@@ -71,16 +80,16 @@ class BaseDataModule(LightningDataModule):
     def generate_id(self, _locals: Dict, exclude: Optional[List[str]] = None) -> str:
         exclude = exclude or []
         _exclude = [
-                       'train_batch_size',
-                       'eval_batch_size',
-                       'num_workers',
-                       'pin_memory',
-                       'data_dir',
-                       '__class__',
-                       'no_cache'
-                   ] + exclude
+            "train_batch_size",
+            "eval_batch_size",
+            "num_workers",
+            "pin_memory",
+            "data_dir",
+            "__class__",
+            "no_cache",
+        ] + exclude
         # flatten kwargs
-        for k, v in _locals.pop('kwargs').items():
+        for k, v in _locals.pop("kwargs").items():
             _locals[k] = v
 
         repr = ""
@@ -90,15 +99,18 @@ class BaseDataModule(LightningDataModule):
 
         return hashlib.sha224(repr.encode("utf-8")).hexdigest()
 
-    def encode(self,
-               examples: Dict[str, Any],
-               *,
-               tokenizer: PreTrainedTokenizerFast,
-               max_length: Optional[int]
-               ) -> Union[Dict, BatchEncoding]:
-        return tokenizer(*(examples[field] for field in self.text_fields),
-                         max_length=max_length,
-                         truncation=max_length is not None)
+    def encode(
+        self,
+        examples: Dict[str, Any],
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        max_length: Optional[int],
+    ) -> Union[Dict, BatchEncoding]:
+        return tokenizer(
+            *(examples[field] for field in self.text_fields),
+            max_length=max_length,
+            truncation=max_length is not None,
+        )
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -134,7 +146,11 @@ class BaseDataModule(LightningDataModule):
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         if isinstance(dataset, DatasetDict):
             return DatasetDict(
-                {k: dset.select(range(n)) for n, (k, dset) in zip([100, 10, 10], self.dataset.items())})
+                {
+                    k: dset.select(range(n))
+                    for n, (k, dset) in zip([100, 10, 10], self.dataset.items())
+                }
+            )
         elif isinstance(dataset, Dataset):
             return dataset.select(range(100))
         else:
@@ -161,16 +177,18 @@ class BaseDataModule(LightningDataModule):
         return dataset
 
     def get_cache_path(self) -> Path:
-        # TODO: solve issues that will arise due to versioning
+        # TODO: solve issues that will arise due to versioning. Solve by avoiding using custom save_to_disk method.
         fn = f"{type(self).__name__}-{self.dset_script_path_or_id.replace('/', '_')}-{self.dset_id}"
-        dir = os.path.join(self.data_dir, 'cache')
+        dir = os.path.join(self.data_dir, "cache")
         return Path(dir) / fn
 
     def pprint(self):
-        print(f">> Dataset: [use_subset={self.use_subset}]: "
-              f"{self.data_train.num_rows} train. rows, "
-              f"{self.data_val.num_rows} val. rows, "
-              f"{self.data_test.num_rows} test rows ")
+        print(
+            f">> Dataset: [use_subset={self.use_subset}]: "
+            f"{self.data_train.num_rows} train. rows, "
+            f"{self.data_val.num_rows} val. rows, "
+            f"{self.data_test.num_rows} test rows "
+        )
         print(f">> Features:")
         l = max(map(len, self.data_train.features)) + 1
         for n, f in self.data_train.features.items():

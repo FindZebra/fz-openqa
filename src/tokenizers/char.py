@@ -5,12 +5,13 @@ from tokenizers.models import BPE
 from tokenizers.normalizers import BertNormalizer
 from transformers import PreTrainedTokenizerFast
 
-SPECIAL_TOKENS = {"pad_token": "[PAD]",
-                  "unk_token": "[UNK]",
-                  "sep_token": "[SEP]",
-                  "mask_token": "[MASK]",
-                  "cls_token": "[cls_token]"
-                  }
+SPECIAL_TOKENS = {
+    "pad_token": "[PAD]",
+    "unk_token": "[UNK]",
+    "sep_token": "[SEP]",
+    "mask_token": "[MASK]",
+    "cls_token": "[cls_token]",
+}
 
 
 def init_char_tokenizer() -> PreTrainedTokenizerFast:

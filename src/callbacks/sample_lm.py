@@ -3,6 +3,7 @@ from rich import print
 from transformers import PreTrainedTokenizerFast
 import shutil
 
+
 class SampleLanguageModel(Callback):
     def on_epoch_start(
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"

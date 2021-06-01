@@ -24,15 +24,15 @@ class LanguageModel(LightningModule):
     """
 
     def __init__(
-            self,
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            evaluator: Evaluator,
-            hidden_size: int = 256,
-            max_length: int = 1000,
-            lr: float = 0.001,
-            weight_decay: float = 0.0005,
-            **kwargs
+        self,
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        evaluator: Evaluator,
+        hidden_size: int = 256,
+        max_length: int = 1000,
+        lr: float = 0.001,
+        weight_decay: float = 0.0005,
+        **kwargs,
     ):
         super().__init__()
 
@@ -68,7 +68,7 @@ class LanguageModel(LightningModule):
         return torch.cat([_zero, batch[:, :-1]], dim=1)
 
     def generate(
-            self, n_samples: int = 10, max_length: Optional[int] = None
+        self, n_samples: int = 10, max_length: Optional[int] = None
     ) -> torch.LongTensor:
         """Samplethe generative model autoregressively"""
         max_length = max_length or self.hparams.max_length
@@ -87,7 +87,7 @@ class LanguageModel(LightningModule):
             input_ids = torch.cat([input_ids, sample_t[:, None]], dim=1)
             t += 1
             stop_condition = (
-                    t > max_length or (sample_t != self.pad_token_id).float().sum() == 0
+                t > max_length or (sample_t != self.pad_token_id).float().sum() == 0
             )
 
         return input_ids
