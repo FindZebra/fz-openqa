@@ -6,7 +6,7 @@ import datasets
 import torch
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
-from .base import BaseDataModule, HgDataset
+from .base_dm import BaseDataModule, HgDataset
 from .datasets import fz_x_medqa
 
 class FZxMedQA(BaseDataModule):

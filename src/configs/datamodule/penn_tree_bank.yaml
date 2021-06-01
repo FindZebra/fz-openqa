@@ -1,4 +1,4 @@
-_target_: src.datamodules.base.BaseDataModule
+_target_: src.datamodules.base_dm.BaseDataModule
 
 data_dir: ${data_dir} # data_dir is specified in config.yaml
 train_batch_size: 64
