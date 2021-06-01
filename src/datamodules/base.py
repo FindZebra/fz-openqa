@@ -1,5 +1,6 @@
 import hashlib
 import os
+from functools import partial
 from pathlib import Path
 from typing import *
 
@@ -62,6 +63,7 @@ class BaseDataModule(LightningDataModule):
         self.max_length = max_length
         self.tokenizer = tokenizer
 
+        self.dataset: Optional[HgDataset] = None
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
@@ -88,36 +90,33 @@ class BaseDataModule(LightningDataModule):
 
         return hashlib.sha224(repr.encode("utf-8")).hexdigest()
 
-    def encode(self, examples: Dict[str, Any]) -> BatchEncoding:
-        return self.tokenizer(*(examples[field] for field in self.text_fields))
+    def encode(self,
+               examples: Dict[str, Any],
+               *,
+               tokenizer: PreTrainedTokenizerFast,
+               max_length: Optional[int]
+               ) -> Union[Dict, BatchEncoding]:
+        return tokenizer(*(examples[field] for field in self.text_fields),
+                         max_length=max_length,
+                         truncation=max_length is not None)
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
         self.load_dataset()
 
-    def load_dataset(
-            self,
-    ) -> DatasetDict:
-        if self.use_subset:
-            return DatasetDict(
-                {
-                    split: load_dataset(
-                        self.dset_script_path_or_id, cache_dir=self.data_dir, split=f"{split}[:{n}]"
-                    )
-                    for split, n in zip(
-                    self.split_ids, [1000, 100, 100]
-                )
-                }
-            )
-        else:
-            return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
+    def load_dataset(self) -> DatasetDict:
+        return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
         if self.update_cache or not self.get_cache_path().exists():
-            self.dataset = self.load_dataset()
-            self.dataset = self.preprocess(self.dataset)
+            self.dataset: HgDataset = self.load_dataset()
+            self.dataset = self.preprocess_dataset(self.dataset)
+            if self.use_subset:
+                self.dataset = self.take_subset(self.dataset)
+
+            self.dataset = self.preprocess_dataset(self.dataset)
 
             # save to disk
             self.save_to_disk()
@@ -132,18 +131,33 @@ class BaseDataModule(LightningDataModule):
 
         self.pprint()
 
+    def take_subset(self, dataset: HgDataset) -> HgDataset:
+        if isinstance(dataset, DatasetDict):
+            return DatasetDict(
+                {k: dset.select(range(n)) for n, (k, dset) in zip([100, 10, 10], self.dataset.items())})
+        elif isinstance(dataset, Dataset):
+            return dataset.select(range(100))
+        else:
+            raise NotImplementedError
+
     def load_from_disk(self):
         self.dataset = DatasetDict().load_from_disk(str(self.get_cache_path()))
 
     def save_to_disk(self):
+        # todo: save to disk should be done automatically through the orriginal Dataset object. Nonetheless, the encode function appears not to be serializable, hence the fingerprint cannot be computed todo: and the encode function cannot be pickled. check if the future version solve the issue and remove this manual save/load operrations"""
         cache_path = self.get_cache_path()
         cache_path.parent.mkdir(exist_ok=True)
         self.dataset.save_to_disk(str(cache_path))
 
-    def preprocess(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         # tokenize and format as PyTorch tensors
-        dataset = dataset.map(self.encode, batched=True)
+
+        fn = partial(self.encode, tokenizer=self.tokenizer, max_length=self.max_length)
+        dataset = dataset.map(fn, batched=True)
         dataset.set_format(type="torch", columns=self.pt_attributes)
+        return dataset
+
+    def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         return dataset
 
     def get_cache_path(self) -> Path:
