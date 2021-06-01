@@ -1,15 +1,13 @@
+import shutil
+from functools import partial
 from typing import *
 
 import datasets
 import torch
-from datasets import load_dataset, DatasetDict
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 from .base import BaseDataModule, HgDataset
 from .datasets import fz_x_medqa
-
-_SCRIPT_PATH = "datasets/fz_x_medqa.py"
-
 
 class FZxMedQA(BaseDataModule):
     dset_script_path_or_id = (
@@ -28,11 +26,11 @@ class FZxMedQA(BaseDataModule):
         self.filter_gold = filter_gold
 
     def encode(
-        self,
-        examples: Dict[str, Any],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
+            self,
+            examples: Dict[str, Any],
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            max_length: Optional[int],
     ) -> Union[Dict, BatchEncoding]:
 
         tokenizer_kwargs = {
@@ -67,30 +65,10 @@ class FZxMedQA(BaseDataModule):
 
         return output
 
-    def prepare_data(self):
-        """Download data if needed. This method is called only from a single GPU.
-        Do not use it to assign state (self.x = y)."""
-        self.load_dataset()
-
-    def load_dataset(self) -> DatasetDict:
-        if self.use_subset:
-            return DatasetDict(
-                {
-                    split: load_dataset(
-                        self.dset_script_path_or_id,
-                        cache_dir=self.data_dir,
-                        split=f"{split}[:{n}%]",
-                    )
-                    for split, n in zip(self.split_ids, [10, 10, 10])
-                }
-            )
-        else:
-            return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
-
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
-        dataset = self.filter_dataset(dataset)
         # tokenize and format as PyTorch tensors
-        dataset = dataset.map(self.encode, batched=True)
+        fn = partial(self.encode, tokenizer=self.tokenizer, max_length=self.max_length)
+        dataset = dataset.map(fn, batched=True)
         # transform attributes to tensors
         attrs = ["input_ids", "attention_mask"]
         columns = ["question", "document", "answer_"]
@@ -147,3 +125,22 @@ class FZxMedQA(BaseDataModule):
             )
 
         return output
+
+    def display_one_sample(self, example: Dict[str, torch.Tensor]):
+        decode_kwargs = {'skip_special_tokens': True}
+        console_width, _ = shutil.get_terminal_size()
+        print("=== Sample ===")
+        print(console_width * "-")
+        print("* Question:")
+        print(console_width * "-")
+        print(self.tokenizer.decode(example['question.input_ids'], **decode_kwargs))
+        print(f"* Document (is_gold={example['is_gold']})")
+        print(console_width * "-")
+        print(self.tokenizer.decode(example['document.input_ids'], **decode_kwargs))
+        print("* Answer Choices:")
+        print(console_width * "-")
+        idx = example['answer_idx']
+        for i, an in enumerate(example['answer_choices.input_ids'], **decode_kwargs):
+            print(f"   - [{'x' if idx == i else ' '}] "
+                  f"{self.tokenizer.decode(an)}")
+        print(console_width * "=")

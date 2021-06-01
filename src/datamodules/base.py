@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 from functools import partial
 from pathlib import Path
 from typing import *
@@ -8,6 +9,7 @@ import datasets
 import torch
 from datasets import load_dataset, DatasetDict
 from pytorch_lightning import LightningDataModule
+from pytorch_lightning.utilities import rank_zero_only
 from rich import print
 from torch.utils.data import DataLoader, Dataset
 from transformers import PreTrainedTokenizerFast, BatchEncoding
@@ -124,7 +126,7 @@ class BaseDataModule(LightningDataModule):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
         if self.update_cache or not self.get_cache_path().exists():
             self.dataset: HgDataset = self.load_dataset()
-            self.dataset = self.preprocess_dataset(self.dataset)
+            self.dataset = self.filter_dataset(self.dataset)
             if self.use_subset:
                 self.dataset = self.take_subset(self.dataset)
 
@@ -142,6 +144,9 @@ class BaseDataModule(LightningDataModule):
         self.data_test = self.dataset[self.split_ids[2]]
 
         self.pprint()
+
+        self.display_sample()
+
 
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         if isinstance(dataset, DatasetDict):
@@ -226,3 +231,22 @@ class BaseDataModule(LightningDataModule):
 
     def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         return self.tokenizer.pad(batch)
+
+    @rank_zero_only
+    def display_sample(self):
+        batch = next(iter(self.train_dataloader()))
+        console_width, _ = shutil.get_terminal_size()
+        print(console_width * "=")
+        print("=== Training Batch ===")
+        print(console_width * "-")
+        for k,v in batch.items():
+            print(f"   - {k}: {v.shape} <{v.dtype}>")
+        print(console_width * "=")
+        self.display_one_sample({k : v[0] for k,v in batch.items()})
+
+    def display_one_sample(self, example: Dict[str, torch.Tensor]):
+        console_width, _ = shutil.get_terminal_size()
+        print("=== Sample ===")
+        print(console_width * "-")
+        print(self.tokenizer.decode(example['input_ids'], skip_special_tokens=True))
+        print(console_width * "=")
