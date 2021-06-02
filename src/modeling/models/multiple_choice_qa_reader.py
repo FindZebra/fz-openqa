@@ -54,6 +54,7 @@ class MultipleChoiceQAReader(LightningModule):
 
         # pretrained model
         self.bert: BertPreTrainedModel = AutoModel.from_pretrained(bert_id, cache_dir=cache_dir)
+        self.bert.resize_token_embeddings(len(tokenizer)) # necessary because of the added special tokens
 
         # projection heads
         self.e_proj = nn.Linear(self.bert.config.hidden_size, hidden_size)

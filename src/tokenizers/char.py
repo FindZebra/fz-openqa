@@ -4,14 +4,18 @@ from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.normalizers import BertNormalizer
 from transformers import PreTrainedTokenizerFast
+from .static import ADDITIONAL_SPECIAL_TOKENS
 
 SPECIAL_TOKENS = {
     "pad_token": "[PAD]",
     "unk_token": "[UNK]",
     "sep_token": "[SEP]",
     "mask_token": "[MASK]",
-    "cls_token": "[cls_token]",
+    "cls_token": "[CLS]",
+    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS
 }
+
+
 
 
 def init_char_tokenizer() -> PreTrainedTokenizerFast:
@@ -34,5 +38,6 @@ def init_char_tokenizer() -> PreTrainedTokenizerFast:
 
     # add the special tokens
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
+    tokenizer.sanitize_special_tokens()
 
     return tokenizer
