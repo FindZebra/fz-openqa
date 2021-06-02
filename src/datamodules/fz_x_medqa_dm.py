@@ -6,8 +6,19 @@ import datasets
 import torch
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
+from src.tokenizers.static import QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
 from .base_dm import BaseDataModule, HgDataset
 from .datasets import fz_x_medqa
+
+
+def add_spec_token(special_token: str, text: str, ):
+    """
+    This functions append a special token to a text such that output = special_token+text.
+    The pretrained tokenizer with registered special tokens will encode the output as:
+    [CLS][SPEC][ text tokens ][SEP]
+    """
+    assert special_token in [QUERY_TOKEN, ANS_TOKEN, DOC_TOKEN]
+    return f"{special_token}{text}"
 
 
 class FZxMedQADataModule(BaseDataModule):
@@ -31,11 +42,11 @@ class FZxMedQADataModule(BaseDataModule):
         self.filter_gold = filter_gold
 
     def tokenize_examples(
-        self,
-        examples: Dict[str, List[Any]],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
+            self,
+            examples: Dict[str, List[Any]],
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            max_length: Optional[int],
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         examples = {
@@ -55,16 +66,18 @@ class FZxMedQADataModule(BaseDataModule):
         }
 
         """
-
         tokenizer_kwargs = {
             "max_length": max_length,
             "return_token_type_ids": False,
             "add_special_tokens": True,
             "truncation": max_length is not None,
         }
+
         # process questions and documents
-        q_encodings = tokenizer(examples["question"], **tokenizer_kwargs)
-        d_encodings = tokenizer(examples["document"], **tokenizer_kwargs)
+        questions = list(map(partial(add_spec_token, QUERY_TOKEN), examples['question']))
+        documents = list(map(partial(add_spec_token, DOC_TOKEN), examples['document']))
+        q_encodings = tokenizer(questions, **tokenizer_kwargs)
+        d_encodings = tokenizer(documents, **tokenizer_kwargs)
         output = {
             "question.text": examples["question"],
             "document.text": examples["document"],
@@ -74,10 +87,11 @@ class FZxMedQADataModule(BaseDataModule):
                 output[f"{prefix}.{k}"] = v
 
         # process answers
+        add_answ_token = partial(add_spec_token, ANS_TOKEN)
         n_choices = len(examples["answer_choices"][0])
         answer_encodings = [
             tokenizer(
-                [ans[n] for ans in examples["answer_choices"]], **tokenizer_kwargs
+                [add_answ_token(ans[n]) for ans in examples["answer_choices"]], **tokenizer_kwargs
             )
             for n in range(n_choices)
         ]
