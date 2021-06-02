@@ -4,6 +4,7 @@ from transformers import PreTrainedTokenizerFast, AutoModel, BertPreTrainedModel
 
 from src.modeling.evaluators import Evaluator
 from .base import BaseModel
+from src.modeling.similarities import Similarity
 
 
 class QaRetriever(BaseModel):
