@@ -68,7 +68,7 @@ def log_hyperparameters(
         - number of trainable model parameters
     """
 
-    hparams = {}
+    hparams = {k:v for k,v in config.items() if isinstance(v, (str, int,))}
 
     # choose which parts of hydra config will be saved to loggers
     hparams["trainer"] = config["trainer"]
