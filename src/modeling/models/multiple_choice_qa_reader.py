@@ -25,7 +25,8 @@ class MultipleChoiceQAReader(LightningModule):
         'answer_choices.input_ids',
         'answer_choices.attention_mask',
     ]
-    _prog_bar_metrics = ['loss', 'accuracy'] # metrics that will be display in the progress bar
+    _prog_bar_metrics = ['loss', 'accuracy']  # metrics that will be display in the progress bar
+
     def __init__(
             self,
             *,
@@ -118,10 +119,6 @@ class MultipleChoiceQAReader(LightningModule):
         # remember to always return loss from training_step, or else backpropagation will fail!
         return data
 
-    def training_epoch_end(self, outputs: List[Any]):
-        # `outputs` is a list of dicts returned from `training_step()`
-        pass
-
     def validation_step(self, batch: Any, batch_idx: int):
         data = self.evaluator(self.forward, batch, split=Split.VALIDATION)
 
@@ -130,9 +127,6 @@ class MultipleChoiceQAReader(LightningModule):
             self.log(f"val/{k}", v, on_step=False, on_epoch=True, prog_bar=k in self._prog_bar_metrics)
 
         return data  # potentially add the other metrics here
-
-    def validation_epoch_end(self, outputs: List[Any]):
-        pass
 
     def test_step(self, batch: Any, batch_idx: int):
         data = self.evaluator(self.forward, batch, split=Split.TEST)
@@ -143,8 +137,24 @@ class MultipleChoiceQAReader(LightningModule):
 
         return data  # potentially add the other metrics here
 
+    def training_epoch_end(self, outputs: List[Any]):
+        # `outputs` is a list of dicts returned from `training_step()`
+        metrics = self.evaluator.compute_metrics(split=Split.TRAIN)
+        for k, v in metrics.items():
+            self.log(k, v, prog_bar=k in self._prog_bar_metrics)
+        self.evaluator.reset_metrics(split=Split.TRAIN)
+
+    def validation_epoch_end(self, outputs: List[Any]):
+        metrics = self.evaluator.compute_metrics(split=Split.VALIDATION)
+        for k, v in metrics.items():
+            self.log(k, v, prog_bar=k in self._prog_bar_metrics)
+        self.evaluator.reset_metrics(split=Split.VALIDATION)
+
     def test_epoch_end(self, outputs: List[Any]):
-        pass
+        metrics = self.evaluator.compute_metrics(split=Split.TEST)
+        for k, v in metrics.items():
+            self.log(k, v, prog_bar=k in self._prog_bar_metrics)
+        self.evaluator.reset_metrics(split=Split.TEST)
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.

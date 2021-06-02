@@ -1,8 +1,8 @@
-import collections
-
 from datasets import Split
 from torch.nn import functional as F
-from torchmetrics.classification.accuracy import Accuracy
+from torchmetrics import Metric
+from torchmetrics import MetricCollection
+from torchmetrics.classification import Accuracy, F1, Recall, Precision
 
 from .abstract import *
 
@@ -22,12 +22,21 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         'answer_idx',
     ]
 
-    def __init__(self):
+    def __init__(self, n_choices: int):
         super().__init__()
-        self.accuracy = nn.ModuleDict(
-            {f"_{k}": Accuracy() for k in [Split.TRAIN,
-                                           Split.VALIDATION,
-                                           Split.TEST]})
+        metric_kwargs = {'num_classes': n_choices, 'compute_on_step': False}
+        gen_metric = lambda split: MetricCollection([Accuracy(),
+                                                     F1(**metric_kwargs),
+                                                     Recall(**metric_kwargs),
+                                                     Precision(**metric_kwargs)]
+                                                    , prefix=f"{split}/")
+        self.metrics = nn.ModuleDict(
+            {f"_{split}": gen_metric(split) for split in [Split.TRAIN,
+                                                          Split.VALIDATION,
+                                                          Split.TEST]})
+
+    def get_metric(self, split: str) -> Metric:
+        return self.metrics[f"_{split}"]
 
     def forward(self, model: nn.Module, batch: Any, split: str, **kwargs: Any) -> Dict[str, Tensor]:
         self.check_batch_type(batch)
@@ -36,19 +45,29 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         logits: Tensor = model(batch)
         targets: Tensor = batch['answer_idx']
         loss = F.cross_entropy(logits, targets, reduce="mean")
-        acc = self.accuracy[f"_{split}"](logits.argmax(-1), targets)
-        return {'loss': loss, 'accuracy': acc}
+        self.get_metric(split).update(logits.argmax(-1), targets)
+        return {'loss': loss}
 
     def check_feature_names(self, batch):
         for f in self._required_eval_feature_names:
             assert f in batch.keys(), f"The feature {f} is required for evaluation."
 
-    def check_batch_type(self, batch):
-        assert isinstance(
-            batch,
-            (
-                dict,
-                collections.OrderedDict,
-                collections.UserDict,
-            ),
-        )
+    def reset_metrics(self, split: Optional[str] = None) -> None:
+        """reset the metrics"""
+        if split is None:
+            map(lambda m: m.reset(), self.metrics.values())
+        else:
+            self.get_metric(split).reset()
+
+    def compute_metrics(self, split: Optional[str] = None) -> Dict[str, Tensor]:
+        """Compute the metrics"""
+        if split is not None:
+            metrics = [self.get_metric(split)]
+        else:
+            metrics = self.metrics.values()
+
+        output = {}
+        for metric in metrics:
+            output.update(**metric.compute())
+
+        return output

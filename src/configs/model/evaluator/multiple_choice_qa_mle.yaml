@@ -1,1 +1,3 @@
 _target_: src.modeling.evaluators.multiple_choice_qa_mle.MultipleChoiceQaMaximumLikelihood
+
+n_choices: 4
