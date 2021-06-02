@@ -18,7 +18,7 @@ poetry run fzqa +experiment=quick_test
 
 Running on the server:
 ```shell
- TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=quick_test trainer.gpus=1 work_dir=/scratch/valv/runs callbacks=none datamodule.use_subset=False +trainer.checkpoint_callback=False
+ TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only work_dir=/scratch/valv/runs 
  ```
 
 ## Testing
