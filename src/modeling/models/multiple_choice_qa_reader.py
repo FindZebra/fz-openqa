@@ -31,14 +31,14 @@ class MultipleChoiceQAReader(BaseModel):
     ]  # metrics that will be display in the progress bar
 
     def __init__(
-        self,
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        bert_id: str,
-        evaluator: Evaluator,
-        cache_dir: str,
-        hidden_size: int = 256,
-        **kwargs,
+            self,
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            bert_id: str,
+            evaluator: Evaluator,
+            cache_dir: str,
+            hidden_size: int = 256,
+            **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -62,17 +62,14 @@ class MultipleChoiceQAReader(BaseModel):
         )  # necessary because of the added special tokens
         bert_hdim = self.bert.config.hidden_size
 
-        # projection heads
-        self.e_proj = nn.Linear(bert_hdim, hidden_size)
-
         # attention model for query-attention
-        self.qa_qkv = nn.Linear(
+        self._qkv = nn.Linear(
             bert_hdim, 3 * bert_hdim
         )  # the weights of the attention model
-        self.qa_attn = nn.MultiheadAttention(
+        self._attn = nn.MultiheadAttention(
             bert_hdim, num_heads=self.bert.config.num_attention_heads
         )  # attention layer
-        self.qa_proj = nn.Linear(bert_hdim, hidden_size)
+        self._proj = nn.Linear(bert_hdim, 1)
 
     def e_repr(self, input_ids: Tensor, attention_mask: Tensor) -> Tensor:
         h = self.bert(input_ids, attention_mask).last_hidden_state
@@ -88,31 +85,22 @@ class MultipleChoiceQAReader(BaseModel):
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
 
         # compute contextualized representations
-        he = self.bert(
-            batch["document.input_ids"], batch["document.attention_mask"]
-        ).last_hidden_state # [bs, L_e, h]
-        hq = self.bert(
-            batch["question.input_ids"], batch["question.attention_mask"]
-        ).last_hidden_state # [bs, L_q, h]
+        ids = torch.cat([batch["document.input_ids"], batch["question.input_ids"]], dim=1)
+        attn = torch.cat([batch["document.attention_mask"], batch["question.attention_mask"]], dim=1)
+        # Todo: handle truncating in a nicer way (i.e. remove question padding first)
+        heq = self.bert(ids[:, :512], attn[:, :512]).last_hidden_state  # [bs, L_e+L_q, h]
         ha = self.bert(
             flatten(batch["answer_choices.input_ids"]),
             flatten(batch["answer_choices.attention_mask"]),
-        ).last_hidden_state # [bs * N_a, L_a, h]
-
-        # evidence representation
-        he_glob = self.e_proj(he[:, 0]) # [bs, h]
+        ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # answer-question representation
-        hq = self.expand_and_flatten(hq, N_a) # [bs * N_a, L_q, h]
-        hqa = torch.cat([hq, ha], dim=1).permute(1, 0, 2) # [bs * N_a, L_q + L_a, h]
-        hqa, _ = self.qa_attn(*self.qa_qkv(hqa).chunk(3, dim=-1))
-        hqa_glob = self.qa_proj(hqa[0, :, :]) # [bs * N_a, h]
-
-        # compute the interaction model (dot-product) and return as shape [bs, N_a]
-        # todo: local interaction model (using MaxSim or attention layer)
-        he_glob = self.expand_and_flatten(he_glob, N_a)
-        logits = (hqa_glob * he_glob).sum(1)
-        return logits.view(bs, N_a)
+        # here I use a full attention layer, even so this is quite a waste since we only use the output at position 0
+        heq = self.expand_and_flatten(heq, N_a)  # [bs * N_a, L_q, h]
+        hqa = torch.cat([heq, ha], dim=1).permute(1, 0, 2)  # [bs * N_a, L_q + L_a, h]
+        hqa, _ = self._attn(*self._qkv(hqa).chunk(3, dim=-1))
+        hqa_glob = self._proj(hqa[0, :, :])  # [bs * N_a, h]
+        return hqa_glob.view(bs, N_a)
 
     @staticmethod
     def expand_and_flatten(x: Tensor, n: int) -> Tensor:
