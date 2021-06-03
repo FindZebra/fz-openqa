@@ -55,12 +55,15 @@ class MultipleChoiceQAReader(BaseModel):
         # pretrained model
         self.bert: BertPreTrainedModel = AutoModel.from_pretrained(bert_id, cache_dir=cache_dir)
         self.bert.resize_token_embeddings(len(tokenizer))  # necessary because of the added special tokens
+        bert_hdim = self.bert.config.hidden_size
 
         # projection heads
-        self.e_proj = nn.Linear(self.bert.config.hidden_size, hidden_size)
+        self.e_proj = nn.Linear(bert_hdim, hidden_size)
 
-        self.qa_attn = nn.MultiheadAttention(self.bert.config.hidden_size, self.bert.config.num_attention_heads)
-        self.qa_proj = nn.Linear(self.bert.config.hidden_size, hidden_size)
+        # attention model for query-attention
+        self.qa_qkv = nn.Linear(bert_hdim, 3 * bert_hdim) # the weights of the attention model
+        self.qa_attn = nn.MultiheadAttention(bert_hdim, num_heads=self.bert.config.num_attention_heads) # attention layer
+        self.qa_proj = nn.Linear(bert_hdim, hidden_size)
 
     def e_repr(self, input_ids: Tensor, attention_mask: Tensor) -> Tensor:
         h = self.bert(input_ids, attention_mask).last_hidden_state
@@ -86,10 +89,12 @@ class MultipleChoiceQAReader(BaseModel):
 
         # answer-question representation
         hq = self.expand_and_flatten(hq, N_a)
-        hqa, _ = self.qa_attn(ha.permute(1, 0, 2), hq.permute(1, 0, 2), hq.permute(1, 0, 2))
+        hqa = torch.cat([hq, ha], dim=1).permute(1, 0, 2)
+        hqa, _ = self.qa_attn(*self.qa_qkv(hqa).chunk(3, dim=-1))
         hqa_glob = self.qa_proj(hqa[0, :, :])
 
         # compute the interaction model (dot-product) and return as shape [bs, N_a]
+        # todo: local interaction model (using MaxSim or attention layer)
         he_glob = self.expand_and_flatten(he_glob, N_a)
         logits = (hqa_glob * he_glob).sum(1)
         return logits.view(bs, N_a)
