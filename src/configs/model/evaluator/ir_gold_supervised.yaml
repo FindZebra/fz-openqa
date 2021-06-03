@@ -1,4 +1,4 @@
 _target_: src.modeling.evaluators.ir_gold_supervised.InformationRetrievalGoldSupervised
 
 defaults:
-  - similarity: dot_product.yaml
+  - similarity: max_sim.yaml

@@ -1,16 +1,8 @@
 from torch import Tensor
 
-from .base import Similarity
+from .base import GolbalSimilarity
 
 
-class DotProduct(Similarity):
-    def __call__(self, query: Tensor, x: Tensor) -> Tensor:
-        assert len(query.shape) == 2
-        assert len(x.shape) == 2
-        n = query.shape[0]
-        m = x.shape[0]
-
-        sim = n @ m.transpose(1, 0)
-        assert n == sim.shape[0]
-        assert m == sim.shape[1]
-        return sim
+class DotProduct(GolbalSimilarity):
+    def vec_similarity(self, x: Tensor, y: Tensor) -> Tensor:
+        return x @ y.transpose(1, 0)

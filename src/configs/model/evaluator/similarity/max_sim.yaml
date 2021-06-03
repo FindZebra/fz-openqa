@@ -1,1 +1,3 @@
 _target_: src.modeling.similarities.max_sim.MaxSim
+
+similarity_metric: dot_product
