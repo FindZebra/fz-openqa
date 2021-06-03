@@ -1,5 +1,18 @@
 # Medical Open Domain Question Answering - FindZebra
 
+## Environment Setup
+
+Install poetry
+
+```shell
+curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+```
+
+Install dependencies (within the project)
+```shell
+poetry install
+```
+
 ## Running the code
 
 `src.cli.main` can be called directly using the command `fzqa` (which can be edited in the `.toml` file):
