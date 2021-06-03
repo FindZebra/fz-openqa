@@ -38,6 +38,7 @@ class MultipleChoiceQAReader(BaseModel):
             evaluator: Evaluator,
             cache_dir: str,
             hidden_size: int = 256,
+            dropout: float=0,
             **kwargs,
     ):
         super().__init__(**kwargs)
@@ -70,11 +71,7 @@ class MultipleChoiceQAReader(BaseModel):
             bert_hdim, num_heads=self.bert.config.num_attention_heads
         )  # attention layer
         self._proj = nn.Linear(bert_hdim, 1)
-
-    def e_repr(self, input_ids: Tensor, attention_mask: Tensor) -> Tensor:
-        h = self.bert(input_ids, attention_mask).last_hidden_state
-        h_cls = self.e_proj(h[:, 0])
-        return h_cls
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, batch: Dict[str, Tensor], **kwargs) -> torch.FloatTensor:
         """Compute the answer model p(a_i | q, e)"""
@@ -98,6 +95,7 @@ class MultipleChoiceQAReader(BaseModel):
         # here I use a full attention layer, even so this is quite a waste since we only use the output at position 0
         heq = self.expand_and_flatten(heq, N_a)  # [bs * N_a, L_q, h]
         hqa = torch.cat([heq, ha], dim=1).permute(1, 0, 2)  # [bs * N_a, L_q + L_a, h]
+        hqa = self.dropout(hqa)
         hqa, _ = self._attn(*self._qkv(hqa).chunk(3, dim=-1))
         hqa_glob = self._proj(hqa[0, :, :])  # [bs * N_a, h]
         return hqa_glob.view(bs, N_a)
