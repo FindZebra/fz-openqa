@@ -6,7 +6,7 @@ from .base import Similarity
 
 class MaxSim(Similarity):
     def __init__(self, similarity_metric=str):
-        assert similarity_metric in {'l2', 'dot_product'}
+        assert similarity_metric in {"l2", "dot_product"}
         self.similarity_metric = similarity_metric
 
     def __call__(self, query: Tensor, document: Tensor) -> Tensor:
@@ -21,12 +21,12 @@ class MaxSim(Similarity):
         n = query.shape[0]
         m = document.shape[0]
 
-        if self.similarity_metric == 'dot_product':
+        if self.similarity_metric == "dot_product":
             # todo: check how this is implemented in the official repo,
             #  they do not return an NxM matrix
-            interactions = torch.einsum('nph, mqh -> nmpq', query, document)
+            interactions = torch.einsum("nph, mqh -> nmpq", query, document)
             sim = interactions.max(dim=-1).values.sum(-1)
-        elif self.similarity_metric == 'l2':
+        elif self.similarity_metric == "l2":
             raise NotImplementedError
         else:
             raise ValueError(f"Unknown similarity metric: `{self.similarity_metric}`")

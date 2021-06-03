@@ -55,7 +55,7 @@ class BaseDataModule(LightningDataModule):
         eval_batch_size: int = 128,
         num_workers: int = 0,
         pin_memory: bool = False,
-        persistent_workers:bool=False,
+        persistent_workers: bool = False,
         max_length: Optional[int] = 512,
         use_subset: bool = False,
         update_cache: bool = False,

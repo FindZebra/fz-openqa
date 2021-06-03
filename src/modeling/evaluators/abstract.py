@@ -8,7 +8,9 @@ from torch import nn, Tensor
 class Evaluator(nn.Module):
     """A base class to evaluate model's output given a model and a batch of data. Track and compute metrics"""
 
-    def forward(self, model: nn.Module, batch: Any, split: str, **kwargs: Any) -> Dict[str, Tensor]:
+    def forward(
+        self, model: nn.Module, batch: Any, split: str, **kwargs: Any
+    ) -> Dict[str, Tensor]:
         """The forward pass handles the processing of the batch given the model,
         compute the loss and update the metrics. Return a dictionary output with at least the key 'loss'"""
         raise NotImplemented
