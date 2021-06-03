@@ -7,6 +7,7 @@ from torchmetrics.classification import Accuracy
 from .abstract import *
 from src.modeling.similarities import Similarity
 
+
 class InformationRetrievalGoldSupervised(Evaluator):
     """
     Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
@@ -16,47 +17,55 @@ class InformationRetrievalGoldSupervised(Evaluator):
 
     where a is the index of the true answer.
     """
+
     # TODO: formalize the Metrics logic (when to compute and log)
     _required_eval_feature_names = [
-        'is_gold',
-        'question.input_ids',
-        'question.attention_mask',
-        'question.input_ids',
-        'document.attention_mask',
-        'question.input_ids',
-        'question.attention_mask',
-        'is_gold'
+        "is_gold",
+        "question.input_ids",
+        "question.attention_mask",
+        "question.input_ids",
+        "document.attention_mask",
+        "question.input_ids",
+        "question.attention_mask",
+        "is_gold",
     ]
 
-    def __init__(self, similarity:Similarity):
+    def __init__(self, similarity: Similarity):
         super().__init__()
         self.similarity = similarity
-        gen_metric = lambda split: MetricCollection([Accuracy()]
-                                                    , prefix=f"{split}/")
+        gen_metric = lambda split: MetricCollection([Accuracy()], prefix=f"{split}/")
         self.metrics = nn.ModuleDict(
-            {f"_{split}": gen_metric(split) for split in [Split.TRAIN,
-                                                          Split.VALIDATION,
-                                                          Split.TEST]})
+            {
+                f"_{split}": gen_metric(split)
+                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
+            }
+        )
 
     def get_metric(self, split: str) -> Metric:
         return self.metrics[f"_{split}"]
 
-    def forward(self, model: nn.Module, batch: Any, split: str, **kwargs: Any) -> Dict[str, Tensor]:
+    def forward(
+        self, model: nn.Module, batch: Any, split: str, **kwargs: Any
+    ) -> Dict[str, Tensor]:
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
-        hq = model(input_ids=batch['question.input_ids'],
-                   attention_mask=batch['question.attention_mask'],
-                   key='document')
-        he = model(input_ids=batch['document.input_ids'],
-                   attention_mask=batch['document.attention_mask'],
-                   key='document')
+        hq = model(
+            input_ids=batch["question.input_ids"],
+            attention_mask=batch["question.attention_mask"],
+            key="document",
+        )
+        he = model(
+            input_ids=batch["document.input_ids"],
+            attention_mask=batch["document.attention_mask"],
+            key="document",
+        )
 
         logits = self.similarity(hq, he)
         targets = torch.arange(start=0, end=len(logits)).long().to(logits.device)
         loss = F.cross_entropy(logits, targets)
         self.get_metric(split).update(logits.argmax(-1), targets)
-        return {'loss': loss}
+        return {"loss": loss}
 
     def check_feature_names(self, batch):
         for f in self._required_eval_feature_names:

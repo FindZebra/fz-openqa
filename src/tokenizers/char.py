@@ -12,10 +12,8 @@ SPECIAL_TOKENS = {
     "sep_token": "[SEP]",
     "mask_token": "[MASK]",
     "cls_token": "[CLS]",
-    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS
+    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
 }
-
-
 
 
 def init_char_tokenizer() -> PreTrainedTokenizerFast:

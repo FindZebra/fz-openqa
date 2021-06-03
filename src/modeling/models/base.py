@@ -6,17 +6,15 @@ from transformers import AdamW
 
 
 class BaseModel(LightningModule):
-    _required_infer_feature_names = [
-    ]
-    _prog_bar_metrics = [
-    ]  # metrics that will be display in the progress bar
+    _required_infer_feature_names = []
+    _prog_bar_metrics = []  # metrics that will be display in the progress bar
 
     def __init__(
-            self,
-            *,
-            lr: float = 0.001,
-            weight_decay: float = 0.0005,
-            **kwargs,
+        self,
+        *,
+        lr: float = 0.001,
+        weight_decay: float = 0.0005,
+        **kwargs,
     ):
         super().__init__()
 
@@ -29,12 +27,14 @@ class BaseModel(LightningModule):
 
         # log 'split' metrics
         for k, v in data.items():
-            self.log(f"{split}/{k}",
-                     v,
-                     on_step=False,
-                     on_epoch=True,
-                     prog_bar=f"{split}/{k}" in self._prog_bar_metrics,
-                     sync_dist=True)
+            self.log(
+                f"{split}/{k}",
+                v,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=f"{split}/{k}" in self._prog_bar_metrics,
+                sync_dist=True,
+            )
 
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below

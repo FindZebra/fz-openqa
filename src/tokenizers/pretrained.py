@@ -4,12 +4,12 @@ from .static import ADDITIONAL_SPECIAL_TOKENS, QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
 
 SPECIAL_TOKENS = {
     "pad_token": "[PAD]",
-    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS
+    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
 }
 
 
 def init_pretrained_tokenizer(
-        *, pretrained_model_name_or_path: str, **kwargs
+    *, pretrained_model_name_or_path: str, **kwargs
 ) -> PreTrainedTokenizerFast:
     """Load a HuggingFace Pretrained Tokenizer and add the special tokens."""
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)

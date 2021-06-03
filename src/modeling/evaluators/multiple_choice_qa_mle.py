@@ -16,37 +16,46 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
 
     where a is the index of the true answer.
     """
+
     # TODO: formalize the Metrics logic (when to compute and log)
     text_key = "question"
     _required_eval_feature_names = [
-        'answer_idx',
+        "answer_idx",
     ]
 
     def __init__(self, n_choices: int):
         super().__init__()
-        metric_kwargs = {'num_classes': n_choices, 'compute_on_step': False}
-        gen_metric = lambda split: MetricCollection([Accuracy(),
-                                                     F1(**metric_kwargs),
-                                                     Recall(**metric_kwargs),
-                                                     Precision(**metric_kwargs)]
-                                                    , prefix=f"{split}/")
+        metric_kwargs = {"num_classes": n_choices, "compute_on_step": False}
+        gen_metric = lambda split: MetricCollection(
+            [
+                Accuracy(),
+                F1(**metric_kwargs),
+                Recall(**metric_kwargs),
+                Precision(**metric_kwargs),
+            ],
+            prefix=f"{split}/",
+        )
         self.metrics = nn.ModuleDict(
-            {f"_{split}": gen_metric(split) for split in [Split.TRAIN,
-                                                          Split.VALIDATION,
-                                                          Split.TEST]})
+            {
+                f"_{split}": gen_metric(split)
+                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
+            }
+        )
 
     def get_metric(self, split: str) -> Metric:
         return self.metrics[f"_{split}"]
 
-    def forward(self, model: nn.Module, batch: Any, split: str, **kwargs: Any) -> Dict[str, Tensor]:
+    def forward(
+        self, model: nn.Module, batch: Any, split: str, **kwargs: Any
+    ) -> Dict[str, Tensor]:
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
         logits: Tensor = model(batch)
-        targets: Tensor = batch['answer_idx']
+        targets: Tensor = batch["answer_idx"]
         loss = F.cross_entropy(logits, targets, reduce="mean")
         self.get_metric(split).update(logits.argmax(-1), targets)
-        return {'loss': loss}
+        return {"loss": loss}
 
     def check_feature_names(self, batch):
         for f in self._required_eval_feature_names:
