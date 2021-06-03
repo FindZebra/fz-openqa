@@ -33,7 +33,8 @@ class BaseModel(LightningModule):
                      v,
                      on_step=False,
                      on_epoch=True,
-                     prog_bar=f"{split}/{k}" in self._prog_bar_metrics)
+                     prog_bar=f"{split}/{k}" in self._prog_bar_metrics,
+                     sync_dist=True)
 
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
@@ -53,7 +54,7 @@ class BaseModel(LightningModule):
         # `outputs` is a list of dicts returned from `training_step()`
         metrics = self.evaluator.compute_metrics(split=split)
         for k, v in metrics.items():
-            self.log(k, v, prog_bar=k in self._prog_bar_metrics)
+            self.log(k, v, prog_bar=k in self._prog_bar_metrics, sync_dist=True)
         self.evaluator.reset_metrics(split=split)
 
     def training_epoch_end(self, outputs: List[Any]):
