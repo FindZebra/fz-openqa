@@ -5,7 +5,7 @@ from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
 from .abstract import *
-
+from src.modeling.similarities import Similarity
 
 class InformationRetrievalGoldSupervised(Evaluator):
     """
@@ -28,8 +28,9 @@ class InformationRetrievalGoldSupervised(Evaluator):
         'is_gold'
     ]
 
-    def __init__(self):
+    def __init__(self, similarity:Similarity):
         super().__init__()
+        self.similarity = similarity
         gen_metric = lambda split: MetricCollection([Accuracy()]
                                                     , prefix=f"{split}/")
         self.metrics = nn.ModuleDict(
@@ -51,7 +52,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
                    attention_mask=batch['document.attention_mask'],
                    key='document')
 
-        logits = hq @ he.transpose(1, 0)
+        logits = self.similarity(hq, he)
         targets = torch.arange(start=0, end=len(logits)).long().to(logits.device)
         loss = F.cross_entropy(logits, targets)
         self.get_metric(split).update(logits.argmax(-1), targets)

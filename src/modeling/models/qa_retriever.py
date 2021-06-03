@@ -64,6 +64,8 @@ class QaRetriever(BaseModel):
 
         # global representations
         h = self.dropout(h)
-        h_glob = {'document': self.e_proj, 'question': self.q_proj}[key](h[:, 0])
+        h_glob: Tensor = {'document': self.e_proj, 'question': self.q_proj}[key](h)
 
-        return h_glob
+
+        # todo: masking
+        return torch.nn.functional.normalize(h_glob, p=2, dim=2)
