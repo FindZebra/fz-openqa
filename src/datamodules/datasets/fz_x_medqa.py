@@ -15,13 +15,13 @@ class FZxMedQAConfig(datasets.BuilderConfig):
 
 
 _TRAIN_URL = (
-    "https://drive.google.com/file/d/11Qg73P952cS4-zdQjSXu9Zcc4i13ooQq/view?usp=sharing"
+    "https://drive.google.com/file/d/1P7qayfeZOE--W8Cblx3vuVDT6vyGb1LI/view?usp=sharing"
 )
 _VALID_URL = (
-    "https://drive.google.com/file/d/16ONbC8UHYeykNDc_PKyhLQee28ap6657/view?usp=sharing"
+    "https://drive.google.com/file/d/1tcoj62M80c31PZCyugW13zMWpTSew9aj/view?usp=sharing"
 )
 _TEST_URL = (
-    "https://drive.google.com/file/d/1PqSRvTsqU3nCNZv7pN2gA6NkqOGz0TVE/view?usp=sharing"
+    "https://drive.google.com/file/d/1T6idjeqwfifAf_MHIMWMw_bqeuT98OyT/view?usp=sharing"
 )
 
 _DESCRIPTION = "A mapping between the FinzdZebra corpus and the MedQA dataset"
@@ -52,7 +52,7 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                     "answer_idx": datasets.Value("int32"),
                     "answer_choices": datasets.Sequence(datasets.Value("string")),
                     "document": datasets.Value("string"),
-                    "is_gold": datasets.Value("bool"),
+                    "rank": datasets.Value("int32"),
                 }
             ),
             supervised_keys=None,
