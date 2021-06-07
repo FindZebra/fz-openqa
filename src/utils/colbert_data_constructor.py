@@ -39,14 +39,14 @@ parser.add_argument(
     "cache_dir",
     type=str,
     nargs="?",
-    default="data/dataset/",
+    default="datamodules/datasets/",
     help="where to download temporary dataset files (relative dir from working directory)",
 )
 parser.add_argument(
     "output",
     type=str,
     nargs="?",
-    default="data/dataset/",
+    default="datamodules/datasets/",
     help="where to output final datasets (relative dir from working directory)",
 )
 args = parser.parse_args()
