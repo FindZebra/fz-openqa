@@ -27,7 +27,7 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
-
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
     if platform == "darwin":
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 

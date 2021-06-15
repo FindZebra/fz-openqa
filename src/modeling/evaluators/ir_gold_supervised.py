@@ -20,14 +20,13 @@ class InformationRetrievalGoldSupervised(Evaluator):
 
     # TODO: formalize the Metrics logic (when to compute and log)
     _required_eval_feature_names = [
-        "is_gold",
         "question.input_ids",
         "question.attention_mask",
         "question.input_ids",
         "document.attention_mask",
         "question.input_ids",
         "question.attention_mask",
-        "is_gold",
+        "rank",
     ]
 
     def __init__(self, similarity: Similarity):

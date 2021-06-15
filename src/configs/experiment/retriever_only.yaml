@@ -26,7 +26,7 @@ model:
   lr: 2e-5
 
 datamodule:
-  train_batch_size: 6
+  train_batch_size: 4
   max_length: 512
   use_subset: False
   update_cache: True

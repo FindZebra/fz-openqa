@@ -12,8 +12,8 @@ from .datasets import fz_x_medqa
 
 
 def add_spec_token(
-    special_token: str,
-    text: str,
+        special_token: str,
+        text: str,
 ):
     """
     This functions append a special token to a text such that output = special_token+text.
@@ -46,11 +46,11 @@ class FZxMedQADataModule(BaseDataModule):
         self.filter_gold = filter_gold
 
     def tokenize_examples(
-        self,
-        examples: Dict[str, List[Any]],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
+            self,
+            examples: Dict[str, List[Any]],
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            max_length: Optional[int],
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         examples = {
@@ -124,7 +124,7 @@ class FZxMedQADataModule(BaseDataModule):
             for c in dataset.column_names["train"]
             if (any(a in c for a in attrs) and any(a in c for a in columns))
         ]
-        self.pt_attributes += ["answer_idx", "is_gold"]
+        self.pt_attributes += ["answer_idx", "rank"]
         dataset.set_format(
             type="torch", columns=self.pt_attributes, output_all_columns=False
         )
@@ -133,7 +133,7 @@ class FZxMedQADataModule(BaseDataModule):
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filtering operations"""
         if self.filter_gold:
-            dataset = dataset.filter(lambda x: x["is_gold"])
+            dataset = dataset.filter(lambda x: x["rank"] == 0)
 
         return dataset
 
@@ -142,7 +142,7 @@ class FZxMedQADataModule(BaseDataModule):
         Concatenating sequences with different length requires padding them.
         Returns a dictionary with attributes:
         output = {
-                is_gold: tensor of shape [N,],
+                rank: tensor of shape [N,],
                 question.input_ids: tensor of shape [N, T],
                 question.attention_mask: tensor of shape [N, T],
                 document.input_ids: tensor of shape [N, T],
@@ -155,9 +155,9 @@ class FZxMedQADataModule(BaseDataModule):
         attrs = ["input_ids", "attention_mask"]
         output = {}
 
-        # answer_idx & is_gold attributes
+        # answer_idx & rank attributes
         output["answer_idx"] = torch.tensor([b["answer_idx"] for b in batch])
-        output["is_gold"] = torch.tensor([b["is_gold"] for b in batch])
+        output["rank"] = torch.tensor([b["rank"] for b in batch])
 
         # documents and questions
         for key in ["document", "question"]:
@@ -199,7 +199,7 @@ class FZxMedQADataModule(BaseDataModule):
         print("* Question:")
         print(self.tokenizer.decode(example["question.input_ids"], **decode_kwargs))
         print(console_width * "-")
-        print(f"* Document (is_gold={example['is_gold']})")
+        print(f"* Document (rank={example['rank']})")
         print(self.tokenizer.decode(example["document.input_ids"], **decode_kwargs))
         print(console_width * "-")
         print("* Answer Choices:")

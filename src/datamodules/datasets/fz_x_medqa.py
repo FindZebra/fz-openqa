@@ -85,4 +85,5 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
+                d['rank'] -= 1 # start from zero
                 yield i, d

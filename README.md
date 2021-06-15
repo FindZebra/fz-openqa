@@ -31,12 +31,12 @@ poetry run fzqa +experiment=quick_test
 
 Running on the server:
 ```shell
- TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only work_dir=/scratch/valv/runs 
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only work_dir=/scratch/valv/runs 
  ```
 
 Multi-gpus training:
 ```shell
-TOKENIZERS_PARALLELISM=false CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py +experiment=reader_only +trainer.accelerator=ddp trainer.gpus=4
+CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py +experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
 ```
 
 ## Testing
