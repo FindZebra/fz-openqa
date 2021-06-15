@@ -52,7 +52,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
         hq = model(
             input_ids=batch["question.input_ids"],
             attention_mask=batch["question.attention_mask"],
-            key="question",
+            key="document", # todo: use question key (too much overfitting currently)
         ) # [bs, h]
         he = model(
             input_ids=batch["document.input_ids"],
