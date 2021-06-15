@@ -7,8 +7,7 @@ defaults:
   - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
   - override /model: qa_retriever.yaml
   - override /datamodule: fz_x_medqa.yaml
-  - override /callbacks: # list callbacks using `- callback_i`
-      - none # disable callbacks for faster training
+  - override /callbacks: default.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
 
 # all parameters below will be merged with parameters from default configurations set above
@@ -21,7 +20,7 @@ trainer:
   min_epochs: 1
   max_epochs: 100
   gradient_clip_val: 0.5
-  checkpoint_callback: False # disable checkpointing for faster training
+  # checkpoint_callback: False # disable checkpointing for faster training
 
 model:
   lr: 2e-5

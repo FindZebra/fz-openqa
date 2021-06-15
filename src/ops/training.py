@@ -2,6 +2,7 @@ from typing import List, Optional
 import os
 from sys import platform
 import hydra
+import os
 from omegaconf import DictConfig
 from pytorch_lightning import (
     Callback,
@@ -86,6 +87,8 @@ def train(config: DictConfig) -> Optional[float]:
         callbacks=callbacks,
         logger=logger,
     )
+    if trainer.checkpoint_callback:
+        print(f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}")
 
     # Train the model
     log.info("Starting training..")

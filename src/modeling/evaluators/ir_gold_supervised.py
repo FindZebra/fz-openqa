@@ -53,15 +53,15 @@ class InformationRetrievalGoldSupervised(Evaluator):
         hq = model(
             input_ids=batch["question.input_ids"],
             attention_mask=batch["question.attention_mask"],
-            key="document",
-        )
+            key="question",
+        ) # [bs, h]
         he = model(
             input_ids=batch["document.input_ids"],
             attention_mask=batch["document.attention_mask"],
             key="document",
-        )
+        ) # [bs, h]
 
-        logits = self.similarity(hq, he)
+        logits = self.similarity(hq, he) # [bs x bs]
         targets = torch.arange(start=0, end=len(logits)).long().to(logits.device)
         loss = F.cross_entropy(logits, targets)
         self.get_metric(split).update(logits.argmax(-1), targets)

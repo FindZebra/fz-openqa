@@ -15,8 +15,8 @@ wandb = "^0.10.30"
 pytorch-lightning = "^1.3.2"
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"
-hydra-core = {version="^1.0", allow-prereleases = true}
 datasets = "^1.6.2"
+hydra-core = {version="^1.0", allow-prereleases = true}
 hydra-colorlog = {version="^1.0.1", allow-prereleases = true}
 
 [tool.poetry.scripts]

@@ -192,7 +192,7 @@ class FZxMedQADataModule(BaseDataModule):
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        decode_kwargs = {"skip_special_tokens": True}
+        decode_kwargs = {"skip_special_tokens": False}
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")

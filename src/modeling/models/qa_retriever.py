@@ -63,7 +63,7 @@ class QaRetriever(BaseModel):
     def forward(
         self, *, input_ids: Tensor, attention_mask: Tensor, key: str, **kwargs
     ) -> torch.FloatTensor:
-        """Compute the answer model p(a_i | q, e)"""
+        """Return the document/question representation."""
         assert key in {"document", "question"}
 
         # compute contextualized representations
