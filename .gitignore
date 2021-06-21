@@ -5,6 +5,8 @@ outputs/
 cache/
 runs/
 
+*.py.lock
+
 # Editors
 .vscode/
 .idea/

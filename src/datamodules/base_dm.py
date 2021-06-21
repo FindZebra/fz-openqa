@@ -1,16 +1,13 @@
-import hashlib
-import os
 import shutil
 from functools import partial
-from pathlib import Path
 from typing import *
 
 import datasets
+import rich
 import torch
 from datasets import load_dataset, DatasetDict, Split
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
-import rich
 from torch.utils.data import DataLoader, Dataset
 from transformers import PreTrainedTokenizerFast, BatchEncoding
 
@@ -47,19 +44,19 @@ class BaseDataModule(LightningDataModule):
     ]  # attributes to be converted into Tensors
 
     def __init__(
-        self,
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        cache_dir: str = "cache/",
-        train_batch_size: int = 64,
-        eval_batch_size: int = 128,
-        num_workers: int = 0,
-        pin_memory: bool = False,
-        persistent_workers: bool = False,
-        max_length: Optional[int] = 512,
-        use_subset: bool = False,
-        verbose: bool = True,
-        **kwargs,
+            self,
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            cache_dir: str = "cache/",
+            train_batch_size: int = 64,
+            eval_batch_size: int = 128,
+            num_workers: int = 0,
+            pin_memory: bool = False,
+            persistent_workers: bool = False,
+            max_length: Optional[int] = 512,
+            use_subset: bool = False,
+            verbose: bool = True,
+            **kwargs,
     ):
         super().__init__()
 
@@ -77,13 +74,14 @@ class BaseDataModule(LightningDataModule):
         self.tokenizer = tokenizer
         self.dataset: Optional[HgDataset] = None
 
-
     def tokenize_examples(
-        self,
-        examples: Dict[str, List[Any]],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
+            self,
+            examples: Dict[str, List[Any]],
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            max_length: Optional[int],
+            preprocess_fn: Optional[Callable] = None,
+            **kwargs
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         The input format is:
@@ -91,10 +89,15 @@ class BaseDataModule(LightningDataModule):
             attribute_name: list of attribute values
         }
         """
+        if preprocess_fn is None:
+            preprocess_fn = lambda x: x
+
+        text_fields = {field: list(map(preprocess_fn, examples[field])) for field in self.text_fields}
         return tokenizer(
-            *(examples[field] for field in self.text_fields),
+            *text_fields.values(),
             max_length=max_length,
             truncation=max_length is not None,
+            **kwargs,
         )
 
     def prepare_data(self):
