@@ -137,7 +137,7 @@ class CorpusDataModule(BaseDataModule):
         args = {
             "pad_token": 0,
             "start_tokens": [0 for _ in start_tokens],
-            "end_tokens": [0 for _ in start_tokens],
+            "end_tokens": [0 for _ in end_tokens],
         }
         idxs, w_idxs, attention_mask, window_mask = zip(
             *[
@@ -172,6 +172,8 @@ class CorpusDataModule(BaseDataModule):
                 for k, args in args_dict.items()
             }
         )
+        for k, xs in output.items(): #todo: debug short lengths
+            print(f" >>>> {k}: {len(xs)}")
 
         return output
 

@@ -14,27 +14,29 @@ def gen_passages(
     """Generate overlapping windows with the corresponding masking such that each token appears only in one window."""
 
     if start_tokens is not None:
-        size -= len(start_tokens)
-        stride -= len(start_tokens)
+        _size = size - len(start_tokens)
+        _stride = stride - len(start_tokens)
     else:
         start_tokens = []
+        _size = size
+        _stride = stride
 
     if end_tokens is not None:
-        size -= len(end_tokens)
-        stride -= len(end_tokens)
+        _size -= len(end_tokens)
+        _stride -= len(end_tokens)
     else:
         end_tokens = []
 
-    assert size > 0
-    assert stride > 0
-    assert stride <= size
-    margin = size - stride
-    for i in range(0, len(sequence), stride):
+    assert _size > 0
+    assert _stride > 0
+    assert _stride <= _size
+    margin = _size - _stride
+    for i in range(0, len(sequence), _stride):
         left_pad = margin // 2 + margin % 2 if i else 0
         right_pad = margin // 2
-        center = size - left_pad - right_pad
-        seq = sequence[i: i + size]
-        padding = max(0, size - len(seq)) if pad_token is not None else 0
+        center = _size - left_pad - right_pad
+        seq = sequence[i: i + _size]
+        padding = max(0, _size - len(seq)) if pad_token is not None else 0
 
         # only return if there are unmasked tokens
         if len(seq) > left_pad:
@@ -42,6 +44,8 @@ def gen_passages(
             mask = (len(start_tokens) + left_pad) * [0] + center * [1] + [0] * (len(end_tokens) + right_pad)
             if padding > 0:
                 mask[-padding:] = padding * [0]
+
+            assert len(seq) == size, f"seq: {len(seq)}, size={size}"
             if return_mask:
                 yield (
                     seq,
