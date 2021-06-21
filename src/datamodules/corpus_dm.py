@@ -181,18 +181,36 @@ class CorpusDataModule(BaseDataModule):
         for k, v in batch.items():
             rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
         print(console_width * "=")
+        print("=== Samples ===")
         for i in range(3):
             self.display_one_sample({k: v[i] for k, v in batch.items()})
+        print(console_width * "=")
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
         console_width, _ = shutil.get_terminal_size()
-        print("=== Sample ===")
         print(console_width * "-")
         print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=False))
-        print(console_width * "=")
 
-    def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    def collate_fn(
+            self, batch: List[Dict[str, Any]]
+    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
-        return self.tokenizer.pad(batch)
+        output = self.tokenizer.pad(batch)
+
+        # infer `max_length`
+        tokens = [b["input_ids"] for b in batch]
+        pad_tok = self.tokenizer.pad_token_id
+        max_length = len(tokens[0]) - min(
+            map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
+        )
+
+        def maybe_truncate(x: Any):
+            """truncate sequential attributes to `max_length`"""
+            if not (isinstance(x, torch.Tensor) and len(x.shape) == 2):
+                return x
+
+            return x[:, :max_length]
+
+        return {k: maybe_truncate(v) for k, v in output.items()}
