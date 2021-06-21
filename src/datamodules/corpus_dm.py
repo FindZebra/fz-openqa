@@ -3,23 +3,25 @@ import re
 import shutil
 from functools import partial
 from typing import *
-import rich
+
 import datasets
 import numpy as np
+import rich
 import torch
 from datasets import load_dataset, DatasetDict
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerFast, BatchEncoding
+from transformers import BatchEncoding
+
 from .base_dm import BaseDataModule
 from .datasets import corpus
+from .utils import gen_passages
 
 HgDataset = Union[Dataset, DatasetDict]
 
 TXT_PATTERN = r"^.*\.txt$"
 
-from .fz_x_medqa_dm import add_spec_token
-from src.tokenizers.static import QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
+from src.tokenizers.static import DOC_TOKEN
 
 
 class CorpusDataModule(BaseDataModule):
@@ -71,7 +73,7 @@ class CorpusDataModule(BaseDataModule):
         return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir, data_files=input_files)
 
     @staticmethod
-    def add_idx(example: Dict[str, Any], idx:int):
+    def add_idx(example: Dict[str, Any], idx: int):
         example['idx'] = idx
         return example
 
@@ -79,7 +81,7 @@ class CorpusDataModule(BaseDataModule):
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
         # add index column
-        dataset = dataset.map(self.add_idx,  batched=False, with_indices=True)
+        dataset = dataset.map(self.add_idx, batched=False, with_indices=True)
 
         # tokenize the dataset
         fn = partial(
@@ -98,6 +100,7 @@ class CorpusDataModule(BaseDataModule):
             size=self.passage_length,
             stride=self.passage_stride,
             start_tokens=[self.tokenizer.cls_token_id, doc_token_id],
+            end_tokens=[self.tokenizer.sep_token_id],
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )
@@ -113,6 +116,7 @@ class CorpusDataModule(BaseDataModule):
             size: int,
             stride: int,
             start_tokens: List[int],
+            end_tokens: List[int],
             pad_token_id: int,
             verbose: bool = True,
     ) -> Dict[str, List]:
@@ -128,6 +132,7 @@ class CorpusDataModule(BaseDataModule):
         args = {
             "pad_token": 0,
             "start_tokens": [0 for _ in start_tokens],
+            "end_tokens": [0 for _ in start_tokens],
         }
         idxs, w_idxs, attention_mask, window_mask = zip(
             *[
@@ -143,12 +148,13 @@ class CorpusDataModule(BaseDataModule):
             "passage_mask": list(window_mask),
         }
 
-        # update "'input_ids'
+        # update "'input_ids' (potentially list other attributes here)
         args_dict = {
             "input_ids": {
                 "pad_token": pad_token_id,
                 "return_mask": False,
                 "start_tokens": start_tokens,
+                "end_tokens": end_tokens,
             },
         }
         output.update(
@@ -183,8 +189,6 @@ class CorpusDataModule(BaseDataModule):
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
-        print(self.tokenizer.decode(self.tokenizer(f"{DOC_TOKEN}test")['input_ids'], skip_special_tokens=False), self.tokenizer(f"{DOC_TOKEN}test")['input_ids'])
-        print(example["input_ids"])
         print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=False))
         print(console_width * "=")
 
@@ -192,46 +196,3 @@ class CorpusDataModule(BaseDataModule):
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
         return self.tokenizer.pad(batch)
-
-
-def gen_passages(
-        sequence: List[int],
-        *,
-        size: int,
-        stride: int,
-        start_tokens: Optional[List[Any]] = None,
-        pad_token: Optional[Any] = None,
-        return_mask: bool = True,
-) -> Iterable[Union[List[int], Tuple[List[int], List[Any]]]]:
-    """Generate overlapping windows with the corresponding masking such that each token appears only in one window."""
-
-    if start_tokens is not None:
-        size -= len(start_tokens)
-        stride -= 1
-    else:
-        start_tokens = []
-
-    assert size > 0
-    assert stride > 0
-    assert stride <= size
-    margin = size - stride
-    for i in range(0, len(sequence), stride):
-        left_pad = margin // 2 + margin % 2 if i else 0
-        right_pad = margin // 2
-        center = size - left_pad - right_pad
-        seq = sequence[i: i + size]
-        padding = max(0, size - len(seq)) if pad_token is not None else 0
-
-        # only return if there are unmasked tokens
-        if len(seq) > left_pad:
-            seq = start_tokens + seq + padding * [pad_token]
-            mask = (len(start_tokens) + left_pad) * [0] + center * [1] + [0] * right_pad
-            if padding > 0:
-                mask[-padding:] = padding * [0]
-            if return_mask:
-                yield (
-                    seq,
-                    mask[: len(seq)],
-                )
-            else:
-                yield seq
