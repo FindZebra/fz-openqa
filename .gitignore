@@ -2,6 +2,8 @@
 data/
 outputs/
 .cache/
+cache/
+runs/
 
 # Editors
 .vscode/

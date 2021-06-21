@@ -1,6 +1,6 @@
 _target_: src.datamodules.base_dm.BaseDataModule
 
-data_dir: ${data_dir} # data_dir is specified in config.yaml
+data_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: 64
 eval_batch_size: 128
 num_workers: 2

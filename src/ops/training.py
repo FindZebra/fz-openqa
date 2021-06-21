@@ -14,7 +14,7 @@ from pytorch_lightning import (
 from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
 from src import utils
-from rich import print
+import rich
 
 log = utils.get_logger(__name__)
 
@@ -27,9 +27,16 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
-    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
     if platform == "darwin":
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
+    if config.verbose == False:
+        os.environ["WANDB_SILENT"] = "TRUE"
+
+    if config.verbose:
+        rich.print(f"> work_dir: {config.work_dir}")
+        rich.print(f"> cache_dir: {os.path.abspath(config.cache_dir)}")
+        rich.print(f"> Current working directory : {os.getcwd()}")
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
@@ -56,10 +63,6 @@ def train(config: DictConfig) -> Optional[float]:
             if "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
                 callbacks.append(hydra.utils.instantiate(cb_conf))
-
-    print(f">> callbacks:")
-    for c in callbacks:
-        print(f"- {c}")
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
