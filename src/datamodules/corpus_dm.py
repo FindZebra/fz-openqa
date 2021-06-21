@@ -10,6 +10,7 @@ import rich
 import torch
 from datasets import load_dataset, DatasetDict
 from pytorch_lightning.utilities import rank_zero_only
+from torch import Tensor
 from torch.utils.data import Dataset
 from transformers import BatchEncoding
 
@@ -48,6 +49,7 @@ class CorpusDataModule(BaseDataModule):
         "input_ids",
         "attention_mask",
     ]  # attributes to be converted into Tensors
+    vectors_id='vectors'
 
     def __init__(
             self,
@@ -70,6 +72,9 @@ class CorpusDataModule(BaseDataModule):
         """Load the base HuggingFace dataset."""
         input_files = [os.path.join(self.input_dir, p) for p in os.listdir(self.input_dir) if
                        re.findall(TXT_PATTERN, p)]
+        print(f"Loading:")
+        for l in input_files:
+            print(f" - {l}")
         return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir, data_files=input_files)
 
     @staticmethod
@@ -124,7 +129,7 @@ class CorpusDataModule(BaseDataModule):
             lens = list(map(len, examples["input_ids"]))
             rich.print(
                 f">> @CorpusDataModule.generate_windows: Number of tokens per documents: "
-                f"mean={np.mean(lens):.1f}, std={np.std(lens):.1f} [{min(lens)}-{max(lens)}]"
+                f"mean={np.mean(lens):.1f}, std={np.std(lens):.1f} [{min(lens)} - {max(lens)}]"
             )
 
         # extend idxs, the attention mask and compute the passage masks and add passage_ids
@@ -214,3 +219,30 @@ class CorpusDataModule(BaseDataModule):
             return x[:, :max_length]
 
         return {k: maybe_truncate(v) for k, v in output.items()}
+
+    @staticmethod
+    @torch.no_grad()
+    def compute_vectors_batch(key:str, model: Callable, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        if isinstance(model, torch.nn.Module):
+            device = next(iter(model.parameters()))
+            batch = {k: v.to(device) for k, v in batch.items()}
+
+        # process and return
+        batch[key] = model(batch)
+        return batch
+
+    def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
+        # todo: distributed version
+        self.dataset = self.dataset.map(partial(self.compute_vectors_batch, self.vectors_id, model),
+                                        batch_size=self.eval_batch_size,
+                                        num_proc=1)
+        if index:
+            self.dataset['train'].add_faiss_index(column=self.vectors_id, **kwargs)
+
+    def query(self, vector: Tensor, k: int = 1):
+        vector = vector.cpu().numpy()
+        return self.dataset['train'].get_nearest_examples(self.vectors_id, vector, k=k)
+
+    def query_batch(self, vector: Tensor, k: int = 1):
+        vector = vector.cpu().numpy()
+        return self.dataset['train'].get_nearest_examples_batch(self.vectors_id, vector, k=k)
