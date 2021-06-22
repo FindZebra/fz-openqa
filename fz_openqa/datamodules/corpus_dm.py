@@ -16,7 +16,7 @@ from transformers import BatchEncoding
 
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from .base_dm import BaseDataModule
-from .datasets import corpus
+from .datasets import file_corpus, meqa_en_corpus
 from .utils import gen_passages
 
 HgDataset = Union[Dataset, DatasetDict]
@@ -34,7 +34,7 @@ class CorpusDataModule(BaseDataModule):
     """
 
     dset_script_path_or_id = (
-        corpus.__file__  # HuggingFace dataset id or local path to script
+        file_corpus.__file__  # HuggingFace dataset id or local path to script
     )
     text_fields = ["text"]  # text fields that should be tokenized
     split_ids = [
@@ -71,14 +71,15 @@ class CorpusDataModule(BaseDataModule):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        input_files = [
-            os.path.join(self.input_dir, p)
-            for p in os.listdir(self.input_dir)
-            if re.findall(TXT_PATTERN, p)
-        ]
-        print("Loading:")
-        for fn in input_files:
-            print(f" - {fn}")
+        input_files = (
+            [
+                os.path.join(self.input_dir, p)
+                for p in os.listdir(self.input_dir)
+                if re.findall(TXT_PATTERN, p)
+            ]
+            if self.input_dir is not None
+            else None
+        )
         return load_dataset(
             self.dset_script_path_or_id,
             cache_dir=self.data_dir,
@@ -94,7 +95,9 @@ class CorpusDataModule(BaseDataModule):
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
         # add index column
-        dataset = dataset.map(self.add_idx, batched=False, with_indices=True)
+        dataset = dataset.map(
+            self.add_idx, batched=False, with_indices=True, desc="Indexing"
+        )
 
         # tokenize the dataset
         fn = partial(
@@ -104,7 +107,9 @@ class CorpusDataModule(BaseDataModule):
             return_token_type_ids=False,
             add_special_tokens=False,
         )
-        dataset = dataset.map(fn, batched=True)
+        dataset = dataset.map(
+            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+        )
 
         # generate passages of equal size
         doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
@@ -118,7 +123,12 @@ class CorpusDataModule(BaseDataModule):
             verbose=self.verbose,
         )
         dataset = dataset.remove_columns(["text"])
-        dataset = dataset.map(gen_passages, batched=True)
+        dataset = dataset.map(
+            gen_passages,
+            batched=True,
+            num_proc=self.num_proc,
+            desc="Extracting passages",
+        )
         dataset.set_format(type="torch", columns=self.pt_attributes)
         return dataset
 
@@ -182,8 +192,6 @@ class CorpusDataModule(BaseDataModule):
                 for k, args in args_dict.items()
             }
         )
-        for k, xs in output.items():  # todo: debug short lengths
-            print(f" >>>> {k}: {len(xs)}")
 
         return output
 
@@ -277,3 +285,9 @@ class CorpusDataModule(BaseDataModule):
         return self.dataset["train"].get_nearest_examples_batch(
             self.vectors_id, vectors, k=k
         )
+
+
+class MedQaEnDataModule(CorpusDataModule):
+    dset_script_path_or_id = (
+        meqa_en_corpus.__file__  # HuggingFace dataset id or local path to script
+    )

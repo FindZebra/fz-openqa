@@ -30,7 +30,7 @@ def train(config: DictConfig) -> Optional[float]:
     """
     if platform == "darwin":
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
+    os.environ["TOKENIZERS_PARALLELISM"] = "TRUE"
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 

@@ -118,7 +118,9 @@ class FZxMedQADataModule(BaseDataModule):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
         )
-        dataset = dataset.map(fn, batched=True)
+        dataset = dataset.map(
+            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+        )
         # transform attributes to tensors
         attrs = ["input_ids", "attention_mask"]
         columns = ["question", "document", "answer_"]
