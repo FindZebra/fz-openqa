@@ -56,6 +56,7 @@ class BaseDataModule(LightningDataModule):
             max_length: Optional[int] = 512,
             use_subset: bool = False,
             verbose: bool = True,
+            corpus: Optional['BaseDataModule'] = None,
             **kwargs,
     ):
         super().__init__()
@@ -68,6 +69,9 @@ class BaseDataModule(LightningDataModule):
         self.persistent_workers = persistent_workers
         self.use_subset = use_subset
         self.verbose = verbose
+
+        # corpus object
+        self.corpus = corpus
 
         # tokenizer and dataset
         self.max_length = max_length
@@ -104,6 +108,8 @@ class BaseDataModule(LightningDataModule):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
         self.load_base_dataset()
+        if self.corpus is not None:
+            self.corpus.prepare_data()
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -120,6 +126,16 @@ class BaseDataModule(LightningDataModule):
         if self.verbose:
             self.pprint()
             self.display_sample()
+
+        if self.corpus is not None:
+            self.corpus.setup()
+            if self.verbose:
+                console_width, _ = shutil.get_terminal_size()
+                print("=== Corpus ===")
+                print(console_width * "*")
+                self.corpus.pprint()
+                self.corpus.display_sample()
+                print(console_width * "*")
 
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         """Take a subset of the dataset and return."""

@@ -3,6 +3,7 @@
 defaults:
   - trainer: minimal.yaml
   - datamodule: fz_x_medqa.yaml
+  - corpus: none.yaml
   - tokenizer: pretrained.yaml
   - model: multiple_choice_qa_reader.yaml
   - callbacks: default.yaml # set this to null if you don't want to use callbacks

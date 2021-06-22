@@ -1,6 +1,6 @@
 _target_: src.datamodules.fz_x_medqa_dm.FZxMedQADataModule
 
-data_dir: ${cache_dir} # cache_dir is specified in config.yaml
+cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 is_gold: True
 train_batch_size: 64
 eval_batch_size: 128
@@ -9,4 +9,4 @@ pin_memory: False
 persistent_workers: False
 max_length: 512
 use_subset: False
-update_cache: True
+verbose: ${verbose}

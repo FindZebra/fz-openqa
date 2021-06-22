@@ -203,7 +203,7 @@ class FZxMedQADataModule(BaseDataModule):
         print("* Answer Choices:")
         idx = example["answer_idx"]
         for i, an in enumerate(example["answer_choices.input_ids"]):
-            rich.print(
+            print(
                 f"   - [{'x' if idx == i else ' '}] "
                 f"{self.tokenizer.decode(an, **decode_kwargs)}"
             )

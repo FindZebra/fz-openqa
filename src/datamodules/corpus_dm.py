@@ -189,7 +189,7 @@ class CorpusDataModule(BaseDataModule):
             rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
         print(console_width * "=")
         print("=== Samples ===")
-        for i in range(3):
+        for i in range(min(3, len(list(batch.values())[0]))):
             self.display_one_sample({k: v[i] for k, v in batch.items()})
         print(console_width * "=")
 
@@ -245,6 +245,7 @@ class CorpusDataModule(BaseDataModule):
 
     def query(self, vector: Tensor, k: int = 1):
         """Query the faiss index given a vector query of shape (h,)"""
+        # todo: this causes segmentation fault on MacOS, works fine on the cluster
         vector = vector.cpu().numpy()
         return self.dataset['train'].get_nearest_examples(self.vectors_id, vector, k=k)
 
