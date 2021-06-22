@@ -1,10 +1,14 @@
-from typing import *
+from typing import Dict
 
 import torch
 from torch import Tensor, nn
-from transformers import PreTrainedTokenizerFast, AutoModel, BertPreTrainedModel
+from transformers import (
+    PreTrainedTokenizerFast,
+    AutoModel,
+    BertPreTrainedModel,
+)
 
-from src.modeling.evaluators import Evaluator
+from src.modeling.evaluators.abstract import Evaluator
 from .base import BaseModel
 
 
@@ -31,15 +35,15 @@ class MultipleChoiceQAReader(BaseModel):
     ]  # metrics that will be display in the progress bar
 
     def __init__(
-            self,
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            bert_id: str,
-            evaluator: Evaluator,
-            cache_dir: str,
-            hidden_size: int = 256,
-            dropout: float=0,
-            **kwargs,
+        self,
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        bert_id: str,
+        evaluator: Evaluator,
+        cache_dir: str,
+        hidden_size: int = 256,
+        dropout: float = 0,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -76,16 +80,28 @@ class MultipleChoiceQAReader(BaseModel):
     def forward(self, batch: Dict[str, Tensor], **kwargs) -> torch.FloatTensor:
         """Compute the answer model p(a_i | q, e)"""
         for f in self._required_infer_feature_names:
-            assert f in batch.keys(), f"The feature {f} is required for inference."
+            assert (
+                f in batch.keys()
+            ), f"The feature {f} is required for inference."
 
         # infer shapes
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
 
         # compute contextualized representations
-        ids = torch.cat([batch["document.input_ids"], batch["question.input_ids"]], dim=1)
-        attn = torch.cat([batch["document.attention_mask"], batch["question.attention_mask"]], dim=1)
+        ids = torch.cat(
+            [batch["document.input_ids"], batch["question.input_ids"]], dim=1
+        )
+        attn = torch.cat(
+            [
+                batch["document.attention_mask"],
+                batch["question.attention_mask"],
+            ],
+            dim=1,
+        )
         # Todo: handle truncating in a nicer way (i.e. remove question padding first)
-        heq = self.bert(ids[:, :512], attn[:, :512]).last_hidden_state  # [bs, L_e+L_q, h]
+        heq = self.bert(
+            ids[:, :512], attn[:, :512]
+        ).last_hidden_state  # [bs, L_e+L_q, h]
         ha = self.bert(
             flatten(batch["answer_choices.input_ids"]),
             flatten(batch["answer_choices.attention_mask"]),
@@ -94,7 +110,9 @@ class MultipleChoiceQAReader(BaseModel):
         # answer-question representation
         # here I use a full attention layer, even so this is quite a waste since we only use the output at position 0
         heq = self.expand_and_flatten(heq, N_a)  # [bs * N_a, L_q, h]
-        hqa = torch.cat([heq, ha], dim=1).permute(1, 0, 2)  # [bs * N_a, L_q + L_a, h]
+        hqa = torch.cat([heq, ha], dim=1).permute(
+            1, 0, 2
+        )  # [bs * N_a, L_q + L_a, h]
         hqa = self.dropout(hqa)
         hqa, _ = self._attn(*self._qkv(hqa).chunk(3, dim=-1))
         hqa_glob = self._proj(hqa[0, :, :])  # [bs * N_a, h]

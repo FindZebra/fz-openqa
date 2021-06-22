@@ -2,14 +2,14 @@ from typing import List, Optional, Any, Iterable, Union, Tuple
 
 
 def gen_passages(
-        sequence: List[int],
-        *,
-        size: int,
-        stride: int,
-        start_tokens: Optional[List[Any]] = None,
-        end_tokens: Optional[List[Any]] = None,
-        pad_token: Optional[Any] = None,
-        return_mask: bool = True,
+    sequence: List[int],
+    *,
+    size: int,
+    stride: int,
+    start_tokens: Optional[List[Any]] = None,
+    end_tokens: Optional[List[Any]] = None,
+    pad_token: Optional[Any] = None,
+    return_mask: bool = True,
 ) -> Iterable[Union[List[int], Tuple[List[int], List[Any]]]]:
     """Generate overlapping windows with the corresponding masking such that each token appears only in one window."""
 
@@ -35,13 +35,17 @@ def gen_passages(
         left_pad = margin // 2 + margin % 2 if i else 0
         right_pad = margin // 2
         center = _size - left_pad - right_pad
-        seq = sequence[i: i + _size]
+        seq = sequence[i : i + _size]
         padding = max(0, _size - len(seq)) if pad_token is not None else 0
 
         # only return if there are unmasked tokens
         if len(seq) > left_pad:
             seq = start_tokens + seq + end_tokens + padding * [pad_token]
-            mask = (len(start_tokens) + left_pad) * [0] + center * [1] + [0] * (len(end_tokens) + right_pad)
+            mask = (
+                (len(start_tokens) + left_pad) * [0]
+                + center * [1]
+                + [0] * (len(end_tokens) + right_pad)
+            )
             if padding > 0:
                 mask[-padding:] = padding * [0]
 

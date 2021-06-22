@@ -1,6 +1,11 @@
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
-from .static import ADDITIONAL_SPECIAL_TOKENS, QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
+from .static import (
+    ADDITIONAL_SPECIAL_TOKENS,
+    QUERY_TOKEN,
+    DOC_TOKEN,
+    ANS_TOKEN,
+)
 
 SPECIAL_TOKENS = {
     "pad_token": "[PAD]",
@@ -12,7 +17,9 @@ def init_pretrained_tokenizer(
     *, pretrained_model_name_or_path: str, **kwargs
 ) -> PreTrainedTokenizerFast:
     """Load a HuggingFace Pretrained Tokenizer and add the special tokens."""
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(
+        pretrained_model_name_or_path, **kwargs
+    )
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.sanitize_special_tokens()
     test_special_token_encoding(tokenizer)

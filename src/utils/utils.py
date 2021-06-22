@@ -24,13 +24,13 @@ def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
     # this ensures all logging levels get marked with the rank zero decorator
     # otherwise logs would get multiplied for each GPU process in multi-GPU setup
     for level in (
-            "debug",
-            "info",
-            "warning",
-            "error",
-            "exception",
-            "fatal",
-            "critical",
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+        "fatal",
+        "critical",
     ):
         setattr(logger, level, rank_zero_only(getattr(logger, level)))
 
@@ -38,12 +38,12 @@ def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
 
 
 def finish(
-        config: DictConfig,
-        model: pl.LightningModule,
-        datamodule: pl.LightningDataModule,
-        trainer: pl.Trainer,
-        callbacks: List[pl.Callback],
-        logger: List[pl.loggers.LightningLoggerBase],
+    config: DictConfig,
+    model: pl.LightningModule,
+    datamodule: pl.LightningDataModule,
+    trainer: pl.Trainer,
+    callbacks: List[pl.Callback],
+    logger: List[pl.loggers.LightningLoggerBase],
 ) -> None:
     """Makes sure everything closed properly."""
 
@@ -55,12 +55,12 @@ def finish(
 
 @rank_zero_only
 def log_hyperparameters(
-        config: DictConfig,
-        model: pl.LightningModule,
-        datamodule: pl.LightningDataModule,
-        trainer: pl.Trainer,
-        callbacks: List[pl.Callback],
-        logger: List[pl.loggers.LightningLoggerBase],
+    config: DictConfig,
+    model: pl.LightningModule,
+    datamodule: pl.LightningDataModule,
+    trainer: pl.Trainer,
+    callbacks: List[pl.Callback],
+    logger: List[pl.loggers.LightningLoggerBase],
 ) -> None:
     """This method controls which parameters from Hydra config are saved by Lightning loggers.
 
@@ -71,12 +71,31 @@ def log_hyperparameters(
     hparams = {
         k: v
         for k, v in config.items()
-        if isinstance(v, (str, int,), )
+        if isinstance(
+            v,
+            (
+                str,
+                int,
+            ),
+        )
     }
 
     # choose which parts of hydra config will be saved to loggers
-    hparams.update({k: v for k, v in config.items()
-                    if k in ('trainer', 'model', 'datamodule', 'tokenizer', 'corpus', 'callbacks')})
+    hparams.update(
+        {
+            k: v
+            for k, v in config.items()
+            if k
+            in (
+                "trainer",
+                "model",
+                "datamodule",
+                "tokenizer",
+                "corpus",
+                "callbacks",
+            )
+        }
+    )
 
     # save number of model parameters
     hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
@@ -152,18 +171,18 @@ def extras(config: DictConfig) -> None:
 
 @rank_zero_only
 def print_config(
-        config: DictConfig,
-        fields: Sequence[str] = (
-                "trainer",
-                "tokenizer",
-                "model",
-                "datamodule",
-                "corpus",
-                "callbacks",
-                "logger",
-                "seed",
-        ),
-        resolve: bool = True,
+    config: DictConfig,
+    fields: Sequence[str] = (
+        "trainer",
+        "tokenizer",
+        "model",
+        "datamodule",
+        "corpus",
+        "callbacks",
+        "logger",
+        "seed",
+    ),
+    resolve: bool = True,
 ) -> None:
     """Prints content of DictConfig using Rich library and its tree structure.
     Args:

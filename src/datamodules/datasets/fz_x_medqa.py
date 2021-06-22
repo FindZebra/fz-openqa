@@ -14,15 +14,9 @@ class FZxMedQAConfig(datasets.BuilderConfig):
         super(FZxMedQAConfig, self).__init__(**kwargs)
 
 
-_TRAIN_URL = (
-    "https://drive.google.com/file/d/1P7qayfeZOE--W8Cblx3vuVDT6vyGb1LI/view?usp=sharing"
-)
-_VALID_URL = (
-    "https://drive.google.com/file/d/1tcoj62M80c31PZCyugW13zMWpTSew9aj/view?usp=sharing"
-)
-_TEST_URL = (
-    "https://drive.google.com/file/d/1T6idjeqwfifAf_MHIMWMw_bqeuT98OyT/view?usp=sharing"
-)
+_TRAIN_URL = "https://drive.google.com/file/d/1P7qayfeZOE--W8Cblx3vuVDT6vyGb1LI/view?usp=sharing"
+_VALID_URL = "https://drive.google.com/file/d/1tcoj62M80c31PZCyugW13zMWpTSew9aj/view?usp=sharing"
+_TEST_URL = "https://drive.google.com/file/d/1T6idjeqwfifAf_MHIMWMw_bqeuT98OyT/view?usp=sharing"
 
 _DESCRIPTION = "A mapping between the FinzdZebra corpus and the MedQA dataset"
 _VERSION = "0.0.1"
@@ -50,7 +44,9 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                     "question": datasets.Value("string"),
                     "question_id": datasets.Value("int32"),
                     "answer_idx": datasets.Value("int32"),
-                    "answer_choices": datasets.Sequence(datasets.Value("string")),
+                    "answer_choices": datasets.Sequence(
+                        datasets.Value("string")
+                    ),
                     "document": datasets.Value("string"),
                     "rank": datasets.Value("int32"),
                 }
@@ -85,5 +81,5 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
-                d['rank'] -= 1 # start from zero
+                d["rank"] -= 1  # start from zero
                 yield i, d

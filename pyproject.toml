@@ -19,6 +19,8 @@ datasets = "^1.6.2"
 hydra-core = { version = "^1.0", allow-prereleases = true }
 hydra-colorlog = { version = "^1.0.1", allow-prereleases = true}
 faiss-cpu = { version = "^1.7.1", allow-prereleases = true }
+gdown = "^3.13.0"
+elasticsearch = "^7.13.2"
 
 [tool.poetry.scripts]
 fzqa = "src.cli:main"
@@ -29,3 +31,21 @@ pytest = "^5.2"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 79
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | \sandbox*.py
+)/
+'''

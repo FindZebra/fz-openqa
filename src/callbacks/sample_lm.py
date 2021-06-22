@@ -1,7 +1,9 @@
+import shutil
+
+import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback
 from rich import print
 from transformers import PreTrainedTokenizerFast
-import shutil
 
 
 class SampleLanguageModel(Callback):

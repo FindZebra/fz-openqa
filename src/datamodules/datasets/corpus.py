@@ -39,7 +39,9 @@ class CorpusDataset(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        assert self.config.data_files is not None, f"`data_files` must be provided in `load_dataset()`"
+        assert (
+            self.config.data_files is not None
+        ), "`data_files` must be provided in `load_dataset()`"
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
@@ -51,4 +53,4 @@ class CorpusDataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         for i, fn in enumerate(self.config.data_files):
             with open(fn, "r") as f:
-                yield i, {'text': f.read()}
+                yield i, {"text": f.read()}

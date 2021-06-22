@@ -1,4 +1,4 @@
-from typing import *
+from typing import Dict, List, Any, Optional
 
 import torch
 from pytorch_lightning import LightningModule
@@ -48,7 +48,9 @@ class LanguageModel(LightningModule):
         self.evaluator = evaluator
 
         # define the module here
-        self.embeddings = nn.Embedding(self.vocabulary_size, self.vocabulary_size)
+        self.embeddings = nn.Embedding(
+            self.vocabulary_size, self.vocabulary_size
+        )
         self.rnn = nn.LSTM(
             input_size=self.vocabulary_size,
             hidden_size=hidden_size,
@@ -87,7 +89,8 @@ class LanguageModel(LightningModule):
             input_ids = torch.cat([input_ids, sample_t[:, None]], dim=1)
             t += 1
             stop_condition = (
-                t > max_length or (sample_t != self.pad_token_id).float().sum() == 0
+                t > max_length
+                or (sample_t != self.pad_token_id).float().sum() == 0
             )
 
         return input_ids
@@ -103,7 +106,9 @@ class LanguageModel(LightningModule):
 
         # log train metrics
         for k, v in data.items():
-            self.log(f"train/{k}", v, on_step=False, on_epoch=True, prog_bar=False)
+            self.log(
+                f"train/{k}", v, on_step=False, on_epoch=True, prog_bar=False
+            )
 
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
@@ -119,7 +124,9 @@ class LanguageModel(LightningModule):
 
         # log train metrics
         for k, v in data.items():
-            self.log(f"val/{k}", v, on_step=False, on_epoch=True, prog_bar=False)
+            self.log(
+                f"val/{k}", v, on_step=False, on_epoch=True, prog_bar=False
+            )
 
         return data  # potentially add the other metrics here
 
@@ -131,7 +138,9 @@ class LanguageModel(LightningModule):
 
         # log train metrics
         for k, v in data.items():
-            self.log(f"test/{k}", v, on_step=False, on_epoch=True, prog_bar=False)
+            self.log(
+                f"test/{k}", v, on_step=False, on_epoch=True, prog_bar=False
+            )
 
         return data  # potentially add the other metrics here
 

@@ -2,7 +2,7 @@ import os
 import re
 import shutil
 from functools import partial
-from typing import *
+from typing import Dict, List, Any, Callable, Union
 
 import datasets
 import numpy as np
@@ -14,6 +14,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from transformers import BatchEncoding
 
+from src.tokenizers.static import DOC_TOKEN
 from .base_dm import BaseDataModule
 from .datasets import corpus
 from .utils import gen_passages
@@ -21,8 +22,6 @@ from .utils import gen_passages
 HgDataset = Union[Dataset, DatasetDict]
 
 TXT_PATTERN = r"^.*\.txt$"
-
-from src.tokenizers.static import DOC_TOKEN
 
 
 class CorpusDataModule(BaseDataModule):
@@ -49,37 +48,46 @@ class CorpusDataModule(BaseDataModule):
         "input_ids",
         "attention_mask",
     ]  # attributes to be converted into Tensors
-    vectors_id = 'vectors'
+    vectors_id = "vectors"
 
     def __init__(
-            self,
-            *args,
-            input_dir: str,
-            passage_length: int = 200,
-            passage_stride: int = 200,
-            max_length=None,
-            **kwargs,
+        self,
+        *args,
+        input_dir: str,
+        passage_length: int = 200,
+        passage_stride: int = 200,
+        max_length=None,
+        **kwargs,
     ):
         super().__init__(*args, max_length=max_length, **kwargs)
-        assert self.max_length is None, f"`max_length` is not a valid argument for this dataset " \
-                                        f"and should be left to None. " \
-                                        f"Use the argument `passage_length` instead."
+        assert self.max_length is None, (
+            "`max_length` is not a valid argument for this dataset "
+            "and should be left to None. "
+            "Use the argument `passage_length` instead."
+        )
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        input_files = [os.path.join(self.input_dir, p) for p in os.listdir(self.input_dir) if
-                       re.findall(TXT_PATTERN, p)]
-        print(f"Loading:")
-        for l in input_files:
-            print(f" - {l}")
-        return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir, data_files=input_files)
+        input_files = [
+            os.path.join(self.input_dir, p)
+            for p in os.listdir(self.input_dir)
+            if re.findall(TXT_PATTERN, p)
+        ]
+        print("Loading:")
+        for fn in input_files:
+            print(f" - {fn}")
+        return load_dataset(
+            self.dset_script_path_or_id,
+            cache_dir=self.data_dir,
+            data_files=input_files,
+        )
 
     @staticmethod
     def add_idx(example: Dict[str, Any], idx: int):
-        example['idx'] = idx
+        example["idx"] = idx
         return example
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
@@ -116,14 +124,14 @@ class CorpusDataModule(BaseDataModule):
 
     @staticmethod
     def generate_passages(
-            examples: Dict[str, List[Any]],
-            *,
-            size: int,
-            stride: int,
-            start_tokens: List[int],
-            end_tokens: List[int],
-            pad_token_id: int,
-            verbose: bool = True,
+        examples: Dict[str, List[Any]],
+        *,
+        size: int,
+        stride: int,
+        start_tokens: List[int],
+        end_tokens: List[int],
+        pad_token_id: int,
+        verbose: bool = True,
     ) -> Dict[str, List]:
         if verbose:
             lens = list(map(len, examples["input_ids"]))
@@ -143,7 +151,9 @@ class CorpusDataModule(BaseDataModule):
             *[
                 (i, w_i, w, m)
                 for i, ex in zip(examples["idx"], examples["attention_mask"])
-                for w_i, (w, m) in enumerate(gen_passages(ex, **args, **base_args))
+                for w_i, (w, m) in enumerate(
+                    gen_passages(ex, **args, **base_args)
+                )
             ]
         )
         output = {
@@ -197,10 +207,14 @@ class CorpusDataModule(BaseDataModule):
         """Decode and print one example from the batch"""
         console_width, _ = shutil.get_terminal_size()
         print(console_width * "-")
-        print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=False))
+        print(
+            self.tokenizer.decode(
+                example["input_ids"], skip_special_tokens=False
+            )
+        )
 
     def collate_fn(
-            self, batch: List[Dict[str, Any]]
+        self, batch: List[Dict[str, Any]]
     ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
@@ -224,7 +238,9 @@ class CorpusDataModule(BaseDataModule):
 
     @staticmethod
     @torch.no_grad()
-    def compute_vectors_batch(key: str, model: Callable, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def compute_vectors_batch(
+        key: str, model: Callable, batch: Dict[str, Tensor]
+    ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
         if isinstance(model, torch.nn.Module):
             device = next(iter(model.parameters()))
@@ -237,19 +253,27 @@ class CorpusDataModule(BaseDataModule):
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
         """Compute the vectors for each passage in the corpus"""
         # todo: distributed version
-        self.dataset = self.dataset.map(partial(self.compute_vectors_batch, self.vectors_id, model),
-                                        batch_size=self.eval_batch_size,
-                                        num_proc=1)
+        self.dataset = self.dataset.map(
+            partial(self.compute_vectors_batch, self.vectors_id, model),
+            batch_size=self.eval_batch_size,
+            num_proc=1,
+        )
         if index:
-            self.dataset['train'].add_faiss_index(column=self.vectors_id, **kwargs)
+            self.dataset["train"].add_faiss_index(
+                column=self.vectors_id, **kwargs
+            )
 
     def query(self, vector: Tensor, k: int = 1):
         """Query the faiss index given a vector query of shape (h,)"""
         # todo: this causes segmentation fault on MacOS, works fine on the cluster
         vector = vector.cpu().numpy()
-        return self.dataset['train'].get_nearest_examples(self.vectors_id, vector, k=k)
+        return self.dataset["train"].get_nearest_examples(
+            self.vectors_id, vector, k=k
+        )
 
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
         vectors = vectors.cpu().numpy()
-        return self.dataset['train'].get_nearest_examples_batch(self.vectors_id, vectors, k=k)
+        return self.dataset["train"].get_nearest_examples_batch(
+            self.vectors_id, vectors, k=k
+        )

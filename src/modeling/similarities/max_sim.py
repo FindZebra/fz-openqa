@@ -29,7 +29,9 @@ class MaxSim(Similarity):
         elif self.similarity_metric == "l2":
             raise NotImplementedError
         else:
-            raise ValueError(f"Unknown similarity metric: `{self.similarity_metric}`")
+            raise ValueError(
+                f"Unknown similarity metric: `{self.similarity_metric}`"
+            )
 
         assert n == sim.shape[0]
         assert m == sim.shape[1]

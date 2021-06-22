@@ -1,10 +1,13 @@
+from typing import Dict, Any, Optional
+
 from datasets import Split
+from torch import nn, Tensor
 from torch.nn import functional as F
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy, F1, Recall, Precision
 
-from .abstract import *
+from .abstract import Evaluator
 
 
 class MultipleChoiceQaMaximumLikelihood(Evaluator):
@@ -12,7 +15,7 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
 
-        L =  \sum_p log p(a_p | q, e, A) 1(p = a)
+        L =  sum_p log p(a_p | q, e, A) 1(p = a)
 
     where a is the index of the true answer.
     """
@@ -26,15 +29,18 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     def __init__(self, n_choices: int):
         super().__init__()
         metric_kwargs = {"num_classes": n_choices, "compute_on_step": False}
-        gen_metric = lambda split: MetricCollection(
-            [
-                Accuracy(),
-                F1(**metric_kwargs),
-                Recall(**metric_kwargs),
-                Precision(**metric_kwargs),
-            ],
-            prefix=f"{split}/",
-        )
+
+        def gen_metric(split):
+            return MetricCollection(
+                [
+                    Accuracy(),
+                    F1(**metric_kwargs),
+                    Recall(**metric_kwargs),
+                    Precision(**metric_kwargs),
+                ],
+                prefix=f"{split}/",
+            )
+
         self.metrics = nn.ModuleDict(
             {
                 f"_{split}": gen_metric(split)
@@ -59,7 +65,9 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
 
     def check_feature_names(self, batch):
         for f in self._required_eval_feature_names:
-            assert f in batch.keys(), f"The feature {f} is required for evaluation."
+            assert (
+                f in batch.keys()
+            ), f"The feature {f} is required for evaluation."
 
     def reset_metrics(self, split: Optional[str] = None) -> None:
         """reset the metrics"""
@@ -68,7 +76,9 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         else:
             self.get_metric(split).reset()
 
-    def compute_metrics(self, split: Optional[str] = None) -> Dict[str, Tensor]:
+    def compute_metrics(
+        self, split: Optional[str] = None
+    ) -> Dict[str, Tensor]:
         """Compute the metrics"""
         if split is not None:
             metrics = [self.get_metric(split)]

@@ -1,5 +1,5 @@
 import collections
-from typing import *
+from typing import Dict, Any, Optional
 
 import torch
 from torch import nn, Tensor
@@ -13,7 +13,7 @@ class Evaluator(nn.Module):
     ) -> Dict[str, Tensor]:
         """The forward pass handles the processing of the batch given the model,
         compute the loss and update the metrics. Return a dictionary output with at least the key 'loss'"""
-        raise NotImplemented
+        raise NotImplementedError
 
         # example
         logits = model(batch)
@@ -24,9 +24,11 @@ class Evaluator(nn.Module):
         """reset the metrics"""
         raise NotImplementedError
 
-    def compute_metrics(self, split: Optional[str] = None) -> Dict[str, Tensor]:
+    def compute_metrics(
+        self, split: Optional[str] = None
+    ) -> Dict[str, Tensor]:
         """Compute the metrics"""
-        raise NotImplemented
+        raise NotImplementedError
 
     def check_batch_type(self, batch):
         assert isinstance(

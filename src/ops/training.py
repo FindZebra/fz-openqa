@@ -31,7 +31,7 @@ def train(config: DictConfig) -> Optional[float]:
     if platform == "darwin":
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
-    if config.verbose == False:
+    if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 
     if config.verbose:
@@ -48,16 +48,26 @@ def train(config: DictConfig) -> Optional[float]:
     tokenizer: PreTrainedTokenizerFast = instantiate(config.tokenizer)
 
     # Init the Corpus
-    log.info(f"Instantiating corpus <{config.corpus._target_ if config.corpus else 'none'}>")
-    corpus: LightningDataModule = instantiate(config.corpus, tokenizer=tokenizer) if config.corpus else None
+    log.info(
+        f"Instantiating corpus <{config.corpus._target_ if config.corpus else 'none'}>"
+    )
+    corpus: LightningDataModule = (
+        instantiate(config.corpus, tokenizer=tokenizer)
+        if config.corpus
+        else None
+    )
 
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: LightningDataModule = instantiate(config.datamodule, tokenizer=tokenizer, corpus=corpus)
+    datamodule: LightningDataModule = instantiate(
+        config.datamodule, tokenizer=tokenizer, corpus=corpus
+    )
 
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
-    model: LightningModule = instantiate(config.model, tokenizer=tokenizer, corpus=corpus)
+    model: LightningModule = instantiate(
+        config.model, tokenizer=tokenizer, corpus=corpus
+    )
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -94,7 +104,9 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
     if trainer.checkpoint_callback:
-        print(f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}")
+        print(
+            f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}"
+        )
 
     # Train the model
     log.info("Starting training..")
@@ -117,7 +129,9 @@ def train(config: DictConfig) -> Optional[float]:
     )
 
     # Print path to best checkpoint
-    log.info(f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}")
+    log.info(
+        f"Best checkpoint path:\n{trainer.checkpoint_callback.best_model_path}"
+    )
 
     # Return metric score for hyperparameter optimization
     optimized_metric = config.get("optimized_metric")

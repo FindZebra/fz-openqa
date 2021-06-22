@@ -1,7 +1,6 @@
 import shutil
 from functools import partial
-from typing import *
-import rich
+from typing import Dict, List, Any, Union, Optional
 
 import datasets
 import torch
@@ -13,8 +12,8 @@ from .datasets import fz_x_medqa
 
 
 def add_spec_token(
-        special_token: str,
-        text: str,
+    special_token: str,
+    text: str,
 ):
     """
     This functions append a special token to a text such that output = special_token+text.
@@ -44,11 +43,11 @@ class FZxMedQADataModule(BaseDataModule):
         self.filter_gold = filter_gold
 
     def tokenize_examples(
-            self,
-            examples: Dict[str, List[Any]],
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            max_length: Optional[int],
+        self,
+        examples: Dict[str, List[Any]],
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        max_length: Optional[int],
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         examples = {
@@ -79,14 +78,18 @@ class FZxMedQADataModule(BaseDataModule):
         questions = list(
             map(partial(add_spec_token, QUERY_TOKEN), examples["question"])
         )
-        documents = list(map(partial(add_spec_token, DOC_TOKEN), examples["document"]))
+        documents = list(
+            map(partial(add_spec_token, DOC_TOKEN), examples["document"])
+        )
         q_encodings = tokenizer(questions, **tokenizer_kwargs)
         d_encodings = tokenizer(documents, **tokenizer_kwargs)
         output = {
             "question.text": examples["question"],
             "document.text": examples["document"],
         }
-        for data, prefix in zip([q_encodings, d_encodings], ["question", "document"]):
+        for data, prefix in zip(
+            [q_encodings, d_encodings], ["question", "document"]
+        ):
             for k, v in data.items():
                 output[f"{prefix}.{k}"] = v
 
@@ -111,7 +114,9 @@ class FZxMedQADataModule(BaseDataModule):
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
         # tokenize and format as PyTorch tensors
         fn = partial(
-            self.tokenize_examples, tokenizer=self.tokenizer, max_length=self.max_length
+            self.tokenize_examples,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
         )
         dataset = dataset.map(fn, batched=True)
         # transform attributes to tensors
@@ -135,7 +140,9 @@ class FZxMedQADataModule(BaseDataModule):
 
         return dataset
 
-    def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    def collate_fn(
+        self, batch: Any
+    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them.
         Returns a dictionary with attributes:
@@ -195,10 +202,18 @@ class FZxMedQADataModule(BaseDataModule):
         print("=== Sample ===")
         print(console_width * "-")
         print("* Question:")
-        print(self.tokenizer.decode(example["question.input_ids"], **decode_kwargs))
+        print(
+            self.tokenizer.decode(
+                example["question.input_ids"], **decode_kwargs
+            )
+        )
         print(console_width * "-")
         print(f"* Document (rank={example['rank']})")
-        print(self.tokenizer.decode(example["document.input_ids"], **decode_kwargs))
+        print(
+            self.tokenizer.decode(
+                example["document.input_ids"], **decode_kwargs
+            )
+        )
         print(console_width * "-")
         print("* Answer Choices:")
         idx = example["answer_idx"]

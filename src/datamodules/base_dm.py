@@ -1,6 +1,6 @@
 import shutil
 from functools import partial
-from typing import *
+from typing import Dict, List, Any, Callable, Union, Optional
 
 import datasets
 import rich
@@ -44,20 +44,20 @@ class BaseDataModule(LightningDataModule):
     ]  # attributes to be converted into Tensors
 
     def __init__(
-            self,
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            cache_dir: str = "cache/",
-            train_batch_size: int = 64,
-            eval_batch_size: int = 128,
-            num_workers: int = 0,
-            pin_memory: bool = False,
-            persistent_workers: bool = False,
-            max_length: Optional[int] = 512,
-            use_subset: bool = False,
-            verbose: bool = True,
-            corpus: Optional['BaseDataModule'] = None,
-            **kwargs,
+        self,
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        cache_dir: str = "cache/",
+        train_batch_size: int = 64,
+        eval_batch_size: int = 128,
+        num_workers: int = 0,
+        pin_memory: bool = False,
+        persistent_workers: bool = False,
+        max_length: Optional[int] = 512,
+        use_subset: bool = False,
+        verbose: bool = True,
+        corpus: Optional["BaseDataModule"] = None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -79,13 +79,13 @@ class BaseDataModule(LightningDataModule):
         self.dataset: Optional[HgDataset] = None
 
     def tokenize_examples(
-            self,
-            examples: Dict[str, List[Any]],
-            *,
-            tokenizer: PreTrainedTokenizerFast,
-            max_length: Optional[int],
-            preprocess_fn: Optional[Callable] = None,
-            **kwargs
+        self,
+        examples: Dict[str, List[Any]],
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        max_length: Optional[int],
+        preprocess_fn: Optional[Callable] = None,
+        **kwargs,
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         The input format is:
@@ -94,9 +94,14 @@ class BaseDataModule(LightningDataModule):
         }
         """
         if preprocess_fn is None:
-            preprocess_fn = lambda x: x
 
-        text_fields = {field: list(map(preprocess_fn, examples[field])) for field in self.text_fields}
+            def preprocess_fn(x):
+                return x
+
+        text_fields = {
+            field: list(map(preprocess_fn, examples[field]))
+            for field in self.text_fields
+        }
         return tokenizer(
             *text_fields.values(),
             max_length=max_length,
@@ -113,7 +118,9 @@ class BaseDataModule(LightningDataModule):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
+        return load_dataset(
+            self.dset_script_path_or_id, cache_dir=self.data_dir
+        )
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
@@ -143,7 +150,9 @@ class BaseDataModule(LightningDataModule):
             return DatasetDict(
                 {
                     k: dset.select(range(n))
-                    for n, (k, dset) in zip([100, 10, 10], self.dataset.items())
+                    for n, (k, dset) in zip(
+                        [100, 10, 10], self.dataset.items()
+                    )
                 }
             )
         elif isinstance(dataset, Dataset):
@@ -154,7 +163,9 @@ class BaseDataModule(LightningDataModule):
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
         fn = partial(
-            self.tokenize_examples, tokenizer=self.tokenizer, max_length=self.max_length
+            self.tokenize_examples,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
         )
         dataset = dataset.map(fn, batched=True)
         dataset.set_format(type="torch", columns=self.pt_attributes)
@@ -167,8 +178,7 @@ class BaseDataModule(LightningDataModule):
     def pprint(self):
         """Pretty print the dtaset"""
         rich.print(
-            f">> Dataset: [use_subset={self.use_subset}]: \n"
-            f"{self.dataset}"
+            f">> Dataset: [use_subset={self.use_subset}]: \n" f"{self.dataset}"
         )
 
     def train_dataloader(self):
@@ -204,7 +214,9 @@ class BaseDataModule(LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
-    def collate_fn(self, batch: Any) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    def collate_fn(
+        self, batch: Any
+    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
         return self.tokenizer.pad(batch)
@@ -227,5 +239,9 @@ class BaseDataModule(LightningDataModule):
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
-        rich.print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=True))
+        rich.print(
+            self.tokenizer.decode(
+                example["input_ids"], skip_special_tokens=True
+            )
+        )
         print(console_width * "=")

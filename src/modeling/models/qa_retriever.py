@@ -1,6 +1,10 @@
 import torch
 from torch import Tensor, nn
-from transformers import PreTrainedTokenizerFast, AutoModel, BertPreTrainedModel
+from transformers import (
+    PreTrainedTokenizerFast,
+    AutoModel,
+    BertPreTrainedModel,
+)
 
 from src.modeling.evaluators import Evaluator
 from .base import BaseModel
@@ -71,7 +75,9 @@ class QaRetriever(BaseModel):
 
         # global representations
         h = self.dropout(h)
-        h_glob: Tensor = {"document": self.e_proj, "question": self.q_proj}[key](h)
+        h_glob: Tensor = {"document": self.e_proj, "question": self.q_proj}[
+            key
+        ](h)
 
         # todo: masking
         return torch.nn.functional.normalize(h_glob, p=2, dim=2)

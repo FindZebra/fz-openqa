@@ -1,4 +1,4 @@
-from typing import *
+from typing import Dict, List, Any
 
 from datasets import Split
 from pytorch_lightning import LightningModule
@@ -22,7 +22,9 @@ class BaseModel(LightningModule):
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters()
 
-    def _step(self, batch: Any, batch_idx: int, split: Split) -> Dict[str, Any]:
+    def _step(
+        self, batch: Any, batch_idx: int, split: Split
+    ) -> Dict[str, Any]:
         data = self.evaluator(self.forward, batch, split=split)
 
         # log 'split' metrics
@@ -54,7 +56,9 @@ class BaseModel(LightningModule):
         # `outputs` is a list of dicts returned from `training_step()`
         metrics = self.evaluator.compute_metrics(split=split)
         for k, v in metrics.items():
-            self.log(k, v, prog_bar=k in self._prog_bar_metrics, sync_dist=True)
+            self.log(
+                k, v, prog_bar=k in self._prog_bar_metrics, sync_dist=True
+            )
         self.evaluator.reset_metrics(split=split)
 
     def training_epoch_end(self, outputs: List[Any]):

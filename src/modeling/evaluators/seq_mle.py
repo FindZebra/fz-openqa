@@ -1,7 +1,11 @@
 import collections
+from typing import Dict, Any
 
-from .abstract import *
+import torch
+from torch import nn, Tensor
 from torch.nn import functional as F
+
+from .abstract import Evaluator
 
 
 class SeqMaximumLikelihood(Evaluator):
@@ -29,7 +33,9 @@ class SeqMaximumLikelihood(Evaluator):
 
         # compute forward pass and loss
         logits = model(input_ids, attention_mask=attention_mask)
-        loss = F.cross_entropy(logits.permute(0, 2, 1), input_ids, reduce="none")
+        loss = F.cross_entropy(
+            logits.permute(0, 2, 1), input_ids, reduce="none"
+        )
 
         if attention_mask is not None:
             loss = (loss * attention_mask).sum() / attention_mask.sum()
