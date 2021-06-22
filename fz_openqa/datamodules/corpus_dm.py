@@ -235,14 +235,14 @@ class CorpusDataModule(BaseDataModule):
             map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
         )
 
-        def maybe_truncate(x: Any):
+        def maybe_truncate(x: Any, max_length: int):
             """truncate sequential attributes to `max_length`"""
             if not (isinstance(x, torch.Tensor) and len(x.shape) == 2):
                 return x
 
             return x[:, :max_length]
 
-        return {k: maybe_truncate(v) for k, v in output.items()}
+        return {k: maybe_truncate(v, max_length) for k, v in output.items()}
 
     @staticmethod
     @torch.no_grad()
