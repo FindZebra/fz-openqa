@@ -3,9 +3,6 @@ name = "fz-openqa"
 version = "0.0.1"
 description = "Medical Open Domain Quetion Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
-packages = [
-    { include = "src" },
-]
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -23,7 +20,7 @@ gdown = "^3.13.0"
 elasticsearch = "^7.13.2"
 
 [tool.poetry.scripts]
-fzqa = "src.cli:main"
+fzqa = "fz_openqa.cli:main"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
