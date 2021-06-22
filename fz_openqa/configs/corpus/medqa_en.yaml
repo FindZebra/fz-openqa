@@ -1,6 +1,6 @@
-_target_: fz_openqa.datamodules.corpus_dm.CorpusDataModule
+_target_: fz_openqa.datamodules.corpus_dm.MedQaEnDataModule
 
-input_dir: "/Users/valv/Documents/Research/code/_main/fz-openqa/examples"
+input_dir: null
 cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: ${datamodule.train_batch_size}
 eval_batch_size: ${datamodule.eval_batch_size}
@@ -8,6 +8,7 @@ num_workers: ${datamodule.num_workers}
 pin_memory: ${datamodule.pin_memory}
 persistent_workers: ${datamodule.persistent_workers}
 max_length: null
+num_proc: ${datamodule.num_proc}
 use_subset: False
 passage_length: 200
 passage_stride: 100

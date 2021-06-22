@@ -55,6 +55,7 @@ class BaseDataModule(LightningDataModule):
         persistent_workers: bool = False,
         max_length: Optional[int] = 512,
         use_subset: bool = False,
+        num_proc: int = 1,
         verbose: bool = True,
         corpus: Optional["BaseDataModule"] = None,
         **kwargs,
@@ -68,6 +69,7 @@ class BaseDataModule(LightningDataModule):
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
         self.use_subset = use_subset
+        self.num_proc = num_proc
         self.verbose = verbose
 
         # corpus object
@@ -167,7 +169,9 @@ class BaseDataModule(LightningDataModule):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
         )
-        dataset = dataset.map(fn, batched=True)
+        dataset = dataset.map(
+            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+        )
         dataset.set_format(type="torch", columns=self.pt_attributes)
         return dataset
 
