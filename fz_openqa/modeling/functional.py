@@ -7,7 +7,7 @@ from torch import Tensor
 Batch = Union[Sequence[Tensor], Tensor]
 
 
-def count_trailing_padding(
+def count_right_padding(
     x: Union[Sequence[Any], Tensor], pad_token: Any
 ) -> int:
     """count the number of right padding tokens"""
@@ -25,9 +25,7 @@ def count_trailing_padding(
 
 def pad(batch: Batch, pad_token: Any):
     """pad a sequence of tensors to the same size, and remove the unnecessary right padding"""
-    max_length = max(
-        len(x) - count_trailing_padding(x, pad_token) for x in batch
-    )
+    max_length = max(len(x) - count_right_padding(x, pad_token) for x in batch)
 
     def pad_one(max_length, x):
         padding = torch.tensor(
@@ -44,7 +42,7 @@ def pad(batch: Batch, pad_token: Any):
 def padless_cat(a: Batch, b: Batch, pad_token: int) -> Tensor:
     """Concatenate the input tensors across the dimension 1 such that there is no padding between a and b."""
     batch = [
-        torch.cat([xa[: -count_trailing_padding(xa, pad_token)], xb], dim=0)
+        torch.cat([xa[: -count_right_padding(xa, pad_token)], xb], dim=0)
         for xa, xb in zip(a, b)
     ]
     return pad(batch, pad_token)

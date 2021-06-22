@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import torch
 
-from fz_openqa.modeling.functional import padless_cat, count_trailing_padding, pad
+from fz_openqa.modeling.functional import padless_cat, count_right_padding, pad
 
 
 class Test_functional(TestCase):
@@ -49,16 +49,16 @@ class Test_functional(TestCase):
         padded = pad(batch, 0)
         self.assertEqual(padded.shape, torch.Size([2, 5]))
 
-    def test_count_trailing_padding(self):
+    def test_count_right_padding(self):
         x = [1, 2, 3]
-        self.assertEqual(count_trailing_padding(x, 0), 0)
+        self.assertEqual(count_right_padding(x, 0), 0)
 
         x = [1, 2, 3, 0, 0]
-        print(count_trailing_padding(x, 0))
-        self.assertEqual(count_trailing_padding(x, 0), 2)
+        print(count_right_padding(x, 0))
+        self.assertEqual(count_right_padding(x, 0), 2)
 
         x = [1, 2, 0, 3, 'x', 'x']
-        self.assertEqual(count_trailing_padding(x, 'x'), 2)
+        self.assertEqual(count_right_padding(x, 'x'), 2)
 
         x = [0, 1, 2, 0, 3]
-        self.assertEqual(count_trailing_padding(x, 0), 0)
+        self.assertEqual(count_right_padding(x, 0), 0)
