@@ -49,7 +49,7 @@ class CorpusDataModule(BaseDataModule):
         "input_ids",
         "attention_mask",
     ]  # attributes to be converted into Tensors
-    vectors_id='vectors'
+    vectors_id = 'vectors'
 
     def __init__(
             self,
@@ -172,7 +172,7 @@ class CorpusDataModule(BaseDataModule):
                 for k, args in args_dict.items()
             }
         )
-        for k, xs in output.items(): #todo: debug short lengths
+        for k, xs in output.items():  # todo: debug short lengths
             print(f" >>>> {k}: {len(xs)}")
 
         return output
@@ -224,7 +224,8 @@ class CorpusDataModule(BaseDataModule):
 
     @staticmethod
     @torch.no_grad()
-    def compute_vectors_batch(key:str, model: Callable, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+    def compute_vectors_batch(key: str, model: Callable, batch: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        """Compute one batch of vectors"""
         if isinstance(model, torch.nn.Module):
             device = next(iter(model.parameters()))
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -234,6 +235,7 @@ class CorpusDataModule(BaseDataModule):
         return batch
 
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
+        """Compute the vectors for each passage in the corpus"""
         # todo: distributed version
         self.dataset = self.dataset.map(partial(self.compute_vectors_batch, self.vectors_id, model),
                                         batch_size=self.eval_batch_size,
@@ -242,9 +244,11 @@ class CorpusDataModule(BaseDataModule):
             self.dataset['train'].add_faiss_index(column=self.vectors_id, **kwargs)
 
     def query(self, vector: Tensor, k: int = 1):
+        """Query the faiss index given a vector query of shape (h,)"""
         vector = vector.cpu().numpy()
         return self.dataset['train'].get_nearest_examples(self.vectors_id, vector, k=k)
 
-    def query_batch(self, vector: Tensor, k: int = 1):
-        vector = vector.cpu().numpy()
-        return self.dataset['train'].get_nearest_examples_batch(self.vectors_id, vector, k=k)
+    def query_batch(self, vectors: Tensor, k: int = 1):
+        """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
+        vectors = vectors.cpu().numpy()
+        return self.dataset['train'].get_nearest_examples_batch(self.vectors_id, vectors, k=k)
