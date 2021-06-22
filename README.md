@@ -1,20 +1,40 @@
 # Medical Open Domain Question Answering - FindZebra
 
-## Environment Setup
+## Setup
 
-Install poetry
+<details>
+<summary>Evironment</summary>
+
+1. Install poetry
 
 ```shell
 curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
 ```
 
-Install dependencies (within the project)
+2. Install dependencies (within the project)
 
 ```shell
 poetry install
 ```
 
-## Running the code
+3. setting up git hooks
+
+```shell
+pip install pre-commit
+pre-commit install
+```
+
+4. Run something using the environment
+
+```shell
+poetry run python <file.py>
+poetry run which python # return the path to the virtual environment
+```
+
+</details>
+
+<details>
+<summary>Running the code</summary>
 
 `src.cli.main` can be called directly using the command `fzqa` (which can be edited in the `.toml` file):
 
@@ -22,40 +42,22 @@ poetry install
 poetry run fzqa <args>
 ```
 
-Arguments are parse using Hydra, configurations are organized into modules (nested dictionary structure). Each attribute
-can be modified through the arguments:
+Or run the python script directly:
 
 ```shell
-poetry run fzqa trainger.gpus=0 trainer.max_epochs=100 logger=wandb datamodule.lr=0.007
+poetry run python run.py <args>
 ```
 
-Experiment configurations define a full experimental setup, overriding other configurations
+</details>
 
-```shell
-poetry run fzqa +experiment=quick_test
-```
-
-Running on the server:
-
-```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only work_dir=/scratch/valv/runs 
- ```
-
-Multi-gpus training:
-
-```shell
-CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py +experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
-```
-
-## Controlling code quality
 
 <details>
 <summary>Using Github</summary>
 
 ### Opening issues
 
-Each task, bug or idea should be registered as an issue. New issues are automatically added to `project/development/todo`.
-Use `- [ ] <text>` to describe each item in a task.
+Each task, bug or idea should be registered as an issue. New issues are automatically added
+to `project/development/todo`. Use `- [ ] <text>` to describe each item in a task.
 
 ### Using the project tab
 
@@ -63,8 +65,9 @@ Use the [project page](https://github.com/vlievin/fz-openqa/projects) to keep tr
 
 ### Branching
 
-Do not implement features in the `master` branch. Create a new branch for each issue. Use a pull request to merge the branch with master and close the corresponding issue.
-Closed issues are automatically moved to `project/development/done`.
+Do not implement features in the `master` branch. Create a new branch for each issue. Use a pull request to merge the
+branch with master and close the corresponding issue. Closed issues are automatically moved
+to `project/development/done`.
 
 </details>
 
@@ -113,7 +116,167 @@ Core functions should be properly tested. Unit tests can be implemented in `test
 poetry run python -m unittest discover
 ```
 
-## Main dependencies
+</details>
+
+## Running the code
+
+`src.cli.main` can be called directly using the command `fzqa` (which can be edited in the `.toml` file):
+
+```shell
+poetry run fzqa <args>
+```
+
+<details>
+<summary>Passing Arguments</summary>
+Arguments are parse using Hydra, configurations are organized into modules (nested dictionary structure). Each attribute
+can be modified through the arguments:
+
+```shell
+poetry run fzqa trainger.gpus=0 trainer.max_epochs=100 logger=wandb datamodule.lr=0.007
+```
+
+</details>
+
+<details>
+<summary>Configuring experiments</summary>
+
+Experiment configurations define a full experimental setup in `configs/experiment/`. Run the experiment config using:
+
+```shell
+poetry run fzqa experiment=quick_test
+```
+
+</details>
+
+<details>
+<summary>GPU cluster</summary>
+
+When running experiments on the GPU cluster, you need to pass the flag `CUDA_VISIBLE_DEVICES` to expose GPU devices to
+your script. The `/scratch` directory should be used to store large files (cache).
+
+```shell
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1 
+ ```
+
+Lightning enables multi-gpus training using torch.distributed. Simply use:
+
+```shell
+CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run fzqa experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
+```
+
+</details>
+
+## Documentation
+
+### Supervised OpenQA
+
+The basic End-to-end OpenQA model relies on a single pretrained BERT model. The model functions as follows:
+
+<details>
+<summary>Retriever model</summary>
+
+```python
+from copy import deepcopy
+import torch
+from torch import Tensor, nn, einsum, argmax
+from transformers import AutoModel
+from fz_openqa.modeling.layers.lambd import Lambda
+
+hdim = 16
+bert = AutoModel.from_pretrained('model_id')
+head_q = nn.Sequential(nn.Linear(bert.config.hidden_size, hdim),
+                       Lambda(lambda x: x[:, 0]))
+head_d = deepcopy(head_q)
+
+
+def h_q(q: Tensor) -> Tensor:
+    """pseudo-code for the query model"""
+    return head_q(bert(q).last_hidden_state)  # tensor of shape [n_q, h,]
+
+
+def h_d(d: Tensor) -> Tensor:
+    """pseudo-code for the query model"""
+    return head_d(bert(d).last_hidden_state)  # tensor of shape [n_d, h,]
+
+
+def sim(h_q: Tensor, h_d: Tensor) -> Tensor:
+    """Compute the similarity matrix between the batch of queries and the documents"""
+    return einsum(f'nh, mh -> nm', h_q, h_d)  # tensor  of shape [n_q, n_d]
+
+
+def topk(similarities: Tensor, k: int) -> Tensor:
+    """return the topk document for each query in the batch given the similarity matrix"""
+    values, indices = torch.topk(similarities, k=k, dim=1)  # tensor of shape [m_q, min(k, n_d)]
+    return indices
+
+
+def retriever(q: Tensor, d: Tensor, k: int) -> Tensor:
+    """Retrieve the top k document form the corpus `d`
+    for each query in the batch `q`"""
+    similarities = sim(h_q(q), h_d(d))
+    return topk(similarities, k)
+```
+
+</details>
+
+<details>
+<summary>Reader model</summary>
+
+```python
+from copy import deepcopy
+import torch
+from torch import Tensor, nn, einsum, cat
+from transformers import AutoModel
+from fz_openqa.modeling.layers.lambd import Lambda
+
+hdim = 16
+bert = AutoModel.from_pretrained('model_id')
+head_qd = nn.Sequential(nn.Linear(bert.config.hidden_size, hdim),
+                        Lambda(lambda x: x[:, 0]))
+head_a = deepcopy(head_qd)
+
+
+def h_qd(q: Tensor, d: Tensor) -> Tensor:
+    """pseudo-code for the query-document model"""
+    qd = cat([q, d], dim=1)
+    return head_qd(bert(qd).last_hidden_state)  # tensor of shape [n_qd, h,]
+
+
+def h_a(a: Tensor) -> Tensor:
+    """pseudo-code for the answer model"""
+    return head_a(bert(a).last_hidden_state)  # tensor of shape [n_a, h,]
+
+
+def sim(h_qd: Tensor, h_a: Tensor) -> Tensor:
+    """Compute the similarity matrix between the batch of query-documents and the answers"""
+    return einsum(f'nh, mh -> nm', h_qd, h_a)  # tensor  of shape [n_qd, n_a]
+
+
+def topk(similarities: Tensor, k: int) -> Tensor:
+    """return the top k document-answers for each query in the batch given the similarity matrix"""
+    values, indices = torch.topk(similarities, k=k, dim=1)  # tensor of shape [n_qd min(k, n_a)]
+    return indices
+
+
+def reader(q: Tensor, d: Tensor, a: Tensor, k: int) -> Tensor:
+    """Retrieve the top k answers given a batch of triplets (query, document, answer)"""
+    similarities = sim(h_qd(q, d), h_a(a))
+    return topk(similarities, k)
+```
+
+</details>
+
+<details>
+<summary>Supervised Training</summary>
+....
+</details>
+
+<details>
+<summary>End-to-end evaluation</summary>
+....
+</details>
+
+### Credits
 
 The package relies on:
 
@@ -122,9 +285,4 @@ The package relies on:
 * [Hydra](https://hydra.cc/docs/intro/) for a clean management of experiments (setting hyper-parameters, ...)
 * [Weights and Biases](https://wandb.ai) for clean logging and experiment tracking
 * [Poetry](https://python-poetry.org/) for stricter dependency management and easy packaging
-
-</details>
-
-## credits
-
-The original template comes from [ashleve](https://github.com/ashleve/lightning-hydra-template).
+* The original template was copied form [ashleve](https://github.com/ashleve/lightning-hydra-template)
