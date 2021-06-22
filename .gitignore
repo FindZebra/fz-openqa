@@ -1,12 +1,9 @@
-# directories toe xclude
+# directories to exclude
 data/
 outputs/
 .cache/
 cache/
 runs/
-*sandbox*
-
-*.py.lock
 
 # Editors
 .vscode/
@@ -133,6 +130,5 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
-src/datamodules/datasets/fz_x_medqa.py.lock
-
-sandbox.py
+*.py.lock
+sandbox*.py

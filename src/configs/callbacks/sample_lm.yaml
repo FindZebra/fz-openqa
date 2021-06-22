@@ -1,2 +1,0 @@
-sample_lm:
-  _target_: src.callbacks.sample_lm.SampleLanguageModel

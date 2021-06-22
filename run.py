@@ -1,3 +1,3 @@
-from src.cli import main
+from fz_openqa.cli import main
 
 main()

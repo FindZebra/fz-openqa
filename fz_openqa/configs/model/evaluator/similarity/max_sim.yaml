@@ -1,0 +1,3 @@
+_target_: fz_openqa.modeling.similarities.max_sim.MaxSim
+
+similarity_metric: dot_product
