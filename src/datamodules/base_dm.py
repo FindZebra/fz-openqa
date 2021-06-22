@@ -1,16 +1,13 @@
-import hashlib
-import os
 import shutil
 from functools import partial
-from pathlib import Path
 from typing import *
 
 import datasets
+import rich
 import torch
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset, DatasetDict, Split
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
-from rich import print
 from torch.utils.data import DataLoader, Dataset
 from transformers import PreTrainedTokenizerFast, BatchEncoding
 
@@ -47,68 +44,48 @@ class BaseDataModule(LightningDataModule):
     ]  # attributes to be converted into Tensors
 
     def __init__(
-        self,
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        data_dir: str = "data/",
-        train_batch_size: int = 64,
-        eval_batch_size: int = 128,
-        num_workers: int = 0,
-        pin_memory: bool = False,
-        persistent_workers: bool = False,
-        max_length: Optional[int] = 512,
-        use_subset: bool = False,
-        update_cache: bool = False,
-        **kwargs,
+            self,
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            cache_dir: str = "cache/",
+            train_batch_size: int = 64,
+            eval_batch_size: int = 128,
+            num_workers: int = 0,
+            pin_memory: bool = False,
+            persistent_workers: bool = False,
+            max_length: Optional[int] = 512,
+            use_subset: bool = False,
+            verbose: bool = True,
+            corpus: Optional['BaseDataModule'] = None,
+            **kwargs,
     ):
         super().__init__()
 
-        self.dset_id = self.generate_id(locals())
-        self.data_dir = data_dir
+        self.data_dir = cache_dir
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
         self.use_subset = use_subset
-        self.update_cache = update_cache
+        self.verbose = verbose
 
+        # corpus object
+        self.corpus = corpus
+
+        # tokenizer and dataset
         self.max_length = max_length
         self.tokenizer = tokenizer
-
         self.dataset: Optional[HgDataset] = None
-        self.data_train: Optional[Dataset] = None
-        self.data_val: Optional[Dataset] = None
-        self.data_test: Optional[Dataset] = None
-
-    def generate_id(self, _locals: Dict, exclude: Optional[List[str]] = None) -> str:
-        exclude = exclude or []
-        _exclude = [
-            "train_batch_size",
-            "eval_batch_size",
-            "num_workers",
-            "pin_memory",
-            "data_dir",
-            "__class__",
-            "no_cache",
-        ] + exclude
-        # flatten kwargs
-        for k, v in _locals.pop("kwargs").items():
-            _locals[k] = v
-
-        repr = ""
-        for k, v in _locals.items():
-            if k not in _exclude:
-                repr += "-" + v.__repr__().replace(" ", "")
-
-        return hashlib.sha224(repr.encode("utf-8")).hexdigest()
 
     def tokenize_examples(
-        self,
-        examples: Dict[str, List[Any]],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
+            self,
+            examples: Dict[str, List[Any]],
+            *,
+            tokenizer: PreTrainedTokenizerFast,
+            max_length: Optional[int],
+            preprocess_fn: Optional[Callable] = None,
+            **kwargs
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         The input format is:
@@ -116,16 +93,23 @@ class BaseDataModule(LightningDataModule):
             attribute_name: list of attribute values
         }
         """
+        if preprocess_fn is None:
+            preprocess_fn = lambda x: x
+
+        text_fields = {field: list(map(preprocess_fn, examples[field])) for field in self.text_fields}
         return tokenizer(
-            *(examples[field] for field in self.text_fields),
+            *text_fields.values(),
             max_length=max_length,
             truncation=max_length is not None,
+            **kwargs,
         )
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
         self.load_base_dataset()
+        if self.corpus is not None:
+            self.corpus.prepare_data()
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -133,28 +117,25 @@ class BaseDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        if self.update_cache or not self.get_cache_path().exists():
-            self.dataset: HgDataset = self.load_base_dataset()
-            self.dataset = self.filter_dataset(self.dataset)
-            if self.use_subset:
-                self.dataset = self.take_subset(self.dataset)
+        self.dataset: HgDataset = self.load_base_dataset()
+        self.dataset = self.filter_dataset(self.dataset)
+        if self.use_subset:
+            self.dataset = self.take_subset(self.dataset)
+        self.dataset = self.preprocess_dataset(self.dataset)
 
-            self.dataset = self.preprocess_dataset(self.dataset)
+        if self.verbose:
+            self.pprint()
+            self.display_sample()
 
-            # save to disk
-            self.save_preprocessed_to_disk()
-
-        else:
-            self.load_preprocessed_from_disk()
-
-        # assign splits
-        self.data_train = self.dataset[self.split_ids[0]]
-        self.data_val = self.dataset[self.split_ids[1]]
-        self.data_test = self.dataset[self.split_ids[2]]
-
-        self.pprint()
-
-        self.display_sample()
+        if self.corpus is not None:
+            self.corpus.setup()
+            if self.verbose:
+                console_width, _ = shutil.get_terminal_size()
+                print("=== Corpus ===")
+                print(console_width * "*")
+                self.corpus.pprint()
+                self.corpus.display_sample()
+                print(console_width * "*")
 
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         """Take a subset of the dataset and return."""
@@ -170,17 +151,6 @@ class BaseDataModule(LightningDataModule):
         else:
             raise NotImplementedError
 
-    def load_preprocessed_from_disk(self):
-        """Load the preprocessed self.dataset from disk."""
-        self.dataset = DatasetDict().load_from_disk(str(self.get_cache_path()))
-
-    def save_preprocessed_to_disk(self):
-        """Save the preprocessed self.dataset to disk."""
-        # todo: save to disk should be done automatically through the orriginal Dataset object. Nonetheless, the encode function appears not to be serializable, hence the fingerprint cannot be computed todo: and the encode function cannot be pickled. check if the future version solve the issue and remove this manual save/load operrations"""
-        cache_path = self.get_cache_path()
-        cache_path.parent.mkdir(exist_ok=True)
-        self.dataset.save_to_disk(str(cache_path))
-
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
         fn = partial(
@@ -194,25 +164,16 @@ class BaseDataModule(LightningDataModule):
         """Apply filter operation to the dataset and return"""
         return dataset
 
-    def get_cache_path(self) -> Path:
-        """Get the path to the cache directory. This cache directory is used for manual saving of the dataset."""
-        # TODO: solve issues that will arise due to versioning. Solve by avoiding using custom save_to_disk method.
-        fn = f"{type(self).__name__}-{self.dset_script_path_or_id.replace('/', '_')}-{self.dset_id}"
-        dir = os.path.join(self.data_dir, "cache")
-        return Path(dir) / fn
-
     def pprint(self):
         """Pretty print the dtaset"""
-        print(
+        rich.print(
             f">> Dataset: [use_subset={self.use_subset}]: \n"
-            f"{self.data_train}\n"
-            f"{self.data_val}\n"
-            f"{self.data_test}\n"
+            f"{self.dataset}"
         )
 
     def train_dataloader(self):
         return DataLoader(
-            dataset=self.data_train,
+            dataset=self.dataset[Split.TRAIN],
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -223,7 +184,7 @@ class BaseDataModule(LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(
-            dataset=self.data_val,
+            dataset=self.dataset[Split.VALIDATION],
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -234,7 +195,7 @@ class BaseDataModule(LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(
-            dataset=self.data_test,
+            dataset=self.dataset[Split.TEST],
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -257,7 +218,7 @@ class BaseDataModule(LightningDataModule):
         print("=== Training Batch ===")
         print(console_width * "-")
         for k, v in batch.items():
-            print(f"   - {k}: {v.shape} <{v.dtype}>")
+            rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
         print(console_width * "=")
         self.display_one_sample({k: v[0] for k, v in batch.items()})
 
@@ -266,5 +227,5 @@ class BaseDataModule(LightningDataModule):
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
-        print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=True))
+        rich.print(self.tokenizer.decode(example["input_ids"], skip_special_tokens=True))
         print(console_width * "=")

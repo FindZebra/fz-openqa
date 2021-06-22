@@ -1,8 +1,9 @@
-from typing import List, Optional
 import os
 from sys import platform
-import hydra
-import os
+from typing import List, Optional
+
+import rich
+from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import (
     Callback,
@@ -13,8 +14,8 @@ from pytorch_lightning import (
 )
 from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
+
 from src import utils
-from rich import print
 
 log = utils.get_logger(__name__)
 
@@ -27,27 +28,36 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
-    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
     if platform == "darwin":
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
+    if config.verbose == False:
+        os.environ["WANDB_SILENT"] = "TRUE"
+
+    if config.verbose:
+        rich.print(f"> work_dir: {config.work_dir}")
+        rich.print(f"> cache_dir: {os.path.abspath(config.cache_dir)}")
+        rich.print(f"> Current working directory : {os.getcwd()}")
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
         seed_everything(config.seed, workers=True)
 
-    # Init Lightning datamodule
+    # Init HuggingFace tokenizer
     log.info(f"Instantiating tokenizer <{config.tokenizer._target_}>")
-    tokenizer: PreTrainedTokenizerFast = hydra.utils.instantiate(config.tokenizer)
+    tokenizer: PreTrainedTokenizerFast = instantiate(config.tokenizer)
+
+    # Init the Corpus
+    log.info(f"Instantiating corpus <{config.corpus._target_ if config.corpus else 'none'}>")
+    corpus: LightningDataModule = instantiate(config.corpus, tokenizer=tokenizer) if config.corpus else None
 
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: LightningDataModule = hydra.utils.instantiate(
-        config.datamodule, tokenizer=tokenizer
-    )
+    datamodule: LightningDataModule = instantiate(config.datamodule, tokenizer=tokenizer, corpus=corpus)
 
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
-    model: LightningModule = hydra.utils.instantiate(config.model, tokenizer=tokenizer)
+    model: LightningModule = instantiate(config.model, tokenizer=tokenizer, corpus=corpus)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -55,11 +65,7 @@ def train(config: DictConfig) -> Optional[float]:
         for _, cb_conf in config["callbacks"].items():
             if "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
-                callbacks.append(hydra.utils.instantiate(cb_conf))
-
-    print(f">> callbacks:")
-    for c in callbacks:
-        print(f"- {c}")
+                callbacks.append(instantiate(cb_conf))
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
@@ -67,11 +73,11 @@ def train(config: DictConfig) -> Optional[float]:
         for _, lg_conf in config["logger"].items():
             if "_target_" in lg_conf:
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
-                logger.append(hydra.utils.instantiate(lg_conf))
+                logger.append(instantiate(lg_conf))
 
     # Init Lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(
+    trainer: Trainer = instantiate(
         config.trainer,
         callbacks=callbacks,
         logger=logger,

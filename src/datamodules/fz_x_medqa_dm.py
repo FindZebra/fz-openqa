@@ -1,6 +1,7 @@
 import shutil
 from functools import partial
 from typing import *
+import rich
 
 import datasets
 import torch
@@ -26,9 +27,6 @@ def add_spec_token(
 
 class FZxMedQADataModule(BaseDataModule):
     """A PyTorch Lightning DataModule wrapping the FZxMedQA dataset."""
-
-    # TODO: Query and Document tokenizers with special tokens:
-    #  see https://github.com/stanford-futuredata/ColBERT/blob/master/colbert/modeling/tokenization/doc_tokenization.py
 
     dset_script_path_or_id = (
         fz_x_medqa.__file__

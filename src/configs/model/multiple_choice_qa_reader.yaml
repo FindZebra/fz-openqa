@@ -5,7 +5,7 @@ _target_: src.modeling.models.multiple_choice_qa_reader.MultipleChoiceQAReader
 
 hidden_size: 32
 bert_id: ${pretrained_model}
-cache_dir: ${data_dir}
+cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 0
 dropout: 0
