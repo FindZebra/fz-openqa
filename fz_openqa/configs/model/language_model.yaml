@@ -1,0 +1,9 @@
+defaults:
+  - evaluator: seq_mle.yaml
+
+_target_: fz_openqa.modeling.models.language_model.LanguageModel
+
+hidden_size: 256
+lr: 0.001
+weight_decay: 0.0005
+max_length: ${datamodule.max_length}

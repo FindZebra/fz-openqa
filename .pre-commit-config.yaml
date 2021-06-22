@@ -3,9 +3,10 @@ repos:
     rev: 20.8b1
     hooks:
       - id: black
-        files: src/
+        files: fz_openqa/
 
   - repo: https://gitlab.com/pycqa/flake8
     rev: 3.8.4
     hooks:
       - id: flake8
+        files: fz_openqa/
