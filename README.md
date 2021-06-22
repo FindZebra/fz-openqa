@@ -158,17 +158,17 @@ your script. The `/scratch` directory should be used to store large files (cache
  CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1 
  ```
 
-Lightning enables multi-gpus training using torch.distributed. Simply use:
+Lightning enables multi-gpus training using torch.distributed. Simply configure the Lightning trainer:
 
 ```shell
-CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run fzqa experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
+CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
 ```
 
 </details>
 
 ## Documentation
 
-### Supervised OpenQA
+### Pesudo-code for Supervised OpenQA
 
 The basic End-to-end OpenQA model relies on a single pretrained BERT model. The model functions as follows:
 
@@ -249,7 +249,7 @@ def h_a(a: Tensor) -> Tensor:
 
 def sim(h_qd: Tensor, h_a: Tensor) -> Tensor:
     """Compute the similarity matrix between the batch of query-documents and the answers"""
-    return einsum(f'nh, mh -> nm', h_qd, h_a)  # tensor  of shape [n_qd, n_a]
+    return einsum(f'nh, nah -> na', h_qd, h_a)  # tensor  of shape [n_qd, n_a]
 
 
 def topk(similarities: Tensor, k: int) -> Tensor:
@@ -268,12 +268,83 @@ def reader(q: Tensor, d: Tensor, a: Tensor, k: int) -> Tensor:
 
 <details>
 <summary>Supervised Training</summary>
-....
+
+The `FZxMedQA` dataset provides triplets `(q, d, a)` that can be exploited for supervised learning. In this setup the
+retriever only learns from the label (golden passage). The pseudo-code looks like:
+
+```python
+import torch
+
+for batch in loader:
+    # shapes: q: [bs, L_q, :], d: [bs, L_d, :], a: [bs, N_a, L_a, :], a_index: [bs,]
+    q, d, a, a_index = batch
+    bs, N_a, L_a, _ = a.shape
+    # retriever loss
+    ir_logits = sim(h_q(q), h_d(d))
+    retriever_loss = torch.nn.functional.cross_entropy(ir_logits, torch.range(ir_logits.shape[0]))
+    # reader loss
+    _h_qd = h_qd(q, d)  # shape [bs, h]
+    _h_a = h_a(a.view(bs * N_a, *a.shape[2:])).view(bs, N_a,
+                                                    -1)  # collapse bs and N_a, and reshape back, shape [bs, N_a, h]
+    qa_logits = torch.einsum(f'nh, nah -> na', _h_qd, _h_a)
+    reader_loss = torch.nn.functional.cross_entropy(qa_logits, a)
+    # total loss
+    loss = retriever_loss + retriever_loss
+    # backward, etc...
+    ...
+
+
+
+
+```
+
 </details>
 
 <details>
 <summary>End-to-end evaluation</summary>
-....
+
+During supervised training, the retriever only learns from the golden passages, and the reader is only evaluated using
+the golden passage. During end-to-end evaluation, we wish to use the documents actually retrieved using the trained
+model.
+
+```python
+# step 1. index the corpus
+for batch in corpus:
+    batch['vectors'] = h_d(batch['input_ids'])
+corpus.add_faiss_index('vectors')
+
+# step 2. end to end evaluation 
+for batch in loader:
+    q, a, a_index = batch
+    # retriever the best document for each query
+    d = corpus.get_nearest_examples_batch('vectors', k=1)  # potentially use k>1
+    # feed the best document to the reader
+    a_inferred = reader(q, d, a)
+    accuracy = Accuracy(a_inferred, a_index)
+    # log, etc...
+    ...
+```
+
+</details>
+
+## Future Improvements
+
+<details>
+<summary>Feed the answer choices to the retriever</summary>
+At the moment the current model does not use the answer choices for retrieval. Concatenate the answer choices with the query. 
+</details>
+
+<details>
+<summary>Late-interaction reader model</summary>
+At the moment, the reader model requires concatenating the query with the document, 
+which requires processing the query and document two times (1 time for IR, one time for reading comprehension). 
+A late interaction model for the reader component would allow processing each input one time with the BERT model.
+</details>
+
+<details>
+<summary>End-to-end training</summary>
+The current retriever only learns to identify the golden passage (which is noisily labelled).
+Sample from the retriever lives and learn from the signal given by the reader component.
 </details>
 
 ### Credits
