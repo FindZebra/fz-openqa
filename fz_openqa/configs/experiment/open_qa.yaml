@@ -27,9 +27,9 @@ model:
 
 datamodule:
   train_batch_size: 4
-  eval_batch_size: 16
+  eval_batch_size: 32
   max_length: 512
-  use_subset: True # todo
+  use_subset: False
   update_cache: True
 
 logger:
