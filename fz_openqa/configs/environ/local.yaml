@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - override /logger: null
+  - override /callbacks: null
+
+trainer:
+  gpus: 0
+
+datamodule:
+  use_subset: True
+  num_proc: 1
