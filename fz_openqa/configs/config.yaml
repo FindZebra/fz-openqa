@@ -10,7 +10,7 @@ defaults:
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)
 
   - experiment: null # define a full experiment configuraiton
-  - env: null # define a configuration specific to the environment (local, server, ...)
+  - environ: null # define a configuration specific to the environment (local, server, ...)
   - hydra: default.yaml
 
     # enable color logging
