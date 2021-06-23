@@ -70,24 +70,24 @@ class MultipleChoiceQAReader(BaseModel):
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
 
         # concatenate questions and documents such that there is no padding between Q and D
-        # todo: handle both input_ids and attention in one call
-        #  not sure it works that way, potential alignment issue
-        ids = padless_cat(
-            batch["document.input_ids"],
-            batch["question.input_ids"],
+        padded_batch = padless_cat(
+            {
+                "input_ids": batch["document.input_ids"],
+                "attention_mask": batch["document.attention_mask"],
+            },
+            {
+                "input_ids": batch["question.input_ids"],
+                "attention_mask": batch["question.attention_mask"],
+            },
             self.pad_token_id,
+            aux_pad_tokens={"attention_mask": 0},
         )
-        attn = padless_cat(
-            batch["document.attention_mask"],
-            batch["question.attention_mask"],
-            0,
-        )
-
         # compute contextualized representations
-        if len(ids) > 512:
+        if len(padded_batch["input_ids"]) > 512:
             warnings.warn("the tensor [question; document] was truncated.")
         heq = self.bert(
-            ids[:, :512], attn[:, :512]
+            padded_batch["input_ids"][:, :512],
+            padded_batch["attention_mask"][:, :512],
         ).last_hidden_state  # [bs, L_e+L_q, h]
         ha = self.bert(
             flatten(batch["answer_choices.input_ids"]),
