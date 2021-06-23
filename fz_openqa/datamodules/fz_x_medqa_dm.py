@@ -3,6 +3,7 @@ from functools import partial
 from typing import Dict, List, Any, Union, Optional
 
 import datasets
+import rich
 import torch
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
@@ -199,22 +200,19 @@ class FZxMedQADataModule(BaseDataModule):
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        decode_kwargs = {"skip_special_tokens": False}
+        decode_kwargs = {"skip_special_tokens": True}
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
         print("* Question:")
-        print(
-            self.tokenizer.decode(
-                example["question.input_ids"], **decode_kwargs
-            )
+        rich.print(
+            self.repr_ex(example, "question.input_ids", **decode_kwargs)
         )
+
         print(console_width * "-")
-        print(f"* Document (rank={example['rank']})")
-        print(
-            self.tokenizer.decode(
-                example["document.input_ids"], **decode_kwargs
-            )
+        rich.print(f"* Document (rank={example['rank']})")
+        rich.print(
+            self.repr_ex(example, "document.input_ids", **decode_kwargs)
         )
         print(console_width * "-")
         print("* Answer Choices:")
@@ -225,3 +223,10 @@ class FZxMedQADataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs)}"
             )
         print(console_width * "=")
+
+    def repr_ex(self, example, key, **kwargs):
+        n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
+        return (
+            f"length={len(example[key])}, padding={n_pad_tokens}, "
+            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
+        )

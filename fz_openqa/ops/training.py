@@ -28,9 +28,13 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
     if platform == "darwin":
+        # a few flags to fix MacOS stuff
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    os.environ["TOKENIZERS_PARALLELISM"] = "TRUE"
+        import multiprocessing
+
+        multiprocessing.set_start_method("fork")
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 
