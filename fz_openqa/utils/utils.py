@@ -1,11 +1,12 @@
 import logging
 import warnings
-from typing import List, Sequence
+from typing import List, Sequence, Union, Any
 
 import pytorch_lightning as pl
 import rich.syntax
 import rich.tree
 import wandb
+from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
@@ -203,6 +204,17 @@ def print_config(
         if isinstance(config_section, DictConfig):
             branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
 
-        branch.add(rich.syntax.Syntax(branch_content, "yaml"))
+        branch.add(
+            rich.syntax.Syntax(
+                branch_content, "yaml", indent_guides=True, word_wrap=True
+            )
+        )
 
     rich.print(tree)
+
+
+def maybe_instantiate(conf_or_obj: Union[Any, DictConfig]):
+    if isinstance(conf_or_obj, DictConfig):
+        return instantiate(conf_or_obj)
+
+    return conf_or_obj

@@ -1,32 +1,18 @@
 import warnings
-from typing import Dict
+from typing import Dict, Optional, Union
 
 import torch
+from omegaconf import DictConfig
 from torch import Tensor, nn
 from transformers import (
     PreTrainedTokenizerFast,
-    AutoModel,
     BertPreTrainedModel,
 )
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
-from fz_openqa.modeling.functional import padless_cat
-from fz_openqa.modeling.layers.lambd import Lambda
-from .base import BaseModel
-
-
-def flatten(x: Tensor) -> Tensor:
-    return x.view(-1, x.shape[-1])
-
-
-class cls_head(nn.Module):
-    def __init__(self, bert: BertPreTrainedModel, output_size: int):
-        super().__init__()
-        self.linear = nn.Linear(bert.config.hidden_size, output_size)
-
-    def forward(self, last_hidden_state: Tensor):
-        cls_ = last_hidden_state[:, 0]  # CLS token
-        return torch.nn.functional.normalize(self.linear(cls_), p=2, dim=-1)
+from fz_openqa.modeling.functional import padless_cat, flatten
+from fz_openqa.modeling.layers.heads import cls_head
+from fz_openqa.modeling.models.base import BaseModel
 
 
 class MultipleChoiceQAReader(BaseModel):
@@ -51,33 +37,21 @@ class MultipleChoiceQAReader(BaseModel):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        bert_id: str,
-        evaluator: Evaluator,
-        cache_dir: str,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
+        cache_dir: Optional[str] = None,
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, evaluator=evaluator)
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters()
 
-        self.tokenizer = tokenizer
-        self.vocabulary_size = len(tokenizer.get_vocab())
-        self.pad_token_id = tokenizer.pad_token_id
-
-        # evaluator: compute the loss and the metrics to be logged in
-        self.evaluator = evaluator
-
-        # pretrained model
-        self.bert: BertPreTrainedModel = AutoModel.from_pretrained(
-            bert_id, cache_dir=cache_dir
-        )
-        self.bert.resize_token_embeddings(
-            len(tokenizer)
-        )  # necessary because of the added special tokens
+        # instantiate the pretrained model
+        self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)
@@ -95,7 +69,9 @@ class MultipleChoiceQAReader(BaseModel):
         # infer shapes
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
 
-        # compute contextualized representations
+        # concatenate questions and documents such that there is no padding between Q and D
+        # todo: handle both input_ids and attention in one call
+        #  not sure it works that way, potential alignment issue
         ids = padless_cat(
             batch["document.input_ids"],
             batch["question.input_ids"],
@@ -104,8 +80,10 @@ class MultipleChoiceQAReader(BaseModel):
         attn = padless_cat(
             batch["document.attention_mask"],
             batch["question.attention_mask"],
-            self.pad_token_id,
+            0,
         )
+
+        # compute contextualized representations
         if len(ids) > 512:
             warnings.warn("the tensor [question; document] was truncated.")
         heq = self.bert(

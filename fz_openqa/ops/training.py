@@ -70,7 +70,7 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
     model: LightningModule = instantiate(
-        config.model, tokenizer=tokenizer, corpus=corpus
+        config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=False
     )
 
     # Init Lightning callbacks

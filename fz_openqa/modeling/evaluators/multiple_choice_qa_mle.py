@@ -28,17 +28,17 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
 
     def __init__(self, n_choices: int):
         super().__init__()
-        metric_kwargs = {"num_classes": n_choices, "compute_on_step": False}
+        metric_kwargs = {"compute_on_step": False}
 
         def gen_metric(split):
             return MetricCollection(
                 [
-                    Accuracy(),
-                    F1(**metric_kwargs),
-                    Recall(**metric_kwargs),
-                    Precision(**metric_kwargs),
+                    Accuracy(**metric_kwargs),
+                    # F1(**metric_kwargs),
+                    # Recall(**metric_kwargs),
+                    # Precision(**metric_kwargs),
                 ],
-                prefix=f"{split}/",
+                prefix="",
             )
 
         self.metrics = nn.ModuleDict(
@@ -59,7 +59,7 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
 
         logits: Tensor = model(batch)
         targets: Tensor = batch["answer_idx"]
-        loss = F.cross_entropy(logits, targets, reduce="mean")
+        loss = F.cross_entropy(logits, targets, reduction="mean")
         self.get_metric(split).update(logits.argmax(-1), targets)
         return {"loss": loss}
 

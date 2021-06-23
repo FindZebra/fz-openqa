@@ -1,0 +1,21 @@
+defaults:
+  - evaluator: null
+  - bert: bio_bert.yaml
+  - multiple_choice_qa_reader@reader
+  - qa_retriever@retriever
+
+_target_: fz_openqa.modeling.models.multiple_choice_qa.MultipleChoiceQA
+
+# global model parameters
+lr: 1e-5
+hidden_size: 32
+
+
+reader:
+  lr: 2e-4
+  hidden_size: ${model.hidden_size}
+
+retriever:
+  lr: 3e-4
+  hidden_size: ${model.hidden_size}
+

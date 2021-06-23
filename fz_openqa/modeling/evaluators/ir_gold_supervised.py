@@ -36,9 +36,10 @@ class InformationRetrievalGoldSupervised(Evaluator):
     def __init__(self, similarity: Similarity):
         super().__init__()
         self.similarity = similarity
+        metric_kwargs = {"compute_on_step": False}
 
         def gen_metric(split):
-            return MetricCollection([Accuracy()], prefix=f"{split}/")
+            return MetricCollection([Accuracy(**metric_kwargs)], prefix="")
 
         self.metrics = nn.ModuleDict(
             {
@@ -59,7 +60,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
         hq = model(
             input_ids=batch["question.input_ids"],
             attention_mask=batch["question.attention_mask"],
-            key="document",  # todo: use question key (too much overfitting currently)
+            key="question",  # todo: use question key (too much overfitting currently)
         )  # [bs, h]
         he = model(
             input_ids=batch["document.input_ids"],

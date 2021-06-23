@@ -1,0 +1,37 @@
+# @package _global_
+
+# to execute this experiment run:
+# poetry run fzqa experiment=reader_only
+
+defaults:
+  - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
+  - override /model: multiple_choice_qa.yaml
+  - override /datamodule: fz_x_medqa.yaml
+  - override /callbacks: null # list callbacks using `- callback_i`
+  - override /logger: wandb.yaml
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+seed: 42
+
+trainer:
+  gpus: 1
+  min_epochs: 1
+  max_epochs: 500
+  gradient_clip_val: 0.5
+  checkpoint_callback: False # disable checkpointing for faster training
+
+model:
+  lr: 2e-5
+
+datamodule:
+  train_batch_size: 4
+  eval_batch_size: 16
+  max_length: 512
+  use_subset: True # todo
+  update_cache: True
+
+logger:
+  wandb:
+    group: open_qa # name your experiment here

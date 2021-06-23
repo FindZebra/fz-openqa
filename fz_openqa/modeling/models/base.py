@@ -1,8 +1,17 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Union
 
 from datasets import Split
+from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
+from torch import Tensor
 from transformers import AdamW
+from transformers import (
+    PreTrainedTokenizerFast,
+    BertPreTrainedModel,
+)
+
+from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.utils import maybe_instantiate
 
 
 class BaseModel(LightningModule):
@@ -14,6 +23,7 @@ class BaseModel(LightningModule):
         *,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
+        evaluator: Optional[Evaluator] = None,
         **kwargs,
     ):
         super().__init__()
@@ -22,21 +32,31 @@ class BaseModel(LightningModule):
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters()
 
+        # evaluator: compute the loss and the metrics to be logged in
+        self.evaluator = maybe_instantiate(self.hparams.pop("evaluator"))
+
+    def instantiate_bert(
+        self,
+        *,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        tokenizer: PreTrainedTokenizerFast,
+    ):
+        """Instantiate a bert model as an attribute, and extend its embeddings to match the tokenizer"""
+
+        self.vocabulary_size = len(tokenizer.get_vocab())
+        self.pad_token_id = tokenizer.pad_token_id
+
+        self.bert: BertPreTrainedModel = maybe_instantiate(bert)
+        # extend BERT embeddings for the added special tokens
+        self.bert.resize_token_embeddings(len(tokenizer))
+
     def _step(
-        self, batch: Any, batch_idx: int, split: Split
+        self, batch: Any, batch_idx: int, split: Split, log_data=True
     ) -> Dict[str, Any]:
         data = self.evaluator(self.forward, batch, split=split)
 
-        # log 'split' metrics
-        for k, v in data.items():
-            self.log(
-                f"{split}/{k}",
-                v,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=f"{split}/{k}" in self._prog_bar_metrics,
-                sync_dist=True,
-            )
+        if log_data:
+            self.log_data(data, prefix=f"{split}/")
 
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
@@ -52,14 +72,14 @@ class BaseModel(LightningModule):
     def test_step(self, batch: Any, batch_idx: int):
         return self._step(batch, batch_idx, Split.VALIDATION)
 
-    def _epoch_end(self, outputs: List[Any], split: Split):
+    def _epoch_end(self, outputs: List[Any], split: Split, log_data=True):
         # `outputs` is a list of dicts returned from `training_step()`
+        assert self.evaluator is not None
         metrics = self.evaluator.compute_metrics(split=split)
-        for k, v in metrics.items():
-            self.log(
-                k, v, prog_bar=k in self._prog_bar_metrics, sync_dist=True
-            )
+        if log_data:
+            self.log_data(metrics, prefix=f"{split}/")
         self.evaluator.reset_metrics(split=split)
+        return metrics
 
     def training_epoch_end(self, outputs: List[Any]):
         return self._epoch_end(outputs, Split.TRAIN)
@@ -69,6 +89,25 @@ class BaseModel(LightningModule):
 
     def test_epoch_end(self, outputs: List[Any]):
         return self._epoch_end(outputs, Split.TEST)
+
+    def log_data(
+        self,
+        data: Dict[str, Tensor],
+        prefix: str = "",
+        on_step=False,
+        on_epoch=True,
+        sync_dist=True,
+    ):
+        # log 'split' metrics
+        for k, v in data.items():
+            self.log(
+                f"{prefix}{k}",
+                v,
+                on_step=on_step,
+                on_epoch=on_epoch,
+                prog_bar=f"{prefix}{k}" in self._prog_bar_metrics,
+                sync_dist=sync_dist,
+            )
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.

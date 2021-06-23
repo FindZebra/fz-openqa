@@ -1,4 +1,4 @@
 _target_: fz_openqa.modeling.evaluators.ir_gold_supervised.InformationRetrievalGoldSupervised
 
 defaults:
-  - similarity: max_sim.yaml
+  - similarity: dot_product.yaml

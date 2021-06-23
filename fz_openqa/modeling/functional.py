@@ -46,3 +46,7 @@ def padless_cat(a: Batch, b: Batch, pad_token: int) -> Tensor:
         for xa, xb in zip(a, b)
     ]
     return pad(batch, pad_token)
+
+
+def flatten(x: Tensor) -> Tensor:
+    return x.view(-1, x.shape[-1])
