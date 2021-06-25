@@ -1,12 +1,13 @@
 # @package _global_
 
-defaults:
-  - override /logger: null
-  - override /callbacks: null
-
 trainer:
   gpus: 0
 
 datamodule:
   use_subset: True
+  train_batch_size: 8
+  eval_batch_size: 32
   num_proc: 1
+
+logger: null
+callbacks: null
