@@ -75,7 +75,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
-    if "callbacks" in config:
+    if config.get("callbacks", None):
         for _, cb_conf in config["callbacks"].items():
             if "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
@@ -83,7 +83,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
-    if "logger" in config:
+    if config.get("logger", None):
         for _, lg_conf in config["logger"].items():
             if "_target_" in lg_conf:
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
@@ -107,7 +107,10 @@ def train(config: DictConfig) -> Optional[float]:
         callbacks=callbacks,
         logger=logger,
     )
-    if trainer.checkpoint_callback:
+    if (
+        trainer.checkpoint_callback
+        and trainer.checkpoint_callback.dirpath is not None
+    ):
         print(
             f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}"
         )
