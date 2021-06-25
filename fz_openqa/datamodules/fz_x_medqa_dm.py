@@ -214,7 +214,7 @@ class FZxMedQADataModule(BaseDataModule):
 
         print(console_width * "-")
         rich.print(
-            f"* Document (rank={example['rank']}, is_positive={example['is_positive']}"
+            f"* Document (rank={example['rank']}, is_positive={example['is_positive']})"
         )
         rich.print(
             self.repr_ex(example, "document.input_ids", **decode_kwargs)
