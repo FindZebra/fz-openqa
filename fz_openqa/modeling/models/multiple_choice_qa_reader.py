@@ -72,12 +72,12 @@ class MultipleChoiceQAReader(BaseModel):
         # concatenate questions and documents such that there is no padding between Q and D
         padded_batch = padless_cat(
             {
-                "input_ids": batch["document.input_ids"],
-                "attention_mask": batch["document.attention_mask"],
-            },
-            {
                 "input_ids": batch["question.input_ids"],
                 "attention_mask": batch["question.attention_mask"],
+            },
+            {
+                "input_ids": batch["document.input_ids"],
+                "attention_mask": batch["document.attention_mask"],
             },
             self.pad_token_id,
             aux_pad_tokens={"attention_mask": 0},
@@ -95,8 +95,10 @@ class MultipleChoiceQAReader(BaseModel):
         ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # answer-question representation
-        heq = self.qd_head(heq)  # [bs, h]
-        ha = self.a_head(ha).view(bs, N_a, self.hparams.hidden_size)
+        heq = self.qd_head(self.dropout(heq))  # [bs, h]
+        ha = self.a_head(self.dropout(ha)).view(
+            bs, N_a, self.hparams.hidden_size
+        )
         return torch.einsum("bh, bah -> ba", heq, ha)  # dot-product model
 
     @staticmethod
