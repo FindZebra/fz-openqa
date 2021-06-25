@@ -130,7 +130,7 @@ class FZxMedQADataModule(BaseDataModule):
             for c in dataset.column_names["train"]
             if (any(a in c for a in attrs) and any(a in c for a in columns))
         ]
-        self.pt_attributes += ["answer_idx", "rank"]
+        self.pt_attributes += ["answer_idx", "rank", "is_positive"]
         dataset.set_format(
             type="torch", columns=self.pt_attributes, output_all_columns=False
         )
@@ -139,7 +139,9 @@ class FZxMedQADataModule(BaseDataModule):
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filtering operations"""
         if self.filter_gold:
-            dataset = dataset.filter(lambda x: x["rank"] == 0)
+            dataset = dataset.filter(
+                lambda x: x["rank"] == 0 and x["is_positive"]
+            )
 
         return dataset
 
@@ -166,6 +168,7 @@ class FZxMedQADataModule(BaseDataModule):
         # answer_idx & rank attributes
         output["answer_idx"] = torch.tensor([b["answer_idx"] for b in batch])
         output["rank"] = torch.tensor([b["rank"] for b in batch])
+        output["is_positive"] = torch.tensor([b["is_positive"] for b in batch])
 
         # documents and questions
         for key in ["document", "question"]:
@@ -210,7 +213,9 @@ class FZxMedQADataModule(BaseDataModule):
         )
 
         print(console_width * "-")
-        rich.print(f"* Document (rank={example['rank']})")
+        rich.print(
+            f"* Document (rank={example['rank']}, is_positive={example['is_positive']}"
+        )
         rich.print(
             self.repr_ex(example, "document.input_ids", **decode_kwargs)
         )
