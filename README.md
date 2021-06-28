@@ -1,6 +1,6 @@
 # Medical Open Domain Question Answering - FindZebra
 
-Project description: [HackMD.io](https://hackmd.io/@vlievin/HkjDWyltO/edit)
+[![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
 
 ## Environment Setup
 
