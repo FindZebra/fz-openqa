@@ -11,6 +11,7 @@ from transformers import (
     BertPreTrainedModel,
 )
 
+from fz_openqa.utils.utils import only_trainable
 from .base import BaseModel
 
 
@@ -108,17 +109,17 @@ class MultipleChoiceQA(BaseModel):
         return AdamW(
             [
                 {
-                    "params": self.bert.parameters(),
+                    "params": only_trainable(self.bert.parameters()),
                     "lr": float(self.hparams.lr),
                     "weight_decay": self.hparams.weight_decay,
                 },
                 {
-                    "params": filtered_params(self.retriever),
+                    "params": only_trainable(filtered_params(self.retriever)),
                     "lr": float(self.retriever.hparams.lr),
                     "weight_decay": self.retriever.hparams.weight_decay,
                 },
                 {
-                    "params": filtered_params(self.reader),
+                    "params": only_trainable(filtered_params(self.reader)),
                     "lr": float(self.reader.hparams.lr),
                     "weight_decay": self.reader.hparams.weight_decay,
                 },

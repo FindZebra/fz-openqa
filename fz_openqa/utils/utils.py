@@ -1,10 +1,11 @@
 import logging
 import warnings
-from typing import List, Sequence, Union, Any
+from typing import List, Sequence, Union, Any, Iterable
 
 import pytorch_lightning as pl
 import rich.syntax
 import rich.tree
+import torch.nn
 import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
@@ -218,3 +219,7 @@ def maybe_instantiate(conf_or_obj: Union[Any, DictConfig]):
         return instantiate(conf_or_obj)
 
     return conf_or_obj
+
+
+def only_trainable(parameters: Iterable[torch.nn.Parameter]):
+    return (p for p in parameters if p.requires_grad)

@@ -12,6 +12,7 @@ from transformers import (
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.utils import maybe_instantiate
+from fz_openqa.utils.utils import only_trainable
 
 
 class BaseModel(LightningModule):
@@ -48,7 +49,9 @@ class BaseModel(LightningModule):
 
         self.bert: BertPreTrainedModel = maybe_instantiate(bert)
         # extend BERT embeddings for the added special tokens
-        self.bert.resize_token_embeddings(len(tokenizer))
+        self.bert.resize_token_embeddings(
+            len(tokenizer)
+        )  # TODO: CRITICAL: check this does not affect the model
 
     def _step(
         self, batch: Any, batch_idx: int, split: Split, log_data=True
@@ -116,7 +119,7 @@ class BaseModel(LightningModule):
             https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#configure-optimizers
         """
         return AdamW(
-            params=self.parameters(),
+            params=only_trainable(self.parameters()),
             lr=self.hparams.lr,
             weight_decay=self.hparams.weight_decay,
         )
