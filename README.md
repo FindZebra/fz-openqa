@@ -1,5 +1,7 @@
 # Medical Open Domain Question Answering - FindZebra
 
+Project description: [HackMD.io](https://hackmd.io/@vlievin/HkjDWyltO/edit)
+
 ## Environment Setup
 
 Install poetry
