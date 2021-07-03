@@ -1,4 +1,4 @@
 _target_: transformers.AutoModel.from_pretrained
 
 pretrained_model_name_or_path: allenai/biomed_roberta_base
-cache_dir: ${cache_dir}
+cache_dir: ${sys.cache_dir}

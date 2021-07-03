@@ -3,8 +3,8 @@ from sys import platform
 from typing import List, Optional
 
 import rich
-from hydra.utils import instantiate
-from omegaconf import DictConfig
+from hydra.utils import instantiate, get_original_cwd
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import (
     Callback,
     LightningDataModule,
@@ -18,6 +18,9 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.utils import utils
 
 log = utils.get_logger(__name__)
+
+OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
+OmegaConf.register_new_resolver("get_original_cwd", lambda: get_original_cwd())
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -40,6 +43,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     if config.verbose:
         rich.print(f"> work_dir: {config.work_dir}")
+        rich.print(f"> original_wdir: {config.original_wdir}")
         rich.print(f"> cache_dir: {os.path.abspath(config.cache_dir)}")
         rich.print(f"> Current working directory : {os.getcwd()}")
 

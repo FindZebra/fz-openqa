@@ -138,13 +138,6 @@ class BaseDataModule(LightningDataModule):
 
         if self.corpus is not None:
             self.corpus.setup()
-            if self.verbose:
-                console_width, _ = shutil.get_terminal_size()
-                print("=== Corpus ===")
-                print(console_width * "*")
-                self.corpus.pprint()
-                self.corpus.display_sample()
-                print(console_width * "*")
 
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         """Take a subset of the dataset and return."""
@@ -244,8 +237,13 @@ class BaseDataModule(LightningDataModule):
         print("=== Sample ===")
         print(console_width * "-")
         rich.print(
-            self.tokenizer.decode(
-                example["input_ids"], skip_special_tokens=True
-            )
+            self.repr_ex(example, "input_ids", skip_special_tokens=True)
         )
         print(console_width * "=")
+
+    def repr_ex(self, example, key, **kwargs):
+        n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
+        return (
+            f"length={len(example[key])}, padding={n_pad_tokens}, "
+            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
+        )

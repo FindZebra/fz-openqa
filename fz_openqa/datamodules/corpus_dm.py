@@ -214,11 +214,10 @@ class CorpusDataModule(BaseDataModule):
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
         console_width, _ = shutil.get_terminal_size()
+        decode_kwargs = {"skip_special_tokens": True}
         print(console_width * "-")
-        print(
-            self.tokenizer.decode(
-                example["input_ids"], skip_special_tokens=False
-            )
+        rich.print(
+            "(CORPUS) " + self.repr_ex(example, "input_ids", **decode_kwargs)
         )
 
     def collate_fn(

@@ -1,4 +1,4 @@
 _target_: transformers.AutoModel.from_pretrained
 
 pretrained_model_name_or_path: bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12
-cache_dir: ${cache_dir}
+cache_dir: ${sys.cache_dir}

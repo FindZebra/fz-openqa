@@ -1,15 +1,13 @@
 # @package _global_
 
-
 defaults:
-  - override /sys: local.yaml
   - override /callbacks: index_corpus.yaml
+  - override /sys: valv.yaml
+
 
 trainer:
-  gpus: 0
-  limit_train_batches: 1
-  limit_val_batches: 1
-  limit_test_batches: 1
+  gpus: 2
+  accelerator: ddp
   checkpoint_callback: False
 
 datamodule:
@@ -17,6 +15,6 @@ datamodule:
   train_batch_size: 5
   eval_batch_size: 5
   num_proc: 1
-  num_workers: 0
+  # num_workers: 4
 
 logger: null

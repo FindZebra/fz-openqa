@@ -1,2 +1,4 @@
-cache_dir: /scratch/valv/cache/
-work_dir: /scratch/valv/lm-priors/
+# @package _global_
+
+defaults:
+  - override /sys: valv.yaml

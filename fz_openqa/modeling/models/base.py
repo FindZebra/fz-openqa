@@ -82,7 +82,6 @@ class BaseModel(LightningModule):
         if log_data:
             self.log_data(metrics, prefix=f"{split}/")
         self.evaluator.reset_metrics(split=split)
-        return metrics
 
     def training_epoch_end(self, outputs: List[Any]):
         return self._epoch_end(outputs, Split.TRAIN)

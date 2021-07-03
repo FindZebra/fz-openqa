@@ -228,10 +228,3 @@ class FZxMedQADataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs)}"
             )
         print(console_width * "=")
-
-    def repr_ex(self, example, key, **kwargs):
-        n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
-        return (
-            f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
-        )

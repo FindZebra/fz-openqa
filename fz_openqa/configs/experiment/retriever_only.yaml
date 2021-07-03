@@ -9,7 +9,7 @@ defaults:
   - override /datamodule: fz_x_medqa.yaml
   - override /callbacks: default.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
-
+  - override /corpus: local.yaml
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
