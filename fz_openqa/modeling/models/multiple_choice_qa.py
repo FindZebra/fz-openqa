@@ -1,18 +1,19 @@
 import re
-from typing import Union, Any, Dict, List
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Union
 
 from datasets import Split
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch import nn
 from transformers import AdamW
-from transformers import (
-    PreTrainedTokenizerFast,
-    BertPreTrainedModel,
-)
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils.utils import only_trainable
 from .base import BaseModel
+from fz_openqa.utils.utils import only_trainable
 
 
 class MultipleChoiceQA(BaseModel):

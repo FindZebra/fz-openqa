@@ -1,6 +1,7 @@
 import json
-from rich import print
+
 import datasets
+from rich import print
 
 
 class FZxMedQAConfig(datasets.BuilderConfig):

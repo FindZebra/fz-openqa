@@ -1,11 +1,17 @@
-from typing import Dict, Any, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 from datasets import Split
-from torch import nn, Tensor
+from torch import nn
+from torch import Tensor
 from torch.nn import functional as F
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
-from torchmetrics.classification import Accuracy, F1, Recall, Precision
+from torchmetrics.classification import Accuracy
+from torchmetrics.classification import F1
+from torchmetrics.classification import Precision
+from torchmetrics.classification import Recall
 
 from .abstract import Evaluator
 

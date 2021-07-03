@@ -1,11 +1,10 @@
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer
+from transformers import PreTrainedTokenizerFast
 
-from .static import (
-    ADDITIONAL_SPECIAL_TOKENS,
-    QUERY_TOKEN,
-    DOC_TOKEN,
-    ANS_TOKEN,
-)
+from .static import ADDITIONAL_SPECIAL_TOKENS
+from .static import ANS_TOKEN
+from .static import DOC_TOKEN
+from .static import QUERY_TOKEN
 
 SPECIAL_TOKENS = {
     "pad_token": "[PAD]",

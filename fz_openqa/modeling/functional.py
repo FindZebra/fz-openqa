@@ -1,5 +1,9 @@
 from collections.abc import Iterable
-from typing import Sequence, Any, Union, Dict, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import Sequence
+from typing import Union
 
 import torch
 from torch import Tensor

@@ -23,4 +23,3 @@ retriever:
   hidden_size: ${model.hidden_size}
   weight_decay: ${model.weight_decay}
   dropout: ${model.dropout}
-

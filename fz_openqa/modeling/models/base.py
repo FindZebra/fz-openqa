@@ -1,14 +1,16 @@
-from typing import Dict, List, Any, Optional, Union
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
 from transformers import AdamW
-from transformers import (
-    PreTrainedTokenizerFast,
-    BertPreTrainedModel,
-)
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.utils import maybe_instantiate

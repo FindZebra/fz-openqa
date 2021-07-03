@@ -1,8 +1,11 @@
 import collections
-from typing import Dict, Any, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 import torch
-from torch import nn, Tensor
+from torch import nn
+from torch import Tensor
 
 
 class Evaluator(nn.Module):

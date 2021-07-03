@@ -1,15 +1,18 @@
-from typing import Dict, Any, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
 import torch
 from datasets import Split
-from torch import nn, Tensor
+from torch import nn
+from torch import Tensor
 from torch.nn import functional as F
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from fz_openqa.modeling.similarities import Similarity
 from .abstract import Evaluator
+from fz_openqa.modeling.similarities import Similarity
 
 
 class InformationRetrievalGoldSupervised(Evaluator):

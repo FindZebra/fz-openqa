@@ -1,15 +1,23 @@
 import shutil
 from functools import partial
-from typing import Dict, List, Any, Union, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
 import datasets
 import rich
 import torch
-from transformers import BatchEncoding, PreTrainedTokenizerFast
+from transformers import BatchEncoding
+from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.tokenizers.static import QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
-from .base_dm import BaseDataModule, HgDataset
+from .base_dm import BaseDataModule
+from .base_dm import HgDataset
 from .datasets import fz_x_medqa
+from fz_openqa.tokenizers.static import ANS_TOKEN
+from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.tokenizers.static import QUERY_TOKEN
 
 
 def add_spec_token(

@@ -1,6 +1,10 @@
 import logging
 import warnings
-from typing import List, Sequence, Union, Any, Iterable
+from typing import Any
+from typing import Iterable
+from typing import List
+from typing import Sequence
+from typing import Union
 
 import pytorch_lightning as pl
 import rich.syntax
@@ -8,7 +12,8 @@ import rich.tree
 import torch.nn
 import wandb
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 

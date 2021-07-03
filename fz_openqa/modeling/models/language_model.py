@@ -1,4 +1,7 @@
-from typing import Dict, List, Any, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import torch
 from pytorch_lightning import LightningModule

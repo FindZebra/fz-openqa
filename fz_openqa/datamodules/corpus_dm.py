@@ -2,22 +2,28 @@ import os
 import re
 import shutil
 from functools import partial
-from typing import Dict, List, Any, Callable, Union
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Union
 
 import datasets
 import numpy as np
 import rich
 import torch
-from datasets import load_dataset, DatasetDict
+from datasets import DatasetDict
+from datasets import load_dataset
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 from torch.utils.data import Dataset
 from transformers import BatchEncoding
 
-from fz_openqa.tokenizers.static import DOC_TOKEN
 from .base_dm import BaseDataModule
-from .datasets import file_corpus, meqa_en_corpus
+from .datasets import file_corpus
+from .datasets import meqa_en_corpus
 from .utils import gen_passages
+from fz_openqa.tokenizers.static import DOC_TOKEN
 
 HgDataset = Union[Dataset, DatasetDict]
 

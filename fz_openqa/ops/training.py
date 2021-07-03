@@ -1,17 +1,18 @@
 import os
 from sys import platform
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 import rich
-from hydra.utils import instantiate, get_original_cwd
-from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning import (
-    Callback,
-    LightningDataModule,
-    LightningModule,
-    Trainer,
-    seed_everything,
-)
+from hydra.utils import get_original_cwd
+from hydra.utils import instantiate
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
+from pytorch_lightning import Callback
+from pytorch_lightning import LightningDataModule
+from pytorch_lightning import LightningModule
+from pytorch_lightning import seed_everything
+from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
 

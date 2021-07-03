@@ -155,7 +155,7 @@ When running experiments on the GPU cluster, you need to pass the flag `CUDA_VIS
 your script. The `/scratch` directory should be used to store large files (cache).
 
 ```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1 
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1
  ```
 
 Lightning enables multi-gpus training using torch.distributed. Simply configure the Lightning trainer:
@@ -313,7 +313,7 @@ for batch in corpus:
     batch['vectors'] = h_d(batch['input_ids'])
 corpus.add_faiss_index('vectors')
 
-# step 2. end to end evaluation 
+# step 2. end to end evaluation
 for batch in loader:
     q, a, a_index = batch
     # retriever the best document for each query
@@ -331,13 +331,13 @@ for batch in loader:
 
 <details>
 <summary>Feed the answer choices to the retriever</summary>
-At the moment the current model does not use the answer choices for retrieval. Concatenate the answer choices with the query. 
+At the moment the current model does not use the answer choices for retrieval. Concatenate the answer choices with the query.
 </details>
 
 <details>
 <summary>Late-interaction reader model</summary>
-At the moment, the reader model requires concatenating the query with the document, 
-which requires processing the query and document two times (1 time for IR, one time for reading comprehension). 
+At the moment, the reader model requires concatenating the query with the document,
+which requires processing the query and document two times (1 time for IR, one time for reading comprehension).
 A late interaction model for the reader component would allow processing each input one time with the BERT model.
 </details>
 

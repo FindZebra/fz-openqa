@@ -4,6 +4,7 @@ from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.normalizers import BertNormalizer
 from transformers import PreTrainedTokenizerFast
+
 from .static import ADDITIONAL_SPECIAL_TOKENS
 
 SPECIAL_TOKENS = {

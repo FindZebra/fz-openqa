@@ -2,11 +2,10 @@ from typing import Union
 
 import torch
 from omegaconf import DictConfig
-from torch import Tensor, nn
-from transformers import (
-    PreTrainedTokenizerFast,
-    BertPreTrainedModel,
-)
+from torch import nn
+from torch import Tensor
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.layers.heads import cls_head
