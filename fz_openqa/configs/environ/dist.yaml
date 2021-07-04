@@ -7,7 +7,7 @@ defaults:
 
 trainer:
   gpus: 2
-  accelerator: ddp
+  accelerator: dp
   checkpoint_callback: False
 
 datamodule:

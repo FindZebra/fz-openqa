@@ -3,7 +3,7 @@
 
 defaults:
   - override /sys: local.yaml
-  - override /callbacks: index_corpus.yaml
+  # - override /callbacks: index_corpus.yaml
 
 trainer:
   gpus: 0

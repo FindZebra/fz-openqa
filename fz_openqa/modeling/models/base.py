@@ -1,9 +1,11 @@
+from numbers import Number
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
+import numpy as np
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
@@ -14,8 +16,16 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.utils import infer_device
+from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.utils import only_trainable
+
+
+def is_loggable(x: Any):
+    return (
+        isinstance(x, Number)
+        or (isinstance(x, Tensor) and len(x.view(-1)) == 1)
+        or (isinstance(x, np.ndarray) and len(x.reshape(-1)) == 1)
+    )
 
 
 class BaseModel(LightningModule):
@@ -37,7 +47,9 @@ class BaseModel(LightningModule):
         self.save_hyperparameters()
 
         # evaluator: compute the loss and the metrics to be logged in
-        self.evaluator = maybe_instantiate(self.hparams.pop("evaluator"))
+        self.evaluator: Evaluator = maybe_instantiate(
+            self.hparams.pop("evaluator")
+        )
 
     def instantiate_bert(
         self,
@@ -52,82 +64,48 @@ class BaseModel(LightningModule):
 
         self.bert: BertPreTrainedModel = maybe_instantiate(bert)
         # extend BERT embeddings for the added special tokens
-        self.bert.resize_token_embeddings(
-            len(tokenizer)
-        )  # TODO: CRITICAL: check this does not affect the model
+        # TODO: CRITICAL: check this does not affect the model
+        #  this might explain the drop of performances
+        self.bert.resize_token_embeddings(len(tokenizer))
 
     def _step(
         self,
         batch: Any,
         batch_idx: int,
         dataloader_idx: Optional[int],
+        *,
         split: Split,
-        *args,
-        log_data=True,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Batch:
+        """This step is performed separately on each device.
+        Do the forward pass and compute the loss.
+        """
+        output = self.evaluator(self.forward, batch, split=split)
+        return output
 
-        if dataloader_idx is None or dataloader_idx > 0:
-            if dataloader_idx is not None:
-                print("-- normal eval --")
-            # evaluate the model normally
-            return self._evaluate_and_log(batch, log_data, split)
-        else:
-            # compute the document representations
-            out = self.predict_step(batch, batch_idx, dataloader_idx)
-            print(
-                f">> predict: {out.shape}, device: {out.device}, batch_idx={batch_idx}, dataloader_idx={dataloader_idx}"
-            )
-            # TODO: reopen https://github.com/PyTorchLightning/pytorch-lightning/issues/5087
-            self.log("dummy", 0.0, prog_bar=False)
-            return {"vectors": out.detach()}
-
-    def _evaluate_and_log(self, batch, log_data, split):
-        data = self.evaluator(self.forward, batch, split=split)
+    def _step_end(self, output: Batch, *, split, log_data=True) -> Batch:
+        """At this step, the output is gathered from all devices.
+        Update the metrics and average the loss."""
+        assert "loss" in output.keys()
+        output["loss"] = output["loss"].mean()
+        self.evaluator.update_metrics(output, split)
         if log_data:
-            self.log_data(data, prefix=f"{split}/")
-        # we can return here dict with any tensors
-        # and then read it in some callback or in training_epoch_end() below
-        # remember to always return loss from training_step, or else backpropagation will fail!
-        return data
+            # potentially log the loss and
+            # other metrics that are computed on each step
+            self.log_data(output, prefix=f"{split}/")
 
-    def training_step(
-        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
-    ) -> Dict[str, Any]:
-        return self._step(batch, batch_idx, dataloader_idx, Split.TRAIN)
+        return output
 
-    def validation_step(
-        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
-    ) -> Dict[str, Any]:
-        return self._step(batch, batch_idx, dataloader_idx, Split.VALIDATION)
-
-    def test_step(
-        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
-    ):
-        return self._step(batch, batch_idx, dataloader_idx, Split.VALIDATION)
-
-    def _epoch_end(self, outputs: List[Any], split: Split, log_data=True):
+    def _epoch_end(
+        self, outputs: List[Any], *, split: Split, log_data=True
+    ) -> Batch:
         # `outputs` is a list of dicts returned from `training_step()`
         assert self.evaluator is not None
         metrics = self.evaluator.compute_metrics(split=split)
         if log_data:
             self.log_data(metrics, prefix=f"{split}/")
         self.evaluator.reset_metrics(split=split)
-
-    def training_epoch_end(self, outputs: List[Any]):
-        return self._epoch_end(outputs, Split.TRAIN)
-
-    def validation_epoch_end(self, outputs: List[Any]):
-        print("VALIDATION_EPOCHS_ENDS:")
-        try:
-            print(outputs.keys())
-        except Exception:
-            pass
-        print(100 * "-")
-        return self._epoch_end(outputs, Split.VALIDATION)
-
-    def test_epoch_end(self, outputs: List[Any]):
-        return self._epoch_end(outputs, Split.TEST)
+        return metrics
 
     def log_data(
         self,
@@ -139,14 +117,16 @@ class BaseModel(LightningModule):
     ):
         # log 'split' metrics
         for k, v in data.items():
-            self.log(
-                f"{prefix}{k}",
-                v,
-                on_step=on_step,
-                on_epoch=on_epoch,
-                prog_bar=f"{prefix}{k}" in self._prog_bar_metrics,
-                sync_dist=sync_dist,
-            )
+            key = f"{prefix}{k}"
+            if is_loggable(v):
+                self.log(
+                    key,
+                    v,
+                    on_step=on_step,
+                    on_epoch=on_epoch,
+                    prog_bar=key in self._prog_bar_metrics,
+                    sync_dist=sync_dist,
+                )
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
@@ -159,3 +139,49 @@ class BaseModel(LightningModule):
             lr=self.hparams.lr,
             weight_decay=self.hparams.weight_decay,
         )
+
+    def training_step_end(self, batch: Batch, **kwargs) -> Batch:
+        return self._step_end(batch, split=Split.TRAIN)
+
+    def validation_step_end(self, batch: Batch, **kwargs) -> Batch:
+        return self._step_end(batch, split=Split.VALIDATION)
+
+    def test_step_end(self, batch: Batch, **kwargs) -> Batch:
+        return self._step_end(batch, split=Split.TEST)
+
+    def training_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return self._step(batch, batch_idx, dataloader_idx, split=Split.TRAIN)
+
+    def validation_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: Optional[int] = None,
+    ) -> Batch:
+        return self._step(
+            batch, batch_idx, dataloader_idx, split=Split.VALIDATION
+        )
+
+    def test_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: Optional[int] = None,
+    ):
+        return self._step(
+            batch, batch_idx, dataloader_idx, split=Split.VALIDATION
+        )
+
+    def training_epoch_end(self, outputs: List[Any]):
+        self._epoch_end(outputs, split=Split.TRAIN)
+
+    def validation_epoch_end(self, outputs: List[Any]):
+        self._epoch_end(outputs, split=Split.VALIDATION)
+
+    def test_epoch_end(self, outputs: List[Any]):
+        self._epoch_end(outputs, split=Split.TEST)
