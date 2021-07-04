@@ -7,8 +7,6 @@ from torch.nn import functional as F
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
-from fz_openqa.utils.functional import batch_reduce
 
 
 class InformationRetrievalGoldSupervised(Evaluator):
@@ -38,7 +36,6 @@ class InformationRetrievalGoldSupervised(Evaluator):
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
     ) -> Batch:
-
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
@@ -51,17 +48,33 @@ class InformationRetrievalGoldSupervised(Evaluator):
             model_key="document",
         )  # [bs, h]
 
+        return {
+            "hq": hq,
+            "he": he,
+        }
+
+    def post_forward(self, output: Batch, split: str) -> Any:
+        """Apply a post-processing step to the forward method.
+        The output is the output of the forward method.
+
+        This method is called after the `output` has been gathered
+        from each device. This method must aggregate the loss across
+        devices.
+
+        torchmetrics update() calls should be placed here.
+        The output must at least contains the `loss` key.
+        """
+        hq, he = (output.pop(k) for k in ["hq", "he"])
         logits = self.similarity(hq, he)  # [bs x bs]
         targets = (
             torch.arange(start=0, end=len(logits)).long().to(logits.device)
         )
-        loss = F.cross_entropy(logits, targets, reduction="none")
-        loss = batch_reduce(
-            loss, torch.mean
-        )  # keep one loss term per batch element
-
-        return {
-            "loss": loss,
-            "preds": logits.argmax(dim=-1).detach(),
-            "targets": targets,
-        }
+        loss = F.cross_entropy(logits, targets, reduction="mean")
+        output["loss"] = loss.mean()
+        output["batch_size"] = logits.shape[1]  # store the batch size
+        output["preds"] = logits.argmax(-1)
+        output["targets"] = targets
+        self.update_metrics(output, split)
+        output.pop("preds")
+        output.pop("targets")
+        return output
