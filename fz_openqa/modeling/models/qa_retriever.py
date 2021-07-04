@@ -30,6 +30,8 @@ class QaRetriever(BaseModel):
         "validation/loss",
         "train/Accuracy",
         "validation/Accuracy",
+        "validation/top5_Accuracy",
+        "validation/top10_Accuracy",
     ]  # metrics that will be display in the progress bar
 
     def __init__(

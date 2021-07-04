@@ -75,7 +75,7 @@ class Evaluator(nn.Module):
 
         return {
             "loss": batch_reduce(nll, op=torch.mean),
-            "preds": logits.argmax(-1),
+            "logits": logits,
             "targets": batch["labels"],
         }
 
@@ -94,13 +94,13 @@ class Evaluator(nn.Module):
         output["loss"] = output["loss"].mean()
         self.update_metrics(output, split)
         output.pop("preds")
-        output.pop("targets")
+        output.pop("logits")
         return output
 
     def update_metrics(self, output: Batch, split: str) -> None:
         """update the metrics of the given split."""
-        preds, targets = (output[k] for k in ("preds", "targets"))
-        self.get_metric(split).update(preds, targets)
+        logits, targets = (output[k] for k in ("logits", "targets"))
+        self.get_metric(split).update(logits, targets)
 
     def check_feature_names(self, batch):
         for f in self._required_eval_feature_names:

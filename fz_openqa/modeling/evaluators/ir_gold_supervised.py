@@ -1,12 +1,43 @@
 from typing import Any
+from typing import Dict
 
 import torch
+from datasets import Split
 from torch import nn
 from torch.nn import functional as F
+from torchmetrics import MetricCollection
+from torchmetrics.classification import Accuracy
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
+
+
+class SafeMetricCollection(MetricCollection):
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        """
+        Iteratively call update for each metric. Positional arguments (args) will
+        be passed to every metric in the collection, while keyword arguments (kwargs)
+        will be filtered based on the signature of the individual metric.
+        """
+        for _, m in self.items(keep_base=True):
+            preds, targets = args
+            if (
+                isinstance(m, Accuracy)
+                and m.top_k is not None
+                and preds.shape[-1] <= m.top_k
+            ):
+                pass
+            else:
+                m_kwargs = m._filter_kwargs(**kwargs)
+                m.update(preds, targets, **m_kwargs)
+
+    def compute(self) -> Dict[str, Any]:
+        return {
+            k: m.compute()
+            for k, m in self.items()
+            if not isinstance(m, Accuracy) or m.mode is not None
+        }
 
 
 class InformationRetrievalGoldSupervised(Evaluator):
@@ -32,6 +63,33 @@ class InformationRetrievalGoldSupervised(Evaluator):
     def __init__(self, similarity: Similarity, **kwargs):
         super().__init__(**kwargs)
         self.similarity = similarity
+
+    def init_metrics(self, prefix: str):
+        """Initialize the metrics for each split."""
+
+        # todo: check if `dist_sync_on_step` is necessary
+        # see https://torchmetrics.readthedocs.io/en/stable/pages/overview.html#metrics-in-dataparallel-dp-mode
+
+        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
+
+        def _name(k):
+            return f"top{k}_Accuracy" if k is not None else "Accuracy"
+
+        def gen_metric_one_split():
+            return SafeMetricCollection(
+                {
+                    _name(k): Accuracy(top_k=k, **metric_kwargs)
+                    for k in [None, 5, 10, 20, 50, 100]
+                },
+                prefix=prefix,
+            )
+
+        self.metrics = nn.ModuleDict(
+            {
+                f"_{split}": gen_metric_one_split()
+                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
+            }
+        )
 
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
@@ -72,9 +130,9 @@ class InformationRetrievalGoldSupervised(Evaluator):
         loss = F.cross_entropy(logits, targets, reduction="mean")
         output["loss"] = loss.mean()
         output["batch_size"] = logits.shape[1]  # store the batch size
-        output["preds"] = logits.argmax(-1)
+        output["logits"] = logits
         output["targets"] = targets
         self.update_metrics(output, split)
-        output.pop("preds")
+        output.pop("logits")
         output.pop("targets")
         return output
