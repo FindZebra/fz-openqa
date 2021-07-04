@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - override /callbacks: index_corpus.yaml
+  - override /callbacks: none.yaml
   - override /sys: valv.yaml
 
 

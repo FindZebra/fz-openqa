@@ -61,14 +61,12 @@ class InformationRetrievalGoldSupervised(Evaluator):
         self.check_feature_names(batch)
 
         hq = model(
-            input_ids=batch["question.input_ids"],
-            attention_mask=batch["question.attention_mask"],
-            key="question",  # todo: use question key (too much overfitting currently)
+            batch=batch,
+            model_key="question",  # todo: use question key (too much overfitting currently)
         )  # [bs, h]
         he = model(
-            input_ids=batch["document.input_ids"],
-            attention_mask=batch["document.attention_mask"],
-            key="document",
+            batch=batch,
+            model_key="document",
         )  # [bs, h]
 
         logits = self.similarity(hq, he)  # [bs x bs]

@@ -20,6 +20,8 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.utils.utils import infer_device
+
 HgDataset = Union[Dataset, DatasetDict]
 
 
@@ -198,9 +200,9 @@ class BaseDataModule(LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
-    def val_dataloader(self):
+    def _eval_loader(self, split):
         return DataLoader(
-            dataset=self.dataset[Split.VALIDATION],
+            dataset=self.dataset[split],
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -209,16 +211,23 @@ class BaseDataModule(LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
+    def val_dataloader(self):
+        if self.corpus is None:
+            return self._eval_loader(Split.VALIDATION)
+        else:
+            return [
+                self.corpus._eval_loader(Split.TRAIN),
+                self._eval_loader(Split.VALIDATION),
+            ]
+
     def test_dataloader(self):
-        return DataLoader(
-            dataset=self.dataset[Split.TEST],
-            batch_size=self.eval_batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            shuffle=False,
-            collate_fn=self.collate_fn,
-        )
+        if self.corpus is None:
+            return self._eval_loader(Split.TEST)
+        else:
+            return [
+                self.corpus._eval_loader(Split.TRAIN),
+                self._eval_loader(Split.TEST),
+            ]
 
     def collate_fn(
         self, batch: Any

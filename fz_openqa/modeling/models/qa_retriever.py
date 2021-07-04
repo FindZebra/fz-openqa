@@ -1,3 +1,6 @@
+from typing import Any
+from typing import Dict
+from typing import Optional
 from typing import Union
 
 import torch
@@ -54,14 +57,35 @@ class QaRetriever(BaseModel):
         self.dropout = nn.Dropout(dropout)
 
     def forward(
-        self, *, input_ids: Tensor, attention_mask: Tensor, key: str, **kwargs
+        self,
+        batch: Dict[str, Tensor],
+        batch_idx: int = 0,
+        dataloader_idx: int = None,
+        model_key: str = "document",
+        **kwargs,
     ) -> torch.Tensor:
         """Return the document/question representation."""
-        assert key in {"document", "question"}
+        assert model_key in {"document", "question"}, f"model_key={model_key}"
+        input_ids = batch[f"{model_key}.input_ids"]
+        attention_mask = batch.get(f"{model_key}.attention_mask", None)
 
         # compute contextualized representations
         h = self.bert(input_ids, attention_mask).last_hidden_state
 
         # global representations
         h = self.dropout(h)
-        return {"document": self.e_proj, "question": self.q_proj}[key](h)
+        return {"document": self.e_proj, "question": self.q_proj}[model_key](h)
+
+    def predict_step(
+        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
+    ) -> Any:
+        # compute contextualized representations
+        h = self.bert(
+            batch["input_ids"], batch["attention_mask"]
+        ).last_hidden_state
+
+        # global representations
+        h = self.dropout(h)
+        return {"document": self.e_proj, "question": self.q_proj}["document"](
+            h
+        )

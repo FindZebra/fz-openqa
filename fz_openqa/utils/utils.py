@@ -226,5 +226,9 @@ def maybe_instantiate(conf_or_obj: Union[Any, DictConfig]):
     return conf_or_obj
 
 
+def infer_device(model):
+    return next(iter(model.parameters())).device
+
+
 def only_trainable(parameters: Iterable[torch.nn.Parameter]):
     return (p for p in parameters if p.requires_grad)
