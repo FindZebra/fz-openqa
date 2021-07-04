@@ -14,6 +14,7 @@ import rich
 import torch
 from datasets import DatasetDict
 from datasets import load_dataset
+from datasets import Split
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 from torch.utils.data import Dataset
@@ -290,6 +291,16 @@ class CorpusDataModule(BaseDataModule):
         return self.dataset["train"].get_nearest_examples_batch(
             self.vectors_id, vectors, k=k
         )
+
+    def val_dataloader(self):
+        return self._eval_loader(
+            Split.TRAIN
+        )  # the dataset only have one split
+
+    def test_dataloader(self):
+        return self._eval_loader(
+            Split.TRAIN
+        )  # the dataset only have one split
 
 
 class MedQaEnDataModule(CorpusDataModule):

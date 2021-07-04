@@ -212,22 +212,10 @@ class BaseDataModule(LightningDataModule):
         )
 
     def val_dataloader(self):
-        if self.corpus is None:
-            return self._eval_loader(Split.VALIDATION)
-        else:
-            return [
-                self.corpus._eval_loader(Split.TRAIN),
-                self._eval_loader(Split.VALIDATION),
-            ]
+        return self._eval_loader(Split.VALIDATION)
 
     def test_dataloader(self):
-        if self.corpus is None:
-            return self._eval_loader(Split.TEST)
-        else:
-            return [
-                self.corpus._eval_loader(Split.TRAIN),
-                self._eval_loader(Split.TEST),
-            ]
+        return self._eval_loader(Split.TEST)
 
     def collate_fn(
         self, batch: Any
