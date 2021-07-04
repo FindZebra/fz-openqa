@@ -20,4 +20,4 @@ datamodule:
 corpus:
   eval_batch_size: 6000
 
-logger: null
+# logger: null
