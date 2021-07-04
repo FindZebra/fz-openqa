@@ -4,10 +4,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .abstract import Evaluator
+from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.utils import batch_reduce
+from fz_openqa.utils.functional import batch_reduce
 
 
 class InformationRetrievalGoldSupervised(Evaluator):

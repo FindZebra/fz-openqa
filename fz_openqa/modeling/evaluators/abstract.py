@@ -10,7 +10,7 @@ from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.utils import batch_reduce
+from fz_openqa.utils.functional import batch_reduce
 
 
 class Evaluator(nn.Module):

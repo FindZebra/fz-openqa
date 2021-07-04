@@ -1,17 +1,12 @@
 import logging
 import warnings
-from typing import Any
-from typing import Iterable
 from typing import List
 from typing import Sequence
-from typing import Union
 
 import pytorch_lightning as pl
 import rich.syntax
 import rich.tree
-import torch.nn
 import wandb
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning.loggers.wandb import WandbLogger
@@ -217,22 +212,3 @@ def print_config(
         )
 
     rich.print(tree)
-
-
-def maybe_instantiate(conf_or_obj: Union[Any, DictConfig]):
-    if isinstance(conf_or_obj, DictConfig):
-        return instantiate(conf_or_obj)
-
-    return conf_or_obj
-
-
-def infer_device(model):
-    return next(iter(model.parameters())).device
-
-
-def only_trainable(parameters: Iterable[torch.nn.Parameter]):
-    return (p for p in parameters if p.requires_grad)
-
-
-def batch_reduce(x, op=torch.sum):
-    return op(x.view(x.size(0), -1), dim=1)

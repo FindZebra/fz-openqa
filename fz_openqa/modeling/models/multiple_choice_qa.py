@@ -12,9 +12,9 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
+from ...utils.functional import only_trainable
 from .base import BaseModel
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.utils import only_trainable
 
 
 class MultipleChoiceQA(BaseModel):

@@ -1,1 +1,1 @@
-from .utils import maybe_instantiate
+from .functional import maybe_instantiate

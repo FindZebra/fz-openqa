@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from torchmetrics import Metric
 
 from .abstract import Evaluator
-from fz_openqa.utils.utils import batch_reduce
+from fz_openqa.utils.functional import batch_reduce
 
 
 class MultipleChoiceQaMaximumLikelihood(Evaluator):

@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import BasePredictionWriter
 from pytorch_lightning.callbacks import Callback
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.utils.utils import infer_device
+from fz_openqa.utils.functional import infer_device
 
 
 class IndexCorpus(Callback):
