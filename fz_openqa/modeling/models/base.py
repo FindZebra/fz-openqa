@@ -15,7 +15,6 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 
@@ -85,6 +84,12 @@ class BaseModel(LightningModule):
         assert "loss" in output.keys()
         output["loss"] = output["loss"].mean()
         self.evaluator.update_metrics(output, split)
+
+        # detach to avoid memory leaks
+        output = {
+            k: v if k == "loss" else v.detach() for k, v in output.items()
+        }
+
         if log_data:
             # potentially log the loss and
             # other metrics that are computed on each step
