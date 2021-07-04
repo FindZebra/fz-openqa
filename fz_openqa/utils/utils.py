@@ -232,3 +232,7 @@ def infer_device(model):
 
 def only_trainable(parameters: Iterable[torch.nn.Parameter]):
     return (p for p in parameters if p.requires_grad)
+
+
+def batch_reduce(x, op=torch.sum):
+    return op(x.view(x.size(0), -1), dim=1)

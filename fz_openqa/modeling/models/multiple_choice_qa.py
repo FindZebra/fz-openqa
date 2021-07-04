@@ -1,7 +1,7 @@
 import re
 from typing import Any
-from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Union
 
 from datasets import Split
@@ -13,6 +13,7 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from .base import BaseModel
+from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.utils import only_trainable
 
 
@@ -51,10 +52,12 @@ class MultipleChoiceQA(BaseModel):
         self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
         # instantiate the reader
-        self.reader = instantiate(reader, bert=self.bert, tokenizer=tokenizer)
+        self.reader: BaseModel = instantiate(
+            reader, bert=self.bert, tokenizer=tokenizer
+        )
 
         # instantiate the retriever
-        self.retriever = instantiate(
+        self.retriever: BaseModel = instantiate(
             retriever, bert=self.bert, tokenizer=tokenizer
         )
 
@@ -62,34 +65,60 @@ class MultipleChoiceQA(BaseModel):
         self,
         batch: Any,
         batch_idx: int,
+        dataloader_idx: Optional[int],
+        *,
         split: Split,
-        log_data=True,
-    ) -> Dict[str, Any]:
+        **kwargs,
+    ) -> Batch:
 
+        # prepare the output and args
+        output = {}
+        kwargs = {"log_data": False, "split": split}
+
+        # forward pass for the reader model
         reader_data = self.reader._step(
-            batch, batch_idx, split, log_data=False
+            batch, batch_idx, dataloader_idx, **kwargs
         )
-        if log_data:
-            self.log_data(reader_data, prefix=f"{split}/reader/")
-        retriever_data = self.retriever._step(
-            batch, batch_idx, split, log_data=False
-        )
-        if log_data:
-            self.log_data(retriever_data, prefix=f"{split}/retriever/")
+        output.update({f"reader/{k}": v for k, v in reader_data.items()})
 
-        # we can return here dict with any tensors
-        # and then read it in some callback or in training_epoch_end() below
-        # remember to always return loss from training_step, or else backpropagation will fail!
-        return {"loss": reader_data["loss"] + retriever_data["loss"]}
+        # forward pass for the retriever model
+        retriever_data = self.retriever._step(
+            batch, batch_idx, dataloader_idx, **kwargs
+        )
+        output.update({f"retriever/{k}": v for k, v in retriever_data.items()})
+
+        # compute the loss and return the full output
+        return {
+            "loss": output["reader/loss"] + output["retriever/loss"],
+            **output,
+        }
+
+    def _step_end(self, output: Batch, split, log_data=True) -> Batch:
+
+        assert "loss" in output.keys()
+        output["loss"] = output["loss"].mean()
+
+        # log the data for both the reader and the retriever
+        if log_data:
+            self.log_data(output, prefix=f"{split}/")
+
+        # update the metrics for both the reader and retriever
+        kwargs = {"log_data": False, "split": split}
+        self.reader._step_end(
+            {k.replace("reader/", ""): v for k, v in output.items()}, **kwargs
+        )
+        self.retriever._step_end(
+            {k.replace("retriever/", ""): v for k, v in output.items()},
+            **kwargs,
+        )
+        return output
 
     def _epoch_end(self, outputs: List[Any], split: Split, log_data=True):
-        # `outputs` is a list of dicts returned from `training_step()`
-        reader_data = self.reader._epoch_end(outputs, split, log_data=False)
+        kwargs = {"log_data": False, "split": split}
+        reader_data = self.reader._epoch_end(outputs, **kwargs)
         if log_data:
             self.log_data(reader_data, prefix=f"{split}/reader/")
-        retriever_data = self.retriever._epoch_end(
-            outputs, split, log_data=False
-        )
+        retriever_data = self.retriever._epoch_end(outputs, **kwargs)
         if log_data:
             self.log_data(retriever_data, prefix=f"{split}/retriever/")
 

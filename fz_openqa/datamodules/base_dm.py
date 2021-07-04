@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils.utils import infer_device
+from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -244,8 +244,7 @@ class BaseDataModule(LightningDataModule):
         print(console_width * "=")
         print("=== Training Batch ===")
         print(console_width * "-")
-        for k, v in batch.items():
-            rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
+        pprint_batch(batch)
         print(console_width * "=")
         self.display_one_sample({k: v[0] for k, v in batch.items()})
 
