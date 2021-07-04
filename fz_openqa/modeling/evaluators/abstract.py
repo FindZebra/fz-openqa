@@ -57,7 +57,14 @@ class Evaluator(nn.Module):
     ) -> Batch:
         """Compute the forward pass of the model and return output
         Return a dictionary output with at least the key 'loss' and the data
-        necessary to compute the metrics"""
+        necessary to compute the metrics, unless the loss is explicitly computed in the
+        `post_forward` method.
+
+        This step will be computed in the `*_step()` method of the ligthning module.
+        Hence the data is processed separately on each device.
+
+        The torchmetric `Metric.update()` method should not be called here. See `post_forward` instead.
+        """
         raise NotImplementedError
 
         # example
@@ -71,6 +78,24 @@ class Evaluator(nn.Module):
             "preds": logits.argmax(-1),
             "targets": batch["labels"],
         }
+
+    def post_forward(self, output: Batch, split: str) -> Any:
+        """Apply a post-processing step to the forward method.
+        The output is the output of the forward method.
+
+        This method is called after the `output` has been gathered
+        from each device. This method must aggregate the loss across
+        devices.
+
+        torchmetrics update() calls should be placed here.
+        The output must at least contains the `loss` key.
+        """
+
+        output["loss"] = output["loss"].mean()
+        self.update_metrics(output, split)
+        output.pop("preds")
+        output.pop("targets")
+        return output
 
     def update_metrics(self, output: Batch, split: str) -> None:
         """update the metrics of the given split."""
