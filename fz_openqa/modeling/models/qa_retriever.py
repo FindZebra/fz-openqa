@@ -66,8 +66,12 @@ class QaRetriever(BaseModel):
     ) -> torch.Tensor:
         """Return the document/question representation."""
         assert model_key in {"document", "question"}, f"model_key={model_key}"
-        input_ids = batch[f"{model_key}.input_ids"]
-        attention_mask = batch.get(f"{model_key}.attention_mask", None)
+        if "input_ids" not in batch.keys():
+            input_ids = batch[f"{model_key}.input_ids"]
+            attention_mask = batch.get(f"{model_key}.attention_mask", None)
+        else:
+            input_ids = batch["input_ids"]
+            attention_mask = batch.get("attention_mask", None)
 
         # compute contextualized representations
         h = self.bert(input_ids, attention_mask).last_hidden_state

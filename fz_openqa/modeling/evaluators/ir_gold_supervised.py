@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import batch_reduce
 
 
@@ -37,6 +38,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
     ) -> Batch:
+
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 

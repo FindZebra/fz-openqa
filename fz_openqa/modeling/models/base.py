@@ -15,6 +15,7 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 
@@ -71,6 +72,10 @@ class BaseModel(LightningModule):
         """This step is performed separately on each device.
         Do the forward pass and compute the loss.
         """
+        if "input_ids" in batch.keys():
+            # todo: temporary for the index_corpus callback
+            return self.predict_step(batch, batch_idx, dataloader_idx)
+
         output = self.evaluator(self.forward, batch, split=split)
         return output
 

@@ -7,5 +7,8 @@ Batch = Dict[str, Tensor]
 
 
 def pprint_batch(batch):
+    u = ""
     for k, v in batch.items():
-        rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
+        u += f"   - {k}: {v.shape} <{v.dtype}> ({v.device})\n"
+
+    rich.print(u)

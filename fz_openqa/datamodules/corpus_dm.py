@@ -257,20 +257,21 @@ class CorpusDataModule(BaseDataModule):
     ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
         if isinstance(model, torch.nn.Module):
-            device = next(iter(model.parameters()))
-            batch = {k: v.to(device) for k, v in batch.items()}
+            device = next(iter(model.parameters())).device
+            batch = {k: v.to(device=device) for k, v in batch.items()}
 
-        # process and return
+        # process, cast and return
         batch[key] = model(batch)
-        return batch
+        return {k: v.to(device="cpu").numpy() for k, v in batch.items()}
 
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
         """Compute the vectors for each passage in the corpus"""
-        # todo: distributed version
         self.dataset = self.dataset.map(
             partial(self.compute_vectors_batch, self.vectors_id, model),
+            batched=True,
             batch_size=self.eval_batch_size,
             num_proc=1,
+            desc="Computing corpus vectors",
         )
         if index:
             self.dataset["train"].add_faiss_index(
