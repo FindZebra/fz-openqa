@@ -44,6 +44,6 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         )  # keep one loss term per batch element
         return {
             "loss": loss,
-            "preds": logits.argmax(dim=-1).detach(),
+            "logits": logits.detach(),
             "targets": targets.detach(),
         }

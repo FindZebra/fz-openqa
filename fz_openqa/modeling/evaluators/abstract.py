@@ -93,8 +93,9 @@ class Evaluator(nn.Module):
 
         output["loss"] = output["loss"].mean()
         self.update_metrics(output, split)
-        output.pop("preds")
-        output.pop("logits")
+        output.pop("preds", None)
+        output.pop("logits", None)
+        output.pop("targets", None)
         return output
 
     def update_metrics(self, output: Batch, split: str) -> None:

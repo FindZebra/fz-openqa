@@ -10,9 +10,11 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.evaluators.abstract import Evaluator
 from fz_openqa.modeling.layers.heads import cls_head
 from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.utils.functional import maybe_instantiate
 
 
 class QaRetriever(BaseModel):
@@ -40,6 +42,7 @@ class QaRetriever(BaseModel):
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
         evaluator: Union[Evaluator, DictConfig],
+        corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,
@@ -52,6 +55,10 @@ class QaRetriever(BaseModel):
 
         # instantiate the pretrained model
         self.instantiate_bert(bert=bert, tokenizer=tokenizer)
+
+        # save pointer to the corpus
+        self.hparams.pop("corpus")
+        self.corpus = None if corpus is None else maybe_instantiate(corpus)
 
         # projection head
         self.q_proj = cls_head(self.bert, hidden_size)

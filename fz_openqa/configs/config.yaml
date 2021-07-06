@@ -18,6 +18,9 @@ defaults:
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
+# version info (useful for filtering runs on wandb)
+exp_version: 1
+code_version: "0.0.1"
 
 # base pretrained model
 pretrained_model: dmis-lab/biobert-base-cased-v1.1

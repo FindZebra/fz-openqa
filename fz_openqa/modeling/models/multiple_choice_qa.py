@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
@@ -15,6 +16,15 @@ from transformers import PreTrainedTokenizerFast
 from ...utils.functional import only_trainable
 from .base import BaseModel
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
+
+
+def add_prefix(d: Dict[str, Any], prefix: str):
+    return {f"{prefix}{k}": v for k, v in d.items()}
+
+
+def filter_prefix(d: Dict[str, Any], prefix: str):
+    return {k.replace(prefix, ""): v for k, v in d.items() if prefix in k}
 
 
 class MultipleChoiceQA(BaseModel):
@@ -35,6 +45,7 @@ class MultipleChoiceQA(BaseModel):
         "validation/loss",
         "validation/reader/Accuracy",
         "validation/retriever/Accuracy",
+        "validation/retriever/top5_Accuracy",
     ]  # metrics that will be display in the progress bar
 
     def __init__(
@@ -79,38 +90,41 @@ class MultipleChoiceQA(BaseModel):
         reader_data = self.reader._step(
             batch, batch_idx, dataloader_idx, **kwargs
         )
-        output.update({f"reader/{k}": v for k, v in reader_data.items()})
+        output.update(add_prefix(reader_data, "reader/"))
 
         # forward pass for the retriever model
         retriever_data = self.retriever._step(
             batch, batch_idx, dataloader_idx, **kwargs
         )
-        output.update({f"retriever/{k}": v for k, v in retriever_data.items()})
+        output.update(add_prefix(retriever_data, "retriever/"))
 
-        # compute the loss and return the full output
-        return {
-            "loss": output["reader/loss"] + output["retriever/loss"],
-            **output,
-        }
+        return output
 
     def _step_end(self, output: Batch, split, log_data=True) -> Batch:
+        # update the metrics for both the reader and retriever
+        kwargs = {"log_data": False, "split": split}
 
-        assert "loss" in output.keys()
-        output["loss"] = output["loss"].mean()
+        # process reader data, without logging
+        reader_output = self.reader._step_end(
+            filter_prefix(output, "reader/"), **kwargs
+        )
+        reader_output = add_prefix(reader_output, "reader/")
+
+        # process retriever data, without logging
+        retriever_output = self.retriever._step_end(
+            filter_prefix(output, "retriever/"),
+            **kwargs,
+        )
+        retriever_output = add_prefix(retriever_output, "retriever/")
+
+        # merge and compute the main loss
+        output = {**reader_output, **retriever_output}
+        output["loss"] = output["reader/loss"] + output["retriever/loss"]
 
         # log the data for both the reader and the retriever
         if log_data:
             self.log_data(output, prefix=f"{split}/")
 
-        # update the metrics for both the reader and retriever
-        kwargs = {"log_data": False, "split": split}
-        self.reader._step_end(
-            {k.replace("reader/", ""): v for k, v in output.items()}, **kwargs
-        )
-        self.retriever._step_end(
-            {k.replace("retriever/", ""): v for k, v in output.items()},
-            **kwargs,
-        )
         return output
 
     def _epoch_end(self, outputs: List[Any], split: Split, log_data=True):

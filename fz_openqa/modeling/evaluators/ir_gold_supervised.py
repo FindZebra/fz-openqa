@@ -14,12 +14,10 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class SafeMetricCollection(MetricCollection):
+    """A safe implementation of MetricCollection, so top-k accuarcy  won't
+    raise an error if the batch size is too small."""
+
     def update(self, *args: Any, **kwargs: Any) -> None:
-        """
-        Iteratively call update for each metric. Positional arguments (args) will
-        be passed to every metric in the collection, while keyword arguments (kwargs)
-        will be filtered based on the signature of the individual metric.
-        """
         for _, m in self.items(keep_base=True):
             preds, targets = args
             if (
@@ -99,7 +97,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
 
         hq = model(
             batch=batch,
-            model_key="question",  # todo: use question key (too much overfitting currently)
+            model_key="question",
         )  # [bs, h]
         he = model(
             batch=batch,

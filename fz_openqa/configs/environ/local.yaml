@@ -14,7 +14,7 @@ trainer:
 
 datamodule:
   use_subset: True
-  train_batch_size: 5
+  train_batch_size: 2
   eval_batch_size: 5
   num_proc: 1
   num_workers: 0
