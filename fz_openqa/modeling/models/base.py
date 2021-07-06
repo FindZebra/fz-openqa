@@ -81,7 +81,7 @@ class BaseModel(LightningModule):
     def _step_end(self, output: Batch, *, split, log_data=True) -> Batch:
         """At this step, the output is gathered from all devices.
         Update the metrics and average the loss."""
-        output = self.evaluator.post_forward(output, split)
+        output = self.evaluator.forward_end(output, split)
 
         if log_data:
             # potentially log the loss and

@@ -158,15 +158,43 @@ your script. The `/scratch` directory should be used to store large files (cache
  CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1
  ```
 
-Lightning enables multi-gpus training using torch.distributed. Simply configure the Lightning trainer:
+Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply configure the Lightning trainer:
 
 ```shell
-CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=ddp trainer.gpus=4
+CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=dp trainer.gpus=4
 ```
 
 </details>
 
 ## Documentation
+
+### Module design
+
+All modules should inherit from `BaseModel`, which in turn inherits from `pl.LightningModule`.
+Each module features one `Evaluator` which role is to compute the loss and the metrics.
+metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
+
+<details>
+<summary>Data flow within the `BaseModels` (multi-GPUs)</summary>
+
+The main computation should be implemented in the `_step()` and `_step_end()` methods of the `BaseModel`.
+The `_step()` method runs independently on each device whereas the `_step_end()` method runs on
+a single device: this is where the final aggregated loss should be implemented (see the diagram below).
+The metrics must be implemented in the `_step_end` method in order to avoid errors with mutli-GPU training.
+
+![Lightning module data flow](.assets/lighning_steps.png)
+
+</details>
+
+<details>
+<summary>`Evaluator`</summary>
+The evaluator handles computing the loss and the metrics. Two methods must be implemented:
+
+1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
+This method is called in the `module._step()` method
+2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
+`Evaluator.foward()` method from each device.
+</details>
 
 ### Pesudo-code for Supervised OpenQA
 

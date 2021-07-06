@@ -79,7 +79,7 @@ class Evaluator(nn.Module):
             "targets": batch["labels"],
         }
 
-    def post_forward(self, output: Batch, split: str) -> Any:
+    def forward_end(self, output: Batch, split: str) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
 
