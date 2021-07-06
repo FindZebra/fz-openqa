@@ -11,6 +11,7 @@ lr: 1e-5
 hidden_size: 256
 weight_decay: 1e-4
 dropout: 0.3
+eval_using_corpus: True
 
 reader:
   lr: 2e-5

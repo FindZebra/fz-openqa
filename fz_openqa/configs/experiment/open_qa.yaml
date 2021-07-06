@@ -7,8 +7,9 @@ defaults:
   - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
   - override /model: multiple_choice_qa.yaml
   - override /datamodule: fz_x_medqa.yaml
-  - override /callbacks: null # list callbacks using `- callback_i`
+  - override /callbacks: index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
+  - override /corpus: medqa_en.yaml
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
@@ -24,6 +25,7 @@ trainer:
 
 model:
   lr: 2e-5
+  hidden_size: 16
 
 datamodule:
   train_batch_size: 3

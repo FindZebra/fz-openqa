@@ -262,6 +262,7 @@ class CorpusDataModule(BaseDataModule):
 
         # process, cast and return
         batch[key] = model(batch)
+        batch.pop("mode", None)
         return {k: v.to(device="cpu").numpy() for k, v in batch.items()}
 
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):

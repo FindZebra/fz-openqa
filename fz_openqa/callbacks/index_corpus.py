@@ -12,6 +12,7 @@ class AcceleratorWrapper:
         self.trainer = trainer
 
     def __call__(self, batch: Any):
+        batch["mode"] = "indexing"
         return self.trainer.accelerator.predict_step([batch, 0, None])
 
 
