@@ -1,8 +1,10 @@
 import collections
-from typing import Dict, Any
+from typing import Any
+from typing import Dict
 
 import torch
-from torch import nn, Tensor
+from torch import nn
+from torch import Tensor
 from torch.nn import functional as F
 
 from .abstract import Evaluator

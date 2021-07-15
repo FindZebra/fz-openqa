@@ -1,5 +1,6 @@
 defaults:
   - evaluator: multiple_choice_qa_mle.yaml
+  - bert: bio_bert.yaml
 
 _target_: fz_openqa.modeling.models.multiple_choice_qa_reader.MultipleChoiceQAReader
 
@@ -7,5 +8,5 @@ hidden_size: 32
 bert_id: ${pretrained_model}
 cache_dir: ${cache_dir}
 lr: 2e-5
-weight_decay: 0
+weight_decay: 1e-4
 dropout: 0

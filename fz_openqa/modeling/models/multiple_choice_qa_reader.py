@@ -1,19 +1,20 @@
+import warnings
 from typing import Dict
+from typing import Optional
+from typing import Union
 
 import torch
-from torch import Tensor, nn
-from transformers import (
-    PreTrainedTokenizerFast,
-    AutoModel,
-    BertPreTrainedModel,
-)
+from omegaconf import DictConfig
+from torch import nn
+from torch import Tensor
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.evaluators.abstract import Evaluator
-from .base import BaseModel
-
-
-def flatten(x: Tensor) -> Tensor:
-    return x.view(-1, x.shape[-1])
+from fz_openqa.modeling.functional import flatten
+from fz_openqa.modeling.functional import padless_cat
+from fz_openqa.modeling.layers.heads import cls_head
+from fz_openqa.modeling.models.base import BaseModel
 
 
 class MultipleChoiceQAReader(BaseModel):
@@ -38,43 +39,26 @@ class MultipleChoiceQAReader(BaseModel):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        bert_id: str,
-        evaluator: Evaluator,
-        cache_dir: str,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
+        cache_dir: Optional[str] = None,
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, evaluator=evaluator)
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters()
 
-        self.tokenizer = tokenizer
-        self.vocabulary_size = len(tokenizer.get_vocab())
-        self.pad_token_id = tokenizer.pad_token_id
+        # instantiate the pretrained model
+        self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
-        # evaluator: compute the loss and the metrics to be logged in
-        self.evaluator = evaluator
+        # heads
+        self.qd_head = cls_head(self.bert, hidden_size)
+        self.a_head = cls_head(self.bert, hidden_size)
 
-        # pretrained model
-        self.bert: BertPreTrainedModel = AutoModel.from_pretrained(
-            bert_id, cache_dir=cache_dir
-        )
-        self.bert.resize_token_embeddings(
-            len(tokenizer)
-        )  # necessary because of the added special tokens
-        bert_hdim = self.bert.config.hidden_size
-
-        # attention model for query-attention
-        self._qkv = nn.Linear(
-            bert_hdim, 3 * bert_hdim
-        )  # the weights of the attention model
-        self._attn = nn.MultiheadAttention(
-            bert_hdim, num_heads=self.bert.config.num_attention_heads
-        )  # attention layer
-        self._proj = nn.Linear(bert_hdim, 1)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, batch: Dict[str, Tensor], **kwargs) -> torch.FloatTensor:
@@ -87,20 +71,25 @@ class MultipleChoiceQAReader(BaseModel):
         # infer shapes
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
 
+        # concatenate questions and documents such that there is no padding between Q and D
+        padded_batch = padless_cat(
+            {
+                "input_ids": batch["question.input_ids"],
+                "attention_mask": batch["question.attention_mask"],
+            },
+            {
+                "input_ids": batch["document.input_ids"],
+                "attention_mask": batch["document.attention_mask"],
+            },
+            self.pad_token_id,
+            aux_pad_tokens={"attention_mask": 0},
+        )
         # compute contextualized representations
-        ids = torch.cat(
-            [batch["document.input_ids"], batch["question.input_ids"]], dim=1
-        )
-        attn = torch.cat(
-            [
-                batch["document.attention_mask"],
-                batch["question.attention_mask"],
-            ],
-            dim=1,
-        )
-        # Todo: handle truncating in a nicer way (i.e. remove question padding first)
+        if len(padded_batch["input_ids"]) > 512:
+            warnings.warn("the tensor [question; document] was truncated.")
         heq = self.bert(
-            ids[:, :512], attn[:, :512]
+            padded_batch["input_ids"][:, :512],
+            padded_batch["attention_mask"][:, :512],
         ).last_hidden_state  # [bs, L_e+L_q, h]
         ha = self.bert(
             flatten(batch["answer_choices.input_ids"]),
@@ -108,15 +97,11 @@ class MultipleChoiceQAReader(BaseModel):
         ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # answer-question representation
-        # here I use a full attention layer, even so this is quite a waste since we only use the output at position 0
-        heq = self.expand_and_flatten(heq, N_a)  # [bs * N_a, L_q, h]
-        hqa = torch.cat([heq, ha], dim=1).permute(
-            1, 0, 2
-        )  # [bs * N_a, L_q + L_a, h]
-        hqa = self.dropout(hqa)
-        hqa, _ = self._attn(*self._qkv(hqa).chunk(3, dim=-1))
-        hqa_glob = self._proj(hqa[0, :, :])  # [bs * N_a, h]
-        return hqa_glob.view(bs, N_a)
+        heq = self.qd_head(self.dropout(heq))  # [bs, h]
+        ha = self.a_head(self.dropout(ha)).view(
+            bs, N_a, self.hparams.hidden_size
+        )
+        return torch.einsum("bh, bah -> ba", heq, ha)  # dot-product model
 
     @staticmethod
     def expand_and_flatten(x: Tensor, n: int) -> Tensor:

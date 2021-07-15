@@ -1,23 +1,31 @@
 import os
+from pathlib import Path
 from sys import platform
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 import rich
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from pytorch_lightning import (
-    Callback,
-    LightningDataModule,
-    LightningModule,
-    Trainer,
-    seed_everything,
-)
+from omegaconf import OmegaConf
+from pytorch_lightning import Callback
+from pytorch_lightning import LightningDataModule
+from pytorch_lightning import LightningModule
+from pytorch_lightning import seed_everything
+from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils import utils
+import fz_openqa
+from fz_openqa.utils import train_utils
 
-log = utils.get_logger(__name__)
+log = train_utils.get_logger(__name__)
+
+
+_root = Path(fz_openqa.__file__).parent.parent
+
+OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
+OmegaConf.register_new_resolver("get_original_cwd", lambda: _root)
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -28,14 +36,19 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
     if platform == "darwin":
+        # a few flags to fix MacOS stuff
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    os.environ["TOKENIZERS_PARALLELISM"] = "TRUE"
+        import multiprocessing
+
+        multiprocessing.set_start_method("fork")
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 
     if config.verbose:
         rich.print(f"> work_dir: {config.work_dir}")
+        rich.print(f"> original_wdir: {config.original_wdir}")
         rich.print(f"> cache_dir: {os.path.abspath(config.cache_dir)}")
         rich.print(f"> Current working directory : {os.getcwd()}")
 
@@ -66,12 +79,12 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
     model: LightningModule = instantiate(
-        config.model, tokenizer=tokenizer, corpus=corpus
+        config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=False
     )
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
-    if "callbacks" in config:
+    if config.get("callbacks", None):
         for _, cb_conf in config["callbacks"].items():
             if "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
@@ -79,7 +92,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
-    if "logger" in config:
+    if config.get("logger", None):
         for _, lg_conf in config["logger"].items():
             if "_target_" in lg_conf:
                 log.info(f"Instantiating logger <{lg_conf._target_}>")
@@ -95,7 +108,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Send some parameters from config to all lightning loggers
     log.info("Logging hyperparameters.")
-    utils.log_hyperparameters(
+    train_utils.log_hyperparameters(
         config=config,
         model=model,
         datamodule=datamodule,
@@ -103,7 +116,10 @@ def train(config: DictConfig) -> Optional[float]:
         callbacks=callbacks,
         logger=logger,
     )
-    if trainer.checkpoint_callback:
+    if (
+        trainer.checkpoint_callback
+        and trainer.checkpoint_callback.dirpath is not None
+    ):
         print(
             f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}"
         )
@@ -119,7 +135,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Make sure everything closed properly
     log.info("Finalizing..")
-    utils.finish(
+    train_utils.finish(
         config=config,
         model=model,
         datamodule=datamodule,

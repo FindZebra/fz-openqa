@@ -1,14 +1,23 @@
 import shutil
 from functools import partial
-from typing import Dict, List, Any, Union, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
 import datasets
+import rich
 import torch
-from transformers import BatchEncoding, PreTrainedTokenizerFast
+from transformers import BatchEncoding
+from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.tokenizers.static import QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN
-from .base_dm import BaseDataModule, HgDataset
+from .base_dm import BaseDataModule
+from .base_dm import HgDataset
 from .datasets import fz_x_medqa
+from fz_openqa.tokenizers.static import ANS_TOKEN
+from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.tokenizers.static import QUERY_TOKEN
 
 
 def add_spec_token(
@@ -129,7 +138,7 @@ class FZxMedQADataModule(BaseDataModule):
             for c in dataset.column_names["train"]
             if (any(a in c for a in attrs) and any(a in c for a in columns))
         ]
-        self.pt_attributes += ["answer_idx", "rank"]
+        self.pt_attributes += ["answer_idx", "rank", "is_positive"]
         dataset.set_format(
             type="torch", columns=self.pt_attributes, output_all_columns=False
         )
@@ -138,7 +147,9 @@ class FZxMedQADataModule(BaseDataModule):
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filtering operations"""
         if self.filter_gold:
-            dataset = dataset.filter(lambda x: x["rank"] == 0)
+            dataset = dataset.filter(
+                lambda x: x["rank"] == 0 and x["is_positive"]
+            )
 
         return dataset
 
@@ -165,6 +176,7 @@ class FZxMedQADataModule(BaseDataModule):
         # answer_idx & rank attributes
         output["answer_idx"] = torch.tensor([b["answer_idx"] for b in batch])
         output["rank"] = torch.tensor([b["rank"] for b in batch])
+        output["is_positive"] = torch.tensor([b["is_positive"] for b in batch])
 
         # documents and questions
         for key in ["document", "question"]:
@@ -199,22 +211,21 @@ class FZxMedQADataModule(BaseDataModule):
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        decode_kwargs = {"skip_special_tokens": False}
+        decode_kwargs = {"skip_special_tokens": True}
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
         print("* Question:")
-        print(
-            self.tokenizer.decode(
-                example["question.input_ids"], **decode_kwargs
-            )
+        rich.print(
+            self.repr_ex(example, "question.input_ids", **decode_kwargs)
         )
+
         print(console_width * "-")
-        print(f"* Document (rank={example['rank']})")
-        print(
-            self.tokenizer.decode(
-                example["document.input_ids"], **decode_kwargs
-            )
+        rich.print(
+            f"* Document (rank={example['rank']}, is_positive={example['is_positive']})"
+        )
+        rich.print(
+            self.repr_ex(example, "document.input_ids", **decode_kwargs)
         )
         print(console_width * "-")
         print("* Answer Choices:")

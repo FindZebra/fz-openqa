@@ -1,4 +1,9 @@
-from typing import List, Optional, Any, Iterable, Union, Tuple
+from typing import Any
+from typing import Iterable
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 
 def gen_passages(

@@ -1,13 +1,20 @@
-import torch
-from torch import Tensor, nn
-from transformers import (
-    PreTrainedTokenizerFast,
-    AutoModel,
-    BertPreTrainedModel,
-)
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import Union
 
+import torch
+from omegaconf import DictConfig
+from torch import nn
+from torch import Tensor
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
+
+from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.evaluators.abstract import Evaluator
-from .base import BaseModel
+from fz_openqa.modeling.layers.heads import cls_head
+from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.utils.functional import maybe_instantiate
 
 
 class QaRetriever(BaseModel):
@@ -25,59 +32,73 @@ class QaRetriever(BaseModel):
         "validation/loss",
         "train/Accuracy",
         "validation/Accuracy",
+        "validation/top5_Accuracy",
+        "validation/top10_Accuracy",
     ]  # metrics that will be display in the progress bar
 
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        bert_id: str,
-        evaluator: Evaluator,
-        cache_dir: str,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
+        corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, evaluator=evaluator)
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters()
 
-        self.tokenizer = tokenizer
-        self.vocabulary_size = len(tokenizer.get_vocab())
-        self.pad_token_id = tokenizer.pad_token_id
+        # instantiate the pretrained model
+        self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
-        # evaluator: compute the loss and the metrics to be logged in
-        self.evaluator = evaluator
-
-        # pretrained model
-        self.bert: BertPreTrainedModel = AutoModel.from_pretrained(
-            bert_id, cache_dir=cache_dir
-        )
-        self.bert.resize_token_embeddings(
-            len(tokenizer)
-        )  # necessary because of the added special tokens
+        # save pointer to the corpus
+        self.hparams.pop("corpus")
+        self.corpus = None if corpus is None else maybe_instantiate(corpus)
 
         # projection head
-        self.q_proj = nn.Linear(self.bert.config.hidden_size, hidden_size)
-        self.e_proj = nn.Linear(self.bert.config.hidden_size, hidden_size)
+        self.q_proj = cls_head(self.bert, hidden_size)
+        self.e_proj = cls_head(self.bert, hidden_size)
         self.dropout = nn.Dropout(dropout)
 
     def forward(
-        self, *, input_ids: Tensor, attention_mask: Tensor, key: str, **kwargs
-    ) -> torch.FloatTensor:
+        self,
+        batch: Dict[str, Tensor],
+        batch_idx: int = 0,
+        dataloader_idx: int = None,
+        model_key: str = "document",
+        **kwargs,
+    ) -> torch.Tensor:
         """Return the document/question representation."""
-        assert key in {"document", "question"}
+        assert model_key in {"document", "question"}, f"model_key={model_key}"
+        if "input_ids" not in batch.keys():
+            input_ids = batch[f"{model_key}.input_ids"]
+            attention_mask = batch.get(f"{model_key}.attention_mask", None)
+        else:
+            input_ids = batch["input_ids"]
+            attention_mask = batch.get("attention_mask", None)
 
         # compute contextualized representations
         h = self.bert(input_ids, attention_mask).last_hidden_state
 
         # global representations
         h = self.dropout(h)
-        h_glob: Tensor = {"document": self.e_proj, "question": self.q_proj}[
-            key
-        ](h)
+        return {"document": self.e_proj, "question": self.q_proj}[model_key](h)
 
-        # todo: masking
-        return torch.nn.functional.normalize(h_glob, p=2, dim=2)
+    def predict_step(
+        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
+    ) -> Any:
+        # compute contextualized representations
+        h = self.bert(
+            batch["input_ids"], batch["attention_mask"]
+        ).last_hidden_state
+
+        # global representations
+        h = self.dropout(h)
+        return {"document": self.e_proj, "question": self.q_proj}["document"](
+            h
+        )

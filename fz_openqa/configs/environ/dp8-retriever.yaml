@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - override /sys: valv.yaml
+
+
+trainer:
+  gpus: 8
+  accelerator: dp
+
+datamodule:
+  use_subset: False
+  train_batch_size: 48 # use 48 for retriever_only
+  eval_batch_size: 1024 # use 1024 for retriever_only
+  num_proc: 1
+  num_workers: 16
+
+corpus:
+  eval_batch_size: 6000
+
+# logger: null

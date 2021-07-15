@@ -1,15 +1,26 @@
 import shutil
 from functools import partial
-from typing import Dict, List, Any, Callable, Union, Optional
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
 import datasets
 import rich
 import torch
-from datasets import load_dataset, DatasetDict, Split
+from datasets import DatasetDict
+from datasets import load_dataset
+from datasets import Split
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
-from torch.utils.data import DataLoader, Dataset
-from transformers import PreTrainedTokenizerFast, BatchEncoding
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
+from transformers import BatchEncoding
+from transformers import PreTrainedTokenizerFast
+
+from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -138,13 +149,6 @@ class BaseDataModule(LightningDataModule):
 
         if self.corpus is not None:
             self.corpus.setup()
-            if self.verbose:
-                console_width, _ = shutil.get_terminal_size()
-                print("=== Corpus ===")
-                print(console_width * "*")
-                self.corpus.pprint()
-                self.corpus.display_sample()
-                print(console_width * "*")
 
     def take_subset(self, dataset: HgDataset) -> HgDataset:
         """Take a subset of the dataset and return."""
@@ -196,9 +200,9 @@ class BaseDataModule(LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
-    def val_dataloader(self):
+    def _eval_loader(self, split):
         return DataLoader(
-            dataset=self.dataset[Split.VALIDATION],
+            dataset=self.dataset[split],
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -207,16 +211,11 @@ class BaseDataModule(LightningDataModule):
             collate_fn=self.collate_fn,
         )
 
+    def val_dataloader(self):
+        return self._eval_loader(Split.VALIDATION)
+
     def test_dataloader(self):
-        return DataLoader(
-            dataset=self.dataset[Split.TEST],
-            batch_size=self.eval_batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            shuffle=False,
-            collate_fn=self.collate_fn,
-        )
+        return self._eval_loader(Split.TEST)
 
     def collate_fn(
         self, batch: Any
@@ -233,8 +232,7 @@ class BaseDataModule(LightningDataModule):
         print(console_width * "=")
         print("=== Training Batch ===")
         print(console_width * "-")
-        for k, v in batch.items():
-            rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
+        pprint_batch(batch)
         print(console_width * "=")
         self.display_one_sample({k: v[0] for k, v in batch.items()})
 
@@ -244,8 +242,13 @@ class BaseDataModule(LightningDataModule):
         print("=== Sample ===")
         print(console_width * "-")
         rich.print(
-            self.tokenizer.decode(
-                example["input_ids"], skip_special_tokens=True
-            )
+            self.repr_ex(example, "input_ids", skip_special_tokens=True)
         )
         print(console_width * "=")
+
+    def repr_ex(self, example, key, **kwargs):
+        n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
+        return (
+            f"length={len(example[key])}, padding={n_pad_tokens}, "
+            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
+        )

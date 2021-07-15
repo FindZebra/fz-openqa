@@ -1,0 +1,2 @@
+sample_lm:
+  _target_: fz_openqa.callbacks.index_corpus.IndexCorpus

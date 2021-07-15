@@ -1,30 +1,11 @@
 import hydra
 from omegaconf import DictConfig
 
+from fz_openqa.ops.experiment import run_exp
+from fz_openqa.ops.tuning import run_tune
 
-@hydra.main(config_path="configs/", config_name="config.yaml")
-def main(config: DictConfig) -> None:
-    # Imports should be nested inside @hydra.main to optimize tab completion
-    # Read more here: https://github.com/facebookresearch/hydra/issues/934
-    from fz_openqa.ops import training
-    from fz_openqa.utils import utils
 
-    # A couple of optional utilities:
-    # - disabling python warnings
-    # - easier access to debug mode
-    # - forcing debug friendly configuration
-    # - forcing multi-gpu friendly configuration
-    # You can safely get rid of this line if you don't want those
-    utils.extras(config)
-
-    # Pretty print config using Rich library
-    # Pretty print config using Rich library
-    if config.get("print_config"):
-        utils.print_config(config, resolve=True)
-
+@hydra.main(config_path="configs/", config_name="hpo_config.yaml")
+def run_hpo(config: DictConfig) -> None:
     # Train model
-    return training.train(config)
-
-
-if __name__ == "__main__":
-    main()
+    return run_tune(config)

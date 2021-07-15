@@ -2,22 +2,29 @@ import os
 import re
 import shutil
 from functools import partial
-from typing import Dict, List, Any, Callable, Union
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Union
 
 import datasets
 import numpy as np
 import rich
 import torch
-from datasets import load_dataset, DatasetDict
+from datasets import DatasetDict
+from datasets import load_dataset
+from datasets import Split
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 from torch.utils.data import Dataset
 from transformers import BatchEncoding
 
-from fz_openqa.tokenizers.static import DOC_TOKEN
 from .base_dm import BaseDataModule
-from .datasets import file_corpus, meqa_en_corpus
+from .datasets import file_corpus
+from .datasets import meqa_en_corpus
 from .utils import gen_passages
+from fz_openqa.tokenizers.static import DOC_TOKEN
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -214,11 +221,10 @@ class CorpusDataModule(BaseDataModule):
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
         console_width, _ = shutil.get_terminal_size()
+        decode_kwargs = {"skip_special_tokens": True}
         print(console_width * "-")
-        print(
-            self.tokenizer.decode(
-                example["input_ids"], skip_special_tokens=False
-            )
+        rich.print(
+            "(CORPUS) " + self.repr_ex(example, "input_ids", **decode_kwargs)
         )
 
     def collate_fn(
@@ -235,14 +241,14 @@ class CorpusDataModule(BaseDataModule):
             map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
         )
 
-        def maybe_truncate(x: Any):
+        def maybe_truncate(x: Any, max_length: int):
             """truncate sequential attributes to `max_length`"""
             if not (isinstance(x, torch.Tensor) and len(x.shape) == 2):
                 return x
 
             return x[:, :max_length]
 
-        return {k: maybe_truncate(v) for k, v in output.items()}
+        return {k: maybe_truncate(v, max_length) for k, v in output.items()}
 
     @staticmethod
     @torch.no_grad()
@@ -251,20 +257,22 @@ class CorpusDataModule(BaseDataModule):
     ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
         if isinstance(model, torch.nn.Module):
-            device = next(iter(model.parameters()))
-            batch = {k: v.to(device) for k, v in batch.items()}
+            device = next(iter(model.parameters())).device
+            batch = {k: v.to(device=device) for k, v in batch.items()}
 
-        # process and return
+        # process, cast and return
         batch[key] = model(batch)
-        return batch
+        batch.pop("mode", None)
+        return {k: v.to(device="cpu").numpy() for k, v in batch.items()}
 
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
         """Compute the vectors for each passage in the corpus"""
-        # todo: distributed version
         self.dataset = self.dataset.map(
             partial(self.compute_vectors_batch, self.vectors_id, model),
+            batched=True,
             batch_size=self.eval_batch_size,
             num_proc=1,
+            desc="Computing corpus vectors",
         )
         if index:
             self.dataset["train"].add_faiss_index(
@@ -285,6 +293,16 @@ class CorpusDataModule(BaseDataModule):
         return self.dataset["train"].get_nearest_examples_batch(
             self.vectors_id, vectors, k=k
         )
+
+    def val_dataloader(self):
+        return self._eval_loader(
+            Split.TRAIN
+        )  # the dataset only have one split
+
+    def test_dataloader(self):
+        return self._eval_loader(
+            Split.TRAIN
+        )  # the dataset only have one split
 
 
 class MedQaEnDataModule(CorpusDataModule):

@@ -1,0 +1,2 @@
+ defaults:
+   - hpo: search_retriever.yaml

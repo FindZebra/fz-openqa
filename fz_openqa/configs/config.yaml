@@ -1,6 +1,7 @@
 # @package _global_
 
 defaults:
+  - sys: local.yaml
   - trainer: minimal.yaml
   - datamodule: fz_x_medqa.yaml
   - corpus: none.yaml
@@ -9,25 +10,36 @@ defaults:
   - callbacks: default.yaml # set this to null if you don't want to use callbacks
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)
 
-  - experiment: null
+  - experiment: null # define a full experiment configuraiton
+  - environ: null # define a configuration specific to the environment (local, server, ...)
   - hydra: default.yaml
 
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
+# version info (useful for filtering runs on wandb)
+exp_version: 1
+code_version: "0.0.1"
+
+# metrics to track
+target_metric: validation/Accuracy
+target_mode: max
 
 # base pretrained model
-pretrained_model: dmis-lab/biobert-base-cased-v1.1
+pretrained_model: ${model.bert.pretrained_model_name_or_path}
 
 # path to original working directory
 # hydra hijacks working directory by changing it to the current log directory,
 # so it's useful to have this path as a special variable
 # learn more here: https://hydra.cc/docs/next/tutorials/basic/running_your_app/working_directory
-work_dir: ${hydra:runtime.cwd}
+work_dir: ${sys.work_dir}
 
 # path to folder with data
-cache_dir: ${work_dir}/cache/
+cache_dir: ${sys.cache_dir}
+
+# original working dir
+original_wdir: ${get_original_cwd:}
 
 # use `python run.py debug=true` for easy debugging!
 # this will run 1 train, val and test loop with only 1 batch

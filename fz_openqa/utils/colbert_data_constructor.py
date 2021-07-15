@@ -4,9 +4,11 @@ import os
 import re
 
 import gdown
+from es_functions import es_create_index
+from es_functions import es_ingest
+from es_functions import es_remove_index
+from es_functions import es_search
 from tqdm import tqdm
-
-from es_functions import es_create_index, es_remove_index, es_search, es_ingest
 
 """
 Generate FZxMedQA Dataset
