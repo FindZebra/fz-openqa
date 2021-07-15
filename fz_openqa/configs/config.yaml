@@ -22,8 +22,12 @@ defaults:
 exp_version: 1
 code_version: "0.0.1"
 
+# metrics to track
+target_metric: validation/Accuracy
+target_mode: max
+
 # base pretrained model
-pretrained_model: dmis-lab/biobert-base-cased-v1.1
+pretrained_model: ${model.bert.pretrained_model_name_or_path}
 
 # path to original working directory
 # hydra hijacks working directory by changing it to the current log directory,

@@ -5,7 +5,7 @@ defaults:
 _target_: fz_openqa.modeling.models.qa_retriever.QaRetriever
 
 hidden_size: 32
-cache_dir: ${sys.cache_dir}
+cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 1e-4
 dropout: 0

@@ -1,10 +1,10 @@
 import os
+from pathlib import Path
 from sys import platform
 from typing import List
 from typing import Optional
 
 import rich
-from hydra.utils import get_original_cwd
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
@@ -16,12 +16,16 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils import utils
+import fz_openqa
+from fz_openqa.utils import train_utils
 
-log = utils.get_logger(__name__)
+log = train_utils.get_logger(__name__)
+
+
+_root = Path(fz_openqa.__file__).parent.parent
 
 OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
-OmegaConf.register_new_resolver("get_original_cwd", lambda: get_original_cwd())
+OmegaConf.register_new_resolver("get_original_cwd", lambda: _root)
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -104,7 +108,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Send some parameters from config to all lightning loggers
     log.info("Logging hyperparameters.")
-    utils.log_hyperparameters(
+    train_utils.log_hyperparameters(
         config=config,
         model=model,
         datamodule=datamodule,
@@ -131,7 +135,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Make sure everything closed properly
     log.info("Finalizing..")
-    utils.finish(
+    train_utils.finish(
         config=config,
         model=model,
         datamodule=datamodule,
