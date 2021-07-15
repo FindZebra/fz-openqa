@@ -1,7 +1,7 @@
 _target_: fz_openqa.datamodules.corpus_dm.CorpusDataModule
 
 input_dir: "${original_wdir}/examples"
-cache_dir: ${sys.cache_dir} # cache_dir is specified in config.yaml
+cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: ${datamodule.train_batch_size}
 eval_batch_size: ${datamodule.eval_batch_size}
 num_workers: ${datamodule.num_workers}

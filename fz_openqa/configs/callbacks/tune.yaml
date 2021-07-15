@@ -1,0 +1,25 @@
+tune_callback:
+  _target_: ray.tune.integration.pytorch_lightning.TuneReportCallback
+  metrics:
+    - ${target_metric}
+    - validation/loss
+
+early_stopping:
+  _target_: pytorch_lightning.callbacks.EarlyStopping
+  monitor: ${target_metric} # name of the logged metric which determines when model is improving
+  patience: 20 # how many epochs of not improving until training stops
+  mode: ${target_mode} # can be "max" or "min"
+  min_delta: 0.00 # minimum change in the monitored metric needed to qualify as an improvement
+
+
+model_checkpoint:
+  _target_: fz_openqa.callbacks.cleanable_checkpoint.CleanableCheckpoint
+  cleanup_threshold: 0.01 # delete checkpoint if max valid metric falls bellow this value
+  monitor: ${target_metric} # name of the logged metric which determines when model is improving
+  mode: ${target_mode} # can be "max" or "min"
+  save_top_k: 1 # save k best models (determined by above metric)
+  save_last: False # additionally always save model from last epoch
+  verbose: False
+  dirpath: "${getcwd:}/checkpoints/"
+  filename: "model-{epoch:02d}"
+## minimum change in the monitored metric needed to qualify as an improvement

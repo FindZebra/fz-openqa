@@ -7,9 +7,9 @@ defaults:
   - override /trainer: minimal.yaml
   - override /model: qa_retriever.yaml
   - override /datamodule: fz_x_medqa.yaml
-  - override /callbacks: index_corpus.yaml # list callbacks using `- callback_i`
+  - override /callbacks: none.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
-  - override /corpus: local.yaml
+  - override /corpus: none.yaml #local.yaml
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
@@ -20,8 +20,8 @@ trainer:
   min_epochs: 1
   max_epochs: 10000
   gradient_clip_val: 0.5
-  stochastic_weight_avg: True
-  # checkpoint_callback: False # disable checkpointing for faster training
+  # stochastic_weight_avg: True
+  checkpoint_callback: False # disable checkpointing for faster training
 
 model:
   lr: 2e-5

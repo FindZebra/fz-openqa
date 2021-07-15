@@ -6,7 +6,7 @@ _target_: fz_openqa.modeling.models.multiple_choice_qa_reader.MultipleChoiceQARe
 
 hidden_size: 32
 bert_id: ${pretrained_model}
-cache_dir: ${sys.cache_dir}
+cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 1e-4
 dropout: 0
