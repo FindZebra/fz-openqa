@@ -156,6 +156,8 @@ Experiment configurations define a full experimental setup in `configs/experimen
 poetry run fzqa experiment=quick_test
 ```
 
+The ´environ´ configuration adjust the experiment to the environment (e.g. cache location).
+
 </details>
 
 <details>
@@ -165,7 +167,7 @@ When running experiments on the GPU cluster, you need to pass the flag `CUDA_VIS
 your script. The `/scratch` directory should be used to store large files (cache).
 
 ```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only cache_dir=/scratch/valv/cache/ trainer.gpus=1
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only environ=valv trainer.gpus=1
  ```
 
 Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply configure the Lightning trainer:
@@ -173,6 +175,16 @@ Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply conf
 ```shell
 CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=dp trainer.gpus=4
 ```
+ </details>
+ 
+ <details>
+<summary>Hyper parameter optimization</summary>
+
+The `tune.py` script allow scheduling and running a set of experiments using `Ray[tune]`. Each experiment is described in `configs/hpo/`. Run an experiment using:
+
+```shell
+ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python tune.py hpo=search_retriever
+ ```
 
 </details>
 
