@@ -26,6 +26,7 @@ _root = Path(fz_openqa.__file__).parent.parent
 
 OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
 OmegaConf.register_new_resolver("get_original_cwd", lambda: _root)
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 
 
 def train(config: DictConfig) -> Optional[float]:

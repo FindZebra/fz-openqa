@@ -15,6 +15,8 @@ from fz_openqa.utils import train_utils
 
 log = train_utils.get_logger(__name__)
 
+# OmegaConf.register_new_resolver("whoami", lambda: os.environ.get('USER'))
+
 
 def trial(args, checkpoint_dir=None, **kwargs):
     with initialize(config_path="../configs/"):

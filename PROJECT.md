@@ -1,19 +1,19 @@
 # Medical Open Domain Question Answering
 
-Open Domain Question Answering (OpenQA) has improved significantly in the last few years thanks to the wide availability of powerful deep language models such as BERT. 
+Open Domain Question Answering (OpenQA) has improved significantly in the last few years thanks to the wide availability of powerful deep language models such as BERT.
 
-FindZebra aims at improving the diagnosis of rare disease using information retrieval. Whereas the current solution relies on classic information retrieval tools (non-ML), there is an opportunity to improve FindZebra latest deep learning techniques. 
+FindZebra aims at improving the diagnosis of rare disease using information retrieval. Whereas the current solution relies on classic information retrieval tools (non-ML), there is an opportunity to improve FindZebra latest deep learning techniques.
 
-The FindZebra corpus contains 30,658 individual disease descriptions. FindZebra's diagnosis tool consists of retrieving the right disease description (evidence) based on a patient description (query). Therefore FindZebra essentially aims at solving a retrieval problem, which can be framed as Open Domain QA (OpenQA). 
+The FindZebra corpus contains 30,658 individual disease descriptions. FindZebra's diagnosis tool consists of retrieving the right disease description (evidence) based on a patient description (query). Therefore FindZebra essentially aims at solving a retrieval problem, which can be framed as Open Domain QA (OpenQA).
 
-The [MedQA](https://arxiv.org/pdf/2009.13081.pdf) dataset, which is now mapped to the FZ corpus will be exploited in this project. The MedQA authors introduced a simple basline model using a BM25 retriever and a bidirectional GRU reader model. 
+The [MedQA](https://arxiv.org/pdf/2009.13081.pdf) dataset, which is now mapped to the FZ corpus will be exploited in this project. The MedQA authors introduced a simple basline model using a BM25 retriever and a bidirectional GRU reader model.
 
 In this project, we will 1. attempt to improve upon the baseline on MedQA and 2. improve FindZebra retrieval using OpenQA.
 
 ## Notation
 * $\mathbf{q}$: query
 * $\mathbf{d}$: an evidence document from the corpus
-* $\mathbf{a}$: an answer 
+* $\mathbf{a}$: an answer
 * $\mathbf{x} = (\mathbf{q}, \mathbf{d}, \mathbf{a})$: a triplet of query, evidence and answer
 * $\mathbf{y}_{1:N}$: batch of N vectors $\mathbf{y}_i$
 * $\mathcal{C} := \{\mathbf{d}_1, \dots, \mathbf{d}_N\}$: corpus of documents
@@ -35,13 +35,13 @@ In this project, we will 1. attempt to improve upon the baseline on MedQA and 2.
 
 ### Reading Comprehension
 
-Reading comprehension (i.e. SQUAD dataset) aims at answering a question $\mathbf{q}$ based on a *known* evidence document $\mathbf{d}$. 
+Reading comprehension (i.e. SQUAD dataset) aims at answering a question $\mathbf{q}$ based on a *known* evidence document $\mathbf{d}$.
 
-BERT-based models [`BERT`, `RoBERTa`, `ALBERT`] hold the [top of the leaderboard](https://paperswithcode.com/sota/question-answering-on-squad20). A linear layer (*head*) is added on top of the BERT model to extract features that will used to build the *reader* $p_\theta(a | q, d)$. 
+BERT-based models [`BERT`, `RoBERTa`, `ALBERT`] hold the [top of the leaderboard](https://paperswithcode.com/sota/question-answering-on-squad20). A linear layer (*head*) is added on top of the BERT model to extract features that will used to build the *reader* $p_\theta(a | q, d)$.
 
 #### Implementing the *reader* $p_\theta(\mathbf{a} | \mathbf{q}, \mathbf{d})$
 
-The implementation of the reader depends on the formulation of the answering problem. 
+The implementation of the reader depends on the formulation of the answering problem.
 
 ##### a. Span-based QA
 
@@ -66,7 +66,7 @@ $$p_\theta(a | \mathbf{q}, \mathbf{d}, \mathbf{A} ) := \frac{e^{f_\theta(\mathbf
 
 ### Information Retrieval
 
-In Open Domain Question Answering, a large corpus of documents is available, and an information retrieval (IR) system is used to noisily retrieve a set of evidence given the question. The reading comprehension model thereafter answers the question based on the noisy evidence documents. All IR models rely on a function $\mathrm{Sim}: \mathcal{X}, \mathcal{X} \rightarrow \mathcal{R}$ that to score the documents $\mathbf{d}$ given the query $\mathbf{q}$. Using the $S$, we can formally define the *retriever* as 
+In Open Domain Question Answering, a large corpus of documents is available, and an information retrieval (IR) system is used to noisily retrieve a set of evidence given the question. The reading comprehension model thereafter answers the question based on the noisy evidence documents. All IR models rely on a function $\mathrm{Sim}: \mathcal{X}, \mathcal{X} \rightarrow \mathcal{R}$ that to score the documents $\mathbf{d}$ given the query $\mathbf{q}$. Using the $S$, we can formally define the *retriever* as
 
 $$p_\phi(\mathbf{d} | \mathbf{q}) :=  \frac{e^{\mathrm{Sim}(\mathbf{q}, \mathbf{d})}}{\sum_{\mathbf{d'} \in \mathcal{C}} e^{\mathrm{Sim}(\mathbf{q}, \mathbf{d'})}}$$
 
@@ -85,7 +85,7 @@ We can also define more complex similarity metrics, including metrics operating 
 \text{token-level metrics:} \qquad& \mathrm{Sim} : \mathcal{X} \times \mathcal{X} \rightarrow \mathcal{R}
 \end{align}
 
-##### Retrieval 
+##### Retrieval
 
 Retrival is performed using maximum similarity / nearest neighbour search:
 
@@ -100,19 +100,19 @@ $$\rm{mss}(q, \mathcal{C}) = \mathop{\mathrm{arg\,min}}_{d \in \mathcal{C} }\ \m
 
 ##### [DPR: Dense Passage Retrieval for Open-Domain Question Answering](https://arxiv.org/pdf/2004.04906.pdf)
 
-DPR proposes learning vectors representations of the queries and the documents using BERT (representation at the `<CLS>` token). Each document is represented by a single vector $\mathbf{h_\rm{CLS}^{.}} \in \mathcal{R}^d$ (BERT output at the `<CLS>` token). 
+DPR proposes learning vectors representations of the queries and the documents using BERT (representation at the `<CLS>` token). Each document is represented by a single vector $\mathbf{h_\rm{CLS}^{.}} \in \mathcal{R}^d$ (BERT output at the `<CLS>` token).
 
 By contrast with ORQA that models evidences as a latent variable, DPR exploits supervised learning (using triplets `(query, gold document,  answer)`) and in-batch contrastive learning (using other examples from the batch as negative examples). Given a batch of triplets $x_{1:N}$, the objective is:
 
 $$L(x_{1:N}) := - \frac{1}{N} \sum_{i=1}^N \log \frac{e^{d(\mathbf{h_\rm{CLS}^{q_i}}, \mathbf{h_\rm{CLS}^{d_i}})}}{\sum_{j=1}^N e^{d(\mathbf{h_\rm{CLS}^{q_i}}, \mathbf{h_\rm{CLS}^{d_j}}) }}$$
 
-where the similarity metric $d$ can be choosen as the dot-product, the cosine similairy or the L2 distance. However, DPR assumes the evidence documents are known. When the evidence is unknown, they use BM25 to rank evidences and choose the best match which includes the answer span. 
+where the similarity metric $d$ can be choosen as the dot-product, the cosine similairy or the L2 distance. However, DPR assumes the evidence documents are known. When the evidence is unknown, they use BM25 to rank evidences and choose the best match which includes the answer span.
 
 ##### [ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT](https://arxiv.org/pdf/2004.12832.pdf)
 
-Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive. 
+Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive.
 
-ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as 
+ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
 
 $$ \rm{MaxSim}(q, p):=\sum_{i \in\left[\left|\mathbf{h^q}\right|\right]} \max _{j \in\left[\left|\mathbf{h^{d}}\right|\right]} d(\mathbf{h^q}_{i}, \mathbf{h^d}_{j})$$
 
@@ -143,9 +143,9 @@ where the similarity metric $d$ can be choosen as the dot-product, the cosine si
 
 ### [MedQA](https://arxiv.org/pdf/2009.13081.pdf)
 
-The MedQA dataset features 61k pairs (query, answer candidates) collected from the National Medical Board Examination (USA, Mainland China and Taiwan) as well as a large corpus (12.7M tokens (en), 14.7M tokens (Zh)) based in medical textbooks. 
+The MedQA dataset features 61k pairs (query, answer candidates) collected from the National Medical Board Examination (USA, Mainland China and Taiwan) as well as a large corpus (12.7M tokens (en), 14.7M tokens (Zh)) based in medical textbooks.
 
-Each question features 4 answer candidates, the aim is to select the right answer based on the evidence corpus, although no gold evidence is provided. 
+Each question features 4 answer candidates, the aim is to select the right answer based on the evidence corpus, although no gold evidence is provided.
 
 
 ### FindZebra Corpus
@@ -154,7 +154,7 @@ The FZ corpus contains 30.658 disease descriptions (source document). Each disea
 
 ### Mapping [FZxMedQA](https://docs.google.com/document/d/1e5_9C5sfjRSZEYZ8917o2Z9iBdakYXOCUb5vljj6cBs/edit)
 
-The mapping relies on using MetaMap to map the MedQA answers to a CUI, which can be subsequently joined to the FZ corpus based on the CUI. 
+The mapping relies on using MetaMap to map the MedQA answers to a CUI, which can be subsequently joined to the FZ corpus based on the CUI.
 
 #### Dataset Formatting
 
@@ -219,7 +219,7 @@ To guarantee computation tractability, we will choose to implement the ColBERT r
 
 #### Optimization
 
-Optimizing the IR model is challenging due to the size of the corpus and the backbone model. 
+Optimizing the IR model is challenging due to the size of the corpus and the backbone model.
 
 **a. Supervised using FZxMedQA** When the evidence document is known, supervised learning can be leveraged for optimizing the retriever. In the case of a <u>single evidence document</u>, we use the same approach as described in DPR, so the evidence likelihood can be expressed using:
 
@@ -237,7 +237,7 @@ In any case, this most likely requires to sample multiple evidence documents for
 
 **c. Semi-supervised Learning** The unsupervised approach can also be coupled with the supervised objective, jointly or sequentially.
 
-## 4. [Development Plan](https://github.com/vlievin/fz-openqa/projects/1) 
+## 4. [Development Plan](https://github.com/vlievin/fz-openqa/projects/1)
 
 ### [Milestone #1 - project and dataset setup](https://github.com/vlievin/fz-openqa/milestone/1)
 
@@ -310,11 +310,11 @@ SciSpacy provides a NER model for TUIs.
 
 The score function is often choosen to be a similarity metric. The simplest ones require comparing document features $y \in \mathcal{R}^d$, for which we define a similarity metric $d : \mathcal{R}^d \times \mathcal{R}^d \rightarrow \mathcal{R}$. Common choices are:
 
-* dot-product: 
+* dot-product:
     $$d^{\rm{dot}}(x,y) := <x,y> := \sum\limits_{|y|} x_i \cdot y_i = x^Ty$$
-* cosine similarity: 
+* cosine similarity:
     $$d^{\rm{Cosine}}(x,y) := \frac{<x,y>}{\|x\|_2\|y\|_2}$$
-* L2 distance: 
+* L2 distance:
 $$d^{L2}(x,y) := \|y - x\|_{2} := \sqrt{ \sum\limits_{|y|} y_i^2 - x_i^2 }$$
 
 
@@ -334,9 +334,9 @@ where $h_\theta(\cdot) \in \mathcal{X}$ is output of a bidirectional GRU.
 
 ### [ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT](https://arxiv.org/pdf/2004.12832.pdf)
 
-Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive. 
+Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive.
 
-ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as 
+ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
 
 $$ \rm{MaxSim}(q, p):=\sum_{i \in\left[\left|\mathbf{h^q}\right|\right]} \max _{j \in\left[\left|\mathbf{h^{e}}\right|\right]} d(\mathbf{h^q}_{i}, \mathbf{h^e}_{j})$$
 
@@ -347,7 +347,7 @@ where the similarity metric $d$ can be choosen as the dot-product, the cosine si
 \mathbf{h^{e}} &:=\text { Filter }\left(\text { Normalize }\left(\operatorname{CNN}\left(\operatorname{BERT}\left([D] e_{0} e_{1} \ldots e_{n} \right)\right)\right)\right)
 \end{aligned}
 
-For short queries, the query is expanded by appending the query tokens with the special token "#". 
+For short queries, the query is expanded by appending the query tokens with the special token "#".
 
 ###### Optimization
 
@@ -365,7 +365,7 @@ Computing the `Maxsim` operator over millions of documents is prohibitevly expen
 
 ###### Prototyping considerations
 
-The FZxMedQA datasets features only 2k lines. We do not need the efficient `faiss` retriever in that case. 
+The FZxMedQA datasets features only 2k lines. We do not need the efficient `faiss` retriever in that case.
 
 ###### Implementation
 
@@ -386,7 +386,7 @@ loss.backward()
 
 ```python=
 # step 0: index
-doc_tokens: Iterable[LongTensor] = tokenize(corpus) #  each Tensor of shape [l, d] 
+doc_tokens: Iterable[LongTensor] = tokenize(corpus) #  each Tensor of shape [l, d]
 tok2doc = {tok_idx: doc_idx for doc_idx, tokens in enumerate(doc_tokens) \
                             for tok_idx, tok in enumerate(tokens)}
 faiss_index = faiss.index((tok for tokens in doc_tokens for tok in tokens))
@@ -399,7 +399,7 @@ for hq in query_tokens:
     K_doc_idxs |= {tok2doc[t] for t in tok_idxs}
 # retrive the K documents
 K_docs = [corpus[i] for i in K_doc_idxs]
-    
+
 # step 2: [refining] apply MaxSim
 top_k_docs = arg_topk(MaxSim(query_tokens, K_docs))
 ```
@@ -417,7 +417,7 @@ top_k_docs = arg_topk(MaxSim(query_tokens, K_docs))
 * MedQA
 * FZxMedQA
 
-#### b. experimental framework 
+#### b. experimental framework
 
 * config management using [Hydra](https://hydra.cc/docs/intro/)
 * training management using [PyTorch Lightning](https://www.pytorchlightning.ai)
@@ -439,7 +439,3 @@ top_k_docs = arg_topk(MaxSim(query_tokens, K_docs))
 #### d. potential steps
 
 * BioBERT distillation
-
-
-
-

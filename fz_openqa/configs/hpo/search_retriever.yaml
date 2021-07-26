@@ -1,13 +1,16 @@
 # @package _global_
+
 # kill all idle processes using:
 # > ps aux | grep ray:: | grep -v grep | awk '{print $2}' | xargs kill -9
 
+defaults:
+  - override /sys: hpo-titan.yaml
+  - override /space: search_1.yaml
+  - override /runner: default.yaml
+
+name: search_retriever
 target_metric: validation/Accuracy
 target_mode: max
-cache_dir: '/scratch/valv/cache/'
-exp_dir: '/scratch/valv/raytune/fz_openqa/'
-print_config: True
-server_address: null
 
 # resources
 gpus: 4
@@ -20,7 +23,7 @@ ray:
 experiment:
   experiment: retriever_only.yaml
   corpus: none.yaml
-  sys: valv.yaml
+  sys: titan.yaml
   cache_dir: ${cache_dir}
   target_metric: ${target_metric}
   target_mode: ${target_mode}
@@ -30,7 +33,7 @@ experiment:
   ignore_warnings: True
   trainer.progress_bar_refresh_rate: 0
   trainer.checkpoint_callback: True
-  logger.wandb.group: ${runner.name}
+  logger.wandb.group: ${name}
   callbacks: tune.yaml
   datamodule.train_batch_size: 24
   datamodule.eval_batch_size: 512
@@ -38,67 +41,3 @@ experiment:
   trainer.max_epochs: 100
   trainer.gpus: ${gpus}
   trainer.accelerator: dp
-
-space:
-  model.bert.pretrained_model_name_or_path:
-    _target_: ray.tune.choice
-    categories:
-      - 'bert-base-cased'
-      - 'dmis-lab/biobert-base-cased-v1.1'
-      - 'emilyalsentzer/Bio_ClinicalBERT'
-      - 'allenai/biomed_roberta_base'
-      - 'allenai/scibert_scivocab_uncased'
-      - 'allenai/scibert_scivocab_cased'
-  model.hidden_size:
-    _target_: ray.tune.choice
-    categories:
-      - 128
-      - 128
-      - 256
-  model.lr:
-    _target_: ray.tune.choice
-    categories:
-      - 1e-5
-      - 3e-5
-      - 6e-5
-      - 1e-4
-  model.weight_decay:
-    _target_: ray.tune.choice
-    categories:
-      - 0
-      - 1e-5
-      - 1e-4
-      - 1e-3
-  model.dropout:
-    _target_: ray.tune.choice
-    categories:
-      - 0
-      - 0.1
-      - 0.3
-      - 0.5
-
-
-runner:
-  name: search_retriever
-  resume: False
-  num_samples: 5000
-  metric: ${target_metric}
-  mode: ${target_mode}
-  resources_per_trial:
-    cpu: ${cpus}
-    gpu: ${gpus}
-  fail_fast: True
-  raise_on_failed_trial: False
-  #  checkpoint_freq: 0
-  #  checkpoint_at_end: False
-  local_dir: ${exp_dir}
-    #  progress_reporter:
-    #    _target_: ray.tune.CLIReporter
-    #    metric_columns: ['validation/loss', 'validation/F1']
-  scheduler:
-    _target_: ray.tune.schedulers.AsyncHyperBandScheduler
-    max_t: 1000
-    grace_period: 5
-  search_alg:
-    _target_: ray.tune.suggest.hyperopt.HyperOptSearch
-    points_to_evaluate: null

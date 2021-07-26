@@ -1,0 +1,36 @@
+model.bert.pretrained_model_name_or_path:
+  _target_: ray.tune.choice
+  categories:
+    - 'bert-base-cased'
+    - 'dmis-lab/biobert-base-cased-v1.1'
+    - 'emilyalsentzer/Bio_ClinicalBERT'
+    - 'allenai/biomed_roberta_base'
+    - 'allenai/scibert_scivocab_uncased'
+    - 'allenai/scibert_scivocab_cased'
+model.hidden_size:
+  _target_: ray.tune.choice
+  categories:
+    - 128
+    - 128
+    - 256
+model.lr:
+  _target_: ray.tune.choice
+  categories:
+    - 1e-5
+    - 3e-5
+    - 6e-5
+    - 1e-4
+model.weight_decay:
+  _target_: ray.tune.choice
+  categories:
+    - 0
+    - 1e-5
+    - 1e-4
+    - 1e-3
+model.dropout:
+  _target_: ray.tune.choice
+  categories:
+    - 0
+    - 0.1
+    - 0.3
+    - 0.5
