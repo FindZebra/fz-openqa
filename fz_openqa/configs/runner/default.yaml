@@ -1,16 +1,16 @@
-name: ${name}
+name: ${base.name}
 resume: False
 num_samples: 5000
-metric: ${target_metric}
-mode: ${target_mode}
+metric: ${base.target_metric}
+mode: ${base.target_mode}
 resources_per_trial:
-  cpu: ${cpus}
-  gpu: ${gpus}
+  cpu: ${base.cpus}
+  gpu: ${base.gpus}
 fail_fast: True
 raise_on_failed_trial: False
 #  checkpoint_freq: 0
 #  checkpoint_at_end: False
-local_dir: ${exp_dir}
+local_dir: ${sys.work_dir}
   #  progress_reporter:
   #    _target_: ray.tune.CLIReporter
 #    metric_columns: ['validation/loss', 'validation/F1']

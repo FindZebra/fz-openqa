@@ -32,12 +32,12 @@ def trial(args, checkpoint_dir=None, **kwargs):
 
 
 def run_tune(config: DictConfig) -> Optional[float]:
-    if config.print_config:
+    if config.base.print_config:
         print_config(config)
 
     log.info("Initializing Ray")
-    if config.server_address is not None:
-        ray.util.connect(config.server_address)
+    if config.base.server_address is not None:
+        ray.util.connect(config.base.server_address)
     else:
         ray.init(**config.ray)
 
@@ -47,9 +47,22 @@ def run_tune(config: DictConfig) -> Optional[float]:
     log.info("Setting up the trainable")
     trainable = ray.tune.with_parameters(trial, **config.experiment)
 
+    log.info("Instantiating the search algorithm")
+    if config.runner.get("search_alg", None) is not None:
+        search_alg = instantiate(config.runner.search_alg)
+        # cast `points_to_evaluate` into a list
+        if search_alg._points_to_evaluate is not None:
+            search_alg._points_to_evaluate = [
+                p for p in search_alg._points_to_evaluate
+            ]
+    else:
+        search_alg = None
+
     log.info("Instantiating the runner")
     runner = ray.tune.run(
-        trainable, config={**space}, **instantiate(config.runner)
+        trainable,
+        config={**space},
+        **instantiate(config.runner, search_alg=search_alg),
     )
 
     log.info("Running HPO!")

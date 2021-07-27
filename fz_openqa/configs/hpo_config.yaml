@@ -4,20 +4,18 @@ defaults:
   - sys: hpo-titan.yaml
   - space: search_1.yaml
   - runner: default.yaml
-  - hpo: null # define a full experiment configuration
+
 
 # base arguments
-name: hpo-sandbox
-target_metric: validation/Accuracy
-target_mode: max
-cache_dir: ${sys.cache_dir}
-exp_dir: ${sys.work_dir}
-print_config: True
-server_address: null
-
-# resources
-gpus: 4
-cpus: 16
+base:
+  name: null
+  target_metric: validation/Accuracy
+  target_mode: max
+  print_config: True
+  server_address: null
+  # resources
+  gpus: 4
+  cpus: 16
 
 ray:
   local_mode: False
