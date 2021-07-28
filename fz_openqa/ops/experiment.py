@@ -5,7 +5,7 @@ import hydra
 from omegaconf import DictConfig
 
 from fz_openqa import configs
-from fz_openqa.ops.utils import resolve_config_paths
+from fz_openqa.utils.config import resolve_config_paths
 
 
 @hydra.main(

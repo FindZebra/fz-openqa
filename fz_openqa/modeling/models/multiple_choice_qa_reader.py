@@ -53,7 +53,9 @@ class MultipleChoiceQAReader(BaseModel):
         self.save_hyperparameters()
 
         # instantiate the pretrained model
-        self.instantiate_bert(bert=bert, tokenizer=tokenizer)
+        self.instantiate_bert(
+            bert=bert, tokenizer=tokenizer, cache_dir=cache_dir
+        )
 
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)

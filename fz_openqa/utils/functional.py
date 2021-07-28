@@ -18,10 +18,19 @@ def is_loggable(x: Any):
     )
 
 
-def maybe_instantiate(conf_or_obj: Union[Any, DictConfig]):
-    if isinstance(conf_or_obj, DictConfig):
-        return instantiate(conf_or_obj)
+def maybe_instantiate(conf_or_obj: Union[Any, DictConfig], **kwargs):
+    if isinstance(
+        conf_or_obj,
+        (
+            DictConfig,
+            dict,
+        ),
+    ):
+        return instantiate(conf_or_obj, **kwargs)
 
+    assert (
+        len(kwargs) == 0
+    ), "Keyword arguments were provided but the object was already instantiated"
     return conf_or_obj
 
 

@@ -1,0 +1,15 @@
+# @package _global_
+
+defaults:
+  - sys: local.yaml
+  - datamodule: fz_x_medqa.yaml
+  - corpus: none.yaml
+  - model: multiple_choice_qa_reader.yaml
+
+# base arguments
+device: cpu
+checkpoint_path: '/Users/valv/Documents/Research/remote_data/search-reader-1/treasured-river-1573.ckpt'
+print_config: True
+verbose: True
+work_dir: ${sys.work_dir}
+cache_dir: ${sys.cache_dir}
