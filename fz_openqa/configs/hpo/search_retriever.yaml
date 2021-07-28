@@ -8,13 +8,13 @@ defaults:
   - override /space: search_1.yaml
   - override /runner: default.yaml
 
-name: search_retriever
-target_metric: validation/Accuracy
-target_mode: max
-
-# resources
-gpus: 4
-cpus: 16
+base:
+  name: search_retriever
+  target_metric: validation/Accuracy
+  target_mode: max
+  # resources
+  gpus: 4
+  cpus: 16
 
 ray:
   local_mode: False
@@ -24,20 +24,30 @@ experiment:
   experiment: retriever_only.yaml
   corpus: none.yaml
   sys: titan.yaml
-  cache_dir: ${cache_dir}
-  target_metric: ${target_metric}
-  target_mode: ${target_mode}
+  cache_dir: ${sys.cache_dir}
+  target_metric: ${base.target_metric}
+  target_mode: ${base.target_mode}
   seed: null
   print_config: False
   verbose: False
   ignore_warnings: True
   trainer.progress_bar_refresh_rate: 0
   trainer.checkpoint_callback: True
-  logger.wandb.group: ${name}
+  logger.wandb.group: ${base.name}
   callbacks: tune.yaml
   datamodule.train_batch_size: 24
   datamodule.eval_batch_size: 512
-  datamodule.num_workers: ${cpus}
+  datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
-  trainer.gpus: ${gpus}
+  trainer.gpus: ${base.gpus}
   trainer.accelerator: dp
+
+
+runner:
+  search_alg:
+    points_to_evaluate:
+      - model.hidden_size: 128
+        model.lr: 0.0001
+        model.weight_decay: 0.001
+        model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
+        model.dropout: 0

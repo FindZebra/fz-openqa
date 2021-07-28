@@ -176,14 +176,14 @@ Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply conf
 CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=dp trainer.gpus=4
 ```
  </details>
- 
+
  <details>
 <summary>Hyper parameter optimization</summary>
 
 The `tune.py` script allow scheduling and running a set of experiments using `Ray[tune]`. Each experiment is described in `configs/hpo/`. Run an experiment using:
 
 ```shell
- CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python tune.py hpo=search_retriever
+ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python tune.py +hpo=search_retriever
  ```
 
 </details>
