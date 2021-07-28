@@ -7,6 +7,7 @@ defaults:
   - model: multiple_choice_qa_reader.yaml
 
 # base arguments
+input_text: /Users/valv/Documents/Research/code/_main/fz-openqa/examples/triplet_1.json
 device: cpu
 checkpoint_path: '/Users/valv/Documents/Research/remote_data/search-reader-1/treasured-river-1573.ckpt'
 print_config: True

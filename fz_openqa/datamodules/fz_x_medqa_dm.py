@@ -51,8 +51,8 @@ class FZxMedQADataModule(BaseDataModule):
         super().__init__(**kwargs)
         self.filter_gold = filter_gold
 
+    @staticmethod
     def tokenize_examples(
-        self,
         examples: Dict[str, List[Any]],
         *,
         tokenizer: PreTrainedTokenizerFast,
@@ -156,6 +156,12 @@ class FZxMedQADataModule(BaseDataModule):
     def collate_fn(
         self, batch: Any
     ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+        return self.collate_fn_(self.tokenizer, batch)
+
+    @staticmethod
+    def collate_fn_(
+        tokenizer: PreTrainedTokenizerFast, batch: Any
+    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them.
         Returns a dictionary with attributes:
@@ -180,7 +186,7 @@ class FZxMedQADataModule(BaseDataModule):
 
         # documents and questions
         for key in ["document", "question"]:
-            doc_encoding = self.tokenizer.pad(
+            doc_encoding = tokenizer.pad(
                 [
                     {
                         k.replace(f"{key}.", ""): v
@@ -195,7 +201,7 @@ class FZxMedQADataModule(BaseDataModule):
 
         # merge answers:
         ans_cols = ["answer_0", "answer_1", "answer_2", "answer_3"]
-        ans_encoding = self.tokenizer.pad(
+        ans_encoding = tokenizer.pad(
             {
                 attr: [b[f"{ans}.{attr}"] for ans in ans_cols for b in batch]
                 for attr in attrs

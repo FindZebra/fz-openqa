@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Dict
 
@@ -10,9 +11,11 @@ from omegaconf import DictConfig
 from transformers import PreTrainedModel
 
 from fz_openqa import configs
+from fz_openqa.datamodules.fz_x_medqa_dm import FZxMedQADataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
+from fz_openqa.utils.datastruct import pprint_batch
 
 
 @hydra.main(
@@ -44,11 +47,41 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
     print(">> model successfully loaded!")
     rich.print(model.bert.config)
 
-    print(f">> Instantiating tokenizer `{bert_id}` ...")
+    print(f">> Instantiating tokenizer `{bert_id}`")
     tokenizer = init_pretrained_tokenizer(
         pretrained_model_name_or_path=bert_id, cache_dir=config.cache_dir
     )
     rich.print(tokenizer)
+
+    print(f">> Loading input data from `{config.input_text}`")
+    data = load_inputs(config.input_text)
+    rich.print(data)
+
+    print(">> Tokenizing input data")
+    data = {k: [v] for k, v in data.items()}
+    batch = FZxMedQADataModule.tokenize_examples(
+        data, tokenizer=tokenizer, max_length=None
+    )
+    batch.update(
+        **{
+            k: v
+            for k, v in data.items()
+            if k in ["answer_idx", "rank", "idx", "is_positive"]
+        }
+    )
+    [batch.pop(k) for k in list(batch.keys()) if ".text" in k]
+    batch = {k: torch.tensor(v[0]) for k, v in batch.items()}
+    batch = FZxMedQADataModule.collate_fn_(tokenizer, [batch])
+    pprint_batch(batch)
+
+    print(">> Processing input data")
+    output = model(batch)
+    rich.print(output.softmax(-1))
+
+
+def load_inputs(path: str):
+    with open(path, "r") as fp:
+        return json.load(fp)
 
 
 def load_model(
