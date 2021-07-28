@@ -19,7 +19,7 @@ defaults:
   - override hydra/job_logging: colorlog
 
 # version info (useful for filtering runs on wandb)
-exp_version: 1
+exp_version: 2
 code_version: "0.0.1"
 
 # metrics to track

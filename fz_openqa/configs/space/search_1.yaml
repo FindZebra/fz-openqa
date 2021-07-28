@@ -3,6 +3,7 @@ model.bert.pretrained_model_name_or_path:
   categories:
     - 'bert-base-cased'
     - 'dmis-lab/biobert-base-cased-v1.1'
+    - 'dmis-lab/biobert-base-cased-v1.2'
     - 'emilyalsentzer/Bio_ClinicalBERT'
     - 'allenai/biomed_roberta_base'
     - 'allenai/scibert_scivocab_uncased'
