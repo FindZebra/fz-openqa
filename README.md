@@ -397,7 +397,18 @@ The current retriever only learns to identify the golden passage (which is noisi
 Sample from the retriever lives and learn from the signal given by the reader component.
 </details>
 
-### Credits
+## Tips and Tricks
+
+<details>
+<summary>Deleting runs older than x minutes</summary>
+
+When running the HPO, checkpoints may occupy hundreds of GB. You can delete all the directories (saved runs) created more than 120 min ago using:
+```bash
+find . -type d -path "./*" -mmin +120 -exec rm -rf {} \;
+```
+</details>
+
+## Credits
 
 The package relies on:
 
