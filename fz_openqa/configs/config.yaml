@@ -9,14 +9,14 @@ defaults:
   - model: multiple_choice_qa_reader.yaml
   - callbacks: default.yaml # set this to null if you don't want to use callbacks
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)
-
-  - experiment: null # define a full experiment configuration
-  - environ: null # define a configuration specific to the environment (local, server, ...)
   - hydra: default.yaml
 
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
+
+# random seed
+seed: null
 
 # version info (useful for filtering runs on wandb)
 exp_version: 2

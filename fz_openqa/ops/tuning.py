@@ -19,11 +19,20 @@ log = train_utils.get_logger(__name__)
 
 # OmegaConf.register_new_resolver("whoami", lambda: os.environ.get('USER'))
 
+DEFAULT_GLOBALS = ["experiment", "environ"]
+
+
+def format_key(k, globals=DEFAULT_GLOBALS):
+    if k in globals:
+        return f"+{k}"
+    else:
+        return k
+
 
 def trial(args, checkpoint_dir=None, **kwargs):
     with initialize(config_path="../configs/"):
-        overrides = [f"{k}={v}" for k, v in kwargs.items()]
-        overrides += [f"{k}={v}" for k, v in args.items()]
+        overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
+        overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
         overrides += [f"work_dir='{os.getcwd()}'"]
         cfg = compose(
             config_name="config.yaml",

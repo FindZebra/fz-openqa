@@ -25,6 +25,7 @@ trainer:
 
 model:
   lr: 2e-5
+  dropout: 0
 
 datamodule:
   train_batch_size: 6

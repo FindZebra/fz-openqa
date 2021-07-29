@@ -117,13 +117,6 @@ def train(config: DictConfig) -> Optional[float]:
         callbacks=callbacks,
         logger=logger,
     )
-    if (
-        trainer.checkpoint_callback
-        and trainer.checkpoint_callback.dirpath is not None
-    ):
-        print(
-            f">> checkpoint: {os.path.abspath(trainer.checkpoint_callback.dirpath)}"
-        )
 
     # Train the model
     log.info("Starting training..")

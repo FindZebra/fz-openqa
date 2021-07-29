@@ -153,7 +153,7 @@ poetry run fzqa trainger.gpus=0 trainer.max_epochs=100 logger=wandb datamodule.l
 Experiment configurations define a full experimental setup in `configs/experiment/`. Run the experiment config using:
 
 ```shell
-poetry run fzqa experiment=quick_test
+poetry run fzqa +experiment=quick_test
 ```
 
 The ´environ´ configuration adjust the experiment to the environment (e.g. cache location).
@@ -167,13 +167,13 @@ When running experiments on the GPU cluster, you need to pass the flag `CUDA_VIS
 your script. The `/scratch` directory should be used to store large files (cache).
 
 ```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa experiment=reader_only environ=valv trainer.gpus=1
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only +environ=valv trainer.gpus=1
  ```
 
 Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply configure the Lightning trainer:
 
 ```shell
-CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py experiment=retriever_only +trainer.accelerator=dp trainer.gpus=4
+CUDA_VISIBLE_DEVICES=3,4,5,6 poetry run python run.py +experiment=retriever_only +trainer.accelerator=dp trainer.gpus=4
 ```
  </details>
 
