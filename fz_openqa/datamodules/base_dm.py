@@ -90,6 +90,7 @@ class BaseDataModule(LightningDataModule):
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.dataset: Optional[HgDataset] = None
+        self.text_data: Optional[HgDataset] = None
 
     def tokenize_examples(
         self,
@@ -137,11 +138,11 @@ class BaseDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        self.dataset: HgDataset = self.load_base_dataset()
-        self.dataset = self.filter_dataset(self.dataset)
+        self.text_data: HgDataset = self.load_base_dataset()
+        self.text_data = self.filter_dataset(self.text_data)
         if self.use_subset:
-            self.dataset = self.take_subset(self.dataset)
-        self.dataset = self.preprocess_dataset(self.dataset)
+            self.text_data = self.take_subset(self.text_data)
+        self.dataset = self.preprocess_dataset(self.text_data)
 
         if self.verbose:
             self.pprint()
@@ -150,15 +151,14 @@ class BaseDataModule(LightningDataModule):
         if self.corpus is not None:
             self.corpus.setup()
 
-    def take_subset(self, dataset: HgDataset) -> HgDataset:
+    @staticmethod
+    def take_subset(dataset: HgDataset) -> HgDataset:
         """Take a subset of the dataset and return."""
         if isinstance(dataset, DatasetDict):
             return DatasetDict(
                 {
                     k: dset.select(range(n))
-                    for n, (k, dset) in zip(
-                        [100, 10, 10], self.dataset.items()
-                    )
+                    for n, (k, dset) in zip([100, 10, 10], dataset.items())
                 }
             )
         elif isinstance(dataset, Dataset):

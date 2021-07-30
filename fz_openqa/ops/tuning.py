@@ -7,21 +7,32 @@ from hydra import compose
 from hydra import initialize
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from omegaconf import OmegaConf
 from ray.tune import CLIReporter
 
+import fz_openqa.utils.config
+import fz_openqa.utils.config_utils
 from fz_openqa.ops.experiment import run_exp
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.config import print_config
 
 log = train_utils.get_logger(__name__)
 
 # OmegaConf.register_new_resolver("whoami", lambda: os.environ.get('USER'))
 
+DEFAULT_GLOBALS = ["experiment", "environ"]
+
+
+def format_key(k, globals=DEFAULT_GLOBALS):
+    if k in globals:
+        return f"+{k}"
+    else:
+        return k
+
 
 def trial(args, checkpoint_dir=None, **kwargs):
     with initialize(config_path="../configs/"):
-        overrides = [f"{k}={v}" for k, v in kwargs.items()]
-        overrides += [f"{k}={v}" for k, v in args.items()]
+        overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
+        overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
         overrides += [f"work_dir='{os.getcwd()}'"]
         cfg = compose(
             config_name="config.yaml",
@@ -32,7 +43,7 @@ def trial(args, checkpoint_dir=None, **kwargs):
 
 
 def run_tune(config: DictConfig) -> Optional[float]:
-    if config.base.print_config:
+    if fz_openqa.utils.config.print_config:
         print_config(config)
 
     log.info("Initializing Ray")
@@ -67,28 +78,6 @@ def run_tune(config: DictConfig) -> Optional[float]:
 
     log.info("Running HPO!")
     rich.print("Best hyperparameters found were: \n", runner.best_config)
-
-
-def print_config(config):
-    style = "dim"
-    tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
-
-    for field in config.keys():
-        branch = tree.add(field, style=style, guide_style=style)
-
-        config_section = config.get(field)
-        branch_content = str(config_section)
-        if isinstance(config_section, DictConfig):
-            try:
-                branch_content = OmegaConf.to_yaml(
-                    config_section, resolve=True
-                )
-            except Exception:
-                pass
-
-        branch.add(rich.syntax.Syntax(branch_content, "yaml"))
-
-    rich.print(tree)
 
 
 if __name__ == "__main__":

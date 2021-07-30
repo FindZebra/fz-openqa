@@ -2,3 +2,5 @@ _target_: transformers.AutoModel.from_pretrained
 
 pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
 cache_dir: ${cache_dir}
+hidden_dropout_prob: 0.1
+attention_probs_dropout_prob: 0.1

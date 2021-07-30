@@ -47,13 +47,16 @@ class BaseModel(LightningModule):
         *,
         bert: Union[BertPreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
+        cache_dir: Optional[str] = None,
     ):
         """Instantiate a bert model as an attribute, and extend its embeddings to match the tokenizer"""
 
         self.vocabulary_size = len(tokenizer.get_vocab())
         self.pad_token_id = tokenizer.pad_token_id
 
-        self.bert: BertPreTrainedModel = maybe_instantiate(bert)
+        self.bert: BertPreTrainedModel = maybe_instantiate(
+            bert, cache_dir=cache_dir
+        )
         # extend BERT embeddings for the added special tokens
         # TODO: CRITICAL: check this does not affect the model
         #  this might explain the drop of performances

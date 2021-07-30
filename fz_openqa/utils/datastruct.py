@@ -14,6 +14,6 @@ def pprint_batch(batch):
         if isinstance(v, Tensor):
             u += f"   - {k}: {v.shape} <{v.dtype}> ({v.device})\n"
         else:
-            u += f"   - {k}: {v} <{type(v)}>\n"
+            u += f"   - {k}: {v} {type(v)}\n"
 
     rich.print(u)

@@ -5,7 +5,7 @@ defaults:
 _target_: fz_openqa.modeling.models.multiple_choice_qa_reader.MultipleChoiceQAReader
 
 hidden_size: 32
-bert_id: ${pretrained_model}
+bert_id: ${model.bert.pretrained_model_name_or_path}
 cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 1e-4
