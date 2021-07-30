@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - override /sys: valv.yaml
+  - override /sys: titan.yaml
 
 
 trainer:

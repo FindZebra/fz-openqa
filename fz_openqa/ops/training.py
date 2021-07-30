@@ -56,13 +56,12 @@ def train(config: DictConfig) -> Optional[float]:
     tokenizer: PreTrainedTokenizerFast = instantiate(config.tokenizer)
 
     # Init the Corpus
+    has_corpus = config.corpus and "_target_" in config.corpus.keys()
     log.info(
-        f"Instantiating corpus <{config.corpus._target_ if config.corpus else 'none'}>"
+        f"Instantiating corpus <{config.corpus._target_ if has_corpus else 'none'}>"
     )
     corpus: LightningDataModule = (
-        instantiate(config.corpus, tokenizer=tokenizer)
-        if config.corpus
-        else None
+        instantiate(config.corpus, tokenizer=tokenizer) if has_corpus else None
     )
 
     # Init Lightning datamodule

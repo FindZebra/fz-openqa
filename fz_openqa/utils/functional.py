@@ -28,9 +28,6 @@ def maybe_instantiate(conf_or_obj: Union[Any, DictConfig], **kwargs):
     ):
         return instantiate(conf_or_obj, **kwargs)
 
-    assert (
-        len(kwargs) == 0
-    ), "Keyword arguments were provided but the object was already instantiated"
     return conf_or_obj
 
 

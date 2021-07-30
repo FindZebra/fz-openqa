@@ -7,17 +7,19 @@ defaults:
 
 trainer:
   gpus: 8
-  accelerator: dp
+  accelerator: ddp
   precision: 32 # fp16 is not compatible with most of the DTU compute GPUs..
+  # plugins: ddp_sharded
 
 datamodule:
   use_subset: False
-  train_batch_size: 24 # use 48 for retriever_only
-  eval_batch_size: 512 # use 1024 for retriever_only
-  num_proc: 32
-  num_workers: 32
+  train_batch_size: 3 # use 48 for retriever_only
+  eval_batch_size: 32 # use 1024 for retriever_only
+  num_proc: 8
+  num_workers: 4
 
 corpus:
-  eval_batch_size: 6000
+  eval_batch_size: 600
+  num_proc: 32
 
 # logger: null

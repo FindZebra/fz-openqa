@@ -6,6 +6,7 @@
 defaults:
   - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
   - override /model: multiple_choice_qa.yaml
+  - override /model/bert: bio_bert.yaml
   - override /datamodule: fz_x_medqa.yaml
   - override /callbacks: index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
@@ -25,7 +26,9 @@ trainer:
 
 model:
   lr: 2e-5
-  hidden_size: 16
+  hidden_size: 32
+  dropout: 0
+  weight_decay: 1e-4
 
 datamodule:
   train_batch_size: 3
