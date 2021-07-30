@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from sys import platform
 from typing import List
 from typing import Optional
 
@@ -18,9 +17,9 @@ from transformers import PreTrainedTokenizerFast
 
 import fz_openqa
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.train_utils import setup_safe_env
 
 log = train_utils.get_logger(__name__)
-
 
 _root = Path(fz_openqa.__file__).parent.parent
 
@@ -37,13 +36,8 @@ def train(config: DictConfig) -> Optional[float]:
     Returns:
         Optional[float]: Metric score for hyperparameter optimization.
     """
-    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
-    if platform == "darwin":
-        # a few flags to fix MacOS stuff
-        os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-        import multiprocessing
+    setup_safe_env()
 
-        multiprocessing.set_start_method("fork")
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 

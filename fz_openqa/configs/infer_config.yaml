@@ -7,7 +7,8 @@ defaults:
   - model: multiple_choice_qa_reader.yaml
 
 # base arguments
-input_text: /Users/valv/Documents/Research/code/_main/fz-openqa/examples/medqa_examples.json
+input_text: /Users/valv/Documents/Research/code/_main/fz-openqa/examples/medqa_examples.json # input data (use the datamodule if set to null)
+slice: '0:10' # slice of the test set
 device: cpu
 checkpoint_path: '/Users/valv/Documents/Research/remote_data/search-reader-1/treasured-river-1573.ckpt'
 print_config: True

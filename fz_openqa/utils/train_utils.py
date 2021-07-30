@@ -1,5 +1,7 @@
 import logging
+import os
 import warnings
+from sys import platform
 from typing import List
 from typing import Sequence
 
@@ -212,3 +214,13 @@ def print_config(
         )
 
     rich.print(tree)
+
+
+def setup_safe_env():
+    os.environ["TOKENIZERS_PARALLELISM"] = "FALSE"
+    if platform == "darwin":
+        # a few flags to fix MacOS stuff
+        os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+        import multiprocessing
+
+        multiprocessing.set_start_method("fork")

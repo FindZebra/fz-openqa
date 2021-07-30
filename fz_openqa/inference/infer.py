@@ -8,7 +8,9 @@ import hydra
 import pytorch_lightning as pl
 import rich
 import torch
+from datasets import Split
 from hydra._internal.instantiate._instantiate2 import _resolve_target
+from hydra.utils import instantiate
 from omegaconf import DictConfig
 from rich.console import Console
 from rich.table import Table
@@ -19,6 +21,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
 from fz_openqa.utils.datastruct import pprint_batch
+from fz_openqa.utils.train_utils import setup_safe_env
 
 
 @hydra.main(
@@ -26,6 +29,18 @@ from fz_openqa.utils.datastruct import pprint_batch
     config_name="infer_config.yaml",
 )
 def load_and_infer(config: DictConfig) -> Dict[str, float]:
+    """
+    Load a train model and process some input data.
+    The input data is a source .json file if provided else this is
+    the test set of the datamodule described in the config file.
+
+    NB: implemented for a reader model only
+    todo: retriever evaluation
+    todo: full model evaluation
+    todo: loader both a reader and a retriever
+    """
+    setup_safe_env()
+
     # replace config paths with loaded configs
     resolve_config_paths(config, path=os.path.dirname(configs.__file__))
 
@@ -33,16 +48,14 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
     if config.get("print_config"):
         print_config(config, resolve=True)
 
-    print(f">> here: {os.listdir()}")
-
-    # load model
+    # load a pretrained model from a checkpoint
     rich.print(
         f">> Instantiating model <{config.model._target_}> "
         f"\n\tfrom checkpoint=`{config.checkpoint_path}`"
         f"\n\ton device=`{config.device}`.."
     )
     cls: pl.LightningModule.__class__ = _resolve_target(config.model._target_)
-    model = load_model(
+    model = load_model_from_checkpoint(
         cls,
         path=config.checkpoint_path,
         device=config.device,
@@ -55,28 +68,51 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
         pretrained_model_name_or_path=bert_id, cache_dir=config.cache_dir
     )
 
-    print(f">> Loading input data from `{config.input_text}`..")
-    data = load_inputs(config.input_text)
+    if config.input_text is None:
+        print(f">> Loading datamodule `{config.datamodule._target_}`..")
+        dm = instantiate(
+            config.datamodule,
+            tokenizer=tokenizer,
+            cache_dir=config.cache_dir,
+            verbose=True,
+        )
+        dm.prepare_data()
+        dm.setup()
+        a, b = map(eval, config.slice.split(":"))
+        data = dm.text_data[Split.TEST][a:b]
+    else:
+        print(f">> Loading input data from `{config.input_text}`..")
+        data = load_inputs(config.input_text)
 
     print(">> Encoding input data..")
     batch = encode_data(data, tokenizer)
     pprint_batch(batch)
 
-    print(">> Processing input data..")
+    print(">> Inferring predictions..")
     output = model(batch)
-
     pprint_results(data, output)
 
 
 def pprint_results(data, output):
-    table = Table(title="Results", show_lines=True)
+    """Print all results as a nicely using rich.table"""
+    all_preds = output.argmax(-1).tolist()
+    targets = data["answer_idx"]
+    accuracy = sum([int(x == y) for x, y in zip(all_preds, targets)]) / len(
+        targets
+    )
+
+    table = Table(
+        title=f"Results (Accuracy=[magenta bold]{100 * accuracy:.2f}%[/magenta bold])",
+        show_lines=True,
+    )
     table.add_column("Question", justify="left", style="cyan", no_wrap=False)
     table.add_column(
         "Document", justify="left", style="magenta", no_wrap=False
     )
-    for idx in range(len(data[0]["answer_choices"])):
+    for idx in range(len(data["answer_choices"][0])):
         table.add_column(f"Answer {idx}", justify="center", style="white")
-    for idx, row in enumerate(data):
+    for idx in range(len(data["question"])):
+        row = {k: data[k][idx] for k in data.keys()}
         probs = output[idx].softmax(-1)
         pred = probs.argmax(-1)
         table.add_row(
@@ -90,8 +126,11 @@ def pprint_results(data, output):
     console = Console()
     console.print(table)
 
+    rich.print(f"Accuracy=[magenta bold]{100 * accuracy:.2f}%[/magenta bold]")
+
 
 def format_ans_prob(k, txt, adx, pred, p):
+    """format answer using rich.style"""
     u = f"{txt}"
     if adx == k:
         u = f"[bold underline]{u}[/underline bold]"
@@ -107,10 +146,7 @@ def format_ans_prob(k, txt, adx, pred, p):
 
 
 def encode_data(data, tokenizer):
-    # convert as dict of list
-    keys = list(data[0].keys())
-    data = {k: [d[k] for d in data] for k in keys}
-
+    """Encode the data retrieve form a .json file"""
     # tokenize
     batch = FZxMedQADataModule.tokenize_examples(
         data, tokenizer=tokenizer, max_length=None
@@ -134,18 +170,24 @@ def encode_data(data, tokenizer):
     return batch
 
 
-def load_inputs(path: str) -> List[Dict[str, Any]]:
+def load_inputs(path: str) -> Dict[str, List[Any]]:
+    """Load data from a .json file"""
     with open(path, "r") as fp:
-        return json.load(fp)
+        data = json.load(fp)
+
+    # convert as dict of list
+    keys = list(data[0].keys())
+    return {k: [d[k] for d in data] for k in keys}
 
 
-def load_model(
+def load_model_from_checkpoint(
     cls: pl.LightningModule.__class__,
     *,
     path: str,
     device: torch.device,
     **kwargs,
 ):
+    """load the model form a checkpoint"""
     model = cls.load_from_checkpoint(path, map_location=device, **kwargs)
     model.eval()
     model.freeze()
