@@ -304,6 +304,21 @@ class CorpusDataModule(BaseDataModule):
             Split.TRAIN
         )  # the dataset only have one split
 
+    @staticmethod
+    def take_subset(dataset: HgDataset) -> HgDataset:
+        """Take a subset of the dataset and return."""
+        if isinstance(dataset, DatasetDict):
+            return DatasetDict(
+                {
+                    k: dset.select(range(n))
+                    for n, (k, dset) in zip([1, 1, 1], dataset.items())
+                }
+            )
+        elif isinstance(dataset, Dataset):
+            return dataset.select(range(1))
+        else:
+            raise NotImplementedError
+
 
 class MedQaEnDataModule(CorpusDataModule):
     dset_script_path_or_id = (
