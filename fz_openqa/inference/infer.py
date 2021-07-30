@@ -12,11 +12,10 @@ from datasets import Split
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from rich.console import Console
-from rich.table import Table
 
 from fz_openqa import configs
 from fz_openqa.datamodules.fz_x_medqa_dm import FZxMedQADataModule
+from fz_openqa.inference.pretty import pprint_results
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
@@ -91,58 +90,6 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
     print(">> Inferring predictions..")
     output = model(batch)
     pprint_results(data, output)
-
-
-def pprint_results(data, output):
-    """Print all results as a nicely using rich.table"""
-    all_preds = output.argmax(-1).tolist()
-    targets = data["answer_idx"]
-    accuracy = sum([int(x == y) for x, y in zip(all_preds, targets)]) / len(
-        targets
-    )
-
-    table = Table(
-        title=f"Results (Accuracy=[magenta bold]{100 * accuracy:.2f}%[/magenta bold])",
-        show_lines=True,
-    )
-    table.add_column("Question", justify="left", style="cyan", no_wrap=False)
-    table.add_column(
-        "Document", justify="left", style="magenta", no_wrap=False
-    )
-    for idx in range(len(data["answer_choices"][0])):
-        table.add_column(f"Answer {idx}", justify="center", style="white")
-    for idx in range(len(data["question"])):
-        row = {k: data[k][idx] for k in data.keys()}
-        probs = output[idx].softmax(-1)
-        pred = probs.argmax(-1)
-        table.add_row(
-            row["question"],
-            row["document"],
-            *(
-                format_ans_prob(k, a, row["answer_idx"], pred, p)
-                for k, (a, p) in enumerate(zip(row["answer_choices"], probs))
-            ),
-        )
-    console = Console()
-    console.print(table)
-
-    rich.print(f"Accuracy=[magenta bold]{100 * accuracy:.2f}%[/magenta bold]")
-
-
-def format_ans_prob(k, txt, adx, pred, p):
-    """format answer using rich.style"""
-    u = f"{txt}"
-    if adx == k:
-        u = f"[bold underline]{u}[/underline bold]"
-
-    u += f"\n{100 * p:.2f}%"
-
-    if k == adx and adx == pred:
-        u = f"[green]{u}[/green]"
-    elif k == pred:
-        u = f"[red]{u}[/red]"
-
-    return u
 
 
 def encode_data(data, tokenizer):
