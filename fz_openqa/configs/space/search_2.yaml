@@ -45,15 +45,6 @@ model.bert.hidden_dropout_prob:
     - 0.3
     - 0.5
 seed:
-  _target_: ray.tune.choice
-  categories:
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    - 6
-    - 7
-    - 8
-    - 9
-    - 10
+  _target_: ray.tune.randint
+  lower: 1
+  upper: 20
