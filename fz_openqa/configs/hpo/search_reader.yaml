@@ -9,7 +9,7 @@ defaults:
 
 base:
   name: search_reader
-  target_metric: validation/Accuracy
+  target_metric: validation/loss
   target_mode: max
   # resources
   gpus: 4

@@ -13,7 +13,7 @@ defaults:
 
 base:
   name: search_retriever
-  target_metric: validation/Accuracy
+  target_metric: validation/loss
   target_mode: max
   # resources
   gpus: 4
