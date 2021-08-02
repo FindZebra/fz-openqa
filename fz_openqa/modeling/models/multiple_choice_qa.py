@@ -11,6 +11,7 @@ from datasets.search import BatchedNearestExamplesResults
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch import nn
+from torch import Tensor
 from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
@@ -21,7 +22,6 @@ from .base import BaseModel
 from .multiple_choice_qa_reader import MultipleChoiceQAReader
 from .qa_retriever import QaRetriever
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 
 
 def add_prefix(d: Dict[str, Any], prefix: str):
@@ -136,9 +136,11 @@ class MultipleChoiceQA(BaseModel):
             )
         )
 
-        # todo: remove idx override (debugging)
+        # create a list of retrieved documents such as:
+        # [x[r_rank=0, bs_idx=0], x[r_rank=1, bs_idx=0]], ...x[r_rank=0, bs_idx=1]]
+        # NB: r_rank corresponds to the rank of the retrieved doc
         retrieved = retrieved_docs.total_examples
-        [r.update({"r_rank": -1 * r["idx"]}) for r in retrieved]
+        [r.update({"r_rank": -1 + 0 * r["idx"]}) for r in retrieved]
         retrieved_batch = [
             {k: idx if k == "r_rank" else v[idx] for k, v in d.items()}
             for idx in range(self.eval_top_k)
@@ -178,32 +180,59 @@ class MultipleChoiceQA(BaseModel):
 
         # gather outputs
         # temporary hack: select the reader output with the highest logit
-        # todo: test this!
         # todo: implement a proper selection model: i.e. eq 5 in DPR (https://arxiv.org/pdf/2004.04906.pdf)
-        keys = list(reader_data[0].keys())
-        reader_data = {
-            k: torch.cat([r[k][:, None] for r in reader_data], dim=1)
-            for k in keys
-        }  # shape [bs, k, *]
-        max_logits, _ = reader_data["logits"].softmax(-1).max(dim=-1)
-        arg_max_logits = max_logits.argmax(dim=1)
+        [
+            r.update({"largest_logit": r["logits"].softmax(-1).max(dim=-1)[0]})
+            for r in reader_data
+        ]
+        reader_data = self.argmax_select(reader_data, key="largest_logit")
 
-        # index the reader data using the max logit position
+        # add key prefix and return
+        output = add_prefix(reader_data, "reader/")
+        return output
+
+    @staticmethod
+    def argmax_select(
+        inputs: List[Dict[str, Tensor]], *, key
+    ) -> Dict[str, Tensor]:
+        """
+        Given a list of M inputs, each encoded as `Dict[str, Tensor]` where all tensors
+        are of the same batch size, this function return one input Dict[str] where for each batch element (independently),
+        the output is the input having the largest `key` value
+        """
+
+        assert all(
+            isinstance(t, Tensor) for r in inputs for t in r.values()
+        ), "Inputs must all be tensors"
+        batch_size = inputs[0][key].shape[0]
+        assert all(
+            t.shape[0] == batch_size for r in inputs for t in r.values()
+        ), "Tensors must be of the same batch size"
+        keys = list(inputs[0].keys())
+        assert all(
+            set(r.keys()) == set(keys) for r in inputs
+        ), "Inputs must all have the same keys"
+        assert all(
+            r[key].shape == (batch_size,) for r in inputs
+        ), "input[key] must all be of shape [batch_size]"
+
+        # concatenate all inputs across dimension 1
+        inputs = {
+            k: torch.cat([r[k][:, None] for r in inputs], dim=1) for k in keys
+        }  # shape [bs, M, *]
+        arg_max = inputs[key].argmax(dim=1)
+
+        # index the reader data using the max `key` position
         def reshape_index(index, v):
             return index.view(batch_size, *(1 for _ in v.shape[1:])).expand(
                 -1, 1, *v.shape[2:]
             )
 
-        reader_data = {
-            k: v.gather(index=reshape_index(arg_max_logits, v), dim=1).squeeze(
-                1
-            )
-            for k, v in reader_data.items()
+        inputs = {
+            k: v.gather(index=reshape_index(arg_max, v), dim=1).squeeze(1)
+            for k, v in inputs.items()
         }
-
-        # add key prefix and return
-        output = add_prefix(reader_data, "reader/")
-        return output
+        return inputs
 
     def _supervised_step(self, batch, batch_idx, dataloader_idx, split):
         """Perform an evaluation step using the triplets (q,d,a). The reader using the
