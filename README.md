@@ -167,7 +167,7 @@ When running experiments on the GPU cluster, you need to pass the flag `CUDA_VIS
 your script. The `/scratch` directory should be used to store large files (cache).
 
 ```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only +environ=valv trainer.gpus=1
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only +environ=titan trainer.gpus=1
  ```
 
 Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply configure the Lightning trainer:

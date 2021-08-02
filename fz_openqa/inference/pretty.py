@@ -1,5 +1,5 @@
 import rich
-from rich import Console
+from rich.console import Console
 from rich.table import Table
 
 

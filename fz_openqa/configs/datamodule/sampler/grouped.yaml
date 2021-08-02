@@ -1,0 +1,7 @@
+_target_: fz_openqa.datamodules.sampler.grouped_sampler.GroupedSampler
+
+dataset: null
+n_pos: 1
+n_neg: 2
+pos_max_rank: 0
+neg_max_rank: 10

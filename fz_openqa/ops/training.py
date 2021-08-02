@@ -67,7 +67,10 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: LightningDataModule = instantiate(
-        config.datamodule, tokenizer=tokenizer, corpus=corpus
+        config.datamodule,
+        tokenizer=tokenizer,
+        corpus=corpus,
+        _recursive_=False,
     )
 
     # Init Lightning model

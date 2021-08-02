@@ -19,5 +19,5 @@ datamodule:
   num_proc: 1
   num_workers: 0
 
-#logger: null
-#callbacks: null
+logger: null
+callbacks: null

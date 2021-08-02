@@ -19,6 +19,14 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 
+PT_SIMPLE_ATTRIBUTES = [
+    "answer_idx",
+    "rank",
+    "is_positive",
+    "question_id",
+    "idx",
+]
+
 
 def add_spec_token(
     special_token: str,
@@ -138,7 +146,7 @@ class FZxMedQADataModule(BaseDataModule):
             for c in dataset.column_names["train"]
             if (any(a in c for a in attrs) and any(a in c for a in columns))
         ]
-        self.pt_attributes += ["answer_idx", "rank", "is_positive"]
+        self.pt_attributes += PT_SIMPLE_ATTRIBUTES
         dataset.set_format(
             type="torch", columns=self.pt_attributes, output_all_columns=False
         )
@@ -155,7 +163,9 @@ class FZxMedQADataModule(BaseDataModule):
 
     def collate_fn(
         self, batch: Any
-    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    ) -> Union[BatchEncoding, List[Dict[str, torch.Tensor]]]:
+        if isinstance(batch[0], list):
+            batch = [leaf for group in batch for leaf in group]
         return self.collate_fn_(self.tokenizer, batch)
 
     @staticmethod
@@ -180,9 +190,8 @@ class FZxMedQADataModule(BaseDataModule):
         output = {}
 
         # answer_idx & rank attributes
-        output["answer_idx"] = torch.tensor([b["answer_idx"] for b in batch])
-        output["rank"] = torch.tensor([b["rank"] for b in batch])
-        output["is_positive"] = torch.tensor([b["is_positive"] for b in batch])
+        for key in PT_SIMPLE_ATTRIBUTES:
+            output[key] = torch.tensor([b[key] for b in batch])
 
         # documents and questions
         for key in ["document", "question"]:
