@@ -5,6 +5,7 @@ outputs/
 cache/
 runs/
 examples/
+sandbox*
 
 # Editors
 .vscode/
