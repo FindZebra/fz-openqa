@@ -49,13 +49,13 @@ class InformationRetrievalGoldSupervised(Evaluator):
     """
 
     _required_eval_feature_names = [
+        "question.idx",
         "question.input_ids",
         "question.attention_mask",
-        "question.input_ids",
+        "document.input_ids",
         "document.attention_mask",
-        "question.input_ids",
-        "question.attention_mask",
-        "rank",
+        "document.rank",
+        "document.is_positive",
     ]
 
     def __init__(self, similarity: Similarity, **kwargs):
@@ -95,6 +95,18 @@ class InformationRetrievalGoldSupervised(Evaluator):
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
+        # keep only one question per question_id
+        batch = self.drop_question_duplicates(batch)
+
+        print(">> Supervied-eval: batch:")
+        from fz_openqa.utils.datastruct import pprint_batch
+
+        pprint_batch(batch)
+        print(f">> question: {batch['question_id']}")
+        print(f">> unique: {torch.unique(batch['question_id'])}")
+
+        # todo: question reduction : process the question only once (todo in collate_fn)
+
         hq = model(
             batch=batch,
             model_key="question",
@@ -107,6 +119,11 @@ class InformationRetrievalGoldSupervised(Evaluator):
         return {
             "hq": hq,
             "he": he,
+            **{
+                k: v
+                for k, v in batch.items()
+                if k in ["question_id", "is_positive"]
+            },
         }
 
     def forward_end(self, output: Batch, split: str) -> Any:
@@ -120,11 +137,17 @@ class InformationRetrievalGoldSupervised(Evaluator):
         torchmetrics update() calls should be placed here.
         The output must at least contains the `loss` key.
         """
-        hq, he = (output.pop(k) for k in ["hq", "he"])
-        logits = self.similarity(hq, he)  # [bs x bs]
-        targets = (
-            torch.arange(start=0, end=len(logits)).long().to(logits.device)
+        hq, he, question_id, is_positive = (
+            output.pop(k) for k in ["hq", "he", "question_id", "is_positive"]
         )
+
+        # compute logits
+        logits = self.similarity(hq, he)  # [bs x bs]
+
+        # compute targets
+        # todo: write loss
+        targets = is_positive.argmax()
+        print(targets)
         loss = F.cross_entropy(logits, targets, reduction="mean")
         output["loss"] = loss.mean()
         output["batch_size"] = logits.shape[1]  # store the batch size

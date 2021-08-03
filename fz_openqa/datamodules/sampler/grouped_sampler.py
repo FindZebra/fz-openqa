@@ -10,7 +10,7 @@ from fz_openqa.datamodules.sampler.sampler import Sampler
 class GroupedSampler(Sampler):
     """Return a list of `n_pos` and `n_neg` examples for each `question_id`"""
 
-    idx_cols = ["question_id", "rank", "is_positive"]
+    idx_cols = ["question.idx", "document.rank", "document.is_positive"]
 
     def __init__(
         self,
@@ -44,36 +44,37 @@ class GroupedSampler(Sampler):
 
         # filter the index based on rank
         self.index = self.index[
-            (self.index["is_positive"] > 0)
-            & (self.index["rank"] <= self.pos_max_rank)
-            | (self.index["is_positive"] == 0)
-            & (self.index["rank"] <= self.neg_max_rank)
+            (self.index["document.is_positive"] > 0)
+            & (self.index["document.rank"] <= self.pos_max_rank)
+            | (self.index["document.is_positive"] == 0)
+            & (self.index["document.rank"] <= self.neg_max_rank)
         ]
         self.index["_index_"] = self.index.index
 
         # filter out question_id with not enough positive/negative examples
-        self.index["is_negative"] = self.index["is_positive"].map(
-            lambda x: 1 - x
-        )
-        counts = self.index.groupby("question_id")[
-            "is_positive", "is_negative"
+        self.index["document.is_negative"] = self.index[
+            "document.is_positive"
+        ].map(lambda x: 1 - x)
+        counts = self.index.groupby("question.idx")[
+            "document.is_positive", "document.is_negative"
         ].sum()
         counts = counts[
-            (counts["is_positive"] >= n_pos) & (counts["is_negative"] >= n_neg)
+            (counts["document.is_positive"] >= n_pos)
+            & (counts["document.is_negative"] >= n_neg)
         ]
-        self.index = self.index[self.index["question_id"].isin(counts.index)]
+        self.index = self.index[self.index["question.idx"].isin(counts.index)]
 
         # question index
-        self.q_index = list(self.index["question_id"].unique())
+        self.q_index = list(self.index["question.idx"].unique())
 
     def __len__(self):
         return len(self.q_index)
 
     def __getitem__(self, idx):
         # filter by `question_id` and `is_positive`
-        subset = self.index[self.index["question_id"] == self.q_index[idx]]
-        positive = subset[subset["is_positive"] > 0]
-        negative = subset[subset["is_positive"] == 0]
+        subset = self.index[self.index["question.idx"] == self.q_index[idx]]
+        positive = subset[subset["document.is_positive"] > 0]
+        negative = subset[subset["document.is_positive"] == 0]
 
         # get positive indexes
         positive = (

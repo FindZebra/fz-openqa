@@ -21,10 +21,8 @@ class MultipleChoiceQAReader(BaseModel):
     _required_infer_feature_names = [
         "question.input_ids",
         "question.attention_mask",
-        "question.input_ids",
+        "document.input_ids",
         "document.attention_mask",
-        "question.input_ids",
-        "question.attention_mask",
         "answer_choices.input_ids",
         "answer_choices.attention_mask",
     ]

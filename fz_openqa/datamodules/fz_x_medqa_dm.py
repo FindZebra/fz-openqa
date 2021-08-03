@@ -21,9 +21,9 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer_idx",
-    "rank",
-    "is_positive",
-    "question_id",
+    "document.rank",
+    "document.is_positive",
+    "question.idx",
     "idx",
 ]
 
@@ -156,7 +156,7 @@ class FZxMedQADataModule(BaseDataModule):
         """Apply filtering operations"""
         if self.filter_gold:
             dataset = dataset.filter(
-                lambda x: x["rank"] == 0 and x["is_positive"]
+                lambda x: x["document.rank"] == 0 and x["document.is_positive"]
             )
 
         return dataset
@@ -237,7 +237,7 @@ class FZxMedQADataModule(BaseDataModule):
 
         print(console_width * "-")
         rich.print(
-            f"* Document (rank={example['rank']}, is_positive={example['is_positive']})"
+            f"* Document (rank={example['document.rank']}, is_positive={example['document.is_positive']})"
         )
         rich.print(
             self.repr_ex(example, "document.input_ids", **decode_kwargs)

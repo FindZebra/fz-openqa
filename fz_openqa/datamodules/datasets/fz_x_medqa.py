@@ -43,14 +43,14 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                 {
                     "idx": datasets.Value("int32"),
                     "question": datasets.Value("string"),
-                    "is_positive": datasets.Value("bool"),
-                    "question_id": datasets.Value("int32"),
+                    "question.idx": datasets.Value("int32"),
                     "answer_idx": datasets.Value("int32"),
                     "answer_choices": datasets.Sequence(
                         datasets.Value("string")
                     ),
                     "document": datasets.Value("string"),
-                    "rank": datasets.Value("int32"),
+                    "document.rank": datasets.Value("int32"),
+                    "document.is_positive": datasets.Value("bool"),
                 }
             ),
             supervised_keys=None,
@@ -83,6 +83,7 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
-                d["rank"] = d["rank_bm25"] - 1  # start from zero
-                d.pop("rank_bm25")
+                d["document.rank"] = d.pop("rank_bm25") - 1  # start from zero
+                d["document.is_positive"] = d.pop("is_positive")
+                d["question.idx"] = d.pop("question_id")
                 yield i, d
