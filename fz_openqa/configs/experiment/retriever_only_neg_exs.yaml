@@ -26,11 +26,14 @@ trainer:
 model:
   lr: 2e-5
   dropout: 0
+  hidden_size: 32
 
 datamodule:
   sampler:
     n_pos: 1
-    n_neg: 1
+    n_neg: 3
+    pos_max_rank: 10
+    neg_max_rank: 10
   train_batch_size: 2
   valid_batch_size: 32
   max_length: 512

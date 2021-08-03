@@ -19,8 +19,8 @@ defaults:
 seed: null
 
 # version info (useful for filtering runs on wandb)
-exp_version: 2
-code_version: "0.0.1"
+exp_version: 3
+code_version: "0.0.2"
 
 # metrics to track
 target_metric: validation/Accuracy

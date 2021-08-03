@@ -376,4 +376,3 @@ class FZxMedQADataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs)}"
             )
         print(console_width * "=")
-        exit()

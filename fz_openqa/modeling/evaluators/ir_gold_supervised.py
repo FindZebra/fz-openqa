@@ -95,17 +95,14 @@ class InformationRetrievalGoldSupervised(Evaluator):
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
-        # keep only one question per question_id
-        batch = self.drop_question_duplicates(batch)
+        # check documents
+        assert torch.all(batch["document.is_positive"][:, 0] == 1)
+        if batch["document.is_positive"].shape[1] > 1:
+            assert torch.all(batch["document.is_positive"][:, 1:] == 0)
 
-        print(">> Supervied-eval: batch:")
-        from fz_openqa.utils.datastruct import pprint_batch
-
-        pprint_batch(batch)
-        print(f">> question: {batch['question_id']}")
-        print(f">> unique: {torch.unique(batch['question_id'])}")
-
-        # todo: question reduction : process the question only once (todo in collate_fn)
+        # flatten documents inputs
+        for k in ["document.input_ids", "document.attention_mask"]:
+            batch[k] = batch[k].view(-1, *batch[k].shape[2:])
 
         hq = model(
             batch=batch,
@@ -119,11 +116,6 @@ class InformationRetrievalGoldSupervised(Evaluator):
         return {
             "hq": hq,
             "he": he,
-            **{
-                k: v
-                for k, v in batch.items()
-                if k in ["question_id", "is_positive"]
-            },
         }
 
     def forward_end(self, output: Batch, split: str) -> Any:
@@ -137,20 +129,20 @@ class InformationRetrievalGoldSupervised(Evaluator):
         torchmetrics update() calls should be placed here.
         The output must at least contains the `loss` key.
         """
-        hq, he, question_id, is_positive = (
-            output.pop(k) for k in ["hq", "he", "question_id", "is_positive"]
-        )
+        hq, he = (output.pop(k) for k in ["hq", "he"])
 
         # compute logits
-        logits = self.similarity(hq, he)  # [bs x bs]
+        logits = self.similarity(hq, he)  # [bs x bs*n_docs]
 
         # compute targets
-        # todo: write loss
-        targets = is_positive.argmax()
-        print(targets)
+        # assuming the target document is the first of each group
+        n_docs = he.shape[0] // hq.shape[0]
+        targets = n_docs * (
+            torch.arange(start=0, end=len(logits)).long().to(logits.device)
+        )
         loss = F.cross_entropy(logits, targets, reduction="mean")
         output["loss"] = loss.mean()
-        output["batch_size"] = logits.shape[1]  # store the batch size
+        output["n_options"] = logits.shape[1]  # store the batch size
         output["logits"] = logits
         output["targets"] = targets
         self.update_metrics(output, split)
