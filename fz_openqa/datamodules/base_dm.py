@@ -96,7 +96,9 @@ class BaseDataModule(LightningDataModule):
         self.text_data: Optional[HgDataset] = None
 
         # sampler
-        self.sampler_cfg = dict(sampler) if len(sampler) else None
+        self.sampler_cfg = (
+            dict(sampler) if sampler is not None and len(sampler) else None
+        )
 
     def tokenize_examples(
         self,

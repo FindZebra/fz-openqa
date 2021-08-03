@@ -7,7 +7,7 @@ class Sampler(TorchDataset):
     """A basic dataset sampler. A sampler wraps an existing dataset and modifies the methods
     __getitem__ and __len__."""
 
-    def __init__(self, dataset: Sized):
+    def __init__(self, *, dataset: Sized):
         self.dataset = dataset
 
     def __len__(self):
