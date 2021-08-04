@@ -13,7 +13,7 @@ from torch import Tensor
 def is_loggable(x: Any):
     return (
         isinstance(x, Number)
-        or (isinstance(x, Tensor) and len(x.view(-1)) == 1)
+        or (isinstance(x, Tensor) and x.numel() == 1)
         or (isinstance(x, np.ndarray) and len(x.reshape(-1)) == 1)
     )
 

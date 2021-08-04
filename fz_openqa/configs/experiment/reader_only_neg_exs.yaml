@@ -5,7 +5,7 @@
 
 defaults:
   - override /trainer: minimal.yaml
-  - override /model: qa_retriever.yaml
+  - override /model: multiple_choice_qa_reader.yaml
   - override /datamodule: fz_x_medqa_grouped.yaml
   - override /callbacks: none.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
@@ -48,4 +48,4 @@ datamodule:
 
 logger:
   wandb:
-    group: retriever-only # name your experiment here
+    group: reader-only # name your experiment here

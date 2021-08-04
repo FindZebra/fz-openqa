@@ -1,6 +1,7 @@
 import warnings
 from typing import Dict
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import torch
@@ -57,11 +58,14 @@ class MultipleChoiceQAReader(BaseModel):
 
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)
+        self.qd_select_head = cls_head(self.bert, 1, normalize=False)
         self.a_head = cls_head(self.bert, hidden_size)
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, batch: Dict[str, Tensor], **kwargs) -> torch.FloatTensor:
+    def forward(
+        self, batch: Dict[str, Tensor], **kwargs
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """Compute the answer model p(a_i | q, e)"""
         for f in self._required_infer_feature_names:
             assert (
@@ -70,6 +74,21 @@ class MultipleChoiceQAReader(BaseModel):
 
         # infer shapes
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
+        n_docs = batch["document.input_ids"].shape[1]
+
+        # flatten documents inputs
+        for k in ["document.input_ids", "document.attention_mask"]:
+            batch[k] = batch[k].view(-1, *batch[k].shape[2:])
+
+        # expand questions and flatten
+        for k in ["question.input_ids", "question.attention_mask"]:
+            v = batch[k]
+            v = (
+                v[:, None]
+                .expand(v.shape[0], n_docs, *v.shape[1:])
+                .contiguous()
+            )
+            batch[k] = v.view(-1, *v.shape[2:])
 
         # concatenate questions and documents such that there is no padding between Q and D
         padded_batch = padless_cat(
@@ -90,18 +109,24 @@ class MultipleChoiceQAReader(BaseModel):
         heq = self.bert(
             padded_batch["input_ids"][:, :512],
             padded_batch["attention_mask"][:, :512],
-        ).last_hidden_state  # [bs, L_e+L_q, h]
+        ).last_hidden_state  # [bs*n_doc, L_e+L_q, h]
         ha = self.bert(
             flatten(batch["answer_choices.input_ids"]),
             flatten(batch["answer_choices.attention_mask"]),
         ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # answer-question representation
-        heq = self.qd_head(self.dropout(heq))  # [bs, h]
+        h_select = self.qd_select_head(self.dropout(heq)).view(bs, n_docs)
+        heq = self.qd_head(self.dropout(heq))  # [bs * n_doc, h]
+        heq = heq.view(bs, n_docs, *heq.shape[1:])
         ha = self.a_head(self.dropout(ha)).view(
             bs, N_a, self.hparams.hidden_size
         )
-        return torch.einsum("bh, bah -> ba", heq, ha)  # dot-product model
+        # dot-product model
+        S_eqa = torch.einsum("bdh, bah -> bda", heq, ha)
+
+        # return S(qd, a) and the selection model
+        return S_eqa, h_select
 
     @staticmethod
     def expand_and_flatten(x: Tensor, n: int) -> Tensor:

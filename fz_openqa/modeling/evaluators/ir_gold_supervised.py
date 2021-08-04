@@ -95,21 +95,23 @@ class InformationRetrievalGoldSupervised(Evaluator):
         self.check_batch_type(batch)
         self.check_feature_names(batch)
 
-        # check documents
+        # check that the first document of each question is positive
         assert torch.all(batch["document.is_positive"][:, 0] == 1)
         if batch["document.is_positive"].shape[1] > 1:
             assert torch.all(batch["document.is_positive"][:, 1:] == 0)
 
         # flatten documents inputs
-        for k in ["document.input_ids", "document.attention_mask"]:
-            batch[k] = batch[k].view(-1, *batch[k].shape[2:])
+        doc_batch = {
+            k: batch[k].view(-1, *batch[k].shape[2:])
+            for k in ["document.input_ids", "document.attention_mask"]
+        }
 
         hq = model(
             batch=batch,
             model_key="question",
         )  # [bs, h]
         he = model(
-            batch=batch,
+            batch=doc_batch,
             model_key="document",
         )  # [bs, h]
 
