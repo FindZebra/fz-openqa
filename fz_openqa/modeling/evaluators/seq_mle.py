@@ -7,7 +7,7 @@ from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 
-from .abstract import Evaluator
+from .base import Evaluator
 
 
 class SeqMaximumLikelihood(Evaluator):

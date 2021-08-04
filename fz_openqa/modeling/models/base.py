@@ -12,7 +12,7 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable

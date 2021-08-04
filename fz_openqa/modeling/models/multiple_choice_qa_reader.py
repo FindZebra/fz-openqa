@@ -11,7 +11,7 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.modeling.layers.heads import cls_head

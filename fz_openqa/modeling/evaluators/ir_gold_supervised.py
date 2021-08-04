@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 

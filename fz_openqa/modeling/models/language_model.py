@@ -10,7 +10,7 @@ from torch.distributions import Categorical
 from torchmetrics.classification.accuracy import Accuracy
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 
 
 class LanguageModel(LightningModule):

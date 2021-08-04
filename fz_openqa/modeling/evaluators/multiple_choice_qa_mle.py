@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torchmetrics import Metric
 
-from .abstract import Evaluator
+from .base import Evaluator
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import batch_reduce

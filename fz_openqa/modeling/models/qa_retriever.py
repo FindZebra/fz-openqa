@@ -11,7 +11,7 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.abstract import Evaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.layers.heads import cls_head
 from fz_openqa.modeling.models.base import BaseModel
 from fz_openqa.utils.functional import maybe_instantiate
