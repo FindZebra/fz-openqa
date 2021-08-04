@@ -19,14 +19,14 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
 
-class NestedMetricCollections(Metric):
+class NestedMetricCollections(MetricCollection):
     """
     A class that allows handling multiple sub-MetricCollections, each of them index by a key.
     Only the signature of the update method changes, which requires a dictionary of tuples as input.
     """
 
-    def __init__(self, metrics: Dict[str, MetricCollection], **kwargs):
-        super(NestedMetricCollections, self).__init__(**kwargs)
+    def __init__(self, metrics: Dict[str, MetricCollection]):
+        nn.Module.__init__(self)
         self.metrics = nn.ModuleDict(metrics)
 
     def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
@@ -55,7 +55,6 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     where a is the index of the true answer.
     """
 
-    # TODO: formalize the Metrics logic (when to compute and log)
     text_key = "question"
     _required_eval_feature_names = [
         "answer_idx",
@@ -183,7 +182,7 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         select_logits, select_targets = (
             output[k] for k in ("select_logits", "select_targets")
         )
-        self.get_metric(split)["answer"].update(
+        self.get_metric(split).update(
             {
                 "answer": (answer_logits, answer_targets),
                 "selection": (select_logits, select_targets),
