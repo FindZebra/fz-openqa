@@ -1,24 +1,56 @@
+import re
+from dataclasses import dataclass
 from typing import Any
 from typing import Dict
+from typing import Optional
+from typing import Tuple
 
 import torch
+from datasets import Split
 from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 from torchmetrics import Metric
+from torchmetrics import MetricCollection
+from torchmetrics.classification import Accuracy
 
 from .base import Evaluator
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import batch_reduce
+
+
+class NestedMetricCollections(Metric):
+    """
+    A class that allows handling multiple sub-MetricCollections, each of them index by a key.
+    Only the signature of the update method changes, which requires a dictionary of tuples as input.
+    """
+
+    def __init__(self, metrics: Dict[str, MetricCollection], **kwargs):
+        super(NestedMetricCollections, self).__init__(**kwargs)
+        self.metrics = nn.ModuleDict(metrics)
+
+    def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
+        for k, metric in self.metrics.items():
+            metric.update(*values[k])
+
+    def compute(self) -> Any:
+        return {
+            k: v
+            for metric in self.metrics.values()
+            for k, v in metric.compute().items()
+        }
+
+    def reset(self) -> None:
+        for metric in self.metrics.values():
+            metric.reset()
 
 
 class MultipleChoiceQaMaximumLikelihood(Evaluator):
     """
-    Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
+    Evaluates the Reader model `p(a_i | q, d_1,...d_m, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
 
-        L =  sum_p log p(a_p | q, e, A) 1(p = a)
+        L =  sum_{p, i} log p(a_p | q, d_i, A) 1(p = a)
 
     where a is the index of the true answer.
     """
@@ -36,8 +68,30 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         "answer_choices.attention_mask",
     ]
 
-    def get_metric(self, split: str) -> Metric:
-        return self.metrics[f"_{split}"]
+    def init_metrics(self, prefix: str):
+        """Initialize the metrics for each split. Compute the accuracy for the document selection model
+        and for the answer model"""
+        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
+
+        def gen_metric_one_split():
+            return NestedMetricCollections(
+                {
+                    "answer": MetricCollection(
+                        [Accuracy(**metric_kwargs)], prefix=f"{prefix}"
+                    ),
+                    "selection": MetricCollection(
+                        [Accuracy(**metric_kwargs)],
+                        prefix=f"{prefix}selection-",
+                    ),
+                }
+            )
+
+        self.metrics = nn.ModuleDict(
+            {
+                f"_{split}": gen_metric_one_split()
+                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
+            }
+        )
 
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
@@ -89,8 +143,10 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
             "loss": loss,
             "select_loss": select_loss.detach(),
             "answer_loss": answer_loss.detach(),
-            "logits": answer_logits.detach(),
-            "targets": answer_targets.detach(),
+            "answer_logits": answer_logits.detach(),
+            "answer_targets": answer_targets.detach(),
+            "select_logits": select_logits.detach(),
+            "select_targets": select_targets.detach(),
         }
 
     def forward_end(self, output: Batch, split: str) -> Any:
@@ -105,11 +161,31 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         The output must at least contains the `loss` key.
         """
 
-        output["loss"] = output["loss"].mean()
-        output["select_loss"] = output["select_loss"].mean()
-        output["answer_loss"] = output["answer_loss"].mean()
+        for k in ["loss", "select_loss", "answer_loss"]:
+            output[k] = output[k].mean()
+
         self.update_metrics(output, split)
-        output.pop("preds", None)
-        output.pop("logits", None)
-        output.pop("targets", None)
+
+        for k in [
+            "answer_logits",
+            "answer_targets",
+            "select_logits",
+            "select_targets",
+        ]:
+            output.pop(k, None)
         return output
+
+    def update_metrics(self, output: Batch, split: str) -> None:
+        """update the metrics of the given split."""
+        answer_logits, answer_targets = (
+            output[k] for k in ("answer_logits", "answer_targets")
+        )
+        select_logits, select_targets = (
+            output[k] for k in ("select_logits", "select_targets")
+        )
+        self.get_metric(split)["answer"].update(
+            {
+                "answer": (answer_logits, answer_targets),
+                "selection": (select_logits, select_targets),
+            }
+        )
