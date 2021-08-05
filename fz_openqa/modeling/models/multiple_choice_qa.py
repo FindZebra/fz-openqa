@@ -16,12 +16,14 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from ...datamodules.corpus_dm import CorpusDataModule
-from ...utils.functional import only_trainable
-from .base import BaseModel
-from .multiple_choice_qa_reader import MultipleChoiceQAReader
-from .qa_retriever import QaRetriever
+from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.modeling.models.multiple_choice_qa_reader import (
+    MultipleChoiceQAReader,
+)
+from fz_openqa.modeling.models.qa_retriever import QaRetriever
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import only_trainable
 
 
 def add_prefix(d: Dict[str, Any], prefix: str):
@@ -116,7 +118,6 @@ class MultipleChoiceQA(BaseModel):
          1. query the corpus using the retriever
          2. evaluate the reader using the retriever document
 
-        todo: sample multiple documents from the corpus
         todo: wrap this in an evaluator class
         """
         device = next(iter(batch.values())).device
@@ -146,7 +147,6 @@ class MultipleChoiceQA(BaseModel):
         ]
 
         retrieved_batch = self.retriever.corpus.collate_fn(retrieved_batch)
-        # retrieved_batch = {k: v.to(device) for k, v in retrieved_batch.items()}
 
         # reshape all as [k, bs, *]
         retrieved_batch = {
@@ -155,6 +155,7 @@ class MultipleChoiceQA(BaseModel):
         }
 
         reader_data = []
+        # todo: sample self.train_top_k documents at each iteration
         for idx in range(self.eval_top_k):
             retrieved_batch_k = {k: v[idx] for k, v in retrieved_batch.items()}
             retrieved_batch_k = {
@@ -169,56 +170,38 @@ class MultipleChoiceQA(BaseModel):
 
             # forward pass for the reader model
             kwargs = {"log_data": False, "split": split}
-            reader_data_k = self.reader._step(
-                batch_k, batch_idx, dataloader_idx, **kwargs
+            answer_logits, selection_logits = self.reader.forward(
+                batch_k, **kwargs
             )
-
-            reader_data_k["r_rank"] = retrieved_batch_k["r_rank"]
+            reader_data_k = {
+                "answer_logits": answer_logits,
+                "select_logits": selection_logits,
+            }
+            reader_data_k["r_rank"] = retrieved_batch_k["r_rank"].unsqueeze(1)
             reader_data += [reader_data_k]
 
         # gather outputs
-        # temporary hack: select the reader output with the highest logit
-        # todo: implement a proper selection model: i.e. eq 5 in DPR (https://arxiv.org/pdf/2004.04906.pdf)
-        [
-            r.update({"largest_logit": r["logits"].softmax(-1).max(dim=-1)[0]})
-            for r in reader_data
-        ]
-        reader_data = self.argmax_select(reader_data, key="largest_logit")
+        # todo: experiment with sum(p_select * answer_logits) instead of argmax
+        reader_data = {
+            key: torch.cat([r[key] for r in reader_data], dim=1)
+            for key in reader_data_k.keys()
+        }
+        reader_data["answer_logits"] = self.argmax_select(
+            reader_data["answer_logits"], key=reader_data["select_logits"]
+        )
+        reader_data["answer_targets"] = batch["answer_idx"]
 
         # add key prefix and return
         output = add_prefix(reader_data, "reader/")
         return output
 
     @staticmethod
-    def argmax_select(
-        inputs: List[Dict[str, Tensor]], *, key
-    ) -> Dict[str, Tensor]:
+    def argmax_select(inputs: Tensor, *, key: Tensor) -> Dict[str, Tensor]:
         """
-        Given a list of M inputs, each encoded as `Dict[str, Tensor]` where all tensors
-        are of the same batch size, this function return one input Dict[str] where for each batch element (independently),
-        the output is the input having the largest `key` value
+        Index all the tensor in the input based
         """
-
-        assert all(
-            isinstance(t, Tensor) for r in inputs for t in r.values()
-        ), "Inputs must all be tensors"
-        batch_size = inputs[0][key].shape[0]
-        assert all(
-            t.shape[0] == batch_size for r in inputs for t in r.values()
-        ), "Tensors must be of the same batch size"
-        keys = list(inputs[0].keys())
-        assert all(
-            set(r.keys()) == set(keys) for r in inputs
-        ), "Inputs must all have the same keys"
-        assert all(
-            r[key].shape == (batch_size,) for r in inputs
-        ), "input[key] must all be of shape [batch_size]"
-
-        # concatenate all inputs across dimension 1
-        inputs = {
-            k: torch.cat([r[k][:, None] for r in inputs], dim=1) for k in keys
-        }  # shape [bs, M, *]
-        arg_max = inputs[key].argmax(dim=1)
+        batch_size = key.shape[0]
+        arg_max = key.argmax(dim=1)
 
         # index the reader data using the max `key` position
         def reshape_index(index, v):
@@ -226,11 +209,9 @@ class MultipleChoiceQA(BaseModel):
                 -1, 1, *v.shape[2:]
             )
 
-        inputs = {
-            k: v.gather(index=reshape_index(arg_max, v), dim=1).squeeze(1)
-            for k, v in inputs.items()
-        }
-        return inputs
+        return inputs.gather(
+            index=reshape_index(arg_max, inputs), dim=1
+        ).squeeze(1)
 
     def _supervised_step(self, batch, batch_idx, dataloader_idx, split):
         """Perform an evaluation step using the triplets (q,d,a). The reader using the
@@ -238,16 +219,19 @@ class MultipleChoiceQA(BaseModel):
         retriever and readers are computed independently from each other."""
         output = {}
         kwargs = {"log_data": False, "split": split}
-        # forward pass for the reader model
-        reader_data = self.reader._step(
-            batch, batch_idx, dataloader_idx, **kwargs
-        )
-        output.update(add_prefix(reader_data, "reader/"))
+
         # forward pass for the retriever model
         retriever_data = self.retriever._step(
             batch, batch_idx, dataloader_idx, **kwargs
         )
         output.update(add_prefix(retriever_data, "retriever/"))
+
+        # forward pass for the reader model
+        reader_data = self.reader._step(
+            batch, batch_idx, dataloader_idx, **kwargs
+        )
+        output.update(add_prefix(reader_data, "reader/"))
+
         return output
 
     def predict_step(

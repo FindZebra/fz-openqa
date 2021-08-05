@@ -74,21 +74,6 @@ class MultipleChoiceQAReader(BaseModel):
 
         # infer shapes
         bs, N_a, _ = batch["answer_choices.input_ids"].shape
-        n_docs = batch["document.input_ids"].shape[1]
-
-        # flatten documents inputs
-        for k in ["document.input_ids", "document.attention_mask"]:
-            batch[k] = batch[k].view(-1, *batch[k].shape[2:])
-
-        # expand questions and flatten
-        for k in ["question.input_ids", "question.attention_mask"]:
-            v = batch[k]
-            v = (
-                v[:, None]
-                .expand(v.shape[0], n_docs, *v.shape[1:])
-                .contiguous()
-            )
-            batch[k] = v.view(-1, *v.shape[2:])
 
         # concatenate questions and documents such that there is no padding between Q and D
         padded_batch = padless_cat(
@@ -116,16 +101,18 @@ class MultipleChoiceQAReader(BaseModel):
         ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # answer-question representation
-        h_select = self.qd_select_head(self.dropout(heq)).view(bs, n_docs)
+        h_select = self.qd_select_head(self.dropout(heq))
         heq = self.qd_head(self.dropout(heq))  # [bs * n_doc, h]
-        heq = heq.view(bs, n_docs, *heq.shape[1:])
         ha = self.a_head(self.dropout(ha)).view(
             bs, N_a, self.hparams.hidden_size
         )
         # dot-product model
+        n_docs = heq.shape[0] // ha.shape[0]
+        heq = heq.view(bs, n_docs, *heq.shape[1:])
         S_eqa = torch.einsum("bdh, bah -> bda", heq, ha)
 
         # return S(qd, a) and the selection model
+        h_select = h_select.view(bs, n_docs)
         return S_eqa, h_select
 
     @staticmethod

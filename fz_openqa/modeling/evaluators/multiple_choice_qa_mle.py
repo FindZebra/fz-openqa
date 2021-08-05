@@ -1,8 +1,7 @@
-import re
-from dataclasses import dataclass
+from copy import copy
 from typing import Any
 from typing import Dict
-from typing import Optional
+from typing import List
 from typing import Tuple
 
 import torch
@@ -10,7 +9,6 @@ from datasets import Split
 from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
-from torchmetrics import Metric
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
@@ -30,13 +28,14 @@ class NestedMetricCollections(MetricCollection):
         self.metrics = nn.ModuleDict(metrics)
 
     def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
-        for k, metric in self.metrics.items():
-            metric.update(*values[k])
+        for k, v in values.items():
+            self.metrics[k].update(*v)
 
     def compute(self) -> Any:
         return {
             k: v
             for metric in self.metrics.values()
+            if next(iter(metric.values())).mode is not None
             for k, v in metric.compute().items()
         }
 
@@ -97,12 +96,33 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     ) -> Dict[str, Tensor]:
         self.check_batch_type(batch)
         self.check_feature_names(batch)
+
+        # arguments
+        batch = copy(batch)  # make sure the original batch is not modified
         bs, n_docs = batch["document.input_ids"].shape[:2]
 
         # check that the first document of each question is positive
         assert torch.all(batch["document.is_positive"][:, 0] == 1)
         if batch["document.is_positive"].shape[1] > 1:
             assert torch.all(batch["document.is_positive"][:, 1:] == 0)
+
+        # flatten documents
+        batch.update(
+            **self.flatten_documents(
+                batch,
+                2,
+                keys=["document.input_ids", "document.attention_mask"],
+            )
+        )
+
+        # expand questions and flatten
+        batch.update(
+            **self.expand_and_flatten(
+                batch,
+                n_docs,
+                keys=["question.input_ids", "question.attention_mask"],
+            )
+        )
 
         # forward pass through the reader model
         answer_logits, select_logits = model(batch)
@@ -148,6 +168,26 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
             "select_targets": select_targets.detach(),
         }
 
+    @staticmethod
+    def flatten_documents(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
+        output = {}
+        for k in keys:
+            output[k] = batch[k].view(-1, *batch[k].shape[n_dims:])
+        return output
+
+    @staticmethod
+    def expand_and_flatten(batch: Batch, n_docs, *, keys: List[str]) -> Batch:
+        output = {}
+        for k in keys:
+            v = batch[k]
+            v = (
+                v[:, None]
+                .expand(v.shape[0], n_docs, *v.shape[1:])
+                .contiguous()
+            )
+            output[k] = v.view(-1, *v.shape[2:])
+        return output
+
     def forward_end(self, output: Batch, split: str) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
@@ -161,7 +201,9 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         """
 
         for k in ["loss", "select_loss", "answer_loss"]:
-            output[k] = output[k].mean()
+            y = output.get(k, None)
+            if y is not None:
+                output[k] = y.mean()
 
         self.update_metrics(output, split)
 
@@ -177,14 +219,16 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     def update_metrics(self, output: Batch, split: str) -> None:
         """update the metrics of the given split."""
         answer_logits, answer_targets = (
-            output[k] for k in ("answer_logits", "answer_targets")
+            output.get(k, None) for k in ("answer_logits", "answer_targets")
         )
         select_logits, select_targets = (
-            output[k] for k in ("select_logits", "select_targets")
+            output.get(k, None) for k in ("select_logits", "select_targets")
         )
-        self.get_metric(split).update(
-            {
-                "answer": (answer_logits, answer_targets),
-                "selection": (select_logits, select_targets),
-            }
-        )
+
+        data = {
+            "answer": (answer_logits, answer_targets),
+            "selection": (select_logits, select_targets),
+        }
+        if select_targets is None:
+            data.pop("selection")
+        self.get_metric(split).update(data)
