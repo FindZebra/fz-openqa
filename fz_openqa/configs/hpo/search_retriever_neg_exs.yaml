@@ -13,7 +13,7 @@ defaults:
 
 base:
   name: search_retriever
-  target_metric: validation/Accuracy
+  target_metric: validation/retriever/top5_Accuracy
   target_mode: max
   # resources
   gpus: 4
@@ -54,13 +54,7 @@ runner:
         model.lr: 0.0001
         model.weight_decay: 0.001
         model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
-      - model.hidden_size: 128
-        model.lr: 0.0001
-        model.weight_decay: 0.001
-        model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.2
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
+        model.bert.hidden_dropout_prob: 0
+        model.bert.attention_probs_dropout_prob: 0
+        seed: 8
+        datamodule.sampler.pos_max_rank: 10

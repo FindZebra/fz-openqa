@@ -20,8 +20,13 @@ from fz_openqa.utils.functional import only_trainable
 
 
 class BaseModel(LightningModule):
+    # features required for inference
     _required_infer_feature_names = []
-    _prog_bar_metrics = []  # metrics that will be display in the progress bar
+    # metrics that will be display in the progress bar
+    _prog_bar_metrics = []
+    # prefix for the logged metrics
+    # all metrics are of the form "split/_logging_prefix/metric_name"
+    _logging_prefix = ""
 
     def __init__(
         self,
@@ -114,7 +119,7 @@ class BaseModel(LightningModule):
     ):
         # log 'split' metrics
         for k, v in data.items():
-            key = f"{prefix}{k}"
+            key = f"{prefix}{self._logging_prefix}{k}"
             if is_loggable(v):
                 self.log(
                     key,

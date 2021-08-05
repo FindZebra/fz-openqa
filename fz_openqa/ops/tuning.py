@@ -50,7 +50,10 @@ def run_tune(config: DictConfig) -> Optional[float]:
     if config.base.server_address is not None:
         ray.util.connect(config.base.server_address)
     else:
-        ray.init(**config.ray)
+        cfg = dict(config.ray)
+        pwd = cfg.pop("_redis_password", None)
+        pwd = str(pwd) if pwd is not None else None
+        ray.init(_redis_password=pwd, **cfg)
 
     log.info("Instantiating the search space")
     space = instantiate(config.space)

@@ -304,10 +304,7 @@ class FZxMedQADataModule(BaseDataModule):
         output = {}
         for k, v in ans_encoding.items():
             output[f"answer_choices.{k}"] = (
-                v.view(n_ans, batch_size, -1)
-                .permute(1, 0, 2)
-                .contiguous()
-                # todo: if there is an issue with the answer, it's here
+                v.view(n_ans, batch_size, -1).permute(1, 0, 2).contiguous()
             )
 
         return output

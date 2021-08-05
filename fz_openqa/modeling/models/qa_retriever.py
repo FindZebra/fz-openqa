@@ -27,14 +27,15 @@ class QaRetriever(BaseModel):
         "question.attention_mask",
         "is_gold",
     ]
+    # metrics that will be display in the progress bar
     _prog_bar_metrics = [
-        "train/loss",
-        "validation/loss",
-        "train/Accuracy",
-        "validation/Accuracy",
-        "validation/top5_Accuracy",
-        "validation/top10_Accuracy",
-    ]  # metrics that will be display in the progress bar
+        "train/retriever/loss",
+        "validation/retriever/loss",
+        "validation/retriever/top5_Accuracy",
+        "validation/retriever/top10_Accuracy",
+    ]
+    # prefix for the logged metrics
+    _logging_prefix = "retriever/"
 
     def __init__(
         self,

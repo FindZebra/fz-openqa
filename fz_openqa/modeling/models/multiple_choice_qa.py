@@ -45,13 +45,16 @@ class MultipleChoiceQA(BaseModel):
         "answer_choices.input_ids",
         "answer_choices.attention_mask",
     ]
+    # metrics that will be display in the progress bar
     _prog_bar_metrics = [
         "train/loss",
         "validation/loss",
         "validation/reader/Accuracy",
         "validation/retriever/Accuracy",
         "validation/retriever/top5_Accuracy",
-    ]  # metrics that will be display in the progress bar
+    ]
+    # prefix for the logged metrics
+    _logging_prefix = ""
 
     def __init__(
         self,

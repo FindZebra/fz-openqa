@@ -8,12 +8,12 @@
 
 defaults:
   - override /sys: hpo-titan.yaml
-  - override /space: search_2.yaml
+  - override /space: search_3.yaml
   - override /runner: default.yaml
 
 base:
-  name: search_retriever
-  target_metric: validation/retriever/top5_Accuracy
+  name: search_reader
+  target_metric: validation/reader/Accuracy
   target_mode: max
   # resources
   gpus: 4
@@ -24,7 +24,7 @@ ray:
   configure_logging: False
 
 experiment:
-  experiment: retriever_only.yaml
+  experiment: reader_only_neg_exs.yaml
   corpus: none.yaml
   sys: titan.yaml
   cache_dir: ${sys.cache_dir}
@@ -39,8 +39,8 @@ experiment:
   logger.wandb.group: ${base.name}
   callbacks: tune.yaml
   callbacks.model_checkpoint.cleanup_threshold: 0.09
-  datamodule.train_batch_size: 24
-  datamodule.eval_batch_size: 512
+  datamodule.train_batch_size: 8
+  datamodule.eval_batch_size: 128
   datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
   trainer.gpus: ${base.gpus}
@@ -54,13 +54,7 @@ runner:
         model.lr: 0.0001
         model.weight_decay: 0.001
         model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
-      - model.hidden_size: 128
-        model.lr: 0.0001
-        model.weight_decay: 0.001
-        model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.2
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
+        model.bert.hidden_dropout_prob: 0
+        model.bert.attention_probs_dropout_prob: 0
+        seed: 8
+        datamodule.sampler.pos_max_rank: 10
