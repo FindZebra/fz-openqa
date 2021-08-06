@@ -29,7 +29,7 @@ class CorpusDataset(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "text": datasets.Value("string"),
+                    "document": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -53,4 +53,4 @@ class CorpusDataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         for i, fn in enumerate(self.config.data_files):
             with open(fn, "r") as f:
-                yield i, {"text": f.read()}
+                yield i, {"document": f.read()}

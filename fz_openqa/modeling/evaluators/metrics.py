@@ -6,11 +6,17 @@ from typing import Tuple
 import torch
 from datasets import Split
 from torch import nn
+from torch import Tensor
 from torchmetrics import Accuracy
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
 
 from fz_openqa.utils.datastruct import Batch
+
+
+def is_computable(m: Metric):
+    """check if one can call .compute() on metric"""
+    return not isinstance(m, Accuracy) or m.mode is not None
 
 
 class SplitMetrics(nn.Module):
@@ -36,11 +42,17 @@ class SplitMetrics(nn.Module):
         if split is None:
             map(lambda m: m.reset(), self.metrics.values())
         else:
-            self.get_metric(split).reset()
+            self[split].reset()
 
     def update(self, split: Split, *args: Tuple[torch.Tensor]) -> None:
         """update the metrics of the given split."""
         self[split].update(*args)
+
+    @staticmethod
+    def safe_compute(metric: MetricCollection) -> Batch:
+        """equivalent to `MetricCollection.compute`,
+        but filtering metrics where metric.mode is not set (which happens if there was no update)"""
+        return {k: m.compute() for k, m in metric.items() if is_computable(m)}
 
     def compute(self, split: Optional[Split] = None) -> Batch:
         """
@@ -48,13 +60,13 @@ class SplitMetrics(nn.Module):
         The metrics are return after computation.
         """
         if split is not None:
-            metrics = [self.get_metric(split)]
+            metrics = [self[split]]
         else:
             metrics = self.metrics.values()
 
         output = {}
         for metric in metrics:
-            output.update(**metric.compute())
+            output.update(**self.safe_compute(metric))
 
         return output
 
@@ -84,3 +96,30 @@ class SafeMetricCollection(MetricCollection):
             for k, m in self.items()
             if not isinstance(m, Accuracy) or m.mode is not None
         }
+
+
+class NestedMetricCollections(MetricCollection):
+    """
+    A class that allows handling multiple sub-MetricCollections, each of them index by a key.
+    Only the signature of the update method changes, which requires a dictionary of tuples as input.
+    """
+
+    def __init__(self, metrics: Dict[str, MetricCollection]):
+        nn.Module.__init__(self)
+        self.metrics = nn.ModuleDict(metrics)
+
+    def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
+        for k, v in values.items():
+            self.metrics[k].update(*v)
+
+    def compute(self) -> Any:
+        return {
+            k: v
+            for metric in self.metrics.values()
+            if next(iter(metric.values())).mode is not None
+            for k, v in metric.compute().items()
+        }
+
+    def reset(self) -> None:
+        for metric in self.metrics.values():
+            metric.reset()

@@ -41,13 +41,13 @@ class BaseEvaluator(nn.Module):
     def init_metrics(self, prefix: str):
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 
-        def gen_metric():
+        def init_metric():
             return MetricCollection([Accuracy(**metric_kwargs)], prefix=prefix)
 
-        self.metrics = SplitMetrics(gen_metric)
+        self.metrics = SplitMetrics(init_metric)
 
     def forward(
-        self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
+        self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
     ) -> Batch:
         """Compute the forward pass of the model and return output
         Return a dictionary output with at least the key 'loss' and the data

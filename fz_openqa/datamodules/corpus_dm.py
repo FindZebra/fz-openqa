@@ -15,6 +15,7 @@ import torch
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
+from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 from torch.utils.data import Dataset
@@ -25,6 +26,8 @@ from .datasets import file_corpus
 from .datasets import meqa_en_corpus
 from .utils import gen_passages
 from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -43,7 +46,7 @@ class CorpusDataModule(BaseDataModule):
     dset_script_path_or_id = (
         file_corpus.__file__  # HuggingFace dataset id or local path to script
     )
-    text_fields = ["text"]  # text fields that should be tokenized
+    text_fields = ["document"]  # text fields that should be tokenized
     split_ids = [
         datasets.Split.TRAIN,
         datasets.Split.VALIDATION,
@@ -129,7 +132,7 @@ class CorpusDataModule(BaseDataModule):
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )
-        dataset = dataset.remove_columns(["text"])
+        dataset = dataset.remove_columns(["document"])
         dataset = dataset.map(
             gen_passages,
             batched=True,
@@ -137,6 +140,12 @@ class CorpusDataModule(BaseDataModule):
             desc="Extracting passages",
         )
         dataset.set_format(type="torch", columns=self.pt_attributes)
+
+        # append the prefix "document."
+        dataset = dataset.rename_column("input_ids", "document.input_ids")
+        dataset = dataset.rename_column(
+            "attention_mask", "document.attention_mask"
+        )
         return dataset
 
     @staticmethod
@@ -150,6 +159,7 @@ class CorpusDataModule(BaseDataModule):
         pad_token_id: int,
         verbose: bool = True,
     ) -> Dict[str, List]:
+        # todo: refactor and output text
         if verbose:
             lens = list(map(len, examples["input_ids"]))
             rich.print(
@@ -224,18 +234,27 @@ class CorpusDataModule(BaseDataModule):
         decode_kwargs = {"skip_special_tokens": True}
         print(console_width * "-")
         rich.print(
-            "(CORPUS) " + self.repr_ex(example, "input_ids", **decode_kwargs)
+            "(CORPUS) "
+            + self.repr_ex(example, "document.input_ids", **decode_kwargs)
         )
 
     def collate_fn(
-        self, batch: List[Dict[str, Any]]
+        self, examples: List[Dict[str, Any]]
     ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
-        output = self.tokenizer.pad(batch)
+        tokenizer_inputs = [
+            {k.replace("document.", ""): v for k, v in ex.items()}
+            for ex in examples
+        ]
+        output = self.tokenizer.pad(tokenizer_inputs)
+        output = {
+            f"document.{k}" if k in ["input_ids", "attention_mask"] else k: v
+            for k, v in output.items()
+        }
 
         # infer `max_length`
-        tokens = [b["input_ids"] for b in batch]
+        tokens = [b["document.input_ids"] for b in examples]
         pad_tok = self.tokenizer.pad_token_id
         max_length = len(tokens[0]) - min(
             map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
@@ -253,17 +272,28 @@ class CorpusDataModule(BaseDataModule):
     @staticmethod
     @torch.no_grad()
     def compute_vectors_batch(
-        key: str, model: Callable, batch: Dict[str, Tensor]
+        key: str, model: Callable, batch: Batch
     ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
+        batch = {
+            k: torch.tensor(v) if not isinstance(v, torch.Tensor) else v
+            for k, v in batch.items()
+        }
+
+        # move data to device
         if isinstance(model, torch.nn.Module):
             device = next(iter(model.parameters())).device
-            batch = {k: v.to(device=device) for k, v in batch.items()}
+            batch = move_data_to_device(batch, device)
 
-        # process, cast and return
+        # process with the model
         batch[key] = model(batch)
-        batch.pop("mode", None)
-        return {k: v.to(device="cpu").numpy() for k, v in batch.items()}
+
+        # cast to numpy and return
+        return {
+            k: v.to(device="cpu").numpy() if isinstance(v, Tensor) else v
+            for k, v in batch.items()
+            if k != "_mode_"
+        }
 
     def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
         """Compute the vectors for each passage in the corpus"""

@@ -10,6 +10,7 @@ from datasets import Split
 from datasets.search import BatchedNearestExamplesResults
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from pytorch_lightning.utilities import move_data_to_device
 from torch import nn
 from torch import Tensor
 from transformers import AdamW
@@ -35,9 +36,13 @@ def filter_prefix(d: Dict[str, Any], prefix: str):
 
 
 class MultipleChoiceQA(BaseModel):
-    """A Multiple Choice model """
+    """
+    An end-to-end multiple choice openQA model with:
+    * a dense retriever
+    * a multiple-choice reader
+    """
 
-    _required_infer_feature_names = [
+    _required_feature_names = [
         "question.input_ids",
         "question.attention_mask",
         "document.input_ids",
@@ -68,10 +73,9 @@ class MultipleChoiceQA(BaseModel):
         eval_top_k: int = 2,
         **kwargs,
     ):
-        super().__init__(**kwargs, evaluator=None)
-
-        # instantiate the pretrained model
-        self.instantiate_bert(bert=bert, tokenizer=tokenizer)
+        super().__init__(
+            **kwargs, evaluator=None, tokenizer=tokenizer, bert=bert
+        )
 
         # instantiate the reader
         self.reader: MultipleChoiceQAReader = instantiate(
@@ -101,7 +105,7 @@ class MultipleChoiceQA(BaseModel):
         **kwargs,
     ) -> Batch:
 
-        if batch.pop("mode", None) == "indexing":
+        if batch.pop("_mode_", None) == "indexing":
             return self.retriever.predict_step(
                 batch, batch_idx, dataloader_idx
             )
@@ -122,72 +126,41 @@ class MultipleChoiceQA(BaseModel):
          2. evaluate the reader using the retriever document
 
         todo: wrap this in an evaluator class
+        todo: batch the for loop with `train_top_k` documents
         """
         device = next(iter(batch.values())).device
-        batch_size = batch["question.input_ids"].shape[0]
 
         # query the corpus
         query_encoding = self.retriever(
             batch, batch_idx, dataloader_idx, model_key="question"
         )
 
-        # cast as a batch
-        retrieved_docs: BatchedNearestExamplesResults = (
-            self.retriever.corpus.query_batch(
-                query_encoding, k=self.eval_top_k
-            )
+        # retriever k documents from the corpus given the query
+        retrieved_batch = self.retrieve_documents(
+            self.retriever.corpus, query_encoding, n_docs=self.eval_top_k
         )
 
-        # create a list of retrieved documents such as:
-        # [x[r_rank=0, bs_idx=0], x[r_rank=1, bs_idx=0]], ...x[r_rank=0, bs_idx=1]]
-        # NB: r_rank corresponds to the rank of the retrieved doc
-        retrieved = retrieved_docs.total_examples
-        [r.update({"r_rank": -1 + 0 * r["idx"]}) for r in retrieved]
-        retrieved_batch = [
-            {k: idx if k == "r_rank" else v[idx] for k, v in d.items()}
-            for idx in range(self.eval_top_k)
-            for d in retrieved
-        ]
-
-        retrieved_batch = self.retriever.corpus.collate_fn(retrieved_batch)
-
-        # reshape all as [k, bs, *]
-        retrieved_batch = {
-            k: v.view(self.eval_top_k, batch_size, *v.shape[1:])
-            for k, v in retrieved_batch.items()
-        }
-
         reader_data = []
-        # todo: sample self.train_top_k documents at each iteration
         for idx in range(self.eval_top_k):
-            retrieved_batch_k = {k: v[idx] for k, v in retrieved_batch.items()}
+            # index and move the batc
             retrieved_batch_k = {
-                k: v.to(device) for k, v in retrieved_batch_k.items()
+                k: v[:, idx] for k, v in retrieved_batch.items()
             }
-            batch_k = batch
-            # merge retriever batch with batch
+            retrieved_batch_k = move_data_to_device(retrieved_batch_k, device)
+
+            # create a batch with only one document
+            batch_k = {k: v for k, v in batch.items() if "document." not in k}
             [batch_k.pop(k) for k in list(batch_k.keys()) if "document." in k]
-            batch_k.update(
-                {f"document.{k}": v for k, v in retrieved_batch_k.items()}
-            )
+            batch_k.update(**retrieved_batch_k)
 
             # forward pass for the reader model
-            kwargs = {"log_data": False, "split": split}
-            answer_logits, selection_logits = self.reader.forward(
-                batch_k, **kwargs
-            )
-            reader_data_k = {
-                "answer_logits": answer_logits,
-                "select_logits": selection_logits,
-            }
-            reader_data_k["r_rank"] = retrieved_batch_k["r_rank"].unsqueeze(1)
-            reader_data += [reader_data_k]
+            reader_data += [self._reader_forward(batch_k, split)]
 
         # gather outputs
         # todo: experiment with sum(p_select * answer_logits) instead of argmax
         reader_data = {
             key: torch.cat([r[key] for r in reader_data], dim=1)
-            for key in reader_data_k.keys()
+            for key in list(reader_data[0].keys())
         }
         reader_data["answer_logits"] = self.argmax_select(
             reader_data["answer_logits"], key=reader_data["select_logits"]
@@ -197,6 +170,50 @@ class MultipleChoiceQA(BaseModel):
         # add key prefix and return
         output = add_prefix(reader_data, "reader/")
         return output
+
+    def _reader_forward(self, batch_k: Batch, split: Split) -> Batch:
+        kwargs = {"log_data": False, "split": split}
+        answer_logits, selection_logits = self.reader.forward(
+            batch_k, **kwargs
+        )
+        reader_data_k = {
+            "answer_logits": answer_logits,
+            "select_logits": selection_logits,
+            "r_rank": batch_k["r_rank"].unsqueeze(1),
+        }
+        return reader_data_k
+
+    def retrieve_documents(
+        self, corpus: CorpusDataModule, query: Tensor, n_docs: int
+    ) -> Batch:
+        """
+        Retrieve `n_documents` from the corpus object given the `query`.
+        """
+
+        batch_size = query.shape[0]
+        retrieved_docs: BatchedNearestExamplesResults = corpus.query_batch(
+            query, k=n_docs
+        )
+        # create a list of retrieved documents such as:
+        # [x[r_rank=0, bs_idx=0], x[r_rank=1, bs_idx=0]], ...x[r_rank=0, bs_idx=1]]
+        # NB: r_rank corresponds to the rank of the retrieved doc
+        retrieved = retrieved_docs.total_examples
+        [r.update({"r_rank": -1 + 0 * r["idx"]}) for r in retrieved]
+        retrieved_batch = [
+            {k: idx if k == "r_rank" else v[idx] for k, v in d.items()}
+            for d in retrieved
+            for idx in range(n_docs)
+        ]
+
+        # collate retrieved documents
+        retrieved_batch = self.retriever.corpus.collate_fn(retrieved_batch)
+
+        # reshape all as [batch_size, n_docs, *]
+        retrieved_batch = {
+            k: v.view(batch_size, n_docs, *v.shape[1:])
+            for k, v in retrieved_batch.items()
+        }
+        return retrieved_batch
 
     @staticmethod
     def argmax_select(inputs: Tensor, *, key: Tensor) -> Dict[str, Tensor]:
@@ -240,7 +257,6 @@ class MultipleChoiceQA(BaseModel):
     def predict_step(
         self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
     ) -> Any:
-        # todo: investigate why this is not used (see trick with adding the key `mode` to the batch in _step)
         # compute contextualized representations
         mode = batch.pop("mode", None)
         assert (

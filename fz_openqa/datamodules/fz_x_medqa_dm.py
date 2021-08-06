@@ -103,10 +103,16 @@ class FZxMedQADataModule(BaseDataModule):
         )
         q_encodings = tokenizer(questions, **tokenizer_kwargs)
         d_encodings = tokenizer(documents, **tokenizer_kwargs)
+
+        # store the raw text
         output = {
             "question.text": examples["question"],
             "document.text": examples["document"],
         }
+
+        # append the "question" and "document" prefix to the
+        # "input_ids" and "attention masts from the q/d_encodings
+        # and store them in output.
         for data, prefix in zip(
             [q_encodings, d_encodings], ["question", "document"]
         ):

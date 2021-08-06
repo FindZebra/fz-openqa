@@ -18,14 +18,12 @@ from fz_openqa.utils.functional import maybe_instantiate
 
 
 class QaRetriever(BaseModel):
-    _required_infer_feature_names = [
-        "question.input_ids",
-        "question.attention_mask",
-        "question.input_ids",
-        "document.attention_mask",
-        "question.input_ids",
-        "question.attention_mask",
-        "is_gold",
+    """
+    A Dense retriever model.
+    """
+
+    _required_feature_names = [
+        "input_ids",
     ]
     # metrics that will be display in the progress bar
     _prog_bar_metrics = [
@@ -48,7 +46,9 @@ class QaRetriever(BaseModel):
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(**kwargs, evaluator=evaluator)
+        super().__init__(
+            **kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert
+        )
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
@@ -74,14 +74,20 @@ class QaRetriever(BaseModel):
         model_key: str = "document",
         **kwargs,
     ) -> torch.Tensor:
-        """Return the document/question representation."""
+        """
+        compute the document and question representations based on the argument `model_key`.
+        Return the representation of `x`: BERT(x)_CLS of shape [batch_size, h]
+
+        Future work:
+        Implement ColBERT interaction model, in that case the output
+        will be `conv(BERT(x))` of shape [batch_size, T, h]
+        """
         assert model_key in {"document", "question"}, f"model_key={model_key}"
-        if "input_ids" not in batch.keys():
-            input_ids = batch[f"{model_key}.input_ids"]
-            attention_mask = batch.get(f"{model_key}.attention_mask", None)
-        else:
-            input_ids = batch["input_ids"]
-            attention_mask = batch.get("attention_mask", None)
+        self.check_input_features_with_key(batch, model_key)
+
+        # get input_ids and attention_mask
+        input_ids = batch[f"{model_key}.input_ids"]
+        attention_mask = batch.get(f"{model_key}.attention_mask", None)
 
         # compute contextualized representations
         h = self.bert(input_ids, attention_mask).last_hidden_state
@@ -95,7 +101,8 @@ class QaRetriever(BaseModel):
     ) -> Any:
         # compute contextualized representations
         h = self.bert(
-            batch["input_ids"], batch["attention_mask"]
+            batch["document.input_ids"],
+            batch.get("document.attention_mask", None),
         ).last_hidden_state
 
         # global representations
@@ -103,3 +110,8 @@ class QaRetriever(BaseModel):
         return {"document": self.e_proj, "question": self.q_proj}["document"](
             h
         )
+
+    def check_input_features_with_key(self, batch, key):
+        for f in self._required_feature_names:
+            f = f"{key}.{f}"
+            assert f in batch.keys(), f"The feature {f} is required."

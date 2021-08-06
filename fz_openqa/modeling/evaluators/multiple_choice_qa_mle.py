@@ -1,9 +1,7 @@
 from copy import copy
 from typing import Any
 from typing import Dict
-from typing import List
 from typing import Optional
-from typing import Tuple
 
 import torch
 from datasets import Split
@@ -15,45 +13,25 @@ from torchmetrics.classification import Accuracy
 
 from .base import BaseEvaluator
 from .metrics import SplitMetrics
+from .utils import check_first_doc_positive
+from .utils import expand_and_flatten
+from .utils import flatten_first_dims
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
-
-
-class NestedMetricCollections(MetricCollection):
-    """
-    A class that allows handling multiple sub-MetricCollections, each of them index by a key.
-    Only the signature of the update method changes, which requires a dictionary of tuples as input.
-    """
-
-    def __init__(self, metrics: Dict[str, MetricCollection]):
-        nn.Module.__init__(self)
-        self.metrics = nn.ModuleDict(metrics)
-
-    def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
-        for k, v in values.items():
-            self.metrics[k].update(*v)
-
-    def compute(self) -> Any:
-        return {
-            k: v
-            for metric in self.metrics.values()
-            if next(iter(metric.values())).mode is not None
-            for k, v in metric.compute().items()
-        }
-
-    def reset(self) -> None:
-        for metric in self.metrics.values():
-            metric.reset()
 
 
 class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
     """
     Evaluates the Reader model `p(a_i | q, d_1,...d_m, A)` using maximum likelihood estimation
-    in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
+    in a multiple choice QA context (A = [a_1,...a_P]) and using a supervised selection model.
+    The answering loss loss is defined as:
 
         L =  sum_{p, i} log p(a_p | q, d_i, A) 1(p = a)
 
     where a is the index of the true answer.
+
+    The selection model (eq. 5 in DPR) corresponds to retrieving the positive document among
+    the pos+neg documents for a given question.
     """
 
     _required_eval_feature_names = [
@@ -68,20 +46,21 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
     ]
 
     def init_metrics(self, prefix: str = ""):
-        """Initialize a Metric for each split=train/validation/test"""
+        """Initialize a Metric for each split=train/validation/test
+        fir both the answering model and the selection model"""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 
-        def gen_answer_metric():
+        def init_answer_metric():
             return MetricCollection([Accuracy(**metric_kwargs)], prefix=prefix)
 
-        self.answer_metrics = SplitMetrics(gen_answer_metric)
+        self.answer_metrics = SplitMetrics(init_answer_metric)
 
-        def gen_selection_metric():
+        def init_selection_metric():
             return MetricCollection(
                 [Accuracy(**metric_kwargs)], prefix=f"{prefix}selection-"
             )
 
-        self.selection_metrics = SplitMetrics(gen_selection_metric)
+        self.selection_metrics = SplitMetrics(init_selection_metric)
 
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
@@ -94,22 +73,20 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         bs, n_docs = batch["document.input_ids"].shape[:2]
 
         # check that the first document of each question is positive
-        assert torch.all(batch["document.is_positive"][:, 0] == 1)
-        if batch["document.is_positive"].shape[1] > 1:
-            assert torch.all(batch["document.is_positive"][:, 1:] == 0)
+        check_first_doc_positive(batch)
 
-        # flatten documents
+        # flatten documents of shape [bs, n_docs, T] to [bs*n_docs, T]
         batch.update(
-            **self.flatten_documents(
+            **flatten_first_dims(
                 batch,
                 2,
                 keys=["document.input_ids", "document.attention_mask"],
             )
         )
 
-        # expand questions and flatten
+        # expand questions to shape [bs, n_docs, L] and flatten to shape [bs*n_docs, L]
         batch.update(
-            **self.expand_and_flatten(
+            **expand_and_flatten(
                 batch,
                 n_docs,
                 keys=["question.input_ids", "question.attention_mask"],
@@ -121,25 +98,16 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
         # reader loss
         answer_targets: Tensor = batch["answer_idx"]
-        answer_loss = F.cross_entropy(
-            answer_logits.permute(0, 2, 1),
-            answer_targets[:, None].expand(bs, n_docs),
-            reduction="none",
-        ).mean(1)
-
-        answer_loss = batch_reduce(
-            answer_loss, torch.mean
-        )  # keep one loss term per batch element
-
-        # selection loss: here it is assumed that there is a single positive document
-        # and its index is zero
-        select_targets = torch.zeros_like(batch["answer_idx"]).long()
-        select_loss = F.cross_entropy(
-            select_logits, select_targets, reduction="none"
+        answer_loss = self.compute_answer_loss(
+            answer_logits, answer_targets, bs, n_docs
         )
-        select_loss = batch_reduce(
-            select_loss, torch.mean
-        )  # keep one loss term per batch element
+
+        # selection loss
+        # It is assumed that there is a single positive document and its index is zero
+        select_targets = torch.zeros_like(batch["answer_idx"]).long()
+        select_loss, select_targets = self.compute_selection_loss(
+            select_targets, select_logits
+        )
 
         # final loss
         loss = answer_loss + select_loss
@@ -160,25 +128,29 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
             "select_targets": select_targets.detach(),
         }
 
-    @staticmethod
-    def flatten_documents(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
-        output = {}
-        for k in keys:
-            output[k] = batch[k].view(-1, *batch[k].shape[n_dims:])
-        return output
+    def compute_selection_loss(self, select_targets, select_logits):
+        """
+        L =  - log p(idx_pos | docs[pos+neg])
+        """
+        select_loss = F.cross_entropy(
+            select_logits, select_targets, reduction="none"
+        )
+        select_loss = batch_reduce(
+            select_loss, torch.mean
+        )  # keep one loss term per batch element
+        return select_loss, select_targets
 
-    @staticmethod
-    def expand_and_flatten(batch: Batch, n_docs, *, keys: List[str]) -> Batch:
-        output = {}
-        for k in keys:
-            v = batch[k]
-            v = (
-                v[:, None]
-                .expand(v.shape[0], n_docs, *v.shape[1:])
-                .contiguous()
-            )
-            output[k] = v.view(-1, *v.shape[2:])
-        return output
+    def compute_answer_loss(self, answer_logits, answer_targets, bs, n_docs):
+        """L = 1/N_docs \\sum_i - log p(a | q, d_i, A)"""
+        answer_loss = F.cross_entropy(
+            answer_logits.permute(0, 2, 1),
+            answer_targets[:, None].expand(bs, n_docs),
+            reduction="none",
+        ).mean(1)
+        answer_loss = batch_reduce(
+            answer_loss, torch.mean
+        )  # keep one loss term per batch element
+        return answer_loss
 
     def forward_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.

@@ -7,7 +7,6 @@ from typing import Union
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
-from torch import Tensor
 from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
@@ -54,7 +53,7 @@ class BaseModel(LightningModule):
     """
 
     # features required for inference
-    _required_infer_feature_names = []
+    _required_feature_names = []
     # metrics that will be display in the progress bar
     _prog_bar_metrics = []
     # model-prefix for logging
@@ -66,7 +65,7 @@ class BaseModel(LightningModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[DictConfig, BaseEvaluator],
+        evaluator: Optional[Union[DictConfig, BaseEvaluator]],
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -82,7 +81,7 @@ class BaseModel(LightningModule):
         self.bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
         # evaluator: compute the loss and take care of computing and logging the metrics
-        self.evaluator: BaseEvaluator = maybe_instantiate(evaluator)
+        self.evaluator: Optional[BaseEvaluator] = maybe_instantiate(evaluator)
 
     def instantiate_bert(
         self,
@@ -118,15 +117,18 @@ class BaseModel(LightningModule):
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
 
+        if the input batch as the attribute `_mode_` set to true, use
+        the `predict_step` instead.
         """
-        if "input_ids" in batch.keys():
-            # todo: temporary for the index_corpus callback
+        if batch.pop("_mode_", None) == "indexing":
             return self.predict_step(batch, batch_idx, dataloader_idx)
 
         pre_output = self.evaluator(self.forward, batch, split=split)
         return pre_output
 
-    def _step_end(self, pre_output: Batch, *, split, log_data=True) -> Batch:
+    def _step_end(
+        self, pre_output: Batch, *, split: Split, log_data=True
+    ) -> Batch:
         """
         Call the `evaluator.forward_end` method (finalize the loss computation
         and update the metrics) using the `pre_output` data gathered from
@@ -239,3 +241,7 @@ class BaseModel(LightningModule):
 
     def test_epoch_end(self, outputs: List[Any]):
         self._epoch_end(outputs, split=Split.TEST)
+
+    def check_input_features(self, batch):
+        for f in self._required_feature_names:
+            assert f in batch.keys(), f"The feature {f} is required."

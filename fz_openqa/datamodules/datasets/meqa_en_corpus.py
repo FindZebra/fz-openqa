@@ -37,7 +37,7 @@ class MedQaEnCorpusDataset(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "text": datasets.Value("string"),
+                    "document": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -72,4 +72,4 @@ class MedQaEnCorpusDataset(datasets.GeneratorBasedBuilder):
         ]
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
-                yield i, {"text": f.read()}
+                yield i, {"document": f.read()}
