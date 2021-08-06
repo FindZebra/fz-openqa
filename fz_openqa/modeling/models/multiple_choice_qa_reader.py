@@ -11,7 +11,7 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.base import Evaluator
+from fz_openqa.modeling.evaluators.base import BaseEvaluator
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.modeling.layers.heads import cls_head
@@ -35,14 +35,14 @@ class MultipleChoiceQAReader(BaseModel):
         "validation/reader/Accuracy",
     ]
     # prefix for the logged metrics
-    _logging_prefix = "reader/"
+    _model_log_prefix = "reader/"
 
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[Evaluator, DictConfig],
+        evaluator: Union[BaseEvaluator, DictConfig],
         cache_dir: Optional[str] = None,
         hidden_size: int = 256,
         dropout: float = 0,

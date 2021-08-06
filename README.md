@@ -193,7 +193,7 @@ The `tune.py` script allow scheduling and running a set of experiments using `Ra
 ### Module design
 
 All modules should inherit from `BaseModel`, which in turn inherits from `pl.LightningModule`.
-Each module features one `Evaluator` which role is to compute the loss and the metrics.
+Each module features one `BaseEvaluator` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
@@ -209,13 +209,13 @@ The metrics must be implemented in the `_step_end` method in order to avoid erro
 </details>
 
 <details>
-<summary>`Evaluator`</summary>
+<summary>`BaseEvaluator`</summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
 This method is called in the `module._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
-`Evaluator.foward()` method from each device.
+`BaseEvaluator.foward()` method from each device.
 </details>
 
 ### Pesudo-code for Supervised OpenQA

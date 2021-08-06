@@ -12,7 +12,7 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.base import Evaluator
+from fz_openqa.modeling.evaluators.base import BaseEvaluator
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
@@ -20,32 +20,69 @@ from fz_openqa.utils.functional import only_trainable
 
 
 class BaseModel(LightningModule):
+    """
+    This class implements the basics of evaluation, logging and inference using
+    pytorch lightning mechanics.
+
+    ## Main components
+    This class contains 2 main components:
+    * self.bert: the pretrained masked language model
+    * self.evaluator: the object that compute the loss and the evaluation metrics
+
+    ## Pipeline
+    The main data processing flow can be described as follows:
+
+        1.     batch = next(iter(dataloader))               (device=k)
+                            |
+            [   _step(batch): evaluator.forward   ]         (processing on device k)
+                            v
+        2.             pre_output                           (device=k)
+                            |
+                  [ gather (lightning) ]                    (move data to device 0)
+                            v
+        3.              pre_output                            (device=0)
+                            |
+    [ _step_end(pre_output): evaluator.forward_end + log_data ] (processing on device 0)
+                            v
+        4.              output                              (device=0)
+
+
+    ## Metrics:
+    The evaluator keeps track of the metrics using `torchmetrics`.
+    The metrics are updated at each `_step_end` (e.g. keeping track of the true positives and false negatives).
+    The metrics are computed for the whole epoch in `_epoch_end`.
+    """
+
     # features required for inference
     _required_infer_feature_names = []
     # metrics that will be display in the progress bar
     _prog_bar_metrics = []
-    # prefix for the logged metrics
-    # all metrics are of the form "split/_logging_prefix/metric_name"
-    _logging_prefix = ""
+    # model-prefix for logging
+    # all metrics are of the form "split/_model_log_prefix/metric_name"
+    _model_log_prefix = ""
 
     def __init__(
         self,
         *,
+        tokenizer: PreTrainedTokenizerFast,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        evaluator: Union[DictConfig, BaseEvaluator],
         lr: float = 0.001,
         weight_decay: float = 0.0005,
-        evaluator: Optional[Evaluator] = None,
         **kwargs,
     ):
         super().__init__()
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
-        self.save_hyperparameters()
+        # `lr` and `weight_decay` are registered in .hparams
+        self.save_hyperparameters(ignore=["evaluator", "tokenizer", "bert"])
 
-        # evaluator: compute the loss and the metrics to be logged in
-        self.evaluator: Evaluator = maybe_instantiate(
-            self.hparams.pop("evaluator")
-        )
+        # instantiate the pretrained language model
+        self.bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
+
+        # evaluator: compute the loss and take care of computing and logging the metrics
+        self.evaluator: BaseEvaluator = maybe_instantiate(evaluator)
 
     def instantiate_bert(
         self,
@@ -53,43 +90,51 @@ class BaseModel(LightningModule):
         bert: Union[BertPreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
         cache_dir: Optional[str] = None,
-    ):
-        """Instantiate a bert model as an attribute, and extend its embeddings to match the tokenizer"""
+    ) -> BertPreTrainedModel:
+        """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
 
         self.vocabulary_size = len(tokenizer.get_vocab())
         self.pad_token_id = tokenizer.pad_token_id
 
-        self.bert: BertPreTrainedModel = maybe_instantiate(
+        bert: BertPreTrainedModel = maybe_instantiate(
             bert, cache_dir=cache_dir
         )
         # extend BERT embeddings for the added special tokens
         # TODO: CRITICAL: check this does not affect the model
         #  this might explain the drop of performances
-        self.bert.resize_token_embeddings(len(tokenizer))
+        bert.resize_token_embeddings(len(tokenizer))
+        return bert
 
     def _step(
         self,
-        batch: Any,
+        batch: Batch,
         batch_idx: int,
         dataloader_idx: Optional[int],
         *,
         split: Split,
         **kwargs,
     ) -> Batch:
-        """This step is performed separately on each device.
-        Do the forward pass and compute the loss.
+        """
+        Perform the model forward pass and compute the loss or pre loss terms.
+        !! This step is performed separately on each device. !!
+
         """
         if "input_ids" in batch.keys():
             # todo: temporary for the index_corpus callback
             return self.predict_step(batch, batch_idx, dataloader_idx)
 
-        output = self.evaluator(self.forward, batch, split=split)
-        return output
+        pre_output = self.evaluator(self.forward, batch, split=split)
+        return pre_output
 
-    def _step_end(self, output: Batch, *, split, log_data=True) -> Batch:
-        """At this step, the output is gathered from all devices.
-        Update the metrics and average the loss."""
-        output = self.evaluator.forward_end(output, split)
+    def _step_end(self, pre_output: Batch, *, split, log_data=True) -> Batch:
+        """
+        Call the `evaluator.forward_end` method (finalize the loss computation
+        and update the metrics) using the `pre_output` data gathered from
+        all devices.
+
+        !! This step is performed on device 0 !!
+        """
+        output = self.evaluator.forward_end(pre_output, split)
 
         if log_data:
             # potentially log the loss and
@@ -101,7 +146,10 @@ class BaseModel(LightningModule):
     def _epoch_end(
         self, outputs: List[Any], *, split: Split, log_data=True
     ) -> Batch:
-        # `outputs` is a list of dicts returned from `training_step()`
+        """
+        1. Compute the metrics for the whole epoch using `evaluator.compute_metrics`
+        2. Log the metrics for the whole epoch
+        """
         assert self.evaluator is not None
         metrics = self.evaluator.compute_metrics(split=split)
         if log_data:
@@ -111,15 +159,19 @@ class BaseModel(LightningModule):
 
     def log_data(
         self,
-        data: Dict[str, Tensor],
+        data: Batch,
         prefix: str = "",
         on_step=False,
         on_epoch=True,
         sync_dist=True,
     ):
-        # log 'split' metrics
+        """
+        Log all data from the input Batch. Only tensors with one elements are logged.
+        Each key is formatted as: `prefix/_model_log_prefix/key` where prefix is usually
+        the split id.
+        """
         for k, v in data.items():
-            key = f"{prefix}{self._logging_prefix}{k}"
+            key = f"{prefix}{self._model_log_prefix}{k}"
             if is_loggable(v):
                 self.log(
                     key,

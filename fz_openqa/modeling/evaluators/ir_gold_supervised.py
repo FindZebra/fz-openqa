@@ -1,44 +1,19 @@
 from typing import Any
-from typing import Dict
 
 import torch
 from datasets import Split
 from torch import nn
 from torch.nn import functional as F
-from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from fz_openqa.modeling.evaluators.base import Evaluator
+from fz_openqa.modeling.evaluators.base import BaseEvaluator
+from fz_openqa.modeling.evaluators.metrics import SafeMetricCollection
+from fz_openqa.modeling.evaluators.metrics import SplitMetrics
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
-class SafeMetricCollection(MetricCollection):
-    """A safe implementation of MetricCollection, so top-k accuarcy  won't
-    raise an error if the batch size is too small."""
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        for _, m in self.items(keep_base=True):
-            preds, targets = args
-            if (
-                isinstance(m, Accuracy)
-                and m.top_k is not None
-                and preds.shape[-1] <= m.top_k
-            ):
-                pass
-            else:
-                m_kwargs = m._filter_kwargs(**kwargs)
-                m.update(preds, targets, **m_kwargs)
-
-    def compute(self) -> Dict[str, Any]:
-        return {
-            k: m.compute()
-            for k, m in self.items()
-            if not isinstance(m, Accuracy) or m.mode is not None
-        }
-
-
-class InformationRetrievalGoldSupervised(Evaluator):
+class InformationRetrievalGoldSupervised(BaseEvaluator):
     """
     Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
@@ -64,16 +39,13 @@ class InformationRetrievalGoldSupervised(Evaluator):
 
     def init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-
-        # todo: check if `dist_sync_on_step` is necessary
-        # see https://torchmetrics.readthedocs.io/en/stable/pages/overview.html#metrics-in-dataparallel-dp-mode
-
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 
         def _name(k):
             return f"top{k}_Accuracy" if k is not None else "Accuracy"
 
-        def gen_metric_one_split():
+        def gen_metric():
+            """generate a collection of topk accuracies."""
             return SafeMetricCollection(
                 {
                     _name(k): Accuracy(top_k=k, **metric_kwargs)
@@ -82,15 +54,10 @@ class InformationRetrievalGoldSupervised(Evaluator):
                 prefix=prefix,
             )
 
-        self.metrics = nn.ModuleDict(
-            {
-                f"_{split}": gen_metric_one_split()
-                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
-            }
-        )
+        self.metrics = SplitMetrics(gen_metric)
 
     def forward(
-        self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
+        self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
     ) -> Batch:
         self.check_batch_type(batch)
         self.check_feature_names(batch)

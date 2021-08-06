@@ -54,7 +54,7 @@ class MultipleChoiceQA(BaseModel):
         "validation/retriever/top5_Accuracy",
     ]
     # prefix for the logged metrics
-    _logging_prefix = ""
+    _model_log_prefix = ""
 
     def __init__(
         self,

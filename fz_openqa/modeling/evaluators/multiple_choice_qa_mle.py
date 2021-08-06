@@ -2,6 +2,7 @@ from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import torch
@@ -12,7 +13,8 @@ from torch.nn import functional as F
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from .base import Evaluator
+from .base import BaseEvaluator
+from .metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
@@ -44,7 +46,7 @@ class NestedMetricCollections(MetricCollection):
             metric.reset()
 
 
-class MultipleChoiceQaMaximumLikelihood(Evaluator):
+class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
     """
     Evaluates the Reader model `p(a_i | q, d_1,...d_m, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
@@ -54,7 +56,6 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
     where a is the index of the true answer.
     """
 
-    text_key = "question"
     _required_eval_feature_names = [
         "answer_idx",
         "question.input_ids",
@@ -66,30 +67,21 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
         "answer_choices.attention_mask",
     ]
 
-    def init_metrics(self, prefix: str):
-        """Initialize the metrics for each split. Compute the accuracy for the document selection model
-        and for the answer model"""
+    def init_metrics(self, prefix: str = ""):
+        """Initialize a Metric for each split=train/validation/test"""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 
-        def gen_metric_one_split():
-            return NestedMetricCollections(
-                {
-                    "answer": MetricCollection(
-                        [Accuracy(**metric_kwargs)], prefix=f"{prefix}"
-                    ),
-                    "selection": MetricCollection(
-                        [Accuracy(**metric_kwargs)],
-                        prefix=f"{prefix}selection-",
-                    ),
-                }
+        def gen_answer_metric():
+            return MetricCollection([Accuracy(**metric_kwargs)], prefix=prefix)
+
+        self.answer_metrics = SplitMetrics(gen_answer_metric)
+
+        def gen_selection_metric():
+            return MetricCollection(
+                [Accuracy(**metric_kwargs)], prefix=f"{prefix}selection-"
             )
 
-        self.metrics = nn.ModuleDict(
-            {
-                f"_{split}": gen_metric_one_split()
-                for split in [Split.TRAIN, Split.VALIDATION, Split.TEST]
-            }
-        )
+        self.selection_metrics = SplitMetrics(gen_selection_metric)
 
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
@@ -188,7 +180,7 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
             output[k] = v.view(-1, *v.shape[2:])
         return output
 
-    def forward_end(self, output: Batch, split: str) -> Any:
+    def forward_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
 
@@ -216,19 +208,33 @@ class MultipleChoiceQaMaximumLikelihood(Evaluator):
             output.pop(k, None)
         return output
 
-    def update_metrics(self, output: Batch, split: str) -> None:
+    def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         answer_logits, answer_targets = (
             output.get(k, None) for k in ("answer_logits", "answer_targets")
         )
+        self.answer_metrics.update(split, answer_logits, answer_targets)
+
         select_logits, select_targets = (
             output.get(k, None) for k in ("select_logits", "select_targets")
         )
+        if select_targets is not None:
+            self.answer_metrics.update(split, answer_logits, answer_targets)
 
-        data = {
-            "answer": (answer_logits, answer_targets),
-            "selection": (select_logits, select_targets),
+    def reset_metrics(self, split: Optional[Split] = None) -> None:
+        """
+        Reset the metrics corresponding to `split` if provided, else
+        reset all the metrics.
+        """
+        self.answer_metrics.reset(split)
+        self.selection_metrics.reset(split)
+
+    def compute_metrics(self, split: Optional[Split] = None) -> Batch:
+        """
+        Compute the metrics for the given `split` else compute the metrics for all splits.
+        The metrics are return after computation.
+        """
+        return {
+            **self.answer_metrics.compute(split),
+            **self.selection_metrics.compute(split),
         }
-        if select_targets is None:
-            data.pop("selection")
-        self.get_metric(split).update(data)
