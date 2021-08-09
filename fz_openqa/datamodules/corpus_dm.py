@@ -1,11 +1,13 @@
 import os
 import re
 import shutil
+from collections import defaultdict
 from functools import partial
 from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
+from typing import Tuple
 from typing import Union
 
 import datasets
@@ -116,6 +118,7 @@ class CorpusDataModule(BaseDataModule):
             max_length=self.max_length,
             return_token_type_ids=False,
             add_special_tokens=False,
+            return_offsets_mapping=True,
         )
         dataset = dataset.map(
             fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
@@ -132,20 +135,30 @@ class CorpusDataModule(BaseDataModule):
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )
-        dataset = dataset.remove_columns(["document"])
         dataset = dataset.map(
             gen_passages,
             batched=True,
             num_proc=self.num_proc,
             desc="Extracting passages",
         )
-        dataset.set_format(type="torch", columns=self.pt_attributes)
+
+        # dropping unnecessary columns and cast into tensors
+        dataset = dataset.remove_columns(["offset_mapping"])
+        dataset.set_format(
+            type="torch", columns=self.pt_attributes, output_all_columns=True
+        )
 
         # append the prefix "document."
-        dataset = dataset.rename_column("input_ids", "document.input_ids")
-        dataset = dataset.rename_column(
-            "attention_mask", "document.attention_mask"
-        )
+        dataset = dataset.rename_column("document", "document.text")
+        for attr in [
+            "input_ids",
+            "attention_mask",
+            "passage_mask",
+            "idx",
+            "passage_idx",
+        ]:
+            dataset = dataset.rename_column(attr, f"document.{attr}")
+
         return dataset
 
     @staticmethod
@@ -159,16 +172,20 @@ class CorpusDataModule(BaseDataModule):
         pad_token_id: int,
         verbose: bool = True,
     ) -> Dict[str, List]:
-        # todo: refactor and output text
+
         if verbose:
             lens = list(map(len, examples["input_ids"]))
             rich.print(
-                f">> @CorpusDataModule.generate_windows: Number of tokens per documents: "
+                f">> @CorpusDataModule.generate_passages: Number of tokens per documents: "
                 f"mean={np.mean(lens):.1f}, std={np.std(lens):.1f} [{min(lens)} - {max(lens)}]"
             )
 
-        # extend idxs, the attention mask and compute the passage masks and add passage_ids
-        base_args = {"size": size, "stride": stride}
+        # define the arguments of the method `gen_passages`that are valid
+        # for all attributes
+        all_attributes_args = {"size": size, "stride": stride}
+
+        # do a first to generate the passages for the attribute "attention_mask"
+        # while generating the  passage attributes ("passage_idx", "passage_mask")
         args = {
             "pad_token": 0,
             "start_tokens": [0 for _ in start_tokens],
@@ -179,10 +196,12 @@ class CorpusDataModule(BaseDataModule):
                 (i, w_i, w, m)
                 for i, ex in zip(examples["idx"], examples["attention_mask"])
                 for w_i, (w, m) in enumerate(
-                    gen_passages(ex, **args, **base_args)
+                    gen_passages(ex, **args, **all_attributes_args)
                 )
             ]
         )
+
+        # create the output
         output = {
             "idx": list(idxs),
             "passage_idx": list(w_idxs),
@@ -190,7 +209,8 @@ class CorpusDataModule(BaseDataModule):
             "passage_mask": list(window_mask),
         }
 
-        # update "'input_ids' (potentially list other attributes here)
+        # do another pass to generate the passages for the attributes
+        # "input_ids" and "offset_mapping", other attributes can be listed here.
         args_dict = {
             "input_ids": {
                 "pad_token": pad_token_id,
@@ -198,19 +218,49 @@ class CorpusDataModule(BaseDataModule):
                 "start_tokens": start_tokens,
                 "end_tokens": end_tokens,
             },
+            "offset_mapping": {
+                "pad_token": [-1, -1],
+                "return_mask": False,
+                "start_tokens": [[-1, -1] for _ in start_tokens],
+                "end_tokens": [[-1, -1] for _ in start_tokens],
+            },
         }
         output.update(
             {
                 k: [
                     w
                     for ex in examples[k]
-                    for w in gen_passages(ex, **base_args, **args)
+                    for w in gen_passages(ex, **all_attributes_args, **args)
                 ]
                 for k, args in args_dict.items()
             }
         )
+        # extract document.text
+        output["document"] = [
+            CorpusDataModule.extract_passage_text(
+                examples["document"][idx], ofs_ids
+            )
+            for idx, ofs_ids in zip(idxs, output["offset_mapping"])
+        ]
+
+        # drop attributes
+        for k in ["offset_mapping"]:
+            output[k] = [None for _ in output["input_ids"]]
 
         return output
+
+    @staticmethod
+    def extract_passage_text(
+        text: str, offset_mapping: List[Tuple[int, int]]
+    ) -> str:
+        """
+        Extract the text passage from the original document
+        given the offset mapping of the passage
+        """
+        indexes = [
+            x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0
+        ]
+        return text[min(indexes) : max(indexes)]
 
     @rank_zero_only
     def display_sample(self):
@@ -220,8 +270,7 @@ class CorpusDataModule(BaseDataModule):
         print(console_width * "=")
         print("=== Training Batch ===")
         print(console_width * "-")
-        for k, v in batch.items():
-            rich.print(f"   - {k}: {v.shape} <{v.dtype}>")
+        pprint_batch(batch)
         print(console_width * "=")
         print("=== Samples ===")
         for i in range(min(3, len(list(batch.values())[0]))):
@@ -243,23 +292,57 @@ class CorpusDataModule(BaseDataModule):
     ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
+
+        # get the raw text inputs, extract and collate
+        examples, text_outputs = self.extract_and_collate_text_atttributes(
+            examples
+        )
+
+        # collate the tensor attributes: input_ids, idx, ...
+        tensor_outputs = self.collate_tensor_attributes(
+            examples, key="document"
+        )
+
+        return {**tensor_outputs, **text_outputs}
+
+    def collate_tensor_attributes(
+        self, examples: List[Batch], *, key: str
+    ) -> Batch:
+        """Collate the encodings for the given key."""
+
+        # remove the key, so the tokenizer receives the attributes without the key prefix
         tokenizer_inputs = [
-            {k.replace("document.", ""): v for k, v in ex.items()}
+            {
+                k.replace(f"{key}.", ""): v
+                for k, v in ex.items()
+                if f"{key}" in k
+            }
             for ex in examples
         ]
-        output = self.tokenizer.pad(tokenizer_inputs)
-        output = {
-            f"document.{k}" if k in ["input_ids", "attention_mask"] else k: v
-            for k, v in output.items()
-        }
 
+        # collate using the tokenizer
+        output = self.tokenizer.pad(tokenizer_inputs)
+
+        # re-append the key prefix
+        output = {f"{key}.{k}": v for k, v in output.items()}
+
+        # todo: cleanup this, looks unecessary
+        # truncate the output tensors
+        # print(f">> before truncate: {output['document.input_ids'].shape}")
+        # output = self.truncate_examples_to_max_length(output, key="document")
+        # print(f">> after truncate: {output['document.input_ids'].shape}")
+
+        return output
+
+    def truncate_examples_to_max_length(self, output, *, key: str):
         # infer `max_length`
-        tokens = [b["document.input_ids"] for b in examples]
+        tokens = [t for t in output[f"{key}.input_ids"]]
         pad_tok = self.tokenizer.pad_token_id
         max_length = len(tokens[0]) - min(
             map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
         )
 
+        # truncate to `max_length`
         def maybe_truncate(x: Any, max_length: int):
             """truncate sequential attributes to `max_length`"""
             if not (isinstance(x, torch.Tensor) and len(x.shape) == 2):
@@ -267,7 +350,25 @@ class CorpusDataModule(BaseDataModule):
 
             return x[:, :max_length]
 
-        return {k: maybe_truncate(v, max_length) for k, v in output.items()}
+        tensor_outpus = {
+            k: maybe_truncate(v, max_length) for k, v in output.items()
+        }
+        return tensor_outpus
+
+    def extract_and_collate_text_atttributes(
+        self, examples: List[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
+        """
+        Extract text fields from a list of examples and return as Batch.
+        The text attributes are removed from the original examples
+        """
+        text_keys = [key for key in examples[0].keys() if ".text" in key]
+        text_outputs = defaultdict(list)
+        for ex in examples:
+            for key in text_keys:
+                text_outputs[key] += [ex.pop(key)]
+
+        return examples, text_outputs
 
     @staticmethod
     @torch.no_grad()
@@ -348,6 +449,12 @@ class CorpusDataModule(BaseDataModule):
             return dataset.select(range(1))
         else:
             raise NotImplementedError
+
+    def pprint(self):
+        """Pretty print the dtaset"""
+        rich.print(
+            f">> Dataset: (use_subset={self.use_subset}): \n" f"{self.dataset}"
+        )
 
 
 class MedQaEnDataModule(CorpusDataModule):
