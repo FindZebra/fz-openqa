@@ -188,6 +188,17 @@ The `tune.py` script allow scheduling and running a set of experiments using `Ra
 
 </details>
 
+ <details>
+<summary>Running offline</summary>
+
+When working without internet, datasets and models need to be cached, the following flags prevent HuggingFace from throwing an error:
+
+```shell
+HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
+ ```
+
+</details>
+
 ## Documentation
 
 ### Module design
