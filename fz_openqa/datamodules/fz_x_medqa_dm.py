@@ -1,3 +1,4 @@
+import random
 import shutil
 from functools import partial
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Union
 import datasets
 import rich
 import torch
+from datasets import Split
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
@@ -167,6 +169,22 @@ class FZxMedQADataModule(BaseDataModule):
             dataset = dataset.filter(
                 lambda x: x["document.rank"] == 0 and x["document.is_positive"]
             )
+
+        return dataset
+
+    @staticmethod
+    def filter_question_id(ids: List[int], row: Dict[str, Any]) -> bool:
+        return row["question.idx"] in ids
+
+    @staticmethod
+    def take_subset(dataset: HgDataset) -> HgDataset:
+        """Take a subset of the dataset and return."""
+        subset_size = {Split.TRAIN: 5, Split.VALIDATION: 2, Split.TEST: 2}
+        for key, dset in dataset.items():
+            questions_ids = dset["question.idx"]
+            selected_ids = random.sample(questions_ids, k=subset_size[key])
+            fn = partial(FZxMedQADataModule.filter_question_id, selected_ids)
+            dataset[key] = dset.filter(fn)
 
         return dataset
 

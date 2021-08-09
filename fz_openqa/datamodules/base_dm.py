@@ -149,8 +149,6 @@ class BaseDataModule(LightningDataModule):
         self.text_data: HgDataset = self.load_base_dataset()
         self.text_data = self.filter_dataset(self.text_data)
         if self.use_subset:
-            if self.sampler_cfg is not None:
-                raise NotImplementedError
             self.text_data = self.take_subset(self.text_data)
         self.dataset = self.preprocess_dataset(self.text_data)
 
