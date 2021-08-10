@@ -106,11 +106,8 @@ class FZxMedQADataModule(BaseDataModule):
         q_encodings = tokenizer(questions, **tokenizer_kwargs)
         d_encodings = tokenizer(documents, **tokenizer_kwargs)
 
-        # store the raw text
-        output = {
-            "question.text": examples["question"],
-            "document.text": examples["document"],
-        }
+        # prepare the output
+        output = {}
 
         # append the "question" and "document" prefix to the
         # "input_ids" and "attention masts from the q/d_encodings
@@ -149,6 +146,11 @@ class FZxMedQADataModule(BaseDataModule):
         dataset = dataset.map(
             fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
         )
+
+        # rename text attributes
+        for key in ["document", "question", "answer_choices"]:
+            dataset = dataset.rename_column(key, f"{key}.text")
+
         # transform attributes to tensors
         attrs = ["input_ids", "attention_mask"]
         columns = ["question", "document", "answer_"]
@@ -159,8 +161,9 @@ class FZxMedQADataModule(BaseDataModule):
         ]
         self.pt_attributes += PT_SIMPLE_ATTRIBUTES
         dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=False
+            type="torch", columns=self.pt_attributes, output_all_columns=True
         )
+
         return dataset
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
@@ -232,15 +235,27 @@ class FZxMedQADataModule(BaseDataModule):
                 answer_idx: tensor of shape [N,]
         }
         """
+        output = {}
 
         # convert as List of Lists if that's not the case (general case)
         if not isinstance(examples[0], list):
             examples = [[ex] for ex in examples]
 
+        # gather the raw text attributes
+        output["document.text"] = [
+            [ex["document.text"] for ex in exs] for exs in examples
+        ]
+        output["question.text"] = [exs[0]["question.text"] for exs in examples]
+        output["answer_choices.text"] = [
+            exs[0]["answer_choices.text"] for exs in examples
+        ]
+
         # collate the question and answers using the first example of each batch element
         first_examples = [ex[0] for ex in examples]
-        output = FZxMedQADataModule.collate_qa(
-            first_examples, tokenizer=tokenizer
+        output.update(
+            **FZxMedQADataModule.collate_qa(
+                first_examples, tokenizer=tokenizer
+            )
         )
 
         # collate documents
