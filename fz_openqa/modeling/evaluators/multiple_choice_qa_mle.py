@@ -112,9 +112,10 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         # final loss
         loss = answer_loss + select_loss
 
-        # select ``answer_logits`` corresponding to the argmax of th ``select_logits``
+        # select ``answer_logits`` corresponding to the true index
         # to return for the computation of the accuracy
-        selected = select_logits.argmax(-1)
+        # selected_ = select_logits.argmax(-1)
+        selected = select_targets
         _index = selected.view(bs, 1, 1).expand(bs, 1, answer_logits.shape[-1])
         answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
 
