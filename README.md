@@ -229,6 +229,22 @@ This method is called in the `module._step()` method
 `BaseEvaluator.foward()` method from each device.
 </details>
 
+### Data generation pipeline
+
+Generating the positive and hard negative examples will be done dynamically based on:
+
+1. a passage extractor (fixed legnth, paragraphs, ...)
+2. a retriever model (sparse or dense)
+3. a selection strategy (exact match, meta-map, similarity score, ...)
+
+The whole pipeline is pictured bellow:
+<details>
+<summary>Illustration</summary>
+
+![Data generation pipeline](.assets/neg+pos-gen-pipeline.png)
+
+</details>
+
 ### Pesudo-code for Supervised OpenQA
 
 The basic End-to-end OpenQA model relies on a single pretrained BERT model. The model functions as follows:
