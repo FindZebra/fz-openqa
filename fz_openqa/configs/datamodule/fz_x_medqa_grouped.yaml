@@ -1,5 +1,6 @@
 defaults:
-  - sampler: grouped.yaml
+  - sampler/grouped@train_sampler
+  - sampler/grouped@eval_sampler
 
 _target_: fz_openqa.datamodules.fz_x_medqa_dm.FZxMedQADataModule
 cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
@@ -14,6 +15,14 @@ num_proc: 1
 verbose: ${verbose}
 filter_gold: False
 
-sampler:
+train_sampler:
   n_pos: 1
   n_neg: 1
+  pos_max_rank: 0
+  neg_max_rank: 10
+
+eval_sampler:
+  n_pos: 1
+  n_neg: 1
+  pos_max_rank: 0
+  neg_max_rank: 10

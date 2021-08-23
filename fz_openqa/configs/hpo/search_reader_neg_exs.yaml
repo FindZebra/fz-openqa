@@ -13,8 +13,8 @@ defaults:
 
 base:
   name: search_reader
-  target_metric: validation/reader/loss
-  target_mode: min
+  target_metric: validation/reader/Accuracy
+  target_mode: max
   # resources
   gpus: 4
   cpus: 16
@@ -38,9 +38,9 @@ experiment:
   trainer.checkpoint_callback: True
   logger.wandb.group: ${base.name}
   callbacks: tune.yaml
-  callbacks.model_checkpoint.cleanup_threshold: 10 # todo
-  datamodule.train_batch_size: 16
-  datamodule.eval_batch_size: 200
+  callbacks.model_checkpoint.cleanup_threshold: 0.7
+  datamodule.train_batch_size: 8
+  datamodule.eval_batch_size: 128
   datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
   trainer.gpus: ${base.gpus}
@@ -59,4 +59,4 @@ runner:
         model.bert.hidden_dropout_prob: 0
         model.bert.attention_probs_dropout_prob: 0.3
         seed: 14
-        datamodule.sampler.pos_max_rank: 10
+        datamodule.train_sampler.n_neg: 0

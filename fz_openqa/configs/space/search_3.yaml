@@ -40,7 +40,7 @@ seed:
   _target_: ray.tune.randint
   lower: 1
   upper: 20
-datamodule.sampler.pos_max_rank:
+datamodule.train_sampler.n_neg:
   _target_: ray.tune.randint
   lower: 0
-  upper: 10
+  upper: 4

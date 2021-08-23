@@ -71,7 +71,8 @@ class BaseDataModule(LightningDataModule):
         num_proc: int = 1,
         verbose: bool = True,
         corpus: Optional["BaseDataModule"] = None,
-        sampler: Optional[DictConfig] = None,
+        train_sampler: Optional[DictConfig] = None,
+        eval_sampler: Optional[DictConfig] = None,
         **kwargs,
     ):
         super().__init__()
@@ -96,8 +97,15 @@ class BaseDataModule(LightningDataModule):
         self.text_data: Optional[HgDataset] = None
 
         # sampler
-        self.sampler_cfg = (
-            dict(sampler) if sampler is not None and len(sampler) else None
+        self.train_sampler_cfg = (
+            dict(train_sampler)
+            if train_sampler is not None and len(train_sampler)
+            else None
+        )
+        self.eval_sampler_cfg = (
+            dict(eval_sampler)
+            if eval_sampler is not None and len(eval_sampler)
+            else None
         )
 
     def tokenize_examples(
@@ -199,8 +207,9 @@ class BaseDataModule(LightningDataModule):
 
     def train_dataloader(self):
         dset = self.dataset[Split.TRAIN]
-        if self.sampler_cfg is not None:
-            dset = instantiate(self.sampler_cfg, dataset=dset)
+        if self.train_sampler_cfg is not None:
+            dset = instantiate(self.train_sampler_cfg, dataset=dset)
+
         return DataLoader(
             dataset=dset,
             batch_size=self.train_batch_size,
@@ -213,8 +222,9 @@ class BaseDataModule(LightningDataModule):
 
     def _eval_loader(self, split):
         dset = self.dataset[split]
-        if self.sampler_cfg is not None:
-            dset = instantiate(self.sampler_cfg, dataset=dset)
+        if self.eval_sampler_cfg is not None:
+            dset = instantiate(self.eval_sampler_cfg, dataset=dset)
+
         return DataLoader(
             dataset=dset,
             batch_size=self.eval_batch_size,
