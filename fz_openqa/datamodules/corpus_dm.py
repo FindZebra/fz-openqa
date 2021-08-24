@@ -24,6 +24,7 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 
 from .base_dm import BaseDataModule
+from .collate import collate_and_pad_attributes
 from .datasets import file_corpus
 from .datasets import meqa_en_corpus
 from .utils import gen_passages
@@ -191,26 +192,31 @@ class CorpusDataModule(BaseDataModule):
             "start_tokens": [0 for _ in start_tokens],
             "end_tokens": [0 for _ in end_tokens],
         }
-        idxs, w_idxs, attention_mask, window_mask = zip(
+        doc_idxs, pas_idxs, attention_masks, passage_masks = zip(
             *[
-                (i, w_i, w, m)
-                for i, ex in zip(examples["idx"], examples["attention_mask"])
-                for w_i, (w, m) in enumerate(
-                    gen_passages(ex, **args, **all_attributes_args)
+                (doc_idx, pas_idx, attention_mask, passage_mask)
+                for doc_idx, ex in zip(
+                    examples["idx"], examples["attention_mask"]
+                )
+                for pas_idx, (attention_mask, passage_mask) in enumerate(
+                    gen_passages(
+                        ex, **args, **all_attributes_args, return_mask=True
+                    )
                 )
             ]
         )
 
-        # create the output
+        # instantiate the output
         output = {
-            "idx": list(idxs),
-            "passage_idx": list(w_idxs),
-            "attention_mask": list(attention_mask),
-            "passage_mask": list(window_mask),
+            "idx": list(doc_idxs),
+            "passage_idx": list(pas_idxs),
+            "attention_mask": list(attention_masks),
+            "passage_mask": list(passage_masks),
         }
 
         # do another pass to generate the passages for the attributes
         # "input_ids" and "offset_mapping", other attributes can be listed here.
+        # this time the attribute `passage_mask` is not returned.
         args_dict = {
             "input_ids": {
                 "pad_token": pad_token_id,
@@ -228,30 +234,32 @@ class CorpusDataModule(BaseDataModule):
         output.update(
             {
                 k: [
-                    w
+                    passage_attr
                     for ex in examples[k]
-                    for w in gen_passages(ex, **all_attributes_args, **args)
+                    for passage_attr in gen_passages(
+                        ex, **all_attributes_args, **args
+                    )
                 ]
                 for k, args in args_dict.items()
             }
         )
         # extract document.text
         output["document"] = [
-            CorpusDataModule.extract_passage_text(
+            CorpusDataModule.extract_passage_text_from_doc(
                 examples["document"][idx], ofs_ids
             )
-            for idx, ofs_ids in zip(idxs, output["offset_mapping"])
+            for idx, ofs_ids in zip(doc_idxs, output["offset_mapping"])
         ]
 
-        # drop attributes
+        # drop unnecessary attributes
         for k in ["offset_mapping"]:
             output[k] = [None for _ in output["input_ids"]]
 
         return output
 
     @staticmethod
-    def extract_passage_text(
-        text: str, offset_mapping: List[Tuple[int, int]]
+    def extract_passage_text_from_doc(
+        document: str, offset_mapping: List[Tuple[int, int]]
     ) -> str:
         """
         Extract the text passage from the original document
@@ -260,7 +268,7 @@ class CorpusDataModule(BaseDataModule):
         indexes = [
             x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0
         ]
-        return text[min(indexes) : max(indexes)]
+        return document[min(indexes) : max(indexes)]
 
     @rank_zero_only
     def display_sample(self):
@@ -294,45 +302,16 @@ class CorpusDataModule(BaseDataModule):
         Concatenating sequences with different length requires padding them."""
 
         # get the raw text inputs, extract and collate
-        examples, text_outputs = self.extract_and_collate_text_atttributes(
+        examples, text_outputs = self.extract_and_collate_text_attributes(
             examples
         )
 
         # collate the tensor attributes: input_ids, idx, ...
-        tensor_outputs = self.collate_tensor_attributes(
-            examples, key="document"
+        tensor_outputs = collate_and_pad_attributes(
+            examples, tokenizer=self.tokenizer, key="document"
         )
 
         return {**tensor_outputs, **text_outputs}
-
-    def collate_tensor_attributes(
-        self, examples: List[Batch], *, key: str
-    ) -> Batch:
-        """Collate the encodings for the given key."""
-
-        # remove the key, so the tokenizer receives the attributes without the key prefix
-        tokenizer_inputs = [
-            {
-                k.replace(f"{key}.", ""): v
-                for k, v in ex.items()
-                if f"{key}" in k
-            }
-            for ex in examples
-        ]
-
-        # collate using the tokenizer
-        output = self.tokenizer.pad(tokenizer_inputs)
-
-        # re-append the key prefix
-        output = {f"{key}.{k}": v for k, v in output.items()}
-
-        # todo: cleanup this, looks unecessary
-        # truncate the output tensors
-        # print(f">> before truncate: {output['document.input_ids'].shape}")
-        # output = self.truncate_examples_to_max_length(output, key="document")
-        # print(f">> after truncate: {output['document.input_ids'].shape}")
-
-        return output
 
     def truncate_examples_to_max_length(self, output, *, key: str):
         # infer `max_length`
@@ -355,11 +334,13 @@ class CorpusDataModule(BaseDataModule):
         }
         return tensor_outpus
 
-    def extract_and_collate_text_atttributes(
-        self, examples: List[Dict[str, Any]]
+    @staticmethod
+    def extract_and_collate_text_attributes(
+        examples: List[Dict[str, Any]]
     ) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
         """
-        Extract text fields from a list of examples and return as Batch.
+        Extract text fields (e.g. `document.text`) from a list of Examples
+        and return all text fields as a Batch `{'document.text': ["...", "...", ...]}`.
         The text attributes are removed from the original examples
         """
         text_keys = [key for key in examples[0].keys() if ".text" in key]
