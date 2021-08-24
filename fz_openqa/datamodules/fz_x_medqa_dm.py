@@ -22,12 +22,11 @@ from .collate import collate_nested_examples
 from .collate import collate_simple_attributes_by_key
 from .collate import extract_and_collate_attributes_as_list
 from .datasets import fz_x_medqa
-from .utils import nested_list
+from .utils import add_spec_token
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer_idx",
@@ -36,19 +35,6 @@ PT_SIMPLE_ATTRIBUTES = [
     "question.idx",
     "idx",
 ]
-
-
-def add_spec_token(
-    special_token: str,
-    text: str,
-):
-    """
-    This functions append a special token to a text such that output = special_token+text.
-    The pretrained tokenizer with registered special tokens will encode the output as:
-    [CLS][SPEC][ text tokens ][SEP]
-    """
-    assert special_token in [QUERY_TOKEN, ANS_TOKEN, DOC_TOKEN]
-    return f"{special_token}{text}"
 
 
 class FZxMedQADataModule(BaseDataModule):
@@ -75,6 +61,7 @@ class FZxMedQADataModule(BaseDataModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         max_length: Optional[int],
+        add_encoding_tokens: bool = True,
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         examples = {
@@ -102,11 +89,17 @@ class FZxMedQADataModule(BaseDataModule):
         }
 
         # process questions and documents
-        questions = list(
-            map(partial(add_spec_token, QUERY_TOKEN), examples["question"])
+        questions = (
+            list(
+                map(partial(add_spec_token, QUERY_TOKEN), examples["question"])
+            )
+            if add_encoding_tokens
+            else examples["question"]
         )
-        documents = list(
-            map(partial(add_spec_token, DOC_TOKEN), examples["document"])
+        documents = (
+            list(map(partial(add_spec_token, DOC_TOKEN), examples["document"]))
+            if add_encoding_tokens
+            else examples["document"]
         )
         q_encodings = tokenizer(questions, **tokenizer_kwargs)
         d_encodings = tokenizer(documents, **tokenizer_kwargs)
@@ -124,7 +117,11 @@ class FZxMedQADataModule(BaseDataModule):
                 output[f"{prefix}.{k}"] = v
 
         # process answers
-        add_answ_token = partial(add_spec_token, ANS_TOKEN)
+        add_answ_token = (
+            partial(add_spec_token, ANS_TOKEN)
+            if add_encoding_tokens
+            else lambda x: x
+        )
         n_choices = len(examples["answer_choices"][0])
         answer_encodings = [
             tokenizer(
@@ -147,6 +144,7 @@ class FZxMedQADataModule(BaseDataModule):
             self.tokenize_examples,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
+            add_encoding_tokens=self.add_encoding_tokens,
         )
         dataset = dataset.map(
             fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
@@ -292,7 +290,7 @@ class FZxMedQADataModule(BaseDataModule):
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        decode_kwargs = {"skip_special_tokens": True}
+        decode_kwargs = {"skip_special_tokens": False}
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
@@ -320,6 +318,6 @@ class FZxMedQADataModule(BaseDataModule):
         for i, an in enumerate(example["answer_choices.input_ids"]):
             print(
                 f"   - [{'x' if idx == i else ' '}] "
-                f"{self.tokenizer.decode(an, **decode_kwargs)}"
+                f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"
             )
         print(console_width * "=")

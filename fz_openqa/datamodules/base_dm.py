@@ -22,7 +22,8 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils.datastruct import Batch
+from .utils import add_spec_token
+from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
@@ -61,6 +62,7 @@ class BaseDataModule(LightningDataModule):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
+        add_encoding_tokens: bool = True,
         cache_dir: str = "cache/",
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
@@ -96,6 +98,7 @@ class BaseDataModule(LightningDataModule):
         self.tokenizer = tokenizer
         self.dataset: Optional[HgDataset] = None
         self.text_data: Optional[HgDataset] = None
+        self.add_encoding_tokens = add_encoding_tokens
 
         # sampler
         self.train_sampler_cfg = (
@@ -116,6 +119,7 @@ class BaseDataModule(LightningDataModule):
         tokenizer: PreTrainedTokenizerFast,
         max_length: Optional[int],
         preprocess_fn: Optional[Callable] = None,
+        add_encoding_tokens: bool = True,
         **kwargs,
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
@@ -124,17 +128,22 @@ class BaseDataModule(LightningDataModule):
             attribute_name: list of attribute values
         }
         """
-        if preprocess_fn is None:
+        # preprocess
+        examples = {field: examples[field] for field in self.text_fields}
+        if preprocess_fn is not None:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
 
-            def preprocess_fn(x):
-                return x
+        if add_encoding_tokens:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
 
-        text_fields = {
-            field: list(map(preprocess_fn, examples[field]))
-            for field in self.text_fields
-        }
         return tokenizer(
-            *text_fields.values(),
+            *examples.values(),
             max_length=max_length,
             truncation=max_length is not None,
             **kwargs,
@@ -277,7 +286,8 @@ class BaseDataModule(LightningDataModule):
 
     def repr_ex(self, example, key, **kwargs):
         n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
+        txt = self.tokenizer.decode(example[key], **kwargs)
         return (
             f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
+            f"text: `{txt.replace('[PAD]', '').strip()}`"
         )

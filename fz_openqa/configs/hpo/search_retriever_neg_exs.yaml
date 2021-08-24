@@ -59,3 +59,4 @@ runner:
         model.bert.attention_probs_dropout_prob: 0.3
         seed: 14
         datamodule.train_sampler.n_neg: 0
+        datamodule.add_encoding_tokens: True

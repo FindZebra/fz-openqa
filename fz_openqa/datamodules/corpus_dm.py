@@ -1,7 +1,6 @@
 import os
 import re
 import shutil
-from collections import defaultdict
 from functools import partial
 from typing import Any
 from typing import Callable
@@ -21,7 +20,6 @@ from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 from torch.utils.data import Dataset
-from transformers import BatchEncoding
 
 from .base_dm import BaseDataModule
 from .collate import collate_and_pad_attributes
@@ -121,6 +119,7 @@ class CorpusDataModule(BaseDataModule):
             return_token_type_ids=False,
             add_special_tokens=False,
             return_offsets_mapping=True,
+            add_encoding_tokens=False,
         )
         dataset = dataset.map(
             fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
@@ -128,11 +127,16 @@ class CorpusDataModule(BaseDataModule):
 
         # generate passages of equal size
         doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
+        start_tokens = (
+            [self.tokenizer.cls_token_id, doc_token_id]
+            if self.add_encoding_tokens
+            else [self.tokenizer.cls_token_id]
+        )
         gen_passages = partial(
             self.generate_passages,
             size=self.passage_length,
             stride=self.passage_stride,
-            start_tokens=[self.tokenizer.cls_token_id, doc_token_id],
+            start_tokens=start_tokens,
             end_tokens=[self.tokenizer.sep_token_id],
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
@@ -277,11 +281,11 @@ class CorpusDataModule(BaseDataModule):
         batch = next(iter(self.train_dataloader()))
         console_width, _ = shutil.get_terminal_size()
         print(console_width * "=")
-        print("=== Training Batch ===")
+        print("=== Corpus Batch ===")
         print(console_width * "-")
         pprint_batch(batch)
         print(console_width * "=")
-        print("=== Samples ===")
+        print("=== Corpus Samples ===")
         for i in range(min(3, len(list(batch.values())[0]))):
             self.display_one_sample({k: v[i] for k, v in batch.items()})
         print(console_width * "=")
@@ -289,7 +293,7 @@ class CorpusDataModule(BaseDataModule):
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
         console_width, _ = shutil.get_terminal_size()
-        decode_kwargs = {"skip_special_tokens": True}
+        decode_kwargs = {"skip_special_tokens": False}
         print(console_width * "-")
         rich.print(
             "(CORPUS) "
