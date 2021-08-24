@@ -302,7 +302,7 @@ class CorpusDataModule(BaseDataModule):
 
         # get the raw text inputs, extract and collate
         examples, text_outputs = extract_and_collate_attributes_as_list(
-            examples, attribute="text"
+            examples, attribute="text", key="document"
         )
 
         # collate the tensor attributes: input_ids, idx, ...

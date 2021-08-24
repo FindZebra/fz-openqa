@@ -6,6 +6,13 @@ from typing import Tuple
 from typing import Union
 
 
+def nested_list(values: List[Any], *, stride: int) -> List[List[Any]]:
+    output = []
+    for i in range(0, len(values), stride):
+        output += [[values[j] for j in range(i, i + stride)]]
+    return output
+
+
 def gen_passages(
     sequence: List[int],
     *,

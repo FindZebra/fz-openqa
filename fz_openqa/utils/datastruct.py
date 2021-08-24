@@ -4,12 +4,21 @@ from typing import List
 from typing import Union
 
 import rich
+import torch
 from torch import Tensor
 
 Batch = Dict[str, Union[Number, Tensor, List[str]]]
 
 
-def pprint_batch(batch):
+def infer_device_from_batch(batch: Batch):
+    values = [v for v in batch.values() if isinstance(v, torch.Tensor)]
+    if len(values):
+        return values[0].device
+    else:
+        return None
+
+
+def pprint_batch(batch: Batch):
     u = ""
     for k, v in batch.items():
         if isinstance(v, Tensor):

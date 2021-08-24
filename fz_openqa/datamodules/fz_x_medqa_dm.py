@@ -16,11 +16,18 @@ from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
 from .base_dm import HgDataset
+from .collate import collate_and_pad_attributes
+from .collate import collate_answer_options
+from .collate import collate_nested_examples
+from .collate import collate_simple_attributes_by_key
+from .collate import extract_and_collate_attributes_as_list
 from .datasets import fz_x_medqa
+from .utils import nested_list
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer_idx",
@@ -29,8 +36,6 @@ PT_SIMPLE_ATTRIBUTES = [
     "question.idx",
     "idx",
 ]
-ENCODING_ATTRIBUTES = ["input_ids", "attention_mask"]
-DEFAULT_ANSWER_COLUMNS = ["answer_0", "answer_1", "answer_2", "answer_3"]
 
 
 def add_spec_token(
@@ -241,15 +246,6 @@ class FZxMedQADataModule(BaseDataModule):
         if not isinstance(examples[0], list):
             examples = [[ex] for ex in examples]
 
-        # gather the raw text attributes
-        output["document.text"] = [
-            [ex["document.text"] for ex in exs] for exs in examples
-        ]
-        output["question.text"] = [exs[0]["question.text"] for exs in examples]
-        output["answer_choices.text"] = [
-            exs[0]["answer_choices.text"] for exs in examples
-        ]
-
         # collate the question and answers using the first example of each batch element
         first_examples = [ex[0] for ex in examples]
         output.update(
@@ -260,10 +256,11 @@ class FZxMedQADataModule(BaseDataModule):
 
         # collate documents
         output.update(
-            **FZxMedQADataModule.collate_documents(
-                examples, tokenizer=tokenizer
+            **collate_nested_examples(
+                examples, tokenizer=tokenizer, key="document"
             )
         )
+
         return output
 
     @staticmethod
@@ -271,113 +268,27 @@ class FZxMedQADataModule(BaseDataModule):
         examples: List[Batch], *, tokenizer: PreTrainedTokenizerFast
     ) -> Batch:
         """collate the question and answer data"""
-        # collate the questions (text)
-        output = FZxMedQADataModule.collate_text(
-            examples, tokenizer=tokenizer, prefix="question."
+
+        # get the raw text questions, extract and collate
+        examples, output = extract_and_collate_attributes_as_list(
+            examples, attribute="text", key="question"
+        )
+
+        # collate the questions attributes (question.input_ids, question.idx, ...)
+        output.update(
+            **collate_and_pad_attributes(
+                examples, tokenizer=tokenizer, key="question", exclude=".text"
+            )
         )
 
         # collate answer options
-        output.update(
-            **FZxMedQADataModule.collate_answer_options(
-                examples, tokenizer=tokenizer
-            )
-        )
+        output.update(**collate_answer_options(examples, tokenizer=tokenizer))
 
         # collate simple attributes
-        for k in ["question.idx", "idx", "answer_idx"]:
-            output[k] = FZxMedQADataModule.collate_simple_attribute(
-                examples, key=k
-            )
+        for k in ["idx", "answer_idx"]:
+            output[k] = collate_simple_attributes_by_key(examples, key=k)
 
         return output
-
-    @staticmethod
-    def collate_documents(examples, *, tokenizer: PreTrainedTokenizerFast):
-
-        # flatten examples
-        flattened_examples = [sub_ex for ex in examples for sub_ex in ex]
-
-        # encode document text
-        document_output = FZxMedQADataModule.collate_text(
-            flattened_examples, tokenizer=tokenizer, prefix="document."
-        )
-
-        # encode simple attributes
-        for k in ["document.rank", "document.is_positive"]:
-            document_output[k] = FZxMedQADataModule.collate_simple_attribute(
-                flattened_examples, key=k
-            )
-
-        # reshape document data as shape [batch_size, n_docs, ...]
-        n_docs = len(examples[0])
-        batch_size = len(examples)
-        return {
-            k: v.view(batch_size, n_docs, *v.shape[1:])
-            for k, v in document_output.items()
-        }
-
-    @staticmethod
-    def collate_simple_attribute(examples, *, key: str):
-        return torch.tensor([ex[key] for ex in examples])
-
-    @staticmethod
-    def collate_answer_options(
-        examples: List[Batch],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        answer_columns: Optional[List] = None,
-        input_attributes: Optional[List[str]] = None,
-    ) -> Batch:
-        ans_cols = answer_columns or DEFAULT_ANSWER_COLUMNS
-        input_attributes = input_attributes or ENCODING_ATTRIBUTES
-        batch_size = len(examples)
-        n_ans = len(ans_cols)
-        ans_encoding = tokenizer.pad(
-            {
-                attr: [
-                    ex[f"{ans}.{attr}"] for ans in ans_cols for ex in examples
-                ]
-                for attr in input_attributes
-            }
-        )
-        output = {}
-        for k, v in ans_encoding.items():
-            output[f"answer_choices.{k}"] = (
-                v.view(n_ans, batch_size, -1).permute(1, 0, 2).contiguous()
-            )
-
-        return output
-
-    @staticmethod
-    def collate_text(
-        examples: List[Batch],
-        *,
-        tokenizer: PreTrainedTokenizerFast,
-        prefix: str = "",
-        input_attributes: Optional[List[str]] = None,
-    ) -> Batch:
-        """
-        Collate a List of examples of text data into a single batch.
-        """
-
-        # get the list of attributes to select from each batch
-        input_attributes = input_attributes or ENCODING_ATTRIBUTES
-        input_attributes = [f"{prefix}{k}" for k in input_attributes]
-
-        # encode the batches
-        doc_encoding = tokenizer.pad(
-            [
-                {
-                    k.replace(f"{prefix}", ""): v
-                    for k, v in b.items()
-                    if k in input_attributes
-                }
-                for b in examples
-            ]
-        )
-
-        # append the prefix back and return
-        return {f"{prefix}{attr}": tsr for attr, tsr in doc_encoding.items()}
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""

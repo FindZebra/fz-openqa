@@ -24,6 +24,7 @@ from fz_openqa.modeling.models.multiple_choice_qa_reader import (
 )
 from fz_openqa.modeling.models.qa_retriever import QaRetriever
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import infer_device_from_batch
 from fz_openqa.utils.functional import only_trainable
 
 
@@ -128,7 +129,7 @@ class MultipleChoiceQA(BaseModel):
         todo: wrap this in an evaluator class
         todo: batch the for loop with `train_top_k` documents
         """
-        device = next(iter(batch.values())).device
+        device = infer_device_from_batch(batch)
 
         # query the corpus
         query_encoding = self.retriever(
