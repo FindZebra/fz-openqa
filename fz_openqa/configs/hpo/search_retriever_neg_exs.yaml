@@ -48,8 +48,7 @@ experiment:
 
 
 runner:
-  scheduler:
-    grace_period: 10
+  scheduler: null # necessary here because different effective batch sizes are sued because of train_sampler.n_neg
   search_alg:
     points_to_evaluate:
       - model.hidden_size: 64

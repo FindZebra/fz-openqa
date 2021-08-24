@@ -46,7 +46,7 @@ datamodule:
     pos_max_rank: 0
     neg_max_rank: 0
   train_batch_size: 8
-  valid_batch_size: 128
+  valid_batch_size: 512
   max_length: 512
   use_subset: False
   num_workers: 16
