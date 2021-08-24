@@ -1,13 +1,15 @@
-from unittest import TestCase
+from copy import copy
 from typing import List
+from unittest import TestCase
+
 import torch
 from transformers import AutoTokenizer
 
-from fz_openqa.datamodules.collate import collate_and_pad_attributes
+from fz_openqa.datamodules.collate import collate_and_pad_attributes, extract_and_collate_attributes_as_list
 from fz_openqa.utils.datastruct import Batch, pprint_batch
 
 
-def tensorize(examples: List[Batch]) ->  List[Batch]:
+def tensorize(examples: List[Batch]) -> List[Batch]:
     return [{k: torch.tensor(v) for k, v in d.items()} for d in examples]
 
 
@@ -30,6 +32,9 @@ class TestCollate(TestCase):
             d['document.idx'] = idx
         # tensorize
         self.d_examples = tensorize(self.d_examples)
+        # add text attributes
+        for ex, txt in zip(self.d_examples, self.documents):
+            ex['document.text'] = txt
 
         # generate questions
         self.questions = [
@@ -42,12 +47,15 @@ class TestCollate(TestCase):
                            range(len(self.questions))]
         # tensorize
         self.q_examples = tensorize(self.q_examples)
+        # add text attributes
+        for ex, txt in zip(self.q_examples, self.questions):
+            ex['question.text'] = txt
 
     def test_collate_and_pad_attributes(self):
         # encode the documents and questions
-        d_batch = collate_and_pad_attributes(self.d_examples, tokenizer=self.tokenizer, key='document')
+        d_batch = collate_and_pad_attributes(self.d_examples, tokenizer=self.tokenizer, key='document', exclude="text")
         q_batch = collate_and_pad_attributes(self.q_examples, tokenizer=self.tokenizer, key='question',
-                                             exclude="token_type_ids")
+                                             exclude=["token_type_ids", "text"])
 
         # test the document batch
         self.assertTrue(all(isinstance(v, torch.Tensor) for v in d_batch.values()))
@@ -63,3 +71,9 @@ class TestCollate(TestCase):
         self.assertTrue(not all("token_type_ids" in k for k in q_batch.keys()))
         for key in ["idx", "input_ids", "attention_mask"]:
             self.assertTrue(f"question.{key}")
+
+    def test_extract_and_collate_attributes_as_list(self):
+        d_examples, d_batch_text = extract_and_collate_attributes_as_list(copy(self.d_examples), attribute="text")
+        self.assertTrue("document.text" in d_batch_text.keys())
+        self.assertTrue(all(all(".text" not in k for k in d.keys()) for d in d_examples))
+        self.assertTrue(len(d_batch_text['document.text']) == len(d_examples))

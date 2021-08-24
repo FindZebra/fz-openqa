@@ -25,6 +25,7 @@ from transformers import BatchEncoding
 
 from .base_dm import BaseDataModule
 from .collate import collate_and_pad_attributes
+from .collate import extract_and_collate_attributes_as_list
 from .datasets import file_corpus
 from .datasets import meqa_en_corpus
 from .utils import gen_passages
@@ -295,20 +296,18 @@ class CorpusDataModule(BaseDataModule):
             + self.repr_ex(example, "document.input_ids", **decode_kwargs)
         )
 
-    def collate_fn(
-        self, examples: List[Dict[str, Any]]
-    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    def collate_fn(self, examples: List[Dict[str, Any]]) -> Batch:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
 
         # get the raw text inputs, extract and collate
-        examples, text_outputs = self.extract_and_collate_text_attributes(
-            examples
+        examples, text_outputs = extract_and_collate_attributes_as_list(
+            examples, attribute="text"
         )
 
         # collate the tensor attributes: input_ids, idx, ...
         tensor_outputs = collate_and_pad_attributes(
-            examples, tokenizer=self.tokenizer, key="document"
+            examples, tokenizer=self.tokenizer, key="document", exclude="text"
         )
 
         return {**tensor_outputs, **text_outputs}
@@ -333,23 +332,6 @@ class CorpusDataModule(BaseDataModule):
             k: maybe_truncate(v, max_length) for k, v in output.items()
         }
         return tensor_outpus
-
-    @staticmethod
-    def extract_and_collate_text_attributes(
-        examples: List[Dict[str, Any]]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
-        """
-        Extract text fields (e.g. `document.text`) from a list of Examples
-        and return all text fields as a Batch `{'document.text': ["...", "...", ...]}`.
-        The text attributes are removed from the original examples
-        """
-        text_keys = [key for key in examples[0].keys() if ".text" in key]
-        text_outputs = defaultdict(list)
-        for ex in examples:
-            for key in text_keys:
-                text_outputs[key] += [ex.pop(key)]
-
-        return examples, text_outputs
 
     @staticmethod
     @torch.no_grad()
