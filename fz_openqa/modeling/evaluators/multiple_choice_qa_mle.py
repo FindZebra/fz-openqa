@@ -192,7 +192,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
             output.get(k, None) for k in ("select_logits", "select_targets")
         )
         if select_targets is not None:
-            self.answer_metrics.update(split, answer_logits, answer_targets)
+            self.selection_metrics.update(split, select_logits, select_targets)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """

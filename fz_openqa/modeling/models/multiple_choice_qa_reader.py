@@ -60,12 +60,12 @@ class MultipleChoiceQAReader(BaseModel):
 
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)
-        self.qd_select_head = cls_head(self.bert, 1, normalize=False)
+        self.qd_select_head = cls_head(self.bert, hidden_size, normalize=False)
         self.a_head = cls_head(self.bert, hidden_size)
         self.dropout = nn.Dropout(dropout)
 
-        # maximum bert length
-        self.max_length = self.bert.config.max_length
+        # todo: infer maximum bert length
+        self.max_length = 512  # self.bert.config.max_length
 
     def forward(
         self, batch: Dict[str, Tensor], **kwargs
@@ -116,7 +116,9 @@ class MultipleChoiceQAReader(BaseModel):
         )
 
         # selection model
-        h_select = self.qd_select_head(self.dropout(heq))
+        h_select = self.dropout(self.qd_select_head(self.dropout(heq))).mean(
+            -1
+        )
         h_select = h_select.view(bs, n_docs)
 
         # answer-question final representation
