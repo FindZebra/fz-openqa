@@ -56,12 +56,12 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
         self.answer_metrics = SplitMetrics(init_answer_metric)
 
-        def init_selection_metric():
+        def init_relevance_metric():
             return MetricCollection(
-                [Accuracy(**metric_kwargs)], prefix=f"{prefix}selection-"
+                [Accuracy(**metric_kwargs)], prefix=f"{prefix}relevance-"
             )
 
-        self.selection_metrics = SplitMetrics(init_selection_metric)
+        self.relevance_metrics = SplitMetrics(init_relevance_metric)
 
     def forward(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
@@ -76,7 +76,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         # check that only one document is positive and infer the selection targets
         pos_count = (batch["document.is_positive"] > 0).long().sum(1)
         assert (1 - (pos_count == 1).long()).sum() == 0
-        select_targets = batch["document.is_positive"].long().argmax(-1)
+        relevance_targets = batch["document.is_positive"].long().argmax(-1)
 
         # flatten documents of shape [bs, n_docs, T] to [bs*n_docs, T]
         batch.update(
@@ -97,14 +97,16 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         )
 
         # forward pass through the reader model
-        answer_logits, select_logits = model(batch)
+        answer_logits, relevance_logits = model(batch)
 
-        # selection loss
+        # relevance loss
         # It is assumed that there is only a single positive document
-        select_loss = self.cross_entropy(select_targets, select_logits)
+        relevance_loss = self.cross_entropy(
+            relevance_targets, relevance_logits
+        )
 
         # select the logits of the answering model corresponding to the positive document
-        _index = select_targets.view(bs, 1, 1).expand(
+        _index = relevance_targets.view(bs, 1, 1).expand(
             bs, 1, answer_logits.shape[-1]
         )
         answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
@@ -114,16 +116,16 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         answer_loss = self.cross_entropy(answer_targets, answer_logits)
 
         # final loss
-        loss = answer_loss + select_loss
+        loss = answer_loss + relevance_loss
 
         return {
             "loss": loss,
-            "select_loss": select_loss.detach(),
+            "relevance_loss": relevance_loss.detach(),
             "answer_loss": answer_loss.detach(),
             "answer_logits": answer_logits.detach(),
             "answer_targets": answer_targets.detach(),
-            "select_logits": select_logits.detach(),
-            "select_targets": select_targets.detach(),
+            "relevance_logits": relevance_logits.detach(),
+            "relevance_targets": relevance_targets.detach(),
         }
 
     def cross_entropy(self, targets, logits):
@@ -143,7 +145,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         The output must at least contains the `loss` key.
         """
 
-        for k in ["loss", "select_loss", "answer_loss"]:
+        for k in ["loss", "relevance_loss", "answer_loss"]:
             y = output.get(k, None)
             if y is not None:
                 output[k] = y.mean()
@@ -153,8 +155,8 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         for k in [
             "answer_logits",
             "answer_targets",
-            "select_logits",
-            "select_targets",
+            "relevance_logits",
+            "relevance_targets",
         ]:
             output.pop(k, None)
         return output
@@ -166,11 +168,14 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         )
         self.answer_metrics.update(split, answer_logits, answer_targets)
 
-        select_logits, select_targets = (
-            output.get(k, None) for k in ("select_logits", "select_targets")
+        relevance_logits, relevance_targets = (
+            output.get(k, None)
+            for k in ("relevance_logits", "relevance_targets")
         )
-        if select_targets is not None:
-            self.selection_metrics.update(split, select_logits, select_targets)
+        if relevance_targets is not None:
+            self.relevance_metrics.update(
+                split, relevance_logits, relevance_targets
+            )
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
@@ -178,7 +183,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         reset all the metrics.
         """
         self.answer_metrics.reset(split)
-        self.selection_metrics.reset(split)
+        self.relevance_metrics.reset(split)
 
     def compute_metrics(self, split: Optional[Split] = None) -> Batch:
         """
@@ -187,5 +192,5 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         """
         return {
             **self.answer_metrics.compute(split),
-            **self.selection_metrics.compute(split),
+            **self.relevance_metrics.compute(split),
         }

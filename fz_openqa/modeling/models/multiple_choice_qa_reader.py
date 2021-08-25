@@ -64,7 +64,7 @@ class MultipleChoiceQAReader(BaseModel):
 
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)
-        self.qd_select_head = cls_head(self.bert, 1, normalize=False)
+        self.relevance_head = cls_head(self.bert, 1, normalize=False)
         self.a_head = cls_head(self.bert, hidden_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -118,9 +118,9 @@ class MultipleChoiceQAReader(BaseModel):
             f"got n_docs={n_docs}, heq.shape={heq.shape}, bs={bs}"
         )
 
-        # selection model
-        h_select = self.qd_select_head(self.dropout(heq)).mean(-1)
-        h_select = h_select.view(bs, n_docs)
+        # relevance model
+        h_relevance = self.relevance_head(self.dropout(heq)).mean(-1)
+        h_relevance = h_relevance.view(bs, n_docs)
 
         # answer-question final representation
         heq = self.qd_head(self.dropout(heq))  # [bs * n_doc, h]
@@ -131,7 +131,7 @@ class MultipleChoiceQAReader(BaseModel):
         heq = heq.view(bs, n_docs, *heq.shape[1:])
         S_eqa = torch.einsum("bdh, bah -> bda", heq, ha)
 
-        return S_eqa, h_select
+        return S_eqa, h_relevance
 
     def concat_questions_and_documents(self, batch):
         """
