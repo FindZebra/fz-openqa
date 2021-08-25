@@ -4,13 +4,11 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import rich
 import torch
 from transformers import PreTrainedTokenizerFast
 
 from .utils import nested_list
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 
 ENCODING_ATTRIBUTES = ["input_ids", "attention_mask"]
 DEFAULT_ANSWER_COLUMNS = ["answer_0", "answer_1", "answer_2", "answer_3"]
