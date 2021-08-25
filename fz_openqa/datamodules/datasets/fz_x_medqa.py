@@ -44,10 +44,8 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                     "idx": datasets.Value("int32"),
                     "question": datasets.Value("string"),
                     "question.idx": datasets.Value("int32"),
-                    "answer_idx": datasets.Value("int32"),
-                    "answer_choices": datasets.Sequence(
-                        datasets.Value("string")
-                    ),
+                    "answer.target": datasets.Value("int32"),
+                    "answer": datasets.Sequence(datasets.Value("string")),
                     "document": datasets.Value("string"),
                     "document.rank": datasets.Value("int32"),
                     "document.is_positive": datasets.Value("bool"),
@@ -86,4 +84,6 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                 d["document.rank"] = d.pop("rank_bm25") - 1  # start from zero
                 d["document.is_positive"] = d.pop("is_positive")
                 d["question.idx"] = d.pop("question_id")
+                d["answer.target"] = d.pop("answer_idx")
+                d["answer"] = d.pop("answer_choices")
                 yield i, d

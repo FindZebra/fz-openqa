@@ -23,13 +23,16 @@ from .collate import collate_simple_attributes_by_key
 from .collate import extract_and_collate_attributes_as_list
 from .datasets import fz_x_medqa
 from .utils import add_spec_token
+from .utils import nested_list
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 
 PT_SIMPLE_ATTRIBUTES = [
-    "answer_idx",
+    "answer.target",
+    "answer.n_options",
     "document.rank",
     "document.is_positive",
     "question.idx",
@@ -122,18 +125,27 @@ class FZxMedQADataModule(BaseDataModule):
             if add_encoding_tokens
             else lambda x: x
         )
-        n_choices = len(examples["answer_choices"][0])
-        answer_encodings = [
-            tokenizer(
-                [add_answ_token(ans[n]) for ans in examples["answer_choices"]],
-                **tokenizer_kwargs,
-            )
-            for n in range(n_choices)
-        ]
-
-        for idx, data in enumerate(answer_encodings):
-            for k, v in data.items():
-                output[f"answer_{idx}.{k}"] = v
+        output["answer.n_options"] = [len(ex) for ex in examples["answer"]]
+        answer_encodings = tokenizer(
+            [
+                add_answ_token(choice)
+                for choices in examples["answer"]
+                for choice in choices
+            ],
+            **tokenizer_kwargs,
+        )
+        assert all(
+            x == output["answer.n_options"][0]
+            for x in output["answer.n_options"]
+        )
+        output.update(
+            **{
+                f"answer.{k}": nested_list(
+                    v, stride=output["answer.n_options"][0]
+                )
+                for k, v in answer_encodings.items()
+            }
+        )
 
         return output
 
@@ -151,12 +163,12 @@ class FZxMedQADataModule(BaseDataModule):
         )
 
         # rename text attributes
-        for key in ["document", "question", "answer_choices"]:
+        for key in ["document", "question", "answer"]:
             dataset = dataset.rename_column(key, f"{key}.text")
 
         # transform attributes to tensors
         attrs = ["input_ids", "attention_mask"]
-        columns = ["question", "document", "answer_"]
+        columns = ["question", "document", "answer"]
         self.pt_attributes = [
             c
             for c in dataset.column_names["train"]
@@ -227,15 +239,19 @@ class FZxMedQADataModule(BaseDataModule):
         Returns a dictionary with attributes:
         output = {
                 question.idx: tensor of shape [N,],
+                question.text: list of N texts
                 question.input_ids: tensor of shape [N, T],
                 question.attention_mask: tensor of shape [N, T],
+                document.text: nested list of [N, N_docs] texts
                 document.input_ids: tensor of shape [N, N_doc,  T],
                 document.attention_mask: tensor of shape [N, N_doc, T],
                 document.rank: tensor of shape [N, N_doc],
                 document.is_positive: tensor of shape [N, N_doc],
-                answer_choices.input_ids: tensor of shape [N, N_a, T]
-                answer_choices.attention_mask: tensor of shape [N, N_a, T]
-                answer_idx: tensor of shape [N,]
+                answer.text: nested list of [N, N_a] texts
+                answer.input_ids: tensor of shape [N, N_a, T]
+                answer.attention_mask: tensor of shape [N, N_a, T]
+                answer.target: tensor of shape [N,]
+                answer.n_options: tensor of hsape [N,]
         }
         """
         output = {}
@@ -272,6 +288,12 @@ class FZxMedQADataModule(BaseDataModule):
             examples, attribute="text", key="question"
         )
 
+        # collate simple attributes
+        for k in ["idx", "answer.target", "answer.n_options"]:
+            output[k] = collate_simple_attributes_by_key(
+                examples, key=k, extract=True
+            )
+
         # collate the questions attributes (question.input_ids, question.idx, ...)
         output.update(
             **collate_and_pad_attributes(
@@ -281,10 +303,6 @@ class FZxMedQADataModule(BaseDataModule):
 
         # collate answer options
         output.update(**collate_answer_options(examples, tokenizer=tokenizer))
-
-        # collate simple attributes
-        for k in ["idx", "answer_idx"]:
-            output[k] = collate_simple_attributes_by_key(examples, key=k)
 
         return output
 
@@ -314,8 +332,8 @@ class FZxMedQADataModule(BaseDataModule):
             )
         print(console_width * "-")
         print("* Answer Choices:")
-        idx = example["answer_idx"]
-        for i, an in enumerate(example["answer_choices.input_ids"]):
+        idx = example["answer.target"]
+        for i, an in enumerate(example["answer.input_ids"]):
             print(
                 f"   - [{'x' if idx == i else ' '}] "
                 f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"

@@ -6,7 +6,7 @@ from rich.table import Table
 def pprint_results(data, output):
     """Print all results as a nicely using rich.table"""
     all_preds = output.argmax(-1).tolist()
-    targets = data["answer_idx"]
+    targets = data["answer.target"]
     accuracy = sum([int(x == y) for x, y in zip(all_preds, targets)]) / len(
         targets
     )
@@ -29,7 +29,7 @@ def pprint_results(data, output):
             row["question"],
             row["document"],
             *(
-                format_ans_prob(k, a, row["answer_idx"], pred, p)
+                format_ans_prob(k, a, row["answer.target"], pred, p)
                 for k, (a, p) in enumerate(zip(row["answer_choices"], probs))
             ),
         )

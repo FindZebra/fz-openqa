@@ -35,14 +35,14 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
     """
 
     _required_eval_feature_names = [
-        "answer_idx",
+        "answer.target",
         "question.input_ids",
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
         "document.is_positive",
-        "answer_choices.input_ids",
-        "answer_choices.attention_mask",
+        "answer.input_ids",
+        "answer.attention_mask",
     ]
 
     def init_metrics(self, prefix: str = ""):
@@ -97,14 +97,14 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         answer_logits, select_logits = model(batch)
 
         # reader loss
-        answer_targets: Tensor = batch["answer_idx"]
+        answer_targets: Tensor = batch["answer.target"]
         answer_loss = self.compute_answer_loss(
             answer_logits, answer_targets, bs, n_docs
         )
 
         # selection loss
         # It is assumed that there is a single positive document and its index is zero
-        select_targets = torch.zeros_like(batch["answer_idx"]).long()
+        select_targets = torch.zeros_like(batch["answer.target"]).long()
         select_loss, select_targets = self.compute_selection_loss(
             select_targets, select_logits
         )

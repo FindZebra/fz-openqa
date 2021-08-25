@@ -4,19 +4,24 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import rich
 import torch
 from transformers import PreTrainedTokenizerFast
 
 from .utils import nested_list
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 
 ENCODING_ATTRIBUTES = ["input_ids", "attention_mask"]
 DEFAULT_ANSWER_COLUMNS = ["answer_0", "answer_1", "answer_2", "answer_3"]
 
 
-def collate_simple_attributes_by_key(examples, *, key: str):
+def collate_simple_attributes_by_key(examples, *, key: str, extract=False):
     """collate simple attributes such as the index"""
-    return torch.tensor([ex[key] for ex in examples])
+    if extract:
+        return torch.tensor([ex.pop(key) for ex in examples])
+    else:
+        return torch.tensor([ex[key] for ex in examples])
 
 
 def collate_and_pad_attributes(
@@ -125,26 +130,26 @@ def collate_answer_options(
     examples: List[Batch],
     *,
     tokenizer: PreTrainedTokenizerFast,
-    answer_columns: Optional[List] = None,
-    input_attributes: Optional[List[str]] = None,
 ) -> Batch:
     """
     Collate the answer options, registered as separate fields ["answer_0.x", "answer_1.x", ...].
     The return `answer_choices` tensor is of shape [batch_size, n_options, ...]"""
-    ans_cols = answer_columns or DEFAULT_ANSWER_COLUMNS
-    input_attributes = input_attributes or ENCODING_ATTRIBUTES
-    batch_size = len(examples)
-    n_ans = len(ans_cols)
-    ans_encoding = tokenizer.pad(
-        {
-            attr: [ex[f"{ans}.{attr}"] for ans in ans_cols for ex in examples]
-            for attr in input_attributes
-        }
-    )
-    output = {}
-    for k, v in ans_encoding.items():
-        output[f"answer_choices.{k}"] = (
-            v.view(n_ans, batch_size, -1).permute(1, 0, 2).contiguous()
-        )
 
+    # get the raw text questions, extract and collate
+    examples, output = extract_and_collate_attributes_as_list(
+        examples, attribute="text", key="answer"
+    )
+
+    # reshape: List[Dict[str, List[Any]]] -> List[List[Dict[str, List[Any]]]]
+    # for the answer keys
+    keys = [k for k in examples[0].keys() if "answer." in k]
+    n_options = len(list(examples[0].values())[0])
+    examples = [
+        [{key: ex[key][idx] for key in keys} for idx in range(n_options)]
+        for ex in examples
+    ]
+
+    output.update(
+        **collate_nested_examples(examples, tokenizer=tokenizer, key="answer")
+    )
     return output

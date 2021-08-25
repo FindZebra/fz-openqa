@@ -48,8 +48,8 @@ class MultipleChoiceQA(BaseModel):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "answer_choices.input_ids",
-        "answer_choices.attention_mask",
+        "answer.input_ids",
+        "answer.attention_mask",
     ]
     # metrics that will be display in the progress bar
     _prog_bar_metrics = [
@@ -166,7 +166,7 @@ class MultipleChoiceQA(BaseModel):
         reader_data["answer_logits"] = self.argmax_select(
             reader_data["answer_logits"], key=reader_data["select_logits"]
         )
-        reader_data["answer_targets"] = batch["answer_idx"]
+        reader_data["answer_targets"] = batch["answer.target"]
 
         # add key prefix and return
         output = add_prefix(reader_data, "reader/")

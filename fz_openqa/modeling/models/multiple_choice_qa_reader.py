@@ -27,8 +27,8 @@ class MultipleChoiceQAReader(BaseModel):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "answer_choices.input_ids",
-        "answer_choices.attention_mask",
+        "answer.input_ids",
+        "answer.attention_mask",
     ]
     # metrics that will be display in the progress bar
     _prog_bar_metrics = [
@@ -87,13 +87,13 @@ class MultipleChoiceQAReader(BaseModel):
         batch = {
         'document.input_ids': [batch_size * n_docs, L_d]
         'question.input_ids': [batch_size * n_docs, L_q]
-        'answer_choices.input_ids': [batch_size, N_q, L_q]
+        'answer.input_ids': [batch_size, N_q, L_q]
         }
         """
 
         # checks inputs, set parameters and concat the questions with the documents
         self.check_input_features(batch)
-        bs, N_a, _ = batch["answer_choices.input_ids"].shape
+        bs, N_a, _ = batch["answer.input_ids"].shape
         # concatenate questions and documents such that there is no padding between Q and D
         padded_batch = self.concat_questions_and_documents(batch)
 
@@ -104,8 +104,8 @@ class MultipleChoiceQAReader(BaseModel):
         ).last_hidden_state  # [bs*n_doc, L_e+L_q, h]
 
         ha = self.bert(
-            flatten(batch["answer_choices.input_ids"]),
-            flatten(batch["answer_choices.attention_mask"]),
+            flatten(batch["answer.input_ids"]),
+            flatten(batch["answer.attention_mask"]),
         ).last_hidden_state  # [bs * N_a, L_a, h]
 
         # infer the number of documents
