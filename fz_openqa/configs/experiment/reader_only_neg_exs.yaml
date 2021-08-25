@@ -35,10 +35,15 @@ model:
 
 
 datamodule:
-  sampler:
+  train_sampler:
     n_pos: 1
     n_neg: 3
     pos_max_rank: 10
+    neg_max_rank: 10
+  eval_sampler:
+    n_pos: 1
+    n_neg: 3
+    pos_max_rank: 0
     neg_max_rank: 10
   train_batch_size: 8
   valid_batch_size: 128

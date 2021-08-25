@@ -17,6 +17,7 @@ from .utils import check_first_doc_positive
 from .utils import expand_and_flatten
 from .utils import flatten_first_dims
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import batch_reduce
 
 
@@ -72,8 +73,10 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         batch = copy(batch)  # make sure the original batch is not modified
         bs, n_docs = batch["document.input_ids"].shape[:2]
 
-        # check that the first document of each question is positive
-        check_first_doc_positive(batch)
+        # check that only one document is positive and infer the selection targets
+        pos_count = (batch["document.is_positive"] > 0).long().sum(1)
+        assert (1 - (pos_count == 1).long()).sum() == 0
+        select_targets = batch["document.is_positive"].long().argmax(-1)
 
         # flatten documents of shape [bs, n_docs, T] to [bs*n_docs, T]
         batch.update(
@@ -96,28 +99,22 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         # forward pass through the reader model
         answer_logits, select_logits = model(batch)
 
-        # reader loss
-        answer_targets: Tensor = batch["answer.target"]
-        answer_loss = self.compute_answer_loss(
-            answer_logits, answer_targets, bs, n_docs
-        )
-
         # selection loss
-        # It is assumed that there is a single positive document and its index is zero
-        select_targets = torch.zeros_like(batch["answer.target"]).long()
-        select_loss, select_targets = self.compute_selection_loss(
-            select_targets, select_logits
+        # It is assumed that there is only a single positive document
+        select_loss = self.cross_entropy(select_targets, select_logits)
+
+        # select the logits of the answering model corresponding to the positive document
+        _index = select_targets.view(bs, 1, 1).expand(
+            bs, 1, answer_logits.shape[-1]
         )
+        answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
+
+        # compute the reader loss
+        answer_targets: Tensor = batch["answer.target"]
+        answer_loss = self.cross_entropy(answer_targets, answer_logits)
 
         # final loss
         loss = answer_loss + select_loss
-
-        # select ``answer_logits`` corresponding to the true index
-        # to return for the computation of the accuracy
-        # selected_ = select_logits.argmax(-1)
-        selected = select_targets
-        _index = selected.view(bs, 1, 1).expand(bs, 1, answer_logits.shape[-1])
-        answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
 
         return {
             "loss": loss,
@@ -129,29 +126,12 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
             "select_targets": select_targets.detach(),
         }
 
-    def compute_selection_loss(self, select_targets, select_logits):
-        """
-        L =  - log p(idx_pos | docs[pos+neg])
-        """
-        select_loss = F.cross_entropy(
-            select_logits, select_targets, reduction="none"
-        )
-        select_loss = batch_reduce(
-            select_loss, torch.mean
+    def cross_entropy(self, targets, logits):
+        loss = F.cross_entropy(logits, targets, reduction="none")
+        loss = batch_reduce(
+            loss, torch.mean
         )  # keep one loss term per batch element
-        return select_loss, select_targets
-
-    def compute_answer_loss(self, answer_logits, answer_targets, bs, n_docs):
-        """L = 1/N_docs \\sum_i - log p(a | q, d_i, A)"""
-        answer_loss = F.cross_entropy(
-            answer_logits.permute(0, 2, 1),
-            answer_targets[:, None].expand(bs, n_docs),
-            reduction="none",
-        ).mean(1)
-        answer_loss = batch_reduce(
-            answer_loss, torch.mean
-        )  # keep one loss term per batch element
-        return answer_loss
+        return loss
 
     def forward_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.
