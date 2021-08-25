@@ -3,6 +3,7 @@ from typing import Dict
 from typing import Tuple
 from typing import Union
 
+import rich
 import torch
 from omegaconf import DictConfig
 from torch import nn
@@ -15,6 +16,7 @@ from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.modeling.layers.heads import cls_head
 from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.utils.datastruct import pprint_batch
 
 
 class MultipleChoiceQAReader(BaseModel):
@@ -58,6 +60,8 @@ class MultipleChoiceQAReader(BaseModel):
         # it also allows to access params with 'self.hparams' attribute
         self.save_hyperparameters(ignore=["evaluator", "tokenizer", "bert"])
 
+        self.tokenizer = tokenizer  # todo
+
         # heads
         self.qd_head = cls_head(self.bert, hidden_size)
         self.qd_select_head = cls_head(self.bert, 1, normalize=False)
@@ -90,7 +94,6 @@ class MultipleChoiceQAReader(BaseModel):
         'answer.input_ids': [batch_size, N_q, L_q]
         }
         """
-
         # checks inputs, set parameters and concat the questions with the documents
         self.check_input_features(batch)
         bs, N_a, _ = batch["answer.input_ids"].shape

@@ -128,10 +128,8 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
     def cross_entropy(self, targets, logits):
         loss = F.cross_entropy(logits, targets, reduction="none")
-        loss = batch_reduce(
-            loss, torch.mean
-        )  # keep one loss term per batch element
-        return loss
+        # keep one loss term per batch element: shape [batch_size, ]
+        return batch_reduce(loss, torch.mean)
 
     def forward_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.
