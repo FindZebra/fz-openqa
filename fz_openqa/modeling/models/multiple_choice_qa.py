@@ -53,10 +53,8 @@ class MultipleChoiceQA(BaseModel):
     ]
     # metrics that will be display in the progress bar
     _prog_bar_metrics = [
-        "train/loss",
-        "validation/loss",
         "validation/reader/Accuracy",
-        "validation/retriever/Accuracy",
+        "validation/reader/relevance-Accuracy",
         "validation/retriever/top5_Accuracy",
     ]
     # prefix for the logged metrics
