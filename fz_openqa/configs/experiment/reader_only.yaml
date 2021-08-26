@@ -4,34 +4,53 @@
 # poetry run fzqa experiment=reader_only
 
 defaults:
-  - override /trainer: minimal.yaml # choose trainer from 'configs/trainer/'
+  - override /trainer: minimal.yaml
   - override /model: multiple_choice_qa_reader.yaml
-  - override /datamodule: fz_x_medqa.yaml
-  - override /callbacks: none.yaml
+  - override /datamodule: fz_x_medqa_grouped.yaml
+  - override /callbacks: none.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
-  - override /corpus: none.yaml
-
+  - override /corpus: none.yaml #local.yaml
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-seed: 42
+base:
+  seed: 8
 
 trainer:
-  gpus: 1
+  gpus: 4
+  accelerator: dp
   min_epochs: 1
-  max_epochs: 100
+  max_epochs: 10000
   gradient_clip_val: 0.5
+  # stochastic_weight_avg: True
   checkpoint_callback: False # disable checkpointing for faster training
 
 model:
   lr: 2e-5
+  weight_decay: 1e-4
   dropout: 0
+  hidden_size: 32
+  bert:
+    hidden_dropout_prob: 0
+    attention_probs_dropout_prob: 0
+
 
 datamodule:
-  train_batch_size: 6
+  train_sampler:
+    n_pos: 1
+    n_neg: 3
+    pos_max_rank: 3
+    neg_max_rank: 10
+  eval_sampler:
+    n_pos: 1
+    n_neg: 5
+    pos_max_rank: 0
+    neg_max_rank: 10
+  train_batch_size: 8
+  valid_batch_size: 16
   max_length: 512
   use_subset: False
-  update_cache: True
+  num_workers: 16
 
 logger:
   wandb:

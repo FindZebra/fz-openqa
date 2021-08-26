@@ -14,8 +14,10 @@ defaults:
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
-
-seed: 8
+base:
+  seed: 8
+  target_metric: validation/loss
+  target_mode: min
 
 trainer:
   gpus: 8

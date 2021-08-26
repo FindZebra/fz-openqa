@@ -33,7 +33,7 @@ model.bert.hidden_dropout_prob:
     - 0
     - 0.1
     - 0.3
-seed:
+base.seed:
   _target_: ray.tune.randint
   lower: 1
   upper: 20

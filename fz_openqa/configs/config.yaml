@@ -15,16 +15,20 @@ defaults:
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
-# random seed
-seed: null
+
+base:
+  # random seed
+  seed: null
+  # metrics to track
+  target_metric: validation/Accuracy
+  target_mode: max
+
 
 # version info (useful for filtering runs on wandb)
 exp_version: 7
 code_version: "0.0.2"
 
-# metrics to track
-target_metric: validation/Accuracy
-target_mode: max
+
 
 # base pretrained model
 pretrained_model: ${model.bert.pretrained_model_name_or_path}
