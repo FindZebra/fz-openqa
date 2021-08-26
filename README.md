@@ -167,7 +167,7 @@ When running experiments on the GPU cluster, you need to pass the flag `CUDA_VIS
 your script. The `/scratch` directory should be used to store large files (cache).
 
 ```shell
- CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only +environ=valv trainer.gpus=1
+ CUDA_VISIBLE_DEVICES=7 poetry run fzqa +experiment=reader_only +environ=titan trainer.gpus=1
  ```
 
 Lightning enables multi-gpus training using `torch.nn.DataParallel`. Simply configure the Lightning trainer:
@@ -188,12 +188,23 @@ The `tune.py` script allow scheduling and running a set of experiments using `Ra
 
 </details>
 
+ <details>
+<summary>Running offline</summary>
+
+When working without internet, datasets and models need to be cached, the following flags prevent HuggingFace from throwing an error:
+
+```shell
+HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
+ ```
+
+</details>
+
 ## Documentation
 
 ### Module design
 
 All modules should inherit from `BaseModel`, which in turn inherits from `pl.LightningModule`.
-Each module features one `Evaluator` which role is to compute the loss and the metrics.
+Each module features one `BaseEvaluator` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
@@ -209,13 +220,29 @@ The metrics must be implemented in the `_step_end` method in order to avoid erro
 </details>
 
 <details>
-<summary>`Evaluator`</summary>
+<summary>`BaseEvaluator`</summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
 This method is called in the `module._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
-`Evaluator.foward()` method from each device.
+`BaseEvaluator.foward()` method from each device.
+</details>
+
+### Data generation pipeline
+
+Generating the positive and hard negative examples will be done dynamically based on:
+
+1. a passage extractor (fixed legnth, paragraphs, ...)
+2. a retriever model (sparse or dense)
+3. a selection strategy (exact match, meta-map, similarity score, ...)
+
+The whole pipeline is pictured bellow:
+<details>
+<summary>Illustration</summary>
+
+![Data generation pipeline](.assets/neg+pos-gen-pipeline.png)
+
 </details>
 
 ### Pesudo-code for Supervised OpenQA

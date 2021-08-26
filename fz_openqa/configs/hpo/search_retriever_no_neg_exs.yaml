@@ -12,20 +12,19 @@ defaults:
   - override /runner: default.yaml
 
 base:
-  name: search_openqa
-  target_metric: validation/reader/Accuracy
+  name: search_retriever
+  target_metric: validation/retriever/top5_Accuracy
   target_mode: max
   # resources
-  gpus: 8
-  cpus: 32
+  gpus: 4
+  cpus: 16
 
 ray:
   local_mode: False
   configure_logging: False
 
 experiment:
-  experiment: open_qa.yaml
-  environ: dp8-full.yaml
+  experiment: retriever_only_no_neg_exs.yaml
   corpus: none.yaml
   sys: titan.yaml
   cache_dir: ${sys.cache_dir}
@@ -39,28 +38,24 @@ experiment:
   trainer.checkpoint_callback: True
   logger.wandb.group: ${base.name}
   callbacks: tune.yaml
-  callbacks.model_checkpoint.cleanup_threshold: 0.1
+  callbacks.model_checkpoint.cleanup_threshold: 0.09
   datamodule.train_batch_size: 24
   datamodule.eval_batch_size: 512
   datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
   trainer.gpus: ${base.gpus}
+  trainer.accelerator: dp
 
 
 runner:
+  scheduler:
+    grace_period: 10
   search_alg:
     points_to_evaluate:
-      - model.hidden_size: 128
-        model.lr: 0.0001
+      - model.hidden_size: 64
+        model.lr: 0.00001
         model.weight_decay: 0.001
         model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
-      - model.hidden_size: 128
-        model.lr: 0.0001
-        model.weight_decay: 0.001
-        model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.2
-        model.bert.hidden_dropout_prob: 0.1
-        model.bert.attention_probs_dropout_prob: 0.1
-        seed: 1
+        model.bert.hidden_dropout_prob: 0
+        model.bert.attention_probs_dropout_prob: 0.3
+        seed: 14

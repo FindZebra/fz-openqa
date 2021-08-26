@@ -1,13 +1,7 @@
 model.bert.pretrained_model_name_or_path:
   _target_: ray.tune.choice
   categories:
-    - 'bert-base-cased'
     - 'dmis-lab/biobert-base-cased-v1.1'
-    - 'dmis-lab/biobert-base-cased-v1.2'
-    - 'emilyalsentzer/Bio_ClinicalBERT'
-    - 'allenai/biomed_roberta_base'
-    - 'allenai/scibert_scivocab_uncased'
-    - 'allenai/scibert_scivocab_cased'
 model.hidden_size:
   _target_: ray.tune.choice
   categories:
@@ -15,14 +9,10 @@ model.hidden_size:
     - 32
     - 64
     - 128
-    - 256
 model.lr:
   _target_: ray.tune.choice
   categories:
     - 1e-5
-    - 3e-5
-    - 6e-5
-    - 1e-4
 model.weight_decay:
   _target_: ray.tune.choice
   categories:
@@ -43,8 +33,16 @@ model.bert.hidden_dropout_prob:
     - 0
     - 0.1
     - 0.3
-    - 0.5
 base.seed:
   _target_: ray.tune.randint
   lower: 1
   upper: 20
+datamodule.train_sampler.n_neg:
+  _target_: ray.tune.randint
+  lower: 0
+  upper: 4
+datamodule.add_encoding_tokens:
+  _target_: ray.tune.choice
+  categories:
+    - False
+    - True

@@ -3,29 +3,24 @@
 # kill all idle processes using:
 # > ps aux | grep ray:: | grep -v grep | awk '{print $2}' | xargs kill -9
 
-# delete checkpoints
-# > find . -type d -path "./*" -mmin +100 -exec rm -rf {} \;
-
 defaults:
-  - override /sys: hpo-titan.yaml
   - override /space: search_2.yaml
   - override /runner: default.yaml
 
 base:
-  name: search_openqa
+  name: search_reader
   target_metric: validation/reader/Accuracy
   target_mode: max
   # resources
-  gpus: 8
-  cpus: 32
+  gpus: 4
+  cpus: 16
 
 ray:
   local_mode: False
   configure_logging: False
 
 experiment:
-  experiment: open_qa.yaml
-  environ: dp8-full.yaml
+  experiment: reader_only_no_neg_exs.yaml
   corpus: none.yaml
   sys: titan.yaml
   cache_dir: ${sys.cache_dir}
@@ -39,12 +34,13 @@ experiment:
   trainer.checkpoint_callback: True
   logger.wandb.group: ${base.name}
   callbacks: tune.yaml
-  callbacks.model_checkpoint.cleanup_threshold: 0.1
+  callbacks.model_checkpoint.cleanup_threshold: 0.6
   datamodule.train_batch_size: 24
   datamodule.eval_batch_size: 512
   datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
   trainer.gpus: ${base.gpus}
+  trainer.accelerator: dp
 
 
 runner:

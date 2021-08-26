@@ -91,7 +91,7 @@ def log_hyperparameters(
             for k, v in config.items()
             if k
             in (
-                "trainer",
+                "base" "trainer",
                 "model",
                 "datamodule",
                 "tokenizer",
@@ -184,7 +184,7 @@ def print_config(
         "corpus",
         "callbacks",
         "logger",
-        "seed",
+        "base",
     ),
     resolve: bool = True,
 ) -> None:

@@ -13,6 +13,8 @@ import torch
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
@@ -20,6 +22,8 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
+from .utils import add_spec_token
+from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
@@ -58,17 +62,20 @@ class BaseDataModule(LightningDataModule):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
+        add_encoding_tokens: bool = True,
         cache_dir: str = "cache/",
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
         num_workers: int = 0,
-        pin_memory: bool = False,
+        pin_memory: bool = True,
         persistent_workers: bool = False,
         max_length: Optional[int] = 512,
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = True,
         corpus: Optional["BaseDataModule"] = None,
+        train_sampler: Optional[DictConfig] = None,
+        eval_sampler: Optional[DictConfig] = None,
         **kwargs,
     ):
         super().__init__()
@@ -91,6 +98,19 @@ class BaseDataModule(LightningDataModule):
         self.tokenizer = tokenizer
         self.dataset: Optional[HgDataset] = None
         self.text_data: Optional[HgDataset] = None
+        self.add_encoding_tokens = add_encoding_tokens
+
+        # sampler
+        self.train_sampler_cfg = (
+            dict(train_sampler)
+            if train_sampler is not None and len(train_sampler)
+            else None
+        )
+        self.eval_sampler_cfg = (
+            dict(eval_sampler)
+            if eval_sampler is not None and len(eval_sampler)
+            else None
+        )
 
     def tokenize_examples(
         self,
@@ -99,6 +119,7 @@ class BaseDataModule(LightningDataModule):
         tokenizer: PreTrainedTokenizerFast,
         max_length: Optional[int],
         preprocess_fn: Optional[Callable] = None,
+        add_encoding_tokens: bool = True,
         **kwargs,
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
@@ -107,17 +128,22 @@ class BaseDataModule(LightningDataModule):
             attribute_name: list of attribute values
         }
         """
-        if preprocess_fn is None:
+        # preprocess
+        examples = {field: examples[field] for field in self.text_fields}
+        if preprocess_fn is not None:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
 
-            def preprocess_fn(x):
-                return x
+        if add_encoding_tokens:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
 
-        text_fields = {
-            field: list(map(preprocess_fn, examples[field]))
-            for field in self.text_fields
-        }
         return tokenizer(
-            *text_fields.values(),
+            *examples.values(),
             max_length=max_length,
             truncation=max_length is not None,
             **kwargs,
@@ -190,8 +216,12 @@ class BaseDataModule(LightningDataModule):
         )
 
     def train_dataloader(self):
+        dset = self.dataset[Split.TRAIN]
+        if self.train_sampler_cfg is not None:
+            dset = instantiate(self.train_sampler_cfg, dataset=dset)
+
         return DataLoader(
-            dataset=self.dataset[Split.TRAIN],
+            dataset=dset,
             batch_size=self.train_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -201,8 +231,12 @@ class BaseDataModule(LightningDataModule):
         )
 
     def _eval_loader(self, split):
+        dset = self.dataset[split]
+        if self.eval_sampler_cfg is not None:
+            dset = instantiate(self.eval_sampler_cfg, dataset=dset)
+
         return DataLoader(
-            dataset=self.dataset[split],
+            dataset=dset,
             batch_size=self.eval_batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -219,7 +253,7 @@ class BaseDataModule(LightningDataModule):
 
     def collate_fn(
         self, batch: Any
-    ) -> Union[BatchEncoding, Dict[str, torch.Tensor]]:
+    ) -> Union[BatchEncoding, List[Dict[str, torch.Tensor]]]:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
         return self.tokenizer.pad(batch)
@@ -228,11 +262,15 @@ class BaseDataModule(LightningDataModule):
     def display_sample(self):
         """Sample a batch and pretty print it."""
         batch = next(iter(self.train_dataloader()))
+        eval_batch = next(iter(self.val_dataloader()))
         console_width, _ = shutil.get_terminal_size()
         print(console_width * "=")
         print("=== Training Batch ===")
         print(console_width * "-")
         pprint_batch(batch)
+        print("=== Validation Batch ===")
+        print(console_width * "-")
+        pprint_batch(eval_batch)
         print(console_width * "=")
         self.display_one_sample({k: v[0] for k, v in batch.items()})
 
@@ -248,7 +286,8 @@ class BaseDataModule(LightningDataModule):
 
     def repr_ex(self, example, key, **kwargs):
         n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
+        txt = self.tokenizer.decode(example[key], **kwargs)
         return (
             f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: `{self.tokenizer.decode(example[key], **kwargs)}`"
+            f"text: `{txt.replace('[PAD]', '').strip()}`"
         )

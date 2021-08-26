@@ -49,7 +49,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
-        seed_everything(config.seed, workers=True)
+        seed_everything(config.base.seed, workers=True)
 
     # Init HuggingFace tokenizer
     log.info(f"Instantiating tokenizer <{config.tokenizer._target_}>")
@@ -67,7 +67,10 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: LightningDataModule = instantiate(
-        config.datamodule, tokenizer=tokenizer, corpus=corpus
+        config.datamodule,
+        tokenizer=tokenizer,
+        corpus=corpus,
+        _recursive_=False,
     )
 
     # Init Lightning model

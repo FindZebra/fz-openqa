@@ -6,19 +6,17 @@
 defaults:
   - override /trainer: minimal.yaml
   - override /model: qa_retriever.yaml
-  - override /datamodule: fz_x_medqa_grouped.yaml
+  - override /datamodule: fz_x_medqa.yaml
   - override /callbacks: none.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
   - override /corpus: none.yaml #local.yaml
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
-
 base:
-  seed: 8
+  seed: 42
 
 trainer:
-  gpus: 4
-  accelerator: dp
+  gpus: 1
   min_epochs: 1
   max_epochs: 10000
   gradient_clip_val: 0.5
@@ -27,30 +25,13 @@ trainer:
 
 model:
   lr: 2e-5
-  weight_decay: 1e-4
   dropout: 0
-  hidden_size: 32
-  bert:
-    hidden_dropout_prob: 0
-    attention_probs_dropout_prob: 0
-
 
 datamodule:
-  train_sampler:
-    n_pos: 1
-    n_neg: 3
-    pos_max_rank: 10
-    neg_max_rank: 10
-  eval_sampler:
-    n_pos: 1
-    n_neg: 0
-    pos_max_rank: 0
-    neg_max_rank: 0
-  train_batch_size: 8
-  valid_batch_size: 512
+  train_batch_size: 4
   max_length: 512
   use_subset: False
-  num_workers: 16
+  update_cache: True
 
 logger:
   wandb:
