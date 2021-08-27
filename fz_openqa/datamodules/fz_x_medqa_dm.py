@@ -64,6 +64,7 @@ class FZxMedQADataModule(BaseDataModule):
         tokenizer: PreTrainedTokenizerFast,
         max_length: Optional[int],
         add_encoding_tokens: bool = True,
+        **kwargs,
     ) -> Union[Dict, BatchEncoding]:
         """Tokenize a batch of examples and truncate if `max_length` is provided.
         examples = {
@@ -150,7 +151,15 @@ class FZxMedQADataModule(BaseDataModule):
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
-        # tokenize and format as PyTorch tensors
+
+        # append document title
+        if self.append_document_title:
+            dataset = dataset.map(
+                self._append_document_title, desc="Appending document title"
+            )
+        dataset.remove_columns_("document.title")
+
+        # tokenize
         fn = partial(
             self.tokenize_examples,
             tokenizer=self.tokenizer,

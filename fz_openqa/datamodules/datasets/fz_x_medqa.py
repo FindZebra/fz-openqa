@@ -46,6 +46,7 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                     "answer.target": datasets.Value("int32"),
                     "answer": datasets.Sequence(datasets.Value("string")),
                     "document": datasets.Value("string"),
+                    "document.title": datasets.Value("string"),
                     "document.rank": datasets.Value("int32"),
                     "document.is_positive": datasets.Value("bool"),
                 }
@@ -80,6 +81,14 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
+                # extract document text and title
+                document = d["document"]
+                title, *text = document.split(". ")
+                text = ". ".join(text)
+                d["document"] = text
+                d["document.title"] = title
+
+                # adjust other values
                 d["document.rank"] = d.pop("rank_bm25") - 1  # start from zero
                 d["document.is_positive"] = d.pop("is_positive")
                 d["question.idx"] = d.pop("question_id")

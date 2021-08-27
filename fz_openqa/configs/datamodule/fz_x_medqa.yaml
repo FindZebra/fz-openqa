@@ -4,6 +4,7 @@ defaults:
 
 _target_: fz_openqa.datamodules.fz_x_medqa_dm.FZxMedQADataModule
 add_encoding_tokens: True
+append_document_title: True
 cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: 64
 eval_batch_size: 128

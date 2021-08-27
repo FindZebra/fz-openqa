@@ -3,6 +3,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import torch
@@ -18,6 +19,7 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.utils import nested_list
 from fz_openqa.modeling.models.base import BaseModel
 from fz_openqa.modeling.models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
@@ -25,6 +27,7 @@ from fz_openqa.modeling.models.multiple_choice_qa_reader import (
 from fz_openqa.modeling.models.qa_retriever import QaRetriever
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import infer_device_from_batch
+from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import only_trainable
 
 
@@ -135,15 +138,19 @@ class MultipleChoiceQA(BaseModel):
         )
 
         # retriever k documents from the corpus given the query
-        retrieved_batch = self.retrieve_documents(
+        retrieved_batch, effective_n_docs = self.retrieve_documents(
             self.retriever.corpus, query_encoding, n_docs=self.eval_top_k
         )
 
         reader_data = []
-        for idx in range(self.eval_top_k):
-            # index and move the batc
+        for idx in range(effective_n_docs):
+            # index the k-th document for each batch element and
+            # move the batch to device
             retrieved_batch_k = {
-                k: v[:, idx] for k, v in retrieved_batch.items()
+                k: v[:, idx]
+                if isinstance(v, Tensor)
+                else [vv[idx] for vv in v]
+                for k, v in retrieved_batch.items()
             }
             retrieved_batch_k = move_data_to_device(retrieved_batch_k, device)
 
@@ -156,13 +163,13 @@ class MultipleChoiceQA(BaseModel):
             reader_data += [self._reader_forward(batch_k, split)]
 
         # gather outputs
-        # todo: experiment with sum(p_select * answer_logits) instead of argmax
+        # todo: experiment with sum(p_relevance * answer_logits) instead of argmax
         reader_data = {
             key: torch.cat([r[key] for r in reader_data], dim=1)
             for key in list(reader_data[0].keys())
         }
         reader_data["answer_logits"] = self.argmax_select(
-            reader_data["answer_logits"], key=reader_data["select_logits"]
+            reader_data["answer_logits"], key=reader_data["relevance_logits"]
         )
         reader_data["answer_targets"] = batch["answer.target"]
 
@@ -177,14 +184,14 @@ class MultipleChoiceQA(BaseModel):
         )
         reader_data_k = {
             "answer_logits": answer_logits,
-            "select_logits": selection_logits,
-            "r_rank": batch_k["r_rank"].unsqueeze(1),
+            "relevance_logits": selection_logits,
+            "document.r_rank": batch_k["document.r_rank"].unsqueeze(1),
         }
         return reader_data_k
 
     def retrieve_documents(
         self, corpus: CorpusDataModule, query: Tensor, n_docs: int
-    ) -> Batch:
+    ) -> Tuple[Batch, int]:
         """
         Retrieve `n_documents` from the corpus object given the `query`.
         """
@@ -193,13 +200,21 @@ class MultipleChoiceQA(BaseModel):
         retrieved_docs: BatchedNearestExamplesResults = corpus.query_batch(
             query, k=n_docs
         )
+        n_docs = len(retrieved_docs.total_examples)
+
         # create a list of retrieved documents such as:
         # [x[r_rank=0, bs_idx=0], x[r_rank=1, bs_idx=0]], ...x[r_rank=0, bs_idx=1]]
         # NB: r_rank corresponds to the rank of the retrieved doc
         retrieved = retrieved_docs.total_examples
-        [r.update({"r_rank": -1 + 0 * r["idx"]}) for r in retrieved]
+        [
+            r.update({"document.r_rank": -1 + 0 * r["document.idx"]})
+            for r in retrieved
+        ]
         retrieved_batch = [
-            {k: idx if k == "r_rank" else v[idx] for k, v in d.items()}
+            {
+                k: idx if k == "document.r_rank" else v[idx]
+                for k, v in d.items()
+            }
             for d in retrieved
             for idx in range(n_docs)
         ]
@@ -210,9 +225,11 @@ class MultipleChoiceQA(BaseModel):
         # reshape all as [batch_size, n_docs, *]
         retrieved_batch = {
             k: v.view(batch_size, n_docs, *v.shape[1:])
+            if isinstance(v, Tensor)
+            else nested_list(v, stride=n_docs)
             for k, v in retrieved_batch.items()
         }
-        return retrieved_batch
+        return retrieved_batch, n_docs
 
     @staticmethod
     def argmax_select(inputs: Tensor, *, key: Tensor) -> Dict[str, Tensor]:

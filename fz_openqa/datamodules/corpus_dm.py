@@ -6,6 +6,7 @@ from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -25,8 +26,9 @@ from .base_dm import BaseDataModule
 from .collate import collate_and_pad_attributes
 from .collate import extract_and_collate_attributes_as_list
 from .datasets import file_corpus
+from .datasets import fz_corpus
 from .datasets import meqa_en_corpus
-from .utils import gen_passages
+from .passage import gen_passages
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
@@ -48,7 +50,6 @@ class CorpusDataModule(BaseDataModule):
     dset_script_path_or_id = (
         file_corpus.__file__  # HuggingFace dataset id or local path to script
     )
-    text_fields = ["document"]  # text fields that should be tokenized
     split_ids = [
         datasets.Split.TRAIN,
         datasets.Split.VALIDATION,
@@ -59,8 +60,9 @@ class CorpusDataModule(BaseDataModule):
         "passage_idx",
         "input_ids",
         "attention_mask",
+        "passage_mask",
     ]  # attributes to be converted into Tensors
-    vectors_id = "vectors"
+    vectors_id = "document.vectors"
 
     def __init__(
         self,
@@ -68,7 +70,8 @@ class CorpusDataModule(BaseDataModule):
         input_dir: str,
         passage_length: int = 200,
         passage_stride: int = 200,
-        max_length=None,
+        max_length: Optional[int] = None,
+        passage_min_length: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(*args, max_length=max_length, **kwargs)
@@ -80,6 +83,10 @@ class CorpusDataModule(BaseDataModule):
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
+        self.passage_min_length = passage_min_length
+        if self.append_document_title:
+            # appending the title is quite complicated as it requiree
+            raise NotImplementedError
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -106,14 +113,19 @@ class CorpusDataModule(BaseDataModule):
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
+        # remove title for now
+        dataset.remove_columns_("title")
+
         # add index column
         dataset = dataset.map(
             self.add_idx, batched=False, with_indices=True, desc="Indexing"
         )
 
-        # tokenize the dataset
+        # tokenize the text
         fn = partial(
             self.tokenize_examples,
+            fields=["text"],
+            output_key=None,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             return_token_type_ids=False,
@@ -122,7 +134,7 @@ class CorpusDataModule(BaseDataModule):
             add_encoding_tokens=False,
         )
         dataset = dataset.map(
-            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing text"
         )
 
         # generate passages of equal size
@@ -155,7 +167,7 @@ class CorpusDataModule(BaseDataModule):
         )
 
         # append the prefix "document."
-        dataset = dataset.rename_column("document", "document.text")
+        dataset = dataset.rename_column("text", "document.text")
         for attr in [
             "input_ids",
             "attention_mask",
@@ -197,11 +209,11 @@ class CorpusDataModule(BaseDataModule):
             "start_tokens": [0 for _ in start_tokens],
             "end_tokens": [0 for _ in end_tokens],
         }
-        doc_idxs, pas_idxs, attention_masks, passage_masks = zip(
+        indexes, doc_idxs, pas_idxs, attention_masks, passage_masks = zip(
             *[
-                (doc_idx, pas_idx, attention_mask, passage_mask)
-                for doc_idx, ex in zip(
-                    examples["idx"], examples["attention_mask"]
+                (idx, doc_idx, pas_idx, attention_mask, passage_mask)
+                for idx, (doc_idx, ex) in enumerate(
+                    zip(examples["idx"], examples["attention_mask"])
                 )
                 for pas_idx, (attention_mask, passage_mask) in enumerate(
                     gen_passages(
@@ -249,11 +261,11 @@ class CorpusDataModule(BaseDataModule):
             }
         )
         # extract document.text
-        output["document"] = [
+        output["text"] = [
             CorpusDataModule.extract_passage_text_from_doc(
-                examples["document"][idx], ofs_ids
+                examples["text"][idx], ofs_ids
             )
-            for idx, ofs_ids in zip(doc_idxs, output["offset_mapping"])
+            for idx, ofs_ids in zip(indexes, output["offset_mapping"])
         ]
 
         # drop unnecessary attributes
@@ -343,10 +355,6 @@ class CorpusDataModule(BaseDataModule):
         key: str, model: Callable, batch: Batch
     ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
-        batch = {
-            k: torch.tensor(v) if not isinstance(v, torch.Tensor) else v
-            for k, v in batch.items()
-        }
 
         # move data to device
         if isinstance(model, torch.nn.Module):
@@ -425,6 +433,8 @@ class CorpusDataModule(BaseDataModule):
 
 
 class MedQaEnDataModule(CorpusDataModule):
-    dset_script_path_or_id = (
-        meqa_en_corpus.__file__  # HuggingFace dataset id or local path to script
-    )
+    dset_script_path_or_id = meqa_en_corpus.__file__
+
+
+class FzCorpusDataModule(CorpusDataModule):
+    dset_script_path_or_id = fz_corpus.__file__
