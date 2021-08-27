@@ -27,7 +27,6 @@ from fz_openqa.modeling.models.multiple_choice_qa_reader import (
 from fz_openqa.modeling.models.qa_retriever import QaRetriever
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import infer_device_from_batch
-from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import only_trainable
 
 
@@ -199,10 +198,12 @@ class MultipleChoiceQA(BaseModel):
         retrieved_docs: BatchedNearestExamplesResults = corpus.query_batch(
             query, k=n_docs
         )
-        n_docs = len(retrieved_docs.total_examples)
+        n_retrieved_docs = len(
+            list(retrieved_docs.total_examples[0].values())[0]
+        )
 
         # create a list of retrieved documents such as:
-        # [x[r_rank=0, bs_idx=0], x[r_rank=1, bs_idx=0]], ...x[r_rank=0, bs_idx=1]]
+        # [x[bs_idx=0, r_rank=0], x[bs_idx=0, r_rank=1]], ..., x[bs_idx=1, r_rank=0], ...]
         # NB: r_rank corresponds to the rank of the retrieved doc
         retrieved = retrieved_docs.total_examples
         [
@@ -215,7 +216,7 @@ class MultipleChoiceQA(BaseModel):
                 for k, v in d.items()
             }
             for d in retrieved
-            for idx in range(n_docs)
+            for idx in range(n_retrieved_docs)
         ]
 
         # collate retrieved documents
@@ -223,12 +224,12 @@ class MultipleChoiceQA(BaseModel):
 
         # reshape all as [batch_size, n_docs, *]
         retrieved_batch = {
-            k: v.view(batch_size, n_docs, *v.shape[1:])
+            k: v.view(batch_size, n_retrieved_docs, *v.shape[1:])
             if isinstance(v, Tensor)
-            else nested_list(v, stride=n_docs)
+            else nested_list(v, stride=n_retrieved_docs)
             for k, v in retrieved_batch.items()
         }
-        return retrieved_batch, n_docs
+        return retrieved_batch, n_retrieved_docs
 
     @staticmethod
     def argmax_select(inputs: Tensor, *, key: Tensor) -> Dict[str, Tensor]:
