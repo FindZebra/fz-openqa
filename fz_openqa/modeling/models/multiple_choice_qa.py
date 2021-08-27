@@ -163,7 +163,6 @@ class MultipleChoiceQA(BaseModel):
             reader_data += [self._reader_forward(batch_k, split)]
 
         # gather outputs
-        # todo: experiment with sum(p_relevance * answer_logits) instead of argmax
         reader_data = {
             key: torch.cat([r[key] for r in reader_data], dim=1)
             for key in list(reader_data[0].keys())

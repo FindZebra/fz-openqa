@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+from collections import defaultdict
 from functools import partial
 from typing import Any
 from typing import Callable
@@ -70,8 +71,8 @@ class CorpusDataModule(BaseDataModule):
         input_dir: str,
         passage_length: int = 200,
         passage_stride: int = 200,
+        passage_min_length: Optional[int] = 100,
         max_length: Optional[int] = None,
-        passage_min_length: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(*args, max_length=max_length, **kwargs)
@@ -160,6 +161,14 @@ class CorpusDataModule(BaseDataModule):
             desc="Extracting passages",
         )
 
+        # remove passages =< passage_min_length
+        if self.passage_min_length is not None:
+            print(f">>> 1: dset: {len(dataset['train'])}")
+            dataset = dataset.filter(
+                lambda ex: sum(ex["attention_mask"]) > self.passage_min_length
+            )
+            print(f">>> 2: dset: {len(dataset['train'])}")
+
         # dropping unnecessary columns and cast into tensors
         dataset = dataset.remove_columns(["offset_mapping"])
         dataset.set_format(
@@ -198,68 +207,36 @@ class CorpusDataModule(BaseDataModule):
                 f"mean={np.mean(lens):.1f}, std={np.std(lens):.1f} [{min(lens)} - {max(lens)}]"
             )
 
-        # define the arguments of the method `gen_passages`that are valid
-        # for all attributes
-        all_attributes_args = {"size": size, "stride": stride}
-
-        # do a first to generate the passages for the attribute "attention_mask"
-        # while generating the  passage attributes ("passage_idx", "passage_mask")
-        args = {
-            "pad_token": 0,
-            "start_tokens": [0 for _ in start_tokens],
-            "end_tokens": [0 for _ in end_tokens],
-        }
-        indexes, doc_idxs, pas_idxs, attention_masks, passage_masks = zip(
-            *[
-                (idx, doc_idx, pas_idx, attention_mask, passage_mask)
-                for idx, (doc_idx, ex) in enumerate(
-                    zip(examples["idx"], examples["attention_mask"])
-                )
-                for pas_idx, (attention_mask, passage_mask) in enumerate(
-                    gen_passages(
-                        ex, **args, **all_attributes_args, return_mask=True
-                    )
-                )
-            ]
-        )
-
-        # instantiate the output
-        output = {
-            "idx": list(doc_idxs),
-            "passage_idx": list(pas_idxs),
-            "attention_mask": list(attention_masks),
-            "passage_mask": list(passage_masks),
-        }
-
-        # do another pass to generate the passages for the attributes
-        # "input_ids" and "offset_mapping", other attributes can be listed here.
-        # this time the attribute `passage_mask` is not returned.
-        args_dict = {
+        # generate passages for all arguments, the dictionary bellow describes the configuration of the
+        # function `gen_passages` for each key.
+        base_args = {"size": size, "stride": stride}
+        gen_passage_args = {
             "input_ids": {
                 "pad_token": pad_token_id,
-                "return_mask": False,
                 "start_tokens": start_tokens,
                 "end_tokens": end_tokens,
+                **base_args,
+            },
+            "attention_mask": {
+                "pad_token": 0,
+                "end_tokens": [0 for _ in end_tokens],
+                "start_tokens": [0 for _ in start_tokens],
+                **base_args,
             },
             "offset_mapping": {
                 "pad_token": [-1, -1],
-                "return_mask": False,
                 "start_tokens": [[-1, -1] for _ in start_tokens],
                 "end_tokens": [[-1, -1] for _ in start_tokens],
+                **base_args,
             },
         }
-        output.update(
-            {
-                k: [
-                    passage_attr
-                    for ex in examples[k]
-                    for passage_attr in gen_passages(
-                        ex, **all_attributes_args, **args
-                    )
-                ]
-                for k, args in args_dict.items()
-            }
+
+        indexes, output = CorpusDataModule.generate_passages_for_all_keys(
+            examples,
+            keys=["input_ids", "attention_mask", "offset_mapping"],
+            args=gen_passage_args,
         )
+
         # extract document.text
         output["text"] = [
             CorpusDataModule.extract_passage_text_from_doc(
@@ -273,6 +250,58 @@ class CorpusDataModule(BaseDataModule):
             output[k] = [None for _ in output["input_ids"]]
 
         return output
+
+    @staticmethod
+    def generate_passages_for_all_keys(
+        examples: Dict[str, List[Any]],
+        keys: List[str],
+        args: Dict[str, Dict[str, Any]],
+    ) -> Tuple[List[int], Batch]:
+        """
+        This functions generate the passages for each attribute in `keys`, the `arg` dictionary
+        must contain an entry for all `keys`. The first pass is used to store the document/example indexes
+        and compute the `passage_mask`.
+
+        The passage mask is used for segmentation, and is optional for this project.
+        In this context, all tokens are attributed to a single passage,
+        although they appear in multiple passages (strides).
+        The passage mask indicates if a token is attributed to this specific passage.
+
+        return:
+            - indexes: index of the parent example for each passage
+            - output: Batch of data for all keys + `idx` (document id) and `passage_mask`
+        """
+        assert "idx" in examples.keys()
+        assert all(key in args.keys() for key in keys)
+        first_key, *keys = keys
+        output = defaultdict(list)
+        indexes = []
+        for idx, (doc_idx, example) in enumerate(
+            zip(examples["idx"], examples[first_key])
+        ):
+
+            # do a first pass to compute the passage masks
+            for pas_idx, (passage, passage_mask) in enumerate(
+                gen_passages(example, **args[first_key], return_mask=True)
+            ):
+                indexes += [idx]
+                output["idx"].append(doc_idx)
+                output["passage_idx"].append(pas_idx)
+                output["passage_mask"].append(passage_mask)
+                output[first_key].append(passage)
+
+            # do another pass to generate the passages for each remaining attribute
+        for key in keys:
+            for example in examples[key]:
+                for passage in gen_passages(
+                    example, **args[key], return_mask=False
+                ):
+                    output[key].append(passage)
+
+        assert all(
+            len(v) == len(list(output.values())[0]) for v in output.values()
+        )
+        return indexes, output
 
     @staticmethod
     def extract_passage_text_from_doc(

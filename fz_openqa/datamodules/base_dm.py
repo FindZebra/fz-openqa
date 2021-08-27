@@ -303,5 +303,5 @@ class BaseDataModule(LightningDataModule):
         txt = self.tokenizer.decode(example[key], **kwargs)
         return (
             f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: `{txt.replace('[PAD]', '').strip()}`"
+            f"text: [deep_sky_blue3]`{txt.replace('[PAD]', '').strip()}`"
         )
