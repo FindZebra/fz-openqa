@@ -45,7 +45,11 @@ def gen_passages(
 
         # only return if there are unmasked tokens
         if len(seq) > left_pad:
+
+            # define the passage
             seq = start_tokens + seq + end_tokens + padding * [pad_token]
+
+            # define the passage mask
             mask = (
                 (len(start_tokens) + left_pad) * [0]
                 + center * [1]

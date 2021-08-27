@@ -219,14 +219,14 @@ class CorpusDataModule(BaseDataModule):
             },
             "attention_mask": {
                 "pad_token": 0,
-                "end_tokens": [0 for _ in end_tokens],
                 "start_tokens": [0 for _ in start_tokens],
+                "end_tokens": [0 for _ in end_tokens],
                 **base_args,
             },
             "offset_mapping": {
                 "pad_token": [-1, -1],
                 "start_tokens": [[-1, -1] for _ in start_tokens],
-                "end_tokens": [[-1, -1] for _ in start_tokens],
+                "end_tokens": [[-1, -1] for _ in end_tokens],
                 **base_args,
             },
         }
@@ -273,7 +273,10 @@ class CorpusDataModule(BaseDataModule):
         """
         assert "idx" in examples.keys()
         assert all(key in args.keys() for key in keys)
-        first_key, *keys = keys
+        L = len(next(iter(examples.values())))
+        assert all(L == len(x) for x in examples.values())
+
+        first_key, *other_keys = keys
         output = defaultdict(list)
         indexes = []
         for idx, (doc_idx, example) in enumerate(
@@ -291,16 +294,17 @@ class CorpusDataModule(BaseDataModule):
                 output[first_key].append(passage)
 
             # do another pass to generate the passages for each remaining attribute
-        for key in keys:
+        for key in other_keys:
             for example in examples[key]:
-                for passage in gen_passages(
+                passages = gen_passages(
                     example, **args[key], return_mask=False
-                ):
+                )
+                for i, passage in enumerate(passages):
                     output[key].append(passage)
 
-        assert all(
-            len(v) == len(list(output.values())[0]) for v in output.values()
-        )
+        # check output consistency and return
+        L = len(list(next(iter(output.values()))))
+        assert all(len(v) == L for v in output.values())
         return indexes, output
 
     @staticmethod
@@ -446,7 +450,7 @@ class CorpusDataModule(BaseDataModule):
             return DatasetDict(
                 {
                     k: dset.select(range(n))
-                    for n, (k, dset) in zip([1, 1, 1], dataset.items())
+                    for n, (k, dset) in zip([10, 1, 1], dataset.items())
                 }
             )
         elif isinstance(dataset, Dataset):
