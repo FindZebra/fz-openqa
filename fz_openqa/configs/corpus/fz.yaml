@@ -1,4 +1,4 @@
-_target_: fz_openqa.datamodules.corpus_dm.MedQaEnDataModule
+_target_: fz_openqa.datamodules.corpus_dm.FzCorpusDataModule
 
 input_dir: null
 cache_dir: ${cache_dir} # cache_dir is specified in config.yaml

@@ -1,5 +1,5 @@
 defaults:
-  - evaluator: null
+  - evaluator: end2end_multiple_choice_qa.yaml
   - bert: bio_bert.yaml
   - multiple_choice_qa_reader@reader
   - qa_retriever@retriever
@@ -12,8 +12,7 @@ lr: 1e-5
 hidden_size: 256
 weight_decay: 1e-4
 dropout: 0
-eval_using_corpus: True
-eval_top_k: 100
+end_to_end_evaluation: True
 
 reader:
   lr: ${model.lr}

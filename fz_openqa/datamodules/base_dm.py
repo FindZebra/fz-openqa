@@ -22,8 +22,6 @@ from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
-from .utils import add_spec_token
-from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import pprint_batch
 
 HgDataset = Union[Dataset, DatasetDict]
@@ -63,6 +61,7 @@ class BaseDataModule(LightningDataModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
+        append_document_title: bool = True,
         cache_dir: str = "cache/",
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
@@ -99,6 +98,7 @@ class BaseDataModule(LightningDataModule):
         self.dataset: Optional[HgDataset] = None
         self.text_data: Optional[HgDataset] = None
         self.add_encoding_tokens = add_encoding_tokens
+        self.append_document_title = append_document_title
 
         # sampler
         self.train_sampler_cfg = (
@@ -116,6 +116,8 @@ class BaseDataModule(LightningDataModule):
         self,
         examples: Dict[str, List[Any]],
         *,
+        fields: List[str],
+        output_key: Optional[str],
         tokenizer: PreTrainedTokenizerFast,
         max_length: Optional[int],
         preprocess_fn: Optional[Callable] = None,
@@ -129,7 +131,7 @@ class BaseDataModule(LightningDataModule):
         }
         """
         # preprocess
-        examples = {field: examples[field] for field in self.text_fields}
+        examples = {field: examples[field] for field in fields}
         if preprocess_fn is not None:
             examples = {
                 field: list(map(preprocess_fn, values))
@@ -142,12 +144,17 @@ class BaseDataModule(LightningDataModule):
                 for field, values in examples.items()
             }
 
-        return tokenizer(
+        output = tokenizer(
             *examples.values(),
             max_length=max_length,
             truncation=max_length is not None,
             **kwargs,
         )
+
+        if output_key is None:
+            return output
+        else:
+            return {f"{output_key}.{attr}": v for attr, v in output.items()}
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -258,6 +265,13 @@ class BaseDataModule(LightningDataModule):
         Concatenating sequences with different length requires padding them."""
         return self.tokenizer.pad(batch)
 
+    @staticmethod
+    def _append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:
+        example[
+            "document"
+        ] = f"{example['document.title']}. {example['document']}"
+        return example
+
     @rank_zero_only
     def display_sample(self):
         """Sample a batch and pretty print it."""
@@ -289,5 +303,5 @@ class BaseDataModule(LightningDataModule):
         txt = self.tokenizer.decode(example[key], **kwargs)
         return (
             f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: `{txt.replace('[PAD]', '').strip()}`"
+            f"text: [deep_sky_blue3]`{txt.replace('[PAD]', '').strip()}`"
         )

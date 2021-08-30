@@ -1,11 +1,13 @@
 import os
 import re
 import shutil
+from collections import defaultdict
 from functools import partial
 from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -25,8 +27,9 @@ from .base_dm import BaseDataModule
 from .collate import collate_and_pad_attributes
 from .collate import extract_and_collate_attributes_as_list
 from .datasets import file_corpus
+from .datasets import fz_corpus
 from .datasets import meqa_en_corpus
-from .utils import gen_passages
+from .passage import gen_passages
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
@@ -48,7 +51,6 @@ class CorpusDataModule(BaseDataModule):
     dset_script_path_or_id = (
         file_corpus.__file__  # HuggingFace dataset id or local path to script
     )
-    text_fields = ["document"]  # text fields that should be tokenized
     split_ids = [
         datasets.Split.TRAIN,
         datasets.Split.VALIDATION,
@@ -59,8 +61,9 @@ class CorpusDataModule(BaseDataModule):
         "passage_idx",
         "input_ids",
         "attention_mask",
+        "passage_mask",
     ]  # attributes to be converted into Tensors
-    vectors_id = "vectors"
+    vectors_id = "document.vectors"
 
     def __init__(
         self,
@@ -68,7 +71,8 @@ class CorpusDataModule(BaseDataModule):
         input_dir: str,
         passage_length: int = 200,
         passage_stride: int = 200,
-        max_length=None,
+        passage_min_length: Optional[int] = 100,
+        max_length: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(*args, max_length=max_length, **kwargs)
@@ -80,6 +84,10 @@ class CorpusDataModule(BaseDataModule):
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
+        self.passage_min_length = passage_min_length
+        if self.append_document_title:
+            # appending the title is quite complicated as it requiree
+            raise NotImplementedError
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -106,14 +114,19 @@ class CorpusDataModule(BaseDataModule):
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
+        # remove title for now
+        dataset.remove_columns_("title")
+
         # add index column
         dataset = dataset.map(
             self.add_idx, batched=False, with_indices=True, desc="Indexing"
         )
 
-        # tokenize the dataset
+        # tokenize the text
         fn = partial(
             self.tokenize_examples,
+            fields=["text"],
+            output_key=None,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             return_token_type_ids=False,
@@ -122,7 +135,7 @@ class CorpusDataModule(BaseDataModule):
             add_encoding_tokens=False,
         )
         dataset = dataset.map(
-            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing text"
         )
 
         # generate passages of equal size
@@ -148,6 +161,14 @@ class CorpusDataModule(BaseDataModule):
             desc="Extracting passages",
         )
 
+        # remove passages =< passage_min_length
+        if self.passage_min_length is not None:
+            print(f">>> 1: dset: {len(dataset['train'])}")
+            dataset = dataset.filter(
+                lambda ex: sum(ex["attention_mask"]) > self.passage_min_length
+            )
+            print(f">>> 2: dset: {len(dataset['train'])}")
+
         # dropping unnecessary columns and cast into tensors
         dataset = dataset.remove_columns(["offset_mapping"])
         dataset.set_format(
@@ -155,7 +176,7 @@ class CorpusDataModule(BaseDataModule):
         )
 
         # append the prefix "document."
-        dataset = dataset.rename_column("document", "document.text")
+        dataset = dataset.rename_column("text", "document.text")
         for attr in [
             "input_ids",
             "attention_mask",
@@ -186,74 +207,42 @@ class CorpusDataModule(BaseDataModule):
                 f"mean={np.mean(lens):.1f}, std={np.std(lens):.1f} [{min(lens)} - {max(lens)}]"
             )
 
-        # define the arguments of the method `gen_passages`that are valid
-        # for all attributes
-        all_attributes_args = {"size": size, "stride": stride}
-
-        # do a first to generate the passages for the attribute "attention_mask"
-        # while generating the  passage attributes ("passage_idx", "passage_mask")
-        args = {
-            "pad_token": 0,
-            "start_tokens": [0 for _ in start_tokens],
-            "end_tokens": [0 for _ in end_tokens],
-        }
-        doc_idxs, pas_idxs, attention_masks, passage_masks = zip(
-            *[
-                (doc_idx, pas_idx, attention_mask, passage_mask)
-                for doc_idx, ex in zip(
-                    examples["idx"], examples["attention_mask"]
-                )
-                for pas_idx, (attention_mask, passage_mask) in enumerate(
-                    gen_passages(
-                        ex, **args, **all_attributes_args, return_mask=True
-                    )
-                )
-            ]
-        )
-
-        # instantiate the output
-        output = {
-            "idx": list(doc_idxs),
-            "passage_idx": list(pas_idxs),
-            "attention_mask": list(attention_masks),
-            "passage_mask": list(passage_masks),
-        }
-
-        # do another pass to generate the passages for the attributes
-        # "input_ids" and "offset_mapping", other attributes can be listed here.
-        # this time the attribute `passage_mask` is not returned.
-        args_dict = {
+        # generate passages for all arguments, the dictionary bellow describes the configuration of the
+        # function `gen_passages` for each key.
+        base_args = {"size": size, "stride": stride}
+        gen_passage_args = {
             "input_ids": {
                 "pad_token": pad_token_id,
-                "return_mask": False,
                 "start_tokens": start_tokens,
                 "end_tokens": end_tokens,
+                **base_args,
+            },
+            "attention_mask": {
+                "pad_token": 0,
+                "start_tokens": [0 for _ in start_tokens],
+                "end_tokens": [0 for _ in end_tokens],
+                **base_args,
             },
             "offset_mapping": {
                 "pad_token": [-1, -1],
-                "return_mask": False,
                 "start_tokens": [[-1, -1] for _ in start_tokens],
-                "end_tokens": [[-1, -1] for _ in start_tokens],
+                "end_tokens": [[-1, -1] for _ in end_tokens],
+                **base_args,
             },
         }
-        output.update(
-            {
-                k: [
-                    passage_attr
-                    for ex in examples[k]
-                    for passage_attr in gen_passages(
-                        ex, **all_attributes_args, **args
-                    )
-                ]
-                for k, args in args_dict.items()
-            }
+
+        indexes, output = CorpusDataModule.generate_passages_for_all_keys(
+            examples,
+            keys=["input_ids", "attention_mask", "offset_mapping"],
+            args=gen_passage_args,
         )
+
         # extract document.text
-        output["document"] = [
+        output["text"] = [
             CorpusDataModule.extract_passage_text_from_doc(
-                examples["document"][idx], ofs_ids
+                examples["text"][idx], ofs_ids
             )
-            for idx, ofs_ids in zip(doc_idxs, output["offset_mapping"])
+            for idx, ofs_ids in zip(indexes, output["offset_mapping"])
         ]
 
         # drop unnecessary attributes
@@ -261,6 +250,62 @@ class CorpusDataModule(BaseDataModule):
             output[k] = [None for _ in output["input_ids"]]
 
         return output
+
+    @staticmethod
+    def generate_passages_for_all_keys(
+        examples: Dict[str, List[Any]],
+        keys: List[str],
+        args: Dict[str, Dict[str, Any]],
+    ) -> Tuple[List[int], Batch]:
+        """
+        This functions generate the passages for each attribute in `keys`, the `arg` dictionary
+        must contain an entry for all `keys`. The first pass is used to store the document/example indexes
+        and compute the `passage_mask`.
+
+        The passage mask is used for segmentation, and is optional for this project.
+        In this context, all tokens are attributed to a single passage,
+        although they appear in multiple passages (strides).
+        The passage mask indicates if a token is attributed to this specific passage.
+
+        return:
+            - indexes: index of the parent example for each passage
+            - output: Batch of data for all keys + `idx` (document id) and `passage_mask`
+        """
+        assert "idx" in examples.keys()
+        assert all(key in args.keys() for key in keys)
+        L = len(next(iter(examples.values())))
+        assert all(L == len(x) for x in examples.values())
+
+        first_key, *other_keys = keys
+        output = defaultdict(list)
+        indexes = []
+        for idx, (doc_idx, example) in enumerate(
+            zip(examples["idx"], examples[first_key])
+        ):
+
+            # do a first pass to compute the passage masks
+            for pas_idx, (passage, passage_mask) in enumerate(
+                gen_passages(example, **args[first_key], return_mask=True)
+            ):
+                indexes += [idx]
+                output["idx"].append(doc_idx)
+                output["passage_idx"].append(pas_idx)
+                output["passage_mask"].append(passage_mask)
+                output[first_key].append(passage)
+
+            # do another pass to generate the passages for each remaining attribute
+        for key in other_keys:
+            for example in examples[key]:
+                passages = gen_passages(
+                    example, **args[key], return_mask=False
+                )
+                for i, passage in enumerate(passages):
+                    output[key].append(passage)
+
+        # check output consistency and return
+        L = len(list(next(iter(output.values()))))
+        assert all(len(v) == L for v in output.values())
+        return indexes, output
 
     @staticmethod
     def extract_passage_text_from_doc(
@@ -343,10 +388,6 @@ class CorpusDataModule(BaseDataModule):
         key: str, model: Callable, batch: Batch
     ) -> Dict[str, Tensor]:
         """Compute one batch of vectors"""
-        batch = {
-            k: torch.tensor(v) if not isinstance(v, torch.Tensor) else v
-            for k, v in batch.items()
-        }
 
         # move data to device
         if isinstance(model, torch.nn.Module):
@@ -409,7 +450,7 @@ class CorpusDataModule(BaseDataModule):
             return DatasetDict(
                 {
                     k: dset.select(range(n))
-                    for n, (k, dset) in zip([1, 1, 1], dataset.items())
+                    for n, (k, dset) in zip([10, 1, 1], dataset.items())
                 }
             )
         elif isinstance(dataset, Dataset):
@@ -425,6 +466,8 @@ class CorpusDataModule(BaseDataModule):
 
 
 class MedQaEnDataModule(CorpusDataModule):
-    dset_script_path_or_id = (
-        meqa_en_corpus.__file__  # HuggingFace dataset id or local path to script
-    )
+    dset_script_path_or_id = meqa_en_corpus.__file__
+
+
+class FzCorpusDataModule(CorpusDataModule):
+    dset_script_path_or_id = fz_corpus.__file__

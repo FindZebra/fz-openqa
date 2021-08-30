@@ -1,4 +1,5 @@
 from numbers import Number
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Union
@@ -39,3 +40,15 @@ def pprint_batch(batch: Batch):
             u += f"   - {k}: {v} {type(v)}\n"
 
     rich.print(u)
+
+
+def add_prefix(d: Dict[str, Any], prefix: str):
+    return {f"{prefix}{k}": v for k, v in d.items()}
+
+
+def filter_prefix(d: Dict[str, Any], prefix: str):
+    return {k.replace(prefix, ""): v for k, v in d.items() if prefix in k}
+
+
+def contains_prefix(key, output):
+    return any(key in k for k in output.keys())
