@@ -1,0 +1,2 @@
+_target_: fz_openqa.modeling.evaluators.end2end_multiple_choice_qa.EndToEndMultipleChoiceQaMaximumLikelihood
+n_documents: 100

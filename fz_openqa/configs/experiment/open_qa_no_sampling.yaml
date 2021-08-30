@@ -29,7 +29,7 @@ trainer:
 
 model:
   eval_top_k: 100
-  eval_using_corpus: False
+  end_to_end_evaluation: False
   lr: 1e-5
   weight_decay: 1e-4
   dropout: 0
