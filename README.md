@@ -208,7 +208,7 @@ Each module features one `BaseEvaluator` which role is to compute the loss and t
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
-<summary>Data flow within the `BaseModels` (multi-GPUs)</summary>
+<summary>Data flow within the <b>BaseModels</b> (multi-GPUs)</summary>
 
 The main computation should be implemented in the `_step()` and `_step_end()` methods of the `BaseModel`.
 The `_step()` method runs independently on each device whereas the `_step_end()` method runs on
@@ -220,7 +220,7 @@ The metrics must be implemented in the `_step_end` method in order to avoid erro
 </details>
 
 <details>
-<summary>`BaseEvaluator`</summary>
+<summary><b>BaseEvaluator</b></summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
@@ -229,178 +229,89 @@ This method is called in the `module._step()` method
 `BaseEvaluator.foward()` method from each device.
 </details>
 
-### Data generation pipeline
+<details>
+<summary><b>MultipleChoiceQA</b></summary>
 
-Generating the positive and hard negative examples will be done dynamically based on:
+The `MultipleChoiceQA` class implements the end-to-end open question answering pipeline.
+It includes two components: a retriever and reader.
+This class can be instantiated using pretrained components or the components can be trained from scratch
+(at the moment both components are trained separately, but end-to-end training will be soon implemented).
 
-1. a passage extractor (fixed legnth, paragraphs, ...)
-2. a retriever model (sparse or dense)
-3. a selection strategy (exact match, meta-map, similarity score, ...)
+The `_step` and `_step_end` both rely on the methods of the retriever and components (each with their distinct evaluators).
+However, a third evaluator class (`EndToEndMultipleChoiceQaMaximumLikelihood`) is added to evaluate the end-to-end reader accuracy.
+
+During evaluation, data from each component is managed separately (so each module send and receive its own data between `_step` and `_step_end`).
+We do so by prefixing the output data of the reader, the retriever and of the end-to-end evaluator
+using the keys [`retriever/`, `reader/`, `end2end/`].
+</details>
+
+### Data Management
+
+<details>
+<summary>Datamodules and Datasets</summary>
+
+`DataModules` are high-level classes required for `Lightning` to function optimally.
+`DataModule` wraps the loading, preprocessing of the datasets.
+They also include methods to construct batches of data using the `collate` method.
+
+Each datamodule features a collection of `datasets.Datasets` objects (HuggingFace), each corresponding to a split of the dataset (train/validation/test).
+Datasets are managed using `datasets.Datasets` which allows to manage the data transparently (storage, encoding, loading, caching).
+</details>
+
+<details>
+<summary>Corpus</summary>
+
+The `Corpus` object is a `DataModule` that allows to process, store and query a large collection of documents.
+Each document is chunked into equal-length passages.
+Each passage can be encoded into a vector representation (sparse, dense or Colbert). The whole corpus can thereafter be indexed using `faiss`.
+The `faiss` index can be used to rank passages according to a given query (sparse, dense or Colbert).
+Whereas HuggingFace provides methods for sparse and dense indexing. The Colbert indexing and ranking remains to be implemented.
+</details>
+
+<details>
+<summary>Batch structure</summary>
+
+A batch of data contains a question, an answer, and potentially multiple documents (positives and negatives).
+Batches represent a two-level data structure with first-level keys [`question`, `answer`, `document`] and
+second-level attributes [`text`, `input_ids`, `attention_mask`, `idx`, ...]. The nested-structured is flattened and keys joined
+using a dot such as `document` + `input_ids` -> `document.input_ids`.
+
+
+A batch of data is of the following structure.
+Documents are not necessarily given as they might be sampled dynamically within the model.
+
+* question:
+  * text: list of `batch_size` strings
+  * input_ids: tensor of shape `[batch_size, L_q]`
+  * attention_mask: tensor of shape `[batch_size, L_q]`
+* answer:
+  * text: list of `batch_size` lists of `N_a` strings
+  * input_ids: tensor of shape `[batch_size, N_a, L_a]`
+  * attention_mask: tensor of shape `[batch_size, N_a, L_a]`
+  * target:  tensor of shape `[batch_size, ]`
+* document (Optional):
+  * text: list of `batch_size` lists of `N_docs` strings
+  * input_ids: tensor of shape `[batch_size, N_docs, L_d]`
+  * attention_mask: tensor of shape `[batch_size, N_docs, L_d]`
+  * idx: tensor of shape `[batch_size, ]`
+</details>
+
+
+<details>
+<summary>Generating the positive and negative passages</summary>
+
+Generating the positive and hard negative passages for each question will be performed following these 3 steps:
+
+1. a passage extractor (options: fixed length, paragraphs, ...)
+2. a retriever model (options: sparse or dense)
+3. a selection strategy (options: exact match, meta-map, similarity score, ...)
+
+Each step can be configured with different options,
+so we can easily experiment with the different configurations.
 
 The whole pipeline is pictured bellow:
-<details>
-<summary>Illustration</summary>
 
 ![Data generation pipeline](.assets/neg+pos-gen-pipeline.png)
-
-</details>
-
-### Pesudo-code for Supervised OpenQA
-
-The basic End-to-end OpenQA model relies on a single pretrained BERT model. The model functions as follows:
-
-<details>
-<summary>Retriever model</summary>
-
-```python
-from copy import deepcopy
-import torch
-from torch import Tensor, nn, einsum, argmax
-from transformers import AutoModel
-from fz_openqa.modeling.layers.lambd import Lambda
-
-hdim = 16
-bert = AutoModel.from_pretrained('model_id')
-head_q = nn.Sequential(nn.Linear(bert.config.hidden_size, hdim),
-                       Lambda(lambda x: x[:, 0]))
-head_d = deepcopy(head_q)
-
-
-def h_q(q: Tensor) -> Tensor:
-    """pseudo-code for the query model"""
-    return head_q(bert(q).last_hidden_state)  # tensor of shape [n_q, h,]
-
-
-def h_d(d: Tensor) -> Tensor:
-    """pseudo-code for the query model"""
-    return head_d(bert(d).last_hidden_state)  # tensor of shape [n_d, h,]
-
-
-def sim(h_q: Tensor, h_d: Tensor) -> Tensor:
-    """Compute the similarity matrix between the batch of queries and the documents"""
-    return einsum(f'nh, mh -> nm', h_q, h_d)  # tensor  of shape [n_q, n_d]
-
-
-def topk(similarities: Tensor, k: int) -> Tensor:
-    """return the topk document for each query in the batch given the similarity matrix"""
-    values, indices = torch.topk(similarities, k=k, dim=1)  # tensor of shape [m_q, min(k, n_d)]
-    return indices
-
-
-def retriever(q: Tensor, d: Tensor, k: int) -> Tensor:
-    """Retrieve the top k document form the corpus `d`
-    for each query in the batch `q`"""
-    similarities = sim(h_q(q), h_d(d))
-    return topk(similarities, k)
-```
-
-</details>
-
-<details>
-<summary>Reader model</summary>
-
-```python
-from copy import deepcopy
-import torch
-from torch import Tensor, nn, einsum, cat
-from transformers import AutoModel
-from fz_openqa.modeling.layers.lambd import Lambda
-
-hdim = 16
-bert = AutoModel.from_pretrained('model_id')
-head_qd = nn.Sequential(nn.Linear(bert.config.hidden_size, hdim),
-                        Lambda(lambda x: x[:, 0]))
-head_a = deepcopy(head_qd)
-
-
-def h_qd(q: Tensor, d: Tensor) -> Tensor:
-    """pseudo-code for the query-document model"""
-    qd = cat([q, d], dim=1)
-    return head_qd(bert(qd).last_hidden_state)  # tensor of shape [n_qd, h,]
-
-
-def h_a(a: Tensor) -> Tensor:
-    """pseudo-code for the answer model"""
-    return head_a(bert(a).last_hidden_state)  # tensor of shape [n_a, h,]
-
-
-def sim(h_qd: Tensor, h_a: Tensor) -> Tensor:
-    """Compute the similarity matrix between the batch of query-documents and the answers"""
-    return einsum(f'nh, nah -> na', h_qd, h_a)  # tensor  of shape [n_qd, n_a]
-
-
-def topk(similarities: Tensor, k: int) -> Tensor:
-    """return the top k document-answers for each query in the batch given the similarity matrix"""
-    values, indices = torch.topk(similarities, k=k, dim=1)  # tensor of shape [n_qd min(k, n_a)]
-    return indices
-
-
-def reader(q: Tensor, d: Tensor, a: Tensor, k: int) -> Tensor:
-    """Retrieve the top k answers given a batch of triplets (query, document, answer)"""
-    similarities = sim(h_qd(q, d), h_a(a))
-    return topk(similarities, k)
-```
-
-</details>
-
-<details>
-<summary>Supervised Training</summary>
-
-The `FZxMedQA` dataset provides triplets `(q, d, a)` that can be exploited for supervised learning. In this setup the
-retriever only learns from the label (golden passage). The pseudo-code looks like:
-
-```python
-import torch
-
-for batch in loader:
-    # shapes: q: [bs, L_q, :], d: [bs, L_d, :], a: [bs, N_a, L_a, :], a_index: [bs,]
-    q, d, a, a_index = batch
-    bs, N_a, L_a, _ = a.shape
-    # retriever loss
-    ir_logits = sim(h_q(q), h_d(d))
-    retriever_loss = torch.nn.functional.cross_entropy(ir_logits, torch.range(ir_logits.shape[0]))
-    # reader loss
-    _h_qd = h_qd(q, d)  # shape [bs, h]
-    _h_a = h_a(a.view(bs * N_a, *a.shape[2:])).view(bs, N_a,
-                                                    -1)  # collapse bs and N_a, and reshape back, shape [bs, N_a, h]
-    qa_logits = torch.einsum(f'nh, nah -> na', _h_qd, _h_a)
-    reader_loss = torch.nn.functional.cross_entropy(qa_logits, a)
-    # total loss
-    loss = retriever_loss + retriever_loss
-    # backward, etc...
-    ...
-
-
-
-
-```
-
-</details>
-
-<details>
-<summary>End-to-end evaluation</summary>
-
-During supervised training, the retriever only learns from the golden passages, and the reader is only evaluated using
-the golden passage. During end-to-end evaluation, we wish to use the documents actually retrieved using the trained
-model.
-
-```python
-# step 1. index the corpus
-for batch in corpus:
-    batch['vectors'] = h_d(batch['input_ids'])
-corpus.add_faiss_index('vectors')
-
-# step 2. end to end evaluation
-for batch in loader:
-    q, a, a_index = batch
-    # retriever the best document for each query
-    d = corpus.get_nearest_examples_batch('vectors', k=1)  # potentially use k>1
-    # feed the best document to the reader
-    a_inferred = reader(q, d, a)
-    accuracy = Accuracy(a_inferred, a_index)
-    # log, etc...
-    ...
-```
 
 </details>
 
