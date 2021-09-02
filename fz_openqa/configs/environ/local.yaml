@@ -3,19 +3,17 @@
 
 defaults:
   - override /sys: local.yaml
-  # - override /callbacks: index_corpus.yaml
 
 trainer:
   gpus: 0
-  limit_train_batches: 1
-  limit_val_batches: 1
-  limit_test_batches: 1
   checkpoint_callback: False
 
 datamodule:
   use_subset: True
-  train_batch_size: 2
-  eval_batch_size: 5
+  window_size: 200
+  window_stride: 100
+  train_batch_size: 10
+  eval_batch_size: 20
   num_proc: 1
   num_workers: 0
 

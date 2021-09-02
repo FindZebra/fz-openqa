@@ -1,2 +1,0 @@
-cache_dir: /scratch/${whoami:}/cache/
-work_dir: /scratch/${whoami:}/raytune/fz-openqa/
