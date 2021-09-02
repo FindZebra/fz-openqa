@@ -21,7 +21,7 @@
 curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
 ```
 
-2. Install dependencies (within the project)
+2. Install dependencies (within the project directory `fz-openqa/`)
 
 ```shell
 poetry install
