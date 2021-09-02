@@ -336,6 +336,15 @@ Sample from the retriever lives and learn from the signal given by the reader co
 </details>
 
 ## Tips and Tricks
+ 
+ <details>
+<summary>Disk usage</summary>
+
+Check the disk usage for each sub-directory. Useful to check the available. space on `/scratch`.
+```bash
+du -hs *
+```
+</details>
 
 <details>
 <summary>Deleting runs older than x minutes</summary>
