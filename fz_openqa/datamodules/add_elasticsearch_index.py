@@ -1,0 +1,1 @@
+from fz_openqa.datamodules.corpus_dm import CorpusDataModule
