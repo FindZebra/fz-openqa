@@ -18,6 +18,7 @@ import torch
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
+from elasticsearch import Elasticsearch
 from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
@@ -34,8 +35,6 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
 
-from elasticsearch import Elasticsearch
-
 HgDataset = Union[Dataset, DatasetDict]
 
 TXT_PATTERN = r"^.*\.txt$"
@@ -44,20 +43,28 @@ TXT_PATTERN = r"^.*\.txt$"
 es_config = {
     "settings": {
         "number_of_shards": 1,
-        "analysis": {"analyzer": {"stop_standard": {"type": "standard", " stopwords": "_english_"}}},
+        "analysis": {
+            "analyzer": {
+                "stop_standard": {
+                    "type": "standard",
+                    " stopwords": "_english_",
+                }
+            }
+        },
     },
     "mappings": {
         "properties": {
-            "document.idx" : {"type" : "keyword"},
+            "document.idx": {"type": "keyword"},
             "document.text": {
                 "type": "text",
                 "analyzer": "standard",
-                "similarity": "BM25"
+                "similarity": "BM25",
             },
-
         }
     },
 }
+
+
 class CorpusDataModule(BaseDataModule):
     """
     A Corpus data for handling large-scale text datasets. Corpus features the following:
@@ -427,7 +434,7 @@ class CorpusDataModule(BaseDataModule):
         self,
         model: Optional[Callable] = None,
         index: Optional[str] = "faiss",
-        filtering: Optional[str] = None, 
+        filtering: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -448,38 +455,41 @@ class CorpusDataModule(BaseDataModule):
                 column=self.vectors_id, **kwargs
             )
         elif index == "bm25":
-            #if index name exist delete, othervise continue
+            # if index name exist delete, othervise continue
             es = Elasticsearch()
             print(es.info)
-            es.indices.delete(index="corpus", ignore=[400, 404]) 
+            es.indices.delete(index="corpus", ignore=[400, 404])
 
-            #decide whether to filter text to only include medical relevant terms
+            # decide whether to filter text to only include medical relevant terms
             if filtering == "scispacy":
                 raise NotImplementedError
-            
+
             for name in self.dataset["train"].column_names:
                 print(type(self.dataset["train"][name]))
 
             print(self.dataset["train"]["document.text"][0])
             print(type(self.dataset["train"]["document.text"]))
-            
-            self.dataset["train"].map(lambda row : row["document.text"]).add_elasticsearch_index(
-                    column="document.text", host='localhost', port='9200', 
-                    es_index_name="corpus", es_index_config=es_config
-                )
-            print(self.dataset['train'].get_index("corpus").es_index_name)
+
+            self.dataset["train"].add_elasticsearch_index(
+                column="document.text",
+                host="localhost",
+                port="9200",
+                es_index_name="corpus",
+                es_index_config=es_config,
+            )
+            print(self.dataset["train"].get_index("corpus").es_index_name)
 
         else:
             raise NotImplementedError
 
     def query(
-        self, 
-        query : Optional[str] = None,
-        vector : Optional[Tensor]= None, 
-        k : int = 1,
-        index : Optional[str] = "faiss",
-        filtering: Optional[str] = None 
-        ):
+        self,
+        query: Optional[str] = None,
+        vector: Optional[Tensor] = None,
+        k: int = 1,
+        index: Optional[str] = "faiss",
+        filtering: Optional[str] = None,
+    ):
         """Query index given a input query"""
         if index == "faiss":
             # todo: this causes segmentation fault on MacOS, works fine on the cluster
@@ -492,8 +502,6 @@ class CorpusDataModule(BaseDataModule):
             return self.dataset["train"].get_nearest_examples(
                 "document.text", query, k
             )
-
-
 
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
