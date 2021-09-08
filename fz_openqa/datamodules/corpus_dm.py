@@ -68,7 +68,7 @@ class CorpusDataModule(BaseDataModule):
     def __init__(
         self,
         *args,
-        input_dir: str,
+        input_dir: Optional[str] = None,
         passage_length: int = 200,
         passage_stride: int = 200,
         passage_min_length: Optional[int] = 100,
@@ -86,7 +86,7 @@ class CorpusDataModule(BaseDataModule):
         self.passage_stride = passage_stride
         self.passage_min_length = passage_min_length
         if self.append_document_title:
-            # appending the title is quite complicated as it requiree
+            # appending the title is quite complicated as it required
             raise NotImplementedError
 
     def load_base_dataset(self) -> DatasetDict:
@@ -394,7 +394,7 @@ class CorpusDataModule(BaseDataModule):
             device = next(iter(model.parameters())).device
             batch = move_data_to_device(batch, device)
 
-        # process with the model
+        # process with the model (Dense or Sparse)
         batch[key] = model(batch)
 
         # cast to numpy and return
@@ -404,19 +404,36 @@ class CorpusDataModule(BaseDataModule):
             if k != "_mode_"
         }
 
-    def compute_vectors(self, model: Callable, index: bool = True, **kwargs):
-        """Compute the vectors for each passage in the corpus"""
-        self.dataset = self.dataset.map(
-            partial(self.compute_vectors_batch, self.vectors_id, model),
-            batched=True,
-            batch_size=self.eval_batch_size,
-            num_proc=1,
-            desc="Computing corpus vectors",
-        )
-        if index:
+    def index(
+        self,
+        model: Optional[Callable] = None,
+        index: Optional[str] = "faiss",
+        **kwargs,
+    ):
+        """
+        Compute vectors (sparse or dense) for the whole dataset.
+
+        :@param model: callable that returns a vector given the batch input.
+        """
+        if model is not None:
+            self.dataset = self.dataset.map(
+                partial(self.compute_vectors_batch, self.vectors_id, model),
+                batched=True,
+                batch_size=self.eval_batch_size,
+                num_proc=1,
+                desc="Computing corpus vectors",
+            )
+        if index == "faiss":
             self.dataset["train"].add_faiss_index(
                 column=self.vectors_id, **kwargs
             )
+        elif index == "bm25":
+            raise NotImplementedError
+            self.dataset["train"].add_elasticsearch_index(
+                column=self.vectors_id, **kwargs
+            )
+        else:
+            raise NotImplementedError
 
     def query(self, vector: Tensor, k: int = 1):
         """Query the faiss index given a vector query of shape (h,)"""
