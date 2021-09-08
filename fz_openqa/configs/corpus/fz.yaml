@@ -15,3 +15,5 @@ use_subset: False
 passage_length: 200
 passage_stride: 100
 verbose: ${verbose}
+
+index_type: bm_25

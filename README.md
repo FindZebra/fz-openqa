@@ -354,9 +354,9 @@ When running the HPO, checkpoints may occupy hundreds of GB. You can delete all 
 find . -type d -path "./*" -mmin +120 -exec rm -rf {} \;
 ```
 </details>
- 
+
 ## Implemented papers
- 
+
  1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)
   * Dense retriever
   * Relevance model (reader)
