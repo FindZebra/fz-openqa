@@ -35,6 +35,8 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
 
+from fz_openqa.utils.es_functions import *
+
 HgDataset = Union[Dataset, DatasetDict]
 
 TXT_PATTERN = r"^.*\.txt$"
@@ -478,18 +480,16 @@ class CorpusDataModule(BaseDataModule):
                 column=self.vectors_id, **kwargs
             )
         elif index == "bm25":
-            # if index name exist delete, othervise continue
-            es = Elasticsearch(timeout=120)
-            #es.cluster.health(wait_for_status='yellow', request_timeout=30)
-            print(es.info)
-            es.indices.delete(index="corpus", ignore=[400, 404])
+            es_create_index("corpus")
 
             # decide whether to filter text to only include medical relevant terms
             if filtering == "scispacy":
                 raise NotImplementedError
-            squad = load_dataset('squad', split='validation')
             self.dataset.set_format(type='numpy', columns=['document.attention_mask', 'document.idx', 'document.input_ids', 
             'document.passage_idx', 'document.passage_mask', 'document.vectors'])
+            print(self.dataset['train'].column_names)
+            print(self.dataset['train']['document.text'][0])
+            es_bulk("corpus", "book1", self.dataset['train']['document.text'])
 
             # for name in self.dataset["train"].column_names:
             #     if torch.is_tensor(self.dataset["train"][name]):
@@ -501,14 +501,15 @@ class CorpusDataModule(BaseDataModule):
             # 'document.input_ids','document.passage_idx','document.passage_mask','document.vectors'])
             # print(type(subset['train']))
             # print(subset['train'].column_names)
-            squad.add_elasticsearch_index(
-                column="context",
-                host="localhost",
-                port="9200",
-                es_index_name="corpus",
-            )
+            # squad.add_elasticsearch_index(
+            #     column="context",
+            #     host="localhost",
+            #     port="9200",
+            #     es_index_name="corpus",
+            # )
             print("trying to print index")
-            print(self.dataset["train"].get_index("corpus").es_index_name)
+            response = es.indices.exists(index="corpus")
+            print(response)
 
         else:
             raise NotImplementedError
