@@ -467,10 +467,12 @@ class CorpusDataModule(BaseDataModule):
             for name in self.dataset["train"].column_names:
                 print(type(self.dataset["train"][name]))
 
-            print(self.dataset["train"]["document.text"][0])
-            print(type(self.dataset["train"]["document.text"]))
+            # print(self.dataset["train"]["document.text"][0])
+            # print(type(self.dataset["train"]["document.text"]))
 
-            self.dataset["train"].add_elasticsearch_index(
+            self.dataset["train"].map(
+                lambda row: {"document.text": row["document.text"]}
+            ).add_elasticsearch_index(
                 column="document.text",
                 host="localhost",
                 port="9200",
@@ -500,7 +502,7 @@ class CorpusDataModule(BaseDataModule):
 
         elif index == "bm25":
             return self.dataset["train"].get_nearest_examples(
-                "document.text", query, k
+                "document.text", query, k=k
             )
 
     def query_batch(self, vectors: Tensor, k: int = 1):
