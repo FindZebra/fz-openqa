@@ -54,12 +54,35 @@ es_config = {
     },
     "mappings": {
         "properties": {
-            "document.idx": {"type": "keyword"},
+            "ducment.attention_mask" : {
+                "type" : "dense_vector",
+                "dims" : 2
+            },
+            "document.idx": {
+                "type": "dense_vector",
+                "dims": 1
+            },
+            "ducment.input_ids" : {
+                "type" : "dense_vector",
+                "dims" : 2
+            },
             "document.text": {
                 "type": "text",
                 "analyzer": "standard",
                 "similarity": "BM25",
             },
+            "docment.passage_idx" : {
+                "type" : "dense_vector",
+                "dims" : 1
+            },
+            "document.passage_mask" : {
+                "type" : "dense_vector",
+                "dims" : 2
+            },
+            "document.vectors" : {
+                "type" : "dense_vector",
+                "dims" : 2
+            }
         }
     },
 }
@@ -456,29 +479,35 @@ class CorpusDataModule(BaseDataModule):
             )
         elif index == "bm25":
             # if index name exist delete, othervise continue
-            es = Elasticsearch()
+            es = Elasticsearch(timeout=120)
+            #es.cluster.health(wait_for_status='yellow', request_timeout=30)
             print(es.info)
             es.indices.delete(index="corpus", ignore=[400, 404])
 
             # decide whether to filter text to only include medical relevant terms
             if filtering == "scispacy":
                 raise NotImplementedError
+            squad = load_dataset('squad', split='validation')
+            self.dataset.set_format(type='numpy', columns=['document.attention_mask', 'document.idx', 'document.input_ids', 
+            'document.passage_idx', 'document.passage_mask', 'document.vectors'])
 
-            for name in self.dataset["train"].column_names:
-                print(type(self.dataset["train"][name]))
+            # for name in self.dataset["train"].column_names:
+            #     if torch.is_tensor(self.dataset["train"][name]):
+            #         print(name)
+            #         self.dataset["train"].map(lambda row: {name : row[name].numpy()})
+            #         print(type(self.dataset["train"][name]))
 
-            # print(self.dataset["train"]["document.text"][0])
-            # print(type(self.dataset["train"]["document.text"]))
-
-            self.dataset["train"].map(
-                lambda row: {"document.text": row["document.text"]}
-            ).add_elasticsearch_index(
-                column="document.text",
+            # subset = self.dataset.remove_columns(['document.attention_mask', 'document.idx',
+            # 'document.input_ids','document.passage_idx','document.passage_mask','document.vectors'])
+            # print(type(subset['train']))
+            # print(subset['train'].column_names)
+            squad.add_elasticsearch_index(
+                column="context",
                 host="localhost",
                 port="9200",
                 es_index_name="corpus",
-                es_index_config=es_config,
             )
+            print("trying to print index")
             print(self.dataset["train"].get_index("corpus").es_index_name)
 
         else:
