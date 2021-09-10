@@ -530,7 +530,7 @@ class CorpusDataModule(BaseDataModule):
         elif index == "bm25":
             return es_search(index_name="corpus", query=query, results=k)
 
-    def excact_method(
+    def exact_method(
         self,
         query_list: Optional[list] = None,
         answer_list: Optional[list] = None,
