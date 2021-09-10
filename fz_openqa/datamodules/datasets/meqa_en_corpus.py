@@ -74,4 +74,4 @@ class MedQaEnCorpusDataset(datasets.GeneratorBasedBuilder):
         ]
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
-                yield i, {"document": f.read(), "idx": i, "title": ""}
+                yield i, {"text": f.read(), "idx": i, "title": ""}
