@@ -34,8 +34,8 @@ from .passage import gen_passages
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
-
-from fz_openqa.utils.es_functions import *
+from fz_openqa.utils.es_functions import es_bulk
+from fz_openqa.utils.es_functions import es_create_index
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -56,35 +56,17 @@ es_config = {
     },
     "mappings": {
         "properties": {
-            "ducment.attention_mask" : {
-                "type" : "dense_vector",
-                "dims" : 2
-            },
-            "document.idx": {
-                "type": "dense_vector",
-                "dims": 1
-            },
-            "ducment.input_ids" : {
-                "type" : "dense_vector",
-                "dims" : 2
-            },
+            "ducment.attention_mask": {"type": "dense_vector", "dims": 2},
+            "document.idx": {"type": "dense_vector", "dims": 1},
+            "ducment.input_ids": {"type": "dense_vector", "dims": 2},
             "document.text": {
                 "type": "text",
                 "analyzer": "standard",
                 "similarity": "BM25",
             },
-            "docment.passage_idx" : {
-                "type" : "dense_vector",
-                "dims" : 1
-            },
-            "document.passage_mask" : {
-                "type" : "dense_vector",
-                "dims" : 2
-            },
-            "document.vectors" : {
-                "type" : "dense_vector",
-                "dims" : 2
-            }
+            "docment.passage_idx": {"type": "dense_vector", "dims": 1},
+            "document.passage_mask": {"type": "dense_vector", "dims": 2},
+            "document.vectors": {"type": "dense_vector", "dims": 2},
         }
     },
 }
@@ -485,11 +467,10 @@ class CorpusDataModule(BaseDataModule):
             # decide whether to filter text to only include medical relevant terms
             if filtering == "scispacy":
                 raise NotImplementedError
-            self.dataset.set_format(type='numpy', columns=['document.attention_mask', 'document.idx', 'document.input_ids', 
-            'document.passage_idx', 'document.passage_mask', 'document.vectors'])
-            print(self.dataset['train'].column_names)
-            print(self.dataset['train']['document.text'][0])
-            es_bulk("corpus", "book1", self.dataset['train']['document.text'])
+            # self.dataset.set_format(type='numpy', columns=['document.attention_mask', 'document.idx', 'document.input_ids', 'document.passage_idx', 'document.passage_mask', 'document.vectors'])
+            print(self.dataset["train"].column_names)
+            print(self.dataset["train"]["document.text"][0])
+            es_bulk("corpus", "book1", self.dataset["train"]["document.text"])
 
             # for name in self.dataset["train"].column_names:
             #     if torch.is_tensor(self.dataset["train"][name]):
@@ -508,8 +489,8 @@ class CorpusDataModule(BaseDataModule):
             #     es_index_name="corpus",
             # )
             print("trying to print index")
-            response = es.indices.exists(index="corpus")
-            print(response)
+            # response = es.indices.exists(index="corpus")
+            # print(response)
 
         else:
             raise NotImplementedError
