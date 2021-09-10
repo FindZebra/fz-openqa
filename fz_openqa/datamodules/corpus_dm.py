@@ -468,10 +468,25 @@ class CorpusDataModule(BaseDataModule):
             # decide whether to filter text to only include medical relevant terms
             if filtering == "scispacy":
                 raise NotImplementedError
-            # self.dataset.set_format(type='numpy', columns=['document.attention_mask', 'document.idx', 'document.input_ids', 'document.passage_idx', 'document.passage_mask', 'document.vectors'])
-            print(self.dataset["train"].column_names)
-            print(self.dataset["train"]["document.text"][0])
-            es_bulk("corpus", "book1", self.dataset["train"]["document.text"])
+
+            self.dataset.set_format(
+                type="numpy",
+                columns=[
+                    "document.attention_mask",
+                    "document.idx",
+                    "document.input_ids",
+                    "document.passage_idx",
+                    "document.passage_mask",
+                    "document.vectors",
+                ],
+            )
+
+            es_bulk(
+                index_name="corpus",
+                title="book1",
+                document_idx=self.dataset["train"]["document.idx"].tolist(),
+                document_txt=self.dataset["train"]["document.text"],
+            )
 
             # for name in self.dataset["train"].column_names:
             #     if torch.is_tensor(self.dataset["train"][name]):
@@ -489,9 +504,9 @@ class CorpusDataModule(BaseDataModule):
             #     port="9200",
             #     es_index_name="corpus",
             # )
-            print("trying to print index")
+            # print("trying to print index")
             # response = es.indices.exists(index="corpus")
-            # print(response)
+            # rint(response)
 
         else:
             raise NotImplementedError

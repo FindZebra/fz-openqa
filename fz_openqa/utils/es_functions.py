@@ -1,7 +1,10 @@
 from datetime import datetime
 
+import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
+from numpy import array
+from torch.functional import Tensor
 
 """
 Deprecated:
@@ -73,20 +76,25 @@ def es_ingest(index_name: str, title: str, paragraph: str):
     print(response)
 
 
-def es_bulk(index_name: str, title: str, docs: list):
+def es_bulk(
+    index_name: str, title: str, document_idx: list, document_txt: list
+):
     actions = [
         {
             "_index": index_name,
+            "_title": title,
             "_source": {
                 "title": title,
-                "text": doc,
-                "timestamp": datetime.now(),
+                "idx": document_idx[i],
+                "text": document_txt[i],
             },
         }
-        for doc in docs
+        for i in range(len(document_txt))
     ]
 
-    response = helpers.bulk(es, actions, refresh="true")
+    response = helpers.bulk(
+        es, actions, chunk_size=1000, request_timeout=200, refresh="true"
+    )
     print(response)
 
 
