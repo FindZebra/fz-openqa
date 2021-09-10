@@ -7,7 +7,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
 
-corpus = FzCorpusDataModule(tokenizer=tokenizer,
+corpus = MedQaEnDataModule(tokenizer=tokenizer,
                             passage_length=200,
                             passage_stride=100,
                             append_document_title=False,
@@ -17,7 +17,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 corpus.prepare_data()
 corpus.setup()
 
-print(f">> get dataset")
+print(f">> get corpus")
 rich.print(corpus.dataset["train"])
 
 print(f">> indexing the dataset using vectors")
@@ -29,7 +29,30 @@ print(f">> Indexing finished! See index here:")
 rich.print("http://localhost:5601")
 
 qst = "What is the symptoms of post polio syndrome?"
+rich.print(qst)
 hits = corpus.search_index(query=qst, index="bm25", k=1)
 
 print(f">> Query response")
 rich.print(hits)
+
+questions = FZxMedQADataModule(append_document_title=False,
+                            tokenizer=tokenizer,
+                            num_proc=4,
+                            use_subset=False,
+                            verbose=False)
+
+questions.prepare_data()
+questions.setup()
+
+print(f">> Get questions")
+rich.print(questions.dataset['train'])
+
+print(f">> querying MedQA questions")
+
+out = corpus.excact_method(query_list=questions.dataset['train']['question.text'], 
+                            answer_list=questions.dataset['train']['answer.text'])
+
+print(f">> Excact match output")
+rich.print(out['data'][0])
+print(f">> Number of mapped questions")
+rich.print(len(out['data']))
