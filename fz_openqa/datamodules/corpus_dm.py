@@ -514,7 +514,7 @@ class CorpusDataModule(BaseDataModule):
         else:
             raise NotImplementedError
 
-    def query(
+    def search_index(
         self,
         query: Optional[str] = None,
         vector: Optional[Tensor] = None,
@@ -531,8 +531,8 @@ class CorpusDataModule(BaseDataModule):
             )
 
         elif index == "bm25":
-            return self.dataset["train"].get_nearest_examples(
-                "document.text", query, k=k
+            return es_search(
+                index_name="corpus", query=query, results=k
             )
 
     def query_batch(self, vectors: Tensor, k: int = 1):
