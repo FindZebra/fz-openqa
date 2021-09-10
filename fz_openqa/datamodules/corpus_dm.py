@@ -36,6 +36,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.es_functions import es_bulk
 from fz_openqa.utils.es_functions import es_create_index
+from fz_openqa.utils.es_functions import es_search
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -495,7 +496,7 @@ class CorpusDataModule(BaseDataModule):
         else:
             raise NotImplementedError
 
-    def query(
+    def search_index(
         self,
         query: Optional[str] = None,
         vector: Optional[Tensor] = None,
@@ -512,9 +513,7 @@ class CorpusDataModule(BaseDataModule):
             )
 
         elif index == "bm25":
-            return self.dataset["train"].get_nearest_examples(
-                "document.text", query, k=k
-            )
+            return es_search(index_name="corpus", query=query, results=k)
 
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
