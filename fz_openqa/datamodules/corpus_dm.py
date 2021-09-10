@@ -530,6 +530,39 @@ class CorpusDataModule(BaseDataModule):
         elif index == "bm25":
             return es_search(index_name="corpus", query=query, results=k)
 
+    def exact_method(
+        self,
+        query_list: Optional[list] = None,
+        answer_list: Optional[list] = None,
+        synonym_list: Optional[list] = None,
+    ):
+        out = {
+        'version': '0.0.1',
+        'data': []
+        }
+        
+        for i, query in enumerate(query_list):
+            response = self.search_index(query=query, k=100, index="bm25")
+
+            positives = []
+            negatives = []
+            for hit in response['hits']:
+                if answer_list[i][0] in hit['_source']['text']:
+                    positives.append(hit['_source']['text'])
+                else:
+                    negatives.append(hit['_source']['text'])
+            
+            if positives:
+                out['data'].append({
+                    'question' : query,
+                    'answer'   : answer_list[i][0],
+                    'positive' : positives[0],
+                    'negatives': negatives[0:10]
+                })
+
+        return out
+
+
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
         vectors = vectors.cpu().numpy()
