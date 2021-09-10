@@ -2,6 +2,7 @@ import numpy as np
 import rich
 
 from fz_openqa.datamodules.corpus_dm import MedQaEnDataModule, FzCorpusDataModule
+from fz_openqa.datamodules.fz_x_medqa_dm import FZxMedQADataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
