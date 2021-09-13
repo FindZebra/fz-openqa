@@ -13,10 +13,9 @@ class MedQAxCorpusConfig(datasets.BuilderConfig):
         """
         super(MedQAxCorpusConfig, self).__init__(**kwargs)
 
-
-_TRAIN_URL = "https://drive.google.com/file/d/1-0yhF7QxAH6bWLO1Dn9V7K9pUc0VtCCA/view?usp=sharing"
-_VALID_URL = "https://drive.google.com/file/d/1AAyNRxGevRj5mA7BeMsc2M5TtztN9LpZ/view?usp=sharing"
-_TEST_URL = "https://drive.google.com/file/d/1kKcYiNvPs1vw9AibXmtyrFChmtnbEDXw/view?usp=sharing"
+_TRAIN_URL = "https://drive.google.com/file/d/18a1TxYHHlNqXNBHaSgfLRgI4kBmYXcyn/view?usp=sharing"
+_VALID_URL = "https://drive.google.com/file/d/1m4zUJoET3WDqpYvQ_aOJVmJbiSjGGhB0/view?usp=sharing"
+_TEST_URL = "https://drive.google.com/file/d/1cOOSjOjBIOlzi3Wk31kxnp-eIV6Ekslh/view?usp=sharing"
 
 _DESCRIPTION = (
     "A mapping between the MedQA dataset and the MedQA corpus (18 books)"
