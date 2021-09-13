@@ -467,7 +467,7 @@ class CorpusDataModule(BaseDataModule):
             return DatasetDict(
                 {
                     k: dset.select(range(n))
-                    for n, (k, dset) in zip([10, 1, 1], dataset.items())
+                    for n, (k, dset) in zip([1, 1, 1], dataset.items())
                 }
             )
         elif isinstance(dataset, Dataset):
