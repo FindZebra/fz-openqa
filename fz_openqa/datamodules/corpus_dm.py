@@ -449,6 +449,8 @@ class CorpusDataModule(BaseDataModule):
         Compute vectors (sparse or dense) for the whole dataset.
 
         :@param model: callable that returns a vector given the batch input.
+        :@param index: string that determines which index to use (faiss or bm25).
+        :@param filtering: string that determines whether SciSpacy filtering is used.
         """
         if model is not None:
             self.dataset = self.dataset.map(
@@ -466,18 +468,13 @@ class CorpusDataModule(BaseDataModule):
             es_create_index("corpus")
 
             # decide whether to filter text to only include medical relevant terms
-            if filtering == "scispacy":
+            if filtering not in [None, "scispacy"]:
                 raise NotImplementedError
 
             self.dataset.set_format(
                 type="numpy",
                 columns=[
-                    "document.attention_mask",
                     "document.idx",
-                    "document.input_ids",
-                    "document.passage_idx",
-                    "document.passage_mask",
-                    "document.vectors",
                 ],
             )
 
@@ -487,26 +484,6 @@ class CorpusDataModule(BaseDataModule):
                 document_idx=self.dataset["train"]["document.idx"].tolist(),
                 document_txt=self.dataset["train"]["document.text"],
             )
-
-            # for name in self.dataset["train"].column_names:
-            #     if torch.is_tensor(self.dataset["train"][name]):
-            #         print(name)
-            #         self.dataset["train"].map(lambda row: {name : row[name].numpy()})
-            #         print(type(self.dataset["train"][name]))
-
-            # subset = self.dataset.remove_columns(['document.attention_mask', 'document.idx',
-            # 'document.input_ids','document.passage_idx','document.passage_mask','document.vectors'])
-            # print(type(subset['train']))
-            # print(subset['train'].column_names)
-            # squad.add_elasticsearch_index(
-            #     column="context",
-            #     host="localhost",
-            #     port="9200",
-            #     es_index_name="corpus",
-            # )
-            # print("trying to print index")
-            # response = es.indices.exists(index="corpus")
-            # rint(response)
 
         else:
             raise NotImplementedError
@@ -530,38 +507,46 @@ class CorpusDataModule(BaseDataModule):
         elif index == "bm25":
             return es_search(index_name="corpus", query=query, results=k)
 
+        else:
+            raise NotImplementedError
+
     def exact_method(
         self,
         query_list: Optional[list] = None,
         answer_list: Optional[list] = None,
         synonym_list: Optional[list] = None,
     ):
-        out = {
-        'version': '0.0.1',
-        'data': []
-        }
-        
+        """
+        Compute exact matching based on whether answer is contained in document string.
+
+        :@param query_list: list containing the queries.
+        :@param answer_list: list containing the answers.
+        :@param synonym_list: list containing synonyms.
+        """
+        out = {"version": "0.0.1", "data": []}
+
         for i, query in enumerate(query_list):
             response = self.search_index(query=query, k=100, index="bm25")
 
             positives = []
             negatives = []
-            for hit in response['hits']:
-                if answer_list[i][0] in hit['_source']['text']:
-                    positives.append(hit['_source']['text'])
+            for hit in response["hits"]:
+                if answer_list[i][0] in hit["_source"]["text"]:
+                    positives.append(hit["_source"]["text"])
                 else:
-                    negatives.append(hit['_source']['text'])
-            
+                    negatives.append(hit["_source"]["text"])
+
             if positives:
-                out['data'].append({
-                    'question' : query,
-                    'answer'   : answer_list[i][0],
-                    'positive' : positives[0],
-                    'negatives': negatives[0:10]
-                })
+                out["data"].append(
+                    {
+                        "question": query,
+                        "answer": answer_list[i][0],
+                        "positive": positives[0],
+                        "negatives": negatives[0:10],
+                    }
+                )
 
         return out
-
 
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
