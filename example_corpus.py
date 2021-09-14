@@ -49,8 +49,8 @@ rich.print(questions.dataset['train'])
 
 print(f">> querying MedQA questions")
 
-out = corpus.exact_method(query_list=questions.dataset['train']['question.text'],
-                            answer_list=questions.dataset['train']['answer.text'])
+out = corpus.exact_method(queries=questions.dataset['train']['question.text'],
+                            answers=questions.dataset['train']['answer.text'])
 
 print(f">> Excact match output")
 rich.print(out['data'][0])

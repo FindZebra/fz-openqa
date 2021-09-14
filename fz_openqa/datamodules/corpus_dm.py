@@ -524,7 +524,7 @@ class CorpusDataModule(BaseDataModule):
 
     def exact_method(
         self,
-        key: str,
+        key: Optional[str] = None,
         queries: Optional[Batch] = None,
         answers: Optional[Batch] = None,
         synonyms: Optional[Batch] = None,
@@ -536,7 +536,7 @@ class CorpusDataModule(BaseDataModule):
         :@param answers: batch containing the answers.
         :@param synonyms: batch containing synonyms.
         """
-        out = {"version": "0.0.1", "data": []}
+        out: Batch = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(queries):
             response = self.search_index(query=query, k=100, index="bm25")
