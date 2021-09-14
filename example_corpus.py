@@ -7,7 +7,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
 
-corpus = MedQaEnDataModule(tokenizer=tokenizer,
+corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             passage_length=200,
                             passage_stride=100,
                             append_document_title=False,
@@ -49,7 +49,7 @@ rich.print(questions.dataset['train'])
 
 print(f">> querying MedQA questions")
 
-out = corpus.excact_method(query_list=questions.dataset['train']['question.text'], 
+out = corpus.exact_method(query_list=questions.dataset['train']['question.text'],
                             answer_list=questions.dataset['train']['answer.text'])
 
 print(f">> Excact match output")

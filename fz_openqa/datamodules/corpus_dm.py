@@ -443,6 +443,7 @@ class CorpusDataModule(BaseDataModule):
         model: Optional[Callable] = None,
         index: Optional[str] = "faiss",
         filtering: Optional[str] = None,
+        name: str = "corpus",
         **kwargs,
     ):
         """
@@ -451,6 +452,7 @@ class CorpusDataModule(BaseDataModule):
         :@param model: callable that returns a vector given the batch input.
         :@param index: string that determines which index to use (faiss or bm25).
         :@param filtering: string that determines whether SciSpacy filtering is used.
+        :@param name: string for naming index 'group'.
         """
         if model is not None:
             self.dataset = self.dataset.map(
@@ -465,7 +467,7 @@ class CorpusDataModule(BaseDataModule):
                 column=self.vectors_id, **kwargs
             )
         elif index == "bm25":
-            es_create_index("corpus")
+            es_create_index(name)
 
             # decide whether to filter text to only include medical relevant terms
             if filtering not in [None, "scispacy"]:
@@ -479,7 +481,7 @@ class CorpusDataModule(BaseDataModule):
             )
 
             es_bulk(
-                index_name="corpus",
+                index_name=name,
                 title="book1",
                 document_idx=self.dataset["train"]["document.idx"].tolist(),
                 document_txt=self.dataset["train"]["document.text"],
@@ -495,8 +497,18 @@ class CorpusDataModule(BaseDataModule):
         k: int = 1,
         index: Optional[str] = "faiss",
         filtering: Optional[str] = None,
+        name: str = "corpus",
     ):
-        """Query index given a input query"""
+        """
+        Query index given a input query
+
+        :@param query:
+        :@param vector:
+        :@param k: integer that sets number of results to be queried.
+        :@param index: string that determines which index to use (faiss or bm25).
+        :@param filtering: string that determines whether SciSpacy filtering is used.
+        :@param name: string for naming index 'group'.
+        """
         if index == "faiss":
             # todo: this causes segmentation fault on MacOS, works fine on the cluster
             vector = vector.cpu().numpy()
@@ -505,33 +517,34 @@ class CorpusDataModule(BaseDataModule):
             )
 
         elif index == "bm25":
-            return es_search(index_name="corpus", query=query, results=k)
+            return es_search(index_name=name, query=query, results=k)
 
         else:
             raise NotImplementedError
 
     def exact_method(
         self,
-        query_list: Optional[list] = None,
-        answer_list: Optional[list] = None,
-        synonym_list: Optional[list] = None,
-    ):
+        key: str,
+        queries: Optional[Batch] = None,
+        answers: Optional[Batch] = None,
+        synonyms: Optional[Batch] = None,
+    ) -> Batch:
         """
         Compute exact matching based on whether answer is contained in document string.
 
-        :@param query_list: list containing the queries.
-        :@param answer_list: list containing the answers.
-        :@param synonym_list: list containing synonyms.
+        :@param queries: batch containing the queries.
+        :@param answers: batch containing the answers.
+        :@param synonyms: batch containing synonyms.
         """
         out = {"version": "0.0.1", "data": []}
 
-        for i, query in enumerate(query_list):
+        for i, query in enumerate(queries):
             response = self.search_index(query=query, k=100, index="bm25")
 
             positives = []
             negatives = []
             for hit in response["hits"]:
-                if answer_list[i][0] in hit["_source"]["text"]:
+                if answers[i][0] in hit["_source"]["text"]:
                     positives.append(hit["_source"]["text"])
                 else:
                     negatives.append(hit["_source"]["text"])
@@ -540,7 +553,7 @@ class CorpusDataModule(BaseDataModule):
                 out["data"].append(
                     {
                         "question": query,
-                        "answer": answer_list[i][0],
+                        "answer": answers[i][0],
                         "positive": positives[0],
                         "negatives": negatives[0:10],
                     }
