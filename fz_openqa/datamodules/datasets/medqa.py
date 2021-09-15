@@ -42,12 +42,11 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "idx": datasets.Value("int32"),
-                    "question": datasets.Value("string"),
                     "question.idx": datasets.Value("int32"),
+                    "question": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
                     "answer": datasets.Sequence(datasets.Value("string")),
-                    "synonyms": datasets.Value("string"),
+                    "synonyms": datasets.Sequence(datasets.Value("string")),
                 }
             ),
             supervised_keys=None,
@@ -75,3 +74,13 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
             )
             for split, file in downloaded_files.items()
         ]
+
+    def _generate_examples(self, filepath, split):
+        """Yields examples."""
+        with open(filepath, "r") as f:
+            for i, d in enumerate(json.load(f)["data"]):
+                # adjust values
+                d["question.idx"] = d.pop("question_id")
+                d["answer.target"] = d.pop("answer_idx")
+                d["answer"] = d.pop("answer_options")
+                yield i, d
