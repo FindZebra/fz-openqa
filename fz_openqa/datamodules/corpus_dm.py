@@ -525,9 +525,10 @@ class CorpusDataModule(BaseDataModule):
     def exact_method(
         self,
         key: Optional[str] = None,
-        queries: Optional[Batch] = None,
-        answers: Optional[Batch] = None,
-        synonyms: Optional[Batch] = None,
+        queries: Optional[list] = None,
+        answers: Optional[list] = None,
+        answer_idxs: Optional[list] = None,
+        synonyms: Optional[list] = None,
     ) -> Batch:
         """
         Compute exact matching based on whether answer is contained in document string.
@@ -536,15 +537,17 @@ class CorpusDataModule(BaseDataModule):
         :@param answers: batch containing the answers.
         :@param synonyms: batch containing synonyms.
         """
-        out: Batch = {"version": "0.0.1", "data": []}
+        out = {"version": "0.0.1", "data": []}
+        discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(queries):
             response = self.search_index(query=query, k=100, index="bm25")
-
             positives = []
             negatives = []
             for hit in response["hits"]:
-                if answers[i][0] in hit["_source"]["text"]:
+                if answers[i][answer_idxs[i]] in hit["_source"]["text"]:
+                    positives.append(hit["_source"]["text"])
+                elif any(synonym in hit["_source"]["text"] for synonym in synonyms[i]):
                     positives.append(hit["_source"]["text"])
                 else:
                     negatives.append(hit["_source"]["text"])
@@ -558,8 +561,18 @@ class CorpusDataModule(BaseDataModule):
                         "negatives": negatives[0:10],
                     }
                 )
+            else:
+                discarded["data"].append(
+                    {
+                        "question": query,
+                        "answer": answers[i][0],
+                        "synonyms": synonyms[i],
+                        "top 10": negatives[0:10],
+                    }
+                )
 
-        return out
+
+        return out, discarded
 
     def query_batch(self, vectors: Tensor, k: int = 1):
         """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
