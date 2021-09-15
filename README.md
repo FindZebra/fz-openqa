@@ -33,8 +33,22 @@ poetry install
 pip install pre-commit
 pre-commit install
 ```
+ 
+4. setting up ElasticSearch
 
-4. Run something using the environment
+```shell
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
+tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
+```
+ 
+5. setting up Kibana
+
+```shell
+curl -O https://artifacts.elastic.co/downloads/kibana/kibana-7.14.1-linux-x86_64.tar.gz
+tar -xzf kibana-7.14.1-linux-x86_64.tar.gz
+```
+
+6. Run something using the environment
 
 ```shell
 poetry run python <file.py>
