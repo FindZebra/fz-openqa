@@ -482,7 +482,7 @@ class CorpusDataModule(BaseDataModule):
 
             es_bulk(
                 index_name=name,
-                title="book1",
+                title="book1",  # todo: find a way to extract document titles
                 document_idx=self.dataset["train"]["document.idx"].tolist(),
                 document_txt=self.dataset["train"]["document.text"],
             )
@@ -524,10 +524,16 @@ class CorpusDataModule(BaseDataModule):
 
     def exact_method(
         self,
-        key: Optional[str] = None,
-        queries: Optional[Batch] = None,
-        answers: Optional[Batch] = None,
-        synonyms: Optional[Batch] = None,
+        batch: Batch
+        # = {
+        # question.text: list of N texts,
+        # question.input_ids:tensor of shape [N, L_q],
+        # answer.text: N lists of 4 texts,
+        # answer.input_ids: tensor of shape [N, 4, L_a],
+        # answer.target: tensor of shape [N,],
+        # answer.synonyms: N lists of M texts,
+        # }
+        # key: Optional[str],z<
     ) -> Batch:
         """
         Compute exact matching based on whether answer is contained in document string.
@@ -536,15 +542,16 @@ class CorpusDataModule(BaseDataModule):
         :@param answers: batch containing the answers.
         :@param synonyms: batch containing synonyms.
         """
-        out: Batch = {"version": "0.0.1", "data": []}
 
-        for i, query in enumerate(queries):
+        out = {"version": "0.0.1", "data": []}
+
+        for i, query in enumerate(batch["question.text"]):
             response = self.search_index(query=query, k=100, index="bm25")
 
             positives = []
             negatives = []
             for hit in response["hits"]:
-                if answers[i][0] in hit["_source"]["text"]:
+                if batch["answer.text"][i][0] in hit["_source"]["text"]:
                     positives.append(hit["_source"]["text"])
                 else:
                     negatives.append(hit["_source"]["text"])
@@ -553,7 +560,7 @@ class CorpusDataModule(BaseDataModule):
                 out["data"].append(
                     {
                         "question": query,
-                        "answer": answers[i][0],
+                        "answer": batch["answer.text"][i][0],
                         "positive": positives[0],
                         "negatives": negatives[0:10],
                     }

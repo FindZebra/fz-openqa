@@ -1,3 +1,4 @@
+from fz_openqa.datamodules.medqa_dm import MedQaDataModule
 import numpy as np
 import rich
 
@@ -7,7 +8,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
 
-corpus = FzCorpusDataModule(tokenizer=tokenizer,
+corpus = MedQaEnDataModule(tokenizer=tokenizer,
                             passage_length=200,
                             passage_stride=100,
                             append_document_title=False,
@@ -35,7 +36,7 @@ hits = corpus.search_index(query=qst, index="bm25", k=1)
 print(f">> Query response")
 rich.print(hits)
 
-questions = FZxMedQADataModule(append_document_title=False,
+questions = MedQaDataModule(append_document_title=False,
                             tokenizer=tokenizer,
                             num_proc=4,
                             use_subset=False,
@@ -48,9 +49,7 @@ print(f">> Get questions")
 rich.print(questions.dataset['train'])
 
 print(f">> querying MedQA questions")
-
-out = corpus.exact_method(queries=questions.dataset['train']['question.text'],
-                            answers=questions.dataset['train']['answer.text'])
+out = questions.dataset.map(questions.exact_method, batched=True)
 
 print(f">> Excact match output")
 rich.print(out['data'][0])
