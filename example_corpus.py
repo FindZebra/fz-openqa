@@ -1,3 +1,4 @@
+from fz_openqa.datamodules.medqa_dm import MedQaDataModule
 import numpy as np
 import rich, json, os
 
@@ -35,7 +36,7 @@ hits = corpus.search_index(query=qst, index="bm25", k=1)
 print(f">> Query response")
 rich.print(hits)
 
-questions = MedQaDataModule(
+questions = MedQaDataModule(append_document_title=False,
                             tokenizer=tokenizer,
                             num_proc=4,
                             use_subset=False,

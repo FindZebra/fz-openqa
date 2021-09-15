@@ -11,6 +11,7 @@ import datasets
 import rich
 import torch
 from datasets import Split
+from torch.functional import Tensor
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
@@ -25,15 +26,18 @@ from .datasets import medqa
 from .utils import add_spec_token
 from .utils import nested_list
 from fz_openqa.tokenizers.static import ANS_TOKEN
-#from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.es_functions import es_search
+
+# from fz_openqa.tokenizers.static import DOC_TOKEN
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer.target",
     "answer.n_options",
     "question.idx",
 ]
+
 
 class MedQaDataModule(BaseDataModule):
     """A PyTorch Lightning DataModule wrapping the MedQA dataset."""
@@ -53,13 +57,19 @@ class MedQaDataModule(BaseDataModule):
         "input_ids",
         "attention_mask",
         "passage_mask",
-    ]  # attributes to be converted into Tensors  # to be generated 
+    ]  # attributes to be converted into Tensors  # to be generated
     # attributes to be converted into Tensors
 
-    def __init__(self, *, filter_synonyms: bool = True, top_n_synonyms: int = 1, **kwargs):
+    def __init__(
+        self,
+        *,
+        filter_synonyms: bool = True,
+        top_n_synonyms: int = 1,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.filter_synonyms = filter_synonyms
-        self.top_n_synonyms = top_n_synonyms,
+        self.top_n_synonyms = (top_n_synonyms,)
 
     @staticmethod
     def tokenize_examples(
@@ -109,9 +119,7 @@ class MedQaDataModule(BaseDataModule):
         # append the "question" prefix to the
         # "input_ids" and "attention masts from the q_encodings
         # and store them in output.
-        for data, prefix in zip(
-            [q_encodings], ["question"]
-        ):
+        for data, prefix in zip([q_encodings], ["question"]):
             for k, v in data.items():
                 output[f"{prefix}.{k}"] = v
 
@@ -176,16 +184,15 @@ class MedQaDataModule(BaseDataModule):
         )
 
         return dataset
-    
+
     def update_synonym_list(self, example):
-        example['synonyms'] = example['synonyms'][:self.top_n_synonyms[0]]
+        example["synonyms"] = example["synonyms"][: self.top_n_synonyms[0]]
         return example
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filtering operations to filter list of synonyms"""
         if self.filter_synonyms:
-            dataset = dataset.map(self.update_synonym_list
-            )
+            dataset = dataset.map(self.update_synonym_list)
 
         return dataset
 
@@ -257,9 +264,7 @@ class MedQaDataModule(BaseDataModule):
         # collate the question and answers using the first example of each batch element
         first_examples = [ex[0] for ex in examples]
         output.update(
-            **MedQaDataModule.collate_qa(
-                first_examples, tokenizer=tokenizer
-            )
+            **MedQaDataModule.collate_qa(first_examples, tokenizer=tokenizer)
         )
 
         # collate documents
@@ -270,6 +275,7 @@ class MedQaDataModule(BaseDataModule):
         )
 
         return output
+
     @staticmethod
     def collate_qa(
         examples: List[Batch], *, tokenizer: PreTrainedTokenizerFast
@@ -298,6 +304,83 @@ class MedQaDataModule(BaseDataModule):
         output.update(**collate_answer_options(examples, tokenizer=tokenizer))
 
         return output
+
+    def search_index(
+        self,
+        query: Optional[str] = None,
+        vector: Optional[Tensor] = None,
+        k: int = 1,
+        index: Optional[str] = "faiss",
+        filtering: Optional[str] = None,
+        name: str = "corpus",
+    ):
+        """
+        Query index given a input query
+
+        :@param query:
+        :@param vector:
+        :@param k: integer that sets number of results to be queried.
+        :@param index: string that determines which index to use (faiss or bm25).
+        :@param filtering: string that determines whether SciSpacy filtering is used.
+        :@param name: string for naming index 'group'.
+        """
+        if index == "faiss":
+            # todo: this causes segmentation fault on MacOS, works fine on the cluster
+            vector = vector.cpu().numpy()
+            return self.dataset["train"].get_nearest_examples(
+                self.vectors_id, vector, k=k
+            )
+
+        elif index == "bm25":
+            return es_search(index_name=name, query=query, results=k)
+
+        else:
+            raise NotImplementedError
+
+    def exact_method(self, batch: Batch) -> Batch:
+        """
+        Compute exact matching based on whether answer is contained in document string.
+
+        batch = {
+        question.text: list of N texts,
+        question.input_ids:tensor of shape [N, L_q],
+        answer.text: N lists of 4 texts,
+        answer.input_ids: tensor of shape [N, 4, L_a],
+        answer.target: tensor of shape [N,],
+        answer.synonyms: N lists of M texts,
+        }
+
+        :@param queries: batch containing the queries.
+        :@param answers: batch containing the answers.
+        :@param synonyms: batch containing synonyms.
+        """
+
+        out = {"version": "0.0.1", "data": []}
+
+        # batch.map(lambda example : )
+
+        for i, query in enumerate(batch["question.text"]):
+            response = self.search_index(query=query, k=100, index="bm25")
+
+            positives = []
+            negatives = []
+            for hit in response["hits"]:
+                if batch["answer.text"][i][0] in hit["_source"]["text"]:
+                    positives.append(hit["_source"]["text"])
+                else:
+                    negatives.append(hit["_source"]["text"])
+
+            if positives:
+                out["data"].append(
+                    {
+                        "question": query,
+                        "answer": batch["answer.text"][i][0],
+                        "positive": positives[0],
+                        "negatives": negatives[0:10],
+                    }
+                )
+
+        return out
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
@@ -332,4 +415,5 @@ class MedQaDataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"
             )
         print(console_width * "=")
+
     vectors_id = "document.vectors"
