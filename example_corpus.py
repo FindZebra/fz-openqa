@@ -13,7 +13,7 @@ corpus = MedQaEnDataModule(tokenizer=tokenizer,
                             passage_stride=100,
                             append_document_title=False,
                             num_proc=4,
-                            use_subset=False,
+                            use_subset=True,
                             verbose=False)
 corpus.prepare_data()
 corpus.setup()
@@ -36,30 +36,30 @@ hits = corpus.search_index(query=qst, index="bm25", k=1)
 print(f">> Query response")
 rich.print(hits)
 
-questions = MedQaDataModule(append_document_title=False,
-                            tokenizer=tokenizer,
-                            num_proc=4,
-                            use_subset=False,
-                            top_n_synonyms=3,
-                            verbose=False)
+#questions = MedQaDataModule(append_document_title=False,
+#                            tokenizer=tokenizer,
+#                            num_proc=4,
+#                            use_subset=False,
+#                            top_n_synonyms=3,
+#                            verbose=False)
 
-questions.prepare_data()
-questions.setup()
+#questions.prepare_data()
+#questions.setup()
 
-print(f">> Get questions")
-rich.print(questions.dataset['train'])
+#print(f">> Get questions")
+#rich.print(questions.dataset['train'])
 
-print(f">> querying MedQA questions")
-out, discarded = corpus.exact_method(queries=questions.dataset['train']['question.text'],
-                            answers=questions.dataset['train']['answer.text'],
-                            answer_idxs=questions.dataset['train']['answer.target'],
-                            synonyms=questions.dataset['train']['synonyms']
-                            )
+#print(f">> querying MedQA questions")
+#out, discarded = corpus.exact_method(queries=questions.dataset['train']['question.text'],
+#                            answers=questions.dataset['train']['answer.text'],
+#                            answer_idxs=questions.dataset['train']['answer.target'],
+#                            synonyms=questions.dataset['train']['synonyms']
+#                            )
 
-print(f">> Excact match output")
-rich.print(out['data'][0])
-print(f">> Number of mapped questions")
-rich.print(len(out['data']))
+#print(f">> Excact match output")
+#rich.print(out['data'][0])
+#print(f">> Number of mapped questions")
+#rich.print(len(out['data']))
 
-print(f">> Number of discarded questions")
-rich.print(len(discarded['data']))
+#print(f">> Number of discarded questions")
+#rich.print(len(discarded['data']))

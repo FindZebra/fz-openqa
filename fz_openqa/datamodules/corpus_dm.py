@@ -522,28 +522,21 @@ class CorpusDataModule(BaseDataModule):
         else:
             raise NotImplementedError
 
-    def exact_method(
-        self,
-        batch: Batch
-        # = {
-        # question.text: list of N texts,
-        # question.input_ids:tensor of shape [N, L_q],
-        # answer.text: N lists of 4 texts,
-        # answer.input_ids: tensor of shape [N, 4, L_a],
-        # answer.target: tensor of shape [N,],
-        # answer.synonyms: N lists of M texts,
-        # }
-        # key: Optional[str],z<
-    ) -> Batch:
+    def exact_method(self, batch: Batch) -> Batch:
         """
         Compute exact matching based on whether answer is contained in document string.
 
-        :@param queries: batch containing the queries.
-        :@param answers: batch containing the answers.
-        :@param synonyms: batch containing synonyms.
+        :@param batch: {
+        question.text: list of N texts,
+        question.input_ids:tensor of shape [N, L_q],
+        answer.text: N lists of 4 texts,
+        answer.input_ids: tensor of shape [N, 4, L_a],
+        answer.target: tensor of shape [N,],
+        answer.synonyms: N lists of M texts,
+        }
+
         """
         out = {"version": "0.0.1", "data": []}
-
         discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(batch["question.text"]):

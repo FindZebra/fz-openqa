@@ -341,7 +341,7 @@ class MedQaDataModule(BaseDataModule):
         """
         Compute exact matching based on whether answer is contained in document string.
 
-        batch = {
+        :@param batch: {
         question.text: list of N texts,
         question.input_ids:tensor of shape [N, L_q],
         answer.text: N lists of 4 texts,
@@ -350,14 +350,9 @@ class MedQaDataModule(BaseDataModule):
         answer.synonyms: N lists of M texts,
         }
 
-        :@param queries: batch containing the queries.
-        :@param answers: batch containing the answers.
-        :@param synonyms: batch containing synonyms.
         """
 
         out = {"version": "0.0.1", "data": []}
-
-        # batch.map(lambda example : )
 
         for i, query in enumerate(batch["question.text"]):
             response = self.search_index(query=query, k=100, index="bm25")
