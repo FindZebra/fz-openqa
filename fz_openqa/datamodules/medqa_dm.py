@@ -12,6 +12,7 @@ import rich
 import torch
 from datasets import Split
 from torch.functional import Tensor
+from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
@@ -40,7 +41,7 @@ PT_SIMPLE_ATTRIBUTES = [
 
 
 class MedQaDataModule(BaseDataModule):
-    """A PyTorch Lightning DataModule wrapping the MedQA dataset."""
+    """A PyTorch Lightning DataModule for handling the MedQA questions and answers."""
 
     dset_script_path_or_id = (
         medqa.__file__  # HuggingFace dataset id or local path to script
