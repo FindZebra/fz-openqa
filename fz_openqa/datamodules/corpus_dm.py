@@ -521,6 +521,31 @@ class CorpusDataModule(BaseDataModule):
 
         else:
             raise NotImplementedError
+    
+    def search_index_batch(
+        self,
+        batch: Batch,
+        k: int = 100,
+        index: str = "faiss",
+        **kwargs, 
+    ):
+
+        """
+        Query index given a batch input of queries
+
+        :@param batch:
+        """
+        returned_evidence = [] #*
+        for idx in range(len(batch)): #infer batch size
+            ex = {k:v[idx] for k,v in batch.items()}
+            response_idx = self.search_index(
+                ex['question.text'],
+                k = k,
+                index = index,
+                name = "corpus")
+            returned_evidence.append(response_idx) #improve *
+        
+        return returned_evidence
 
     def exact_method(
         self,
@@ -547,7 +572,7 @@ class CorpusDataModule(BaseDataModule):
         discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(queries):
-            response = self.search_index(query=query, k=100, index="bm25")
+            #response = self.search_index(query=query, k=100, index="bm25")
             positives = []
             negatives = []
             for hit in response["hits"]:

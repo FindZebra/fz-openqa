@@ -50,7 +50,7 @@ class MedQaDataModule(BaseDataModule):
         datasets.Split.VALIDATION,
         datasets.Split.TEST,
     ]  # split names
-    text_fields = ["question", "answer", "document"]
+    text_fields = ["question", "answer", "synonyms"]
     pt_attributes = [
         "idx",
         "passage_idx",
