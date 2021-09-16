@@ -522,7 +522,14 @@ class CorpusDataModule(BaseDataModule):
         else:
             raise NotImplementedError
 
-    def exact_method(self, batch: Batch) -> Batch:
+    def exact_method(
+        self,
+        key: Optional[str] = None,
+        queries: Optional[list] = None,
+        answers: Optional[list] = None,
+        answer_idxs: Optional[list] = None,
+        synonyms: Optional[list] = None,
+    ) -> Batch:
         """
         Compute exact matching based on whether answer is contained in document string.
 
@@ -539,16 +546,16 @@ class CorpusDataModule(BaseDataModule):
         out = {"version": "0.0.1", "data": []}
         discarded = {"version": "0.0.1", "data": []}
 
-        for i, query in enumerate(batch["question.text"]):
+        for i, query in enumerate(queries):
             response = self.search_index(query=query, k=100, index="bm25")
             positives = []
             negatives = []
             for hit in response["hits"]:
-                if batch["answer.text"][i] in hit["_source"]["text"]:
+                if answers[i][answer_idxs[i]] in hit["_source"]["text"]:
                     positives.append(hit["_source"]["text"])
                 elif any(
                     synonym in hit["_source"]["text"]
-                    for synonym in batch["answer.synonyms"][i]
+                    for synonym in synonyms[i]
                 ):
                     positives.append(hit["_source"]["text"])
                 else:
@@ -558,7 +565,7 @@ class CorpusDataModule(BaseDataModule):
                 out["data"].append(
                     {
                         "question": query,
-                        "answer": batch["answer.text"][i][0],
+                        "answer": answers[i][0],
                         "positive": positives[0],
                         "negatives": negatives[0:10],
                     }
@@ -567,8 +574,8 @@ class CorpusDataModule(BaseDataModule):
                 discarded["data"].append(
                     {
                         "question": query,
-                        "answer": batch["answer.text"][i][0],
-                        "synonyms": batch["answer.synonyms"][i],
+                        "answer": answers[i][0],
+                        "synonyms": synonyms[i],
                         "top 10": negatives[0:10],
                     }
                 )

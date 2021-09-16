@@ -53,7 +53,7 @@ print(f">> querying MedQA questions")
 out, discarded = corpus.exact_method(queries=questions.dataset['train']['question.text'],
                             answers=questions.dataset['train']['answer.text'],
                             answer_idxs=questions.dataset['train']['answer.target'],
-                            synonyms=questions.dataset['train']['answer.synonyms']
+                            synonyms=questions.dataset['train']['synonyms']
                             )
 
 print(f">> Excact match output")
