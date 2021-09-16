@@ -543,18 +543,20 @@ class CorpusDataModule(BaseDataModule):
         :@param synonyms: batch containing synonyms.
         """
         out = {"version": "0.0.1", "data": []}
-        discarded = {"version": "0.0.1", "data": []}
 
-        out = {"version": "0.0.1", "data": []}
+        discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(batch["question.text"]):
             response = self.search_index(query=query, k=100, index="bm25")
             positives = []
             negatives = []
             for hit in response["hits"]:
-                if batch['answer.text'][i] in hit["_source"]["text"]:
+                if batch["answer.text"][i] in hit["_source"]["text"]:
                     positives.append(hit["_source"]["text"])
-                elif any(synonym in hit["_source"]["text"] for synonym in batch['synonyms'][i]):
+                elif any(
+                    synonym in hit["_source"]["text"]
+                    for synonym in batch["answer.synonyms"][i]
+                ):
                     positives.append(hit["_source"]["text"])
                 else:
                     negatives.append(hit["_source"]["text"])
@@ -572,12 +574,11 @@ class CorpusDataModule(BaseDataModule):
                 discarded["data"].append(
                     {
                         "question": query,
-                        "answer": answers[i][0],
-                        "synonyms": synonyms[i],
+                        "answer": batch["answer.text"][i][0],
+                        "synonyms": batch["answer.synonyms"][i],
                         "top 10": negatives[0:10],
                     }
                 )
-
 
         return out, discarded
 
