@@ -33,8 +33,22 @@ poetry install
 pip install pre-commit
 pre-commit install
 ```
+ 
+4. setting up ElasticSearch
 
-4. Run something using the environment
+```shell
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
+tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
+```
+ 
+5. setting up Kibana
+
+```shell
+curl -O https://artifacts.elastic.co/downloads/kibana/kibana-7.14.1-linux-x86_64.tar.gz
+tar -xzf kibana-7.14.1-linux-x86_64.tar.gz
+```
+
+6. Run something using the environment
 
 ```shell
 poetry run python <file.py>
@@ -336,7 +350,7 @@ Sample from the retriever lives and learn from the signal given by the reader co
 </details>
 
 ## Tips and Tricks
- 
+
  <details>
 <summary>Disk usage</summary>
 
@@ -347,11 +361,12 @@ du -hs *
 </details>
 
 <details>
-<summary>Deleting runs older than x minutes</summary>
+<summary>Deleting checkpoints automatically</summary>
 
-When running the HPO, checkpoints may occupy hundreds of GB. You can delete all the directories (saved runs) created more than 120 min ago using:
+When running the HPO, checkpoints may quickly clog the disks with hundreds of GB. You can automatically delete older runs using:
 ```bash
-find . -type d -path "./*" -mmin +120 -exec rm -rf {} \;
+# every 5 minutes, delete all checkpoints for which the best `metric` is bellow the `metric_threshold` and that was last updated `age` hours ago
+screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/valv/raytune/ --frequency 5  --metric_threshold=0.1 --age 1
 ```
 </details>
 
