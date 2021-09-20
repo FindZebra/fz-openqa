@@ -40,6 +40,7 @@ pre-commit install
 wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
 tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
 ```
+To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and type `./bin/elasticsearch`.
  
 5. setting up Kibana
 
@@ -47,6 +48,7 @@ tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
 curl -O https://artifacts.elastic.co/downloads/kibana/kibana-7.14.1-linux-x86_64.tar.gz
 tar -xzf kibana-7.14.1-linux-x86_64.tar.gz
 ```
+To run Kibana navigate to the `kibana-7.14.1` folder in the terminal and type `./bin/kibana`.
 
 6. Run something using the environment
 
