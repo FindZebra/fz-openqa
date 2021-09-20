@@ -27,6 +27,8 @@ def display_entities(model, document):
     return (displacy_image, entity_and_label)
 
 
+"Test of scispacy entities"
+
 doc2 = "the treatment of Lyme disease.After appropriately treated Lyme disease, a small percentage of patients continue to have subjective symptoms, primarily musculoskeletal pain, neurocognitive difficulties, or fatigue. This chronic Lyme disease or post–Lyme syndrome is sometimes a disabling condition that is similar to chronic fatigue syndrome or fibromyalgia. In a large study, one group of patients with post–Lyme syndrome received IV ceftriaxone for 30 days followed by oral doxycycline for 60 days, while another group received IV and oral placebo preparations for the same durations. No significant differences were found between groups in the numbers of patients reporting that their symptoms had improved, become worse, or stayed the same. Such patients are best treated for the relief of symptoms rather than with prolonged courses of antibiotics.The risk of infection with B. burgdorferi after a recognized tick bite is so low that antibiotic"
 
 display_entities(en_core_sci_md, doc2)
