@@ -18,12 +18,18 @@ corpus = MedQaEnDataModule(tokenizer=tokenizer,
                             verbose=False)
 corpus.prepare_data()
 corpus.setup()
+#print(corpus.dataset['train'])
 
 print(f">> get corpus")
 rich.print(corpus.dataset["train"])
 
 print(f">> indexing the dataset using vectors")
 corpus.index(model=lambda batch:  batch['document.input_ids'], index="faiss")
+
+print(f">> indexing the dataset using bm25")
+corpus.index(index="bm25")
+print(f">> Indexing finished! See index here:")
+rich.print("http://localhost:5601")
 
 qst = "What is the symptoms of post polio syndrome?"
 rich.print(qst)
@@ -41,11 +47,11 @@ questions_dm = MedQaDataModule(append_document_title=False,
 
 questions_dm.prepare_data()
 questions_dm.setup()
-#rainloader = DataLoader(questions_dm)
+print(questions_dm.dataset)
 
 
 # 1. sample data
-batch = next(iter(questions_dm.train_dataloader()))
+#batch = next(iter(questions_dm.train_dataloader())) #
 
 
 """
