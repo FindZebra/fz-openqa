@@ -6,6 +6,7 @@ from pprint import pprint
 
 import en_core_sci_md
 import en_core_sci_sm
+import en_ner_bc5cdr_md
 import scispacy
 import spacy
 from spacy import displacy
