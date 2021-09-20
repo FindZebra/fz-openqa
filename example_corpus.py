@@ -47,11 +47,11 @@ questions_dm = MedQaDataModule(append_document_title=False,
 
 questions_dm.prepare_data()
 questions_dm.setup()
-print(questions_dm.dataset)
+
 
 
 # 1. sample data
-#batch = next(iter(questions_dm.train_dataloader())) #
+batch = next(iter(questions_dm.train_dataloader())) # Dataset is missing the key 'idx' used in collate.py, line 20
 
 
 """

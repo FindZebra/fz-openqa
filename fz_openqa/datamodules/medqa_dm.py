@@ -167,6 +167,8 @@ class MedQaDataModule(BaseDataModule):
             fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
         )
 
+        # to-do: add 'idx' column
+
         # rename text attributes
         for key in ["question", "answer"]:
             dataset = dataset.rename_column(key, f"{key}.text")
