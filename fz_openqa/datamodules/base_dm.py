@@ -1,11 +1,7 @@
-import shutil
-from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
-import numpy as np
 import rich
 import torch
 from datasets import DatasetDict
@@ -15,21 +11,27 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
-from torch import Tensor
 from torch.utils.data import DataLoader
-from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.datamodules.pipes import Lambda
+from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils import HgDataset
 from fz_openqa.datamodules.utils import take_subset
-from fz_openqa.utils.datastruct import pprint_batch
+from fz_openqa.modeling.functional import Batch
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.utils.pretty import pretty_decode
 
 
 class BaseDataModule(LightningDataModule):
     """
     A task agnostic base datamodule. This implements and showcase the
-    basic functionalities of a TextDataModule.
+    basic functionalities of a text DataModule.
+
+    Implementing a sub-class of a `BaseDataModule` mostly requires overriding the
+    `.preprocessing()` and `.collate_fn()` methods.
 
     <original documentation>
     A DataModule implements 5 key methods:
@@ -51,11 +53,19 @@ class BaseDataModule(LightningDataModule):
     # text fields from the raw datasets that should be tokenized and concatenated
     text_fields = ["sentence"]
 
-    # name of the attributes that will be converted to tensors
+    # name of the attributes that will be converted to
+    # tensors in the preprocessing function
     pt_attributes = ["input_ids", "attention_mask"]
 
     # number of data points per subset train/val/test
     subset_size = [100, 10, 10]
+
+    # the attribute used to store the dataset
+    dataset: HgDataset = None
+
+    # define the operator that allows converting a sequence of
+    # examples into a Batch
+    collate_pipe: Pipe = None
 
     def __init__(
         self,
@@ -90,7 +100,6 @@ class BaseDataModule(LightningDataModule):
         # tokenizer and dataset
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.dataset: Optional[HgDataset] = None
 
         # samplers -- samplers wrap the original dataset and override the __get_item__ method
         self.train_sampler_cfg = (
@@ -116,14 +125,23 @@ class BaseDataModule(LightningDataModule):
         self.load_base_dataset()
 
     def setup(self, stage: Optional[str] = None):
-        """Load data and preprocess the data.
-        The dataset will be stored using the attribute `self.dataset`."""
+        """
+        Load data and preprocess the data.
+        1. Store into the attribute `self.dataset`.
+        2. Build the operator to collate examples into a batch.
+        """
+
+        # preprocess
         self.dataset: HgDataset = self.load_base_dataset()
         self.dataset = self.filter_dataset(self.dataset)
         if self.use_subset:
             self.dataset = take_subset(self.dataset, self.subset_size)
         self.dataset = self.preprocess_dataset(self.dataset)
 
+        # define the collate operator
+        self.collate_pipe = self.get_collate_pipe()
+
+        # display the dataset
         if self.verbose:
             self.pprint()
             self.display_sample()
@@ -149,6 +167,9 @@ class BaseDataModule(LightningDataModule):
         )
         dataset.set_format(type="torch", columns=self.pt_attributes)
         return dataset
+
+    def get_collate_pipe(self) -> Pipe:
+        return Lambda(lambda examples: self.tokenizer.pad(examples))
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filter operation to the dataset and return"""
@@ -190,12 +211,10 @@ class BaseDataModule(LightningDataModule):
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
 
-    def collate_fn(
-        self, batch: Any
-    ) -> Union[BatchEncoding, List[Dict[str, torch.Tensor]]]:
+    def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
-        return self.tokenizer.pad(batch)
+        return self.collate_pipe(examples)
 
     def pprint(self):
         """Pretty print the dtaset"""
@@ -208,34 +227,26 @@ class BaseDataModule(LightningDataModule):
         """Sample a batch and pretty print it."""
         batch = next(iter(self.train_dataloader()))
         eval_batch = next(iter(self.val_dataloader()))
-        console_width, _ = shutil.get_terminal_size()
-        print(console_width * "=")
+        print(get_separator("="))
         print("=== Training Batch ===")
-        print(console_width * "-")
+        print(get_separator())
         pprint_batch(batch)
+        print(get_separator())
         print("=== Validation Batch ===")
-        print(console_width * "-")
+        print(get_separator())
         pprint_batch(eval_batch)
-        print(console_width * "=")
+        print(get_separator())
+        print("=== Training Example ===")
+        print(get_separator())
         self.display_one_sample({k: v[0] for k, v in batch.items()})
+        print(get_separator("="))
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        console_width, _ = shutil.get_terminal_size()
-        print("=== Sample ===")
-        print(console_width * "-")
         rich.print(
-            self.pretty_decode(example["input_ids"], skip_special_tokens=True)
-        )
-        print(console_width * "=")
-
-    def pretty_decode(
-        self, tokens: Union[Tensor, List[int], np.ndarray], **kwargs
-    ):
-        """Pretty print an encoded chunk of text"""
-        n_pad_tokens = list(tokens).count(self.tokenizer.pad_token_id)
-        txt = self.tokenizer.decode(tokens, **kwargs)
-        return (
-            f"length={len(tokens)}, padding={n_pad_tokens}, "
-            f"text: [deep_sky_blue3]`{txt.replace('[PAD]', '').strip()}`"
+            pretty_decode(
+                example["input_ids"],
+                tokenizer=self.tokenizer,
+                skip_special_tokens=True,
+            )
         )

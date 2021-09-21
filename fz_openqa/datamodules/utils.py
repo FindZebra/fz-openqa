@@ -12,6 +12,10 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 HgDataset = Union[Dataset, DatasetDict]
 
 
+def flatten_nested(values: List[List[Any]]) -> List[Any]:
+    return [sub_x for x in values for sub_x in x]
+
+
 def nested_list(values: List[Any], *, stride: int) -> List[List[Any]]:
     output = []
     for i in range(0, len(values), stride):

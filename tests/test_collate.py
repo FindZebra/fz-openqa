@@ -5,8 +5,8 @@ from unittest import TestCase
 import torch
 from transformers import AutoTokenizer
 
-from fz_openqa.datamodules.collate import collate_and_pad_attributes, extract_and_collate_attributes_as_list
-from fz_openqa.utils.datastruct import Batch, pprint_batch
+from fz_openqa.datamodules.pipes.collate_fn import collate_and_pad_attributes, extract_and_collate_attributes_as_list
+from fz_openqa.utils.datastruct import Batch
 
 
 def tensorize(examples: List[Batch]) -> List[Batch]:

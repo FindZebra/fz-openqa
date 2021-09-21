@@ -12,24 +12,28 @@ import rich
 import torch
 from datasets import Split
 from torch.functional import Tensor
-from torch.utils.data import Dataset
 from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
-from .base_dm import HgDataset
-from .collate import collate_and_pad_attributes
-from .collate import collate_answer_options
-from .collate import collate_nested_examples
-from .collate import collate_simple_attributes_by_key
-from .collate import extract_and_collate_attributes_as_list
 from .datasets import medqa
 from .utils import add_spec_token
+from .utils import HgDataset
 from .utils import nested_list
+from fz_openqa.datamodules.pipes.collate_fn import collate_and_pad_attributes
+from fz_openqa.datamodules.pipes.collate_fn import collate_answer_options
+from fz_openqa.datamodules.pipes.collate_fn import collate_nested_examples
+from fz_openqa.datamodules.pipes.collate_fn import (
+    collate_simple_attributes_by_key,
+)
+from fz_openqa.datamodules.pipes.collate_fn import (
+    extract_and_collate_attributes_as_list,
+)
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import es_search
+from fz_openqa.utils.pretty import pretty_decode
 
 # from fz_openqa.tokenizers.static import DOC_TOKEN
 
@@ -382,13 +386,16 @@ class MedQaDataModule(BaseDataModule):
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        decode_kwargs = {"skip_special_tokens": False}
+        decode_kwargs = {
+            "skip_special_tokens": False,
+            "tokenizer": self.tokenizer,
+        }
         console_width, _ = shutil.get_terminal_size()
         print("=== Sample ===")
         print(console_width * "-")
         print("* Question:")
         rich.print(
-            self.repr_ex(example, "question.input_ids", **decode_kwargs)
+            pretty_decode(example["question.input_ids"], **decode_kwargs)
         )
 
         print(console_width * "-")
@@ -398,9 +405,8 @@ class MedQaDataModule(BaseDataModule):
                 f"-- document [magenta]{k}[/magenta] (is_positive={example['document.is_positive'][k]}, rank={example['document.rank'][k]}) --"
             )
             rich.print(
-                self.repr_ex(
-                    {"input_ids": example["document.input_ids"][k]},
-                    "input_ids",
+                pretty_decode(
+                    example["document.input_ids"][k],
                     **decode_kwargs,
                 )
             )
