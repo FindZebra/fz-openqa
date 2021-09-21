@@ -5,10 +5,8 @@ import rich
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from ..utils.datastruct import Batch
-from ..utils.pretty import get_separator
-from ..utils.pretty import pretty_decode
 from .base_dm import BaseDataModule
+from .corpus_dm import CorpusDataModule
 from .datasets import medqa
 from .pipes import AddPrefix
 from .pipes import Apply
@@ -27,9 +25,12 @@ from .utils import HgDataset
 from .utils import nested_list
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pretty_decode
 
 
-def add_idx_to_example(example: Batch, idx: int):
+def set_example_idx(example: Batch, idx: int):
     example["idx"] = idx
     return example
 
@@ -39,9 +40,6 @@ class QaDatamodule(BaseDataModule):
 
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = medqa.__file__
-
-    # text fields from the raw datasets that should be tokenized and concatenated
-    text_fields = ["sentence"]
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
@@ -59,6 +57,9 @@ class QaDatamodule(BaseDataModule):
 
     # number of options
     n_options = 4
+
+    # optional corpus
+    corpus: Optional[CorpusDataModule] = None
 
     def __init__(
         self,
@@ -110,7 +111,7 @@ class QaDatamodule(BaseDataModule):
 
         # add an index column
         dataset = dataset.map(
-            add_idx_to_example,
+            set_example_idx,
             batched=False,
             with_indices=True,
             desc="Indexing",

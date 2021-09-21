@@ -15,28 +15,32 @@ import datasets
 import numpy as np
 import rich
 import torch
+from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
-from elasticsearch import Elasticsearch
 from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
-from torch.utils.data import Dataset
+from transformers import BatchEncoding
+from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
-from .collate import collate_and_pad_attributes
-from .collate import extract_and_collate_attributes_as_list
 from .datasets import file_corpus
 from .datasets import fz_corpus
 from .datasets import meqa_en_corpus
 from .passage import gen_passages
+from fz_openqa.datamodules.pipes.collate_fn import collate_and_pad_attributes
+from fz_openqa.datamodules.pipes.collate_fn import (
+    extract_and_collate_attributes_as_list,
+)
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.es_functions import es_bulk
 from fz_openqa.utils.es_functions import es_create_index
 from fz_openqa.utils.es_functions import es_search
+from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.utils.pretty import pretty_decode
 
 HgDataset = Union[Dataset, DatasetDict]
 
@@ -123,6 +127,11 @@ class CorpusDataModule(BaseDataModule):
             # appending the title is quite complicated as it required
             raise NotImplementedError
 
+    @classmethod
+    def from_dataset(cls, corpus: Dataset):
+        """Build a corpus from a loaded dataset"""
+        raise NotImplementedError
+
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         input_files = (
@@ -139,11 +148,6 @@ class CorpusDataModule(BaseDataModule):
             cache_dir=self.data_dir,
             data_files=input_files,
         )
-
-    @staticmethod
-    def add_idx(example: Dict[str, Any], idx: int):
-        example["idx"] = idx
-        return example
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
@@ -221,6 +225,57 @@ class CorpusDataModule(BaseDataModule):
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
         return dataset
+
+    @staticmethod
+    def _append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:
+        example[
+            "document"
+        ] = f"{example['document.title']}. {example['document']}"
+        return example
+
+    def tokenize_examples(
+        self,
+        examples: Dict[str, List[Any]],
+        *,
+        fields: List[str],
+        output_key: Optional[str],
+        tokenizer: PreTrainedTokenizerFast,
+        max_length: Optional[int],
+        preprocess_fn: Optional[Callable] = None,
+        add_encoding_tokens: bool = True,
+        **kwargs,
+    ) -> Union[Dict, BatchEncoding]:
+        """Tokenize a batch of examples and truncate if `max_length` is provided.
+        The input format is:
+        examples = {
+            attribute_name: list of attribute values
+        }
+        """
+        # preprocess
+        examples = {field: examples[field] for field in fields}
+        if preprocess_fn is not None:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
+
+        if add_encoding_tokens:
+            examples = {
+                field: list(map(preprocess_fn, values))
+                for field, values in examples.items()
+            }
+
+        output = tokenizer(
+            *examples.values(),
+            max_length=max_length,
+            truncation=max_length is not None,
+            **kwargs,
+        )
+
+        if output_key is None:
+            return output
+        else:
+            return {f"{output_key}.{attr}": v for attr, v in output.items()}
 
     @staticmethod
     def generate_passages(
@@ -376,7 +431,11 @@ class CorpusDataModule(BaseDataModule):
         print(console_width * "-")
         rich.print(
             "(CORPUS) "
-            + self.repr_ex(example, "document.input_ids", **decode_kwargs)
+            + pretty_decode(
+                example["document.input_ids"],
+                tokenizer=self.tokenizer,
+                **decode_kwargs,
+            )
         )
 
     def collate_fn(self, examples: List[Dict[str, Any]]) -> Batch:
@@ -521,13 +580,13 @@ class CorpusDataModule(BaseDataModule):
 
         else:
             raise NotImplementedError
-    
+
     def search_index_batch(
         self,
         batch: Batch,
         k: int = 100,
         index: str = "faiss",
-        **kwargs, 
+        **kwargs,
     ):
 
         """
@@ -535,20 +594,19 @@ class CorpusDataModule(BaseDataModule):
 
         :@param batch:
         """
-        returned_evidence = [] #*
-        for idx in range(len(batch)): #infer batch size
-            ex = {k:v[idx] for k,v in batch.items()}
+        returned_evidence = []  # *
+        for idx in range(len(batch)):  # infer batch size
+            ex = {k: v[idx] for k, v in batch.items()}
             response_idx = self.search_index(
-                ex['question.text'],
-                k = k,
-                index = index,
-                name = "corpus")
-            returned_evidence.append(response_idx) #improve *
-        
+                ex["question.text"], k=k, index=index, name="corpus"
+            )
+            returned_evidence.append(response_idx)  # improve *
+
         return returned_evidence
 
     def exact_method(
         self,
+        response,
         key: Optional[str] = None,
         queries: Optional[list] = None,
         answers: Optional[list] = None,
@@ -572,7 +630,7 @@ class CorpusDataModule(BaseDataModule):
         discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(queries):
-            #response = self.search_index(query=query, k=100, index="bm25")
+            # response = self.search_index(query=query, k=100, index="bm25")
             positives = []
             negatives = []
             for hit in response["hits"]:

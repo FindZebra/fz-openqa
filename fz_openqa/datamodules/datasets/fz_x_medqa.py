@@ -41,11 +41,11 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
             features=datasets.Features(
                 {
                     "idx": datasets.Value("int32"),
-                    "question": datasets.Value("string"),
+                    "question.text": datasets.Value("string"),
                     "question.idx": datasets.Value("int32"),
                     "answer.target": datasets.Value("int32"),
-                    "answer": datasets.Sequence(datasets.Value("string")),
-                    "document": datasets.Value("string"),
+                    "answer.text": datasets.Sequence(datasets.Value("string")),
+                    "document.text": datasets.Value("string"),
                     "document.title": datasets.Value("string"),
                     "document.rank": datasets.Value("int32"),
                     "document.is_positive": datasets.Value("bool"),
@@ -82,10 +82,10 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
                 # extract document text and title
-                document = d["document"]
+                document = d.pop("document")
                 title, *text = document.split(". ")
                 text = ". ".join(text)
-                d["document"] = text
+                d["document.text"] = text
                 d["document.title"] = title
 
                 # adjust other values
@@ -93,5 +93,6 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
                 d["document.is_positive"] = d.pop("is_positive")
                 d["question.idx"] = d.pop("question_id")
                 d["answer.target"] = d.pop("answer_idx")
-                d["answer"] = d.pop("answer_choices")
+                d["answer.text"] = d.pop("answer_choices")
+                d["question.text"] = d.pop("question")
                 yield i, d
