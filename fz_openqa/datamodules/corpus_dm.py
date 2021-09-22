@@ -539,7 +539,7 @@ class CorpusDataModule(BaseDataModule):
                 ],
             )
 
-            es_bulk(
+            return es_bulk(
                 index_name=name,
                 title="book1",  # todo: find a way to extract document titles
                 document_idx=self.dataset["train"]["document.idx"].tolist(),
@@ -630,7 +630,7 @@ class CorpusDataModule(BaseDataModule):
         discarded = {"version": "0.0.1", "data": []}
 
         for i, query in enumerate(queries):
-            # response = self.search_index(query=query, k=100, index="bm25")
+            response = self.search_index(query=query, k=100, index="bm25")
             positives = []
             negatives = []
             for hit in response["hits"]:

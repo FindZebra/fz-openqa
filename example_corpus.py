@@ -27,7 +27,12 @@ print(f">> indexing the dataset using vectors")
 corpus.index(model=lambda batch:  batch['document.input_ids'], index="faiss")
 
 print(f">> indexing the dataset using bm25")
-corpus.index(index="bm25")
+indices = corpus.index(index="bm25")
+
+# todo: make it possible to lookup the idx in the corpus
+#for idx in indices:
+#    print(corpus.dataset["train"][idx])
+
 print(f">> Indexing finished! See index here:")
 rich.print("http://localhost:5601")
 
@@ -51,7 +56,7 @@ questions_dm.setup()
 
 
 # 1. sample data
-batch = next(iter(questions_dm.train_dataloader())) # Dataset is missing the key 'idx' used in collate.py, line 20
+#batch = next(iter(questions_dm.train_dataloader())) # Dataset is missing the key 'idx' used in collate.py, line 20
 
 
 """
