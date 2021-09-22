@@ -24,10 +24,10 @@ print(f">> get corpus")
 rich.print(corpus.dataset["train"])
 
 print(f">> indexing the dataset using vectors")
-corpus.index(model=lambda batch:  batch['document.input_ids'], index="faiss")
+corpus.index(model=lambda batch:  batch['document.input_ids'], index_mode="faiss")
 
 print(f">> indexing the dataset using bm25")
-indices = corpus.index(index="bm25")
+indices = corpus.index(index_mode="bm25")
 
 # todo: make it possible to lookup the idx in the corpus
 #for idx in indices:

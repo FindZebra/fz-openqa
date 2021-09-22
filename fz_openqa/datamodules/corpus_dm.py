@@ -1,15 +1,11 @@
 import os
 import re
-import shutil
 from functools import partial
-from typing import Any
 from typing import Callable
 from typing import Dict
-from typing import List
 from typing import Optional
 from typing import Union
 
-import datasets
 import rich
 import torch
 from datasets import concatenate_datasets
@@ -17,7 +13,6 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
-from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
 
@@ -31,21 +26,21 @@ from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
+from .pipes import Forward
 from .pipes import Identity
 from .pipes import Lambda
+from .pipes import MetaMapFilter
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import PrintBatch
 from .pipes import ReplaceInKeys
+from .pipes import SciSpacyFilter
 from .pipes import Sequential
 from .pipes import TokenizerPipe
+from .pipes import ToNumpy
 from .pipes.passage import GeneratePassages
 from .utils import add_spec_token
 from .utils import set_example_idx
-from fz_openqa.datamodules.pipes.collate_fn import collate_and_pad_attributes
-from fz_openqa.datamodules.pipes.collate_fn import (
-    extract_and_collate_attributes_as_list,
-)
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import es_bulk
@@ -76,8 +71,6 @@ class CorpusDataModule(BaseDataModule):
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
     pt_attributes = [
-        "document.idx",
-        "document.passage_idx",
         "document.input_ids",
         "document.attention_mask",
         "document.passage_mask",
@@ -149,14 +142,6 @@ class CorpusDataModule(BaseDataModule):
         # remove title for now
         dataset = dataset.remove_columns("title")
 
-        # add index column
-        dataset = dataset.map(
-            set_example_idx,
-            batched=False,
-            with_indices=True,
-            desc="Indexing documents",
-        )
-
         dataset = dataset.map(
             Sequential(
                 self.get_tokenizer_pipe(), self.get_generate_passages_pipe()
@@ -169,6 +154,14 @@ class CorpusDataModule(BaseDataModule):
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
+
+            # add index column
+            dataset = dataset.map(
+                set_example_idx,
+                batched=False,
+                with_indices=True,
+                desc="Indexing documents",
+            )
 
         # casting to tensors
         dataset.set_format(
@@ -260,7 +253,7 @@ class CorpusDataModule(BaseDataModule):
 
         # collate simple attributes
         simple_attr_pipe = Sequential(
-            Collate(keys=["document.idx", "document.passage_idx"]),
+            Collate(keys=["idx", "document.idx", "document.passage_idx"]),
             ApplyToAll(op=lambda x: torch.tensor(x)),
         )
 
@@ -274,34 +267,11 @@ class CorpusDataModule(BaseDataModule):
 
         return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
 
-    @staticmethod
-    @torch.no_grad()
-    def compute_vectors_batch(
-        key: str, model: Callable, batch: Batch
-    ) -> Dict[str, Tensor]:
-        """Compute one batch of vectors"""
-
-        # move data to device
-        if isinstance(model, torch.nn.Module):
-            device = next(iter(model.parameters())).device
-            batch = move_data_to_device(batch, device)
-
-        # process with the model (Dense or Sparse)
-        batch[key] = model(batch)
-
-        # cast to numpy and return
-        return {
-            k: v.to(device="cpu").numpy() if isinstance(v, Tensor) else v
-            for k, v in batch.items()
-            if k != "_mode_"
-        }
-
     def index(
         self,
         model: Optional[Callable] = None,
-        index: Optional[str] = "faiss",
-        filtering: Optional[str] = None,
-        name: str = "corpus",
+        index_mode: Optional[str] = "faiss",
+        filter_mode: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -310,51 +280,116 @@ class CorpusDataModule(BaseDataModule):
         :@param model: callable that returns a vector given the batch input.
         :@param index: string that determines which index to use (faiss or bm25).
         :@param filtering: string that determines whether SciSpacy filtering is used.
-        :@param name: string for naming index 'group'.
         """
-        if model is not None:
-            self.dataset = self.dataset.map(
-                partial(self.compute_vectors_batch, self.vectors_id, model),
-                batched=True,
-                batch_size=self.eval_batch_size,
-                num_proc=1,
-                desc="Computing corpus vectors",
-            )
-        if index == "faiss":
-            self.dataset.add_faiss_index(column=self.vectors_id, **kwargs)
-        elif index == "bm25":
-            es_create_index(name)
+        if index_mode == "faiss":
+            assert (
+                model is not None
+            ), "A model must be provided when using `faiss` indexing."
+            self.build_faiss_index(model, **kwargs)
 
-            # decide whether to filter text to only include medical relevant terms
-            if filtering not in [None, "scispacy"]:
-                raise NotImplementedError
+        elif index_mode == "bm25":
 
-            self.dataset.set_format(
-                type="numpy",
-                columns=[
-                    "document.idx",
-                ],
+            # potentially filter the text field, this returns a copy of
+            # `self.dataset` so it is not modified.
+            dataset = self.filter_text(
+                self.dataset, "document.text", filter_mode
             )
 
-            return es_bulk(
-                index_name=name,
-                title="book1",  # todo: find a way to extract document titles
-                document_idx=self.dataset["document.idx"].tolist(),
-                document_txt=self.dataset["document.text"],
+            self.build_es_index(
+                dataset, index_key="idx", text_key="document.text", **kwargs
             )
-
         else:
             raise NotImplementedError
 
+    def filter_text(
+        self, dataset: Dataset, text_key: str, filter_mode: Optional[str]
+    ) -> Dataset:
+        if filter_mode is None:
+            return dataset
+
+        # select the right pipe constructor
+        filter_pipe_cls = {
+            "scispacy": SciSpacyFilter,
+            "metamap": MetaMapFilter,
+        }[filter_mode]
+
+        # process the dataset using the filtering pipe
+        return self.dataset.map(
+            Sequential(
+                # @idariis: added this line for debugging
+                PrintBatch(header="filtering input"),
+                filter_pipe_cls(text_key=text_key),
+                # @idariis: added this line for debugging
+                PrintBatch(header="filtering output"),
+            ),
+            batched=True,
+            # @idariis: we need to device how to set this
+            batch_size=self.eval_batch_size,
+            # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
+            num_proc=1,
+            desc="Computing corpus vectors",
+        )
+
+    def build_es_index(
+        self,
+        dataset: Dataset,
+        *,
+        index_key: str,
+        text_key: str,
+        verbose: bool = False,
+    ):
+        """Index the dataset using elastic search.
+        We make sure a unique index is created for each dataset"""
+        es_create_index(dataset._fingerprint)
+
+        response = es_bulk(
+            index_name=dataset._fingerprint,
+            # todo: find a way to extract document titles
+            title="__no_title__",
+            document_idx=dataset[index_key],
+            document_txt=dataset[text_key],
+        )
+
+        if verbose:
+            print(get_separator("="))
+            print("=== build_es_index response ===")
+            print(get_separator())
+            rich.print(response)
+            print(get_separator("="))
+
+    def build_faiss_index(self, model: Callable, **kwargs):
+        """Index the dataset using dense vectors"""
+
+        # compute the dense vector for the whole dataset
+        self.dataset = self.dataset.map(
+            self.get_batch_processing_pipe(model),
+            batched=True,
+            batch_size=self.eval_batch_size,
+            num_proc=1,
+            desc="Computing corpus vectors",
+        )
+        # add the dense index
+        self.dataset.add_faiss_index(column=self.vectors_id, **kwargs)
+
+    def get_batch_processing_pipe(
+        self, model: Union[Callable, torch.nn.Module]
+    ) -> Pipe:
+        """returns a pipe that allows processing a batch of data using the model."""
+        return Sequential(
+            Forward(model=model, output_key=self.vectors_id),
+            FilterKeys(lambda key: key == "_index_"),
+            ToNumpy(),
+        )
+
     def search_index(
         self,
-        query: Optional[str] = None,
-        vector: Optional[Tensor] = None,
+        batch: Batch,
+        *,
         k: int = 1,
-        index: Optional[str] = "faiss",
-        filtering: Optional[str] = None,
-        name: str = "corpus",
-    ):
+        index_mode: Optional[str] = "faiss",
+        filter_mode: Optional[str] = None,
+        model: Optional[Union[Callable, torch.nn.Module]] = None,
+    ) -> Batch:
         """
         Query index given a input query
 
@@ -365,15 +400,26 @@ class CorpusDataModule(BaseDataModule):
         :@param filtering: string that determines whether SciSpacy filtering is used.
         :@param name: string for naming index 'group'.
         """
-        if index == "faiss":
+        if index_mode == "faiss":
             # todo: this causes segmentation fault on MacOS, works fine on the cluster
-            vector = vector.cpu().numpy()
-            return self.dataset.get_nearest_examples(
-                self.vectors_id, vector, k=k
-            )
+            batch = self.get_batch_processing_pipe(model=model)
+            vector = batch[self.vectors_id]
+            _ = self.dataset.get_nearest_examples(self.vectors_id, vector, k=k)
+            raise NotImplementedError
 
-        elif index == "bm25":
-            return es_search(index_name=name, query=query, results=k)
+        elif index_mode == "bm25":
+
+            # # select the right pipe constructor
+            # filter_pipe_cls = {'scispacy': SciSpacyFilter,
+            #                    'metamap': MetaMapFilter, }[filter_mode]
+            #
+            # batch = filter_pipe_cls("question.text")(batch)
+            eg = {k: v[0] for k, v in batch.items()}  # todo: temporary
+            return es_search(
+                index_name=self.dataset._fingerprint,
+                query=eg["question.text"],
+                results=k,
+            )
 
         else:
             raise NotImplementedError
@@ -468,31 +514,6 @@ class CorpusDataModule(BaseDataModule):
         return self.dataset.get_nearest_examples_batch(
             self.vectors_id, vectors, k=k
         )
-
-    def val_dataloader(self):
-        return self._eval_loader(
-            Split.TRAIN
-        )  # the dataset only have one split
-
-    def test_dataloader(self):
-        return self._eval_loader(
-            Split.TRAIN
-        )  # the dataset only have one split
-
-    @staticmethod
-    def take_subset(dataset: HgDataset) -> HgDataset:
-        """Take a subset of the dataset and return."""
-        if isinstance(dataset, DatasetDict):
-            return DatasetDict(
-                {
-                    k: dset.select(range(n))
-                    for n, (k, dset) in zip([1, 1, 1], dataset.items())
-                }
-            )
-        elif isinstance(dataset, Dataset):
-            return dataset.select(range(1))
-        else:
-            raise NotImplementedError
 
     def pprint(self):
         """Pretty print the dtaset"""

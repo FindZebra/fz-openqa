@@ -3,9 +3,9 @@ from typing import Dict
 from typing import List
 from typing import Union
 
+import torch
 from datasets import Dataset
 from datasets import DatasetDict
-from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.tokenizers.static import ANS_TOKEN
@@ -55,8 +55,10 @@ def take_subset(dataset: HgDataset, subset_size: List[int]) -> HgDataset:
         raise NotImplementedError
 
 
-def set_example_idx(example: Dict[str, Any], idx: int) -> Dict[str, Any]:
-    example["idx"] = idx
+def set_example_idx(
+    example: Dict[str, Any], idx: int, key: str = "idx"
+) -> Dict[str, Any]:
+    example[key] = idx
     return example
 
 
@@ -78,7 +80,7 @@ def truncate_examples_to_max_length(
     # truncate to `max_length`
     def maybe_truncate(x: Any, max_length: int):
         """truncate sequential attributes to `max_length`"""
-        if not (isinstance(x, Tensor) and len(x.shape) == 2):
+        if not (isinstance(x, torch.Tensor) and len(x.shape) == 2):
             return x
 
         return x[:, :max_length]

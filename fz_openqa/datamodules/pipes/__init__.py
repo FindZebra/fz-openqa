@@ -14,4 +14,9 @@ from .collate import Collate
 from .connect import Parallel
 from .connect import Sequential
 from .passage import GeneratePassages
+from .text_filtering import MetaMapFilter
+from .text_filtering import SciSpacyFilter
+from .text_filtering import TextFilter
 from .tokenizer import TokenizerPipe
+from .torch import Forward
+from .torch import ToNumpy

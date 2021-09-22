@@ -29,4 +29,4 @@ class IndexCorpus(Callback):
         """
         corpus: CorpusDataModule = trainer.datamodule.corpus
         model = AcceleratorWrapper(trainer)
-        corpus.index(model=model, index="faiss")
+        corpus.index(model=model, index_mode="faiss")
