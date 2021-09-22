@@ -92,10 +92,15 @@ def es_bulk(
         for i in range(len(document_txt))
     ]
 
-    response = helpers.bulk(
+    response = helpers.parallel_bulk(
         es, actions, chunk_size=1000, request_timeout=200, refresh="true"
     )
-    print(response)
+    indices = []
+    for succes, info in response:
+        if succes:
+            indices.append(info["index"]["_id"])
+
+    return indices
 
 
 def es_search(index_name: str, query: str, results: int):
