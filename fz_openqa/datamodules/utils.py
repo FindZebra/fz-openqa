@@ -1,9 +1,12 @@
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Union
 
 from datasets import Dataset
 from datasets import DatasetDict
+from torch import Tensor
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
@@ -50,3 +53,37 @@ def take_subset(dataset: HgDataset, subset_size: List[int]) -> HgDataset:
         return dataset.select(range(size))
     else:
         raise NotImplementedError
+
+
+def set_example_idx(example: Dict[str, Any], idx: int) -> Dict[str, Any]:
+    example["idx"] = idx
+    return example
+
+
+def append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:
+    example["document"] = f"{example['document.title']}. {example['document']}"
+    return example
+
+
+def truncate_examples_to_max_length(
+    output, *, key: str, tokenizer: PreTrainedTokenizerFast
+):
+    # infer `max_length`
+    tokens = [t for t in output[f"{key}.input_ids"]]
+    pad_tok = tokenizer.pad_token_id
+    max_length = len(tokens[0]) - min(
+        map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
+    )
+
+    # truncate to `max_length`
+    def maybe_truncate(x: Any, max_length: int):
+        """truncate sequential attributes to `max_length`"""
+        if not (isinstance(x, Tensor) and len(x.shape) == 2):
+            return x
+
+        return x[:, :max_length]
+
+    tensor_outpus = {
+        k: maybe_truncate(v, max_length) for k, v in output.items()
+    }
+    return tensor_outpus

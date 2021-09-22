@@ -23,16 +23,12 @@ from .utils import add_spec_token
 from .utils import flatten_nested
 from .utils import HgDataset
 from .utils import nested_list
+from .utils import set_example_idx
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
-
-
-def set_example_idx(example: Batch, idx: int):
-    example["idx"] = idx
-    return example
 
 
 class QaDatamodule(BaseDataModule):
@@ -66,16 +62,11 @@ class QaDatamodule(BaseDataModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
-        append_document_title: bool = False,
         corpus: Optional[BaseDataModule] = None,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
-
         self.add_encoding_tokens = add_encoding_tokens
-        if append_document_title:
-            raise NotImplementedError
-        self.append_document_title = append_document_title
 
         # corpus object
         self.corpus = corpus

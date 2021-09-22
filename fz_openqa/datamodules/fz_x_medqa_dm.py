@@ -15,8 +15,8 @@ from .corpus_dm import CorpusDataModule
 from .datasets import fz_x_medqa
 from .pipes import Parallel
 from .qa_dm import QaDatamodule
-from .qa_dm import set_example_idx
 from .utils import HgDataset
+from .utils import set_example_idx
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer.target",

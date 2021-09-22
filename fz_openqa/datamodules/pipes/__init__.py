@@ -1,6 +1,7 @@
 from .base import AddPrefix
 from .base import Apply
 from .base import ApplyToAll
+from .base import DropKeys
 from .base import FilterKeys
 from .base import Identity
 from .base import Lambda
@@ -12,4 +13,5 @@ from .collate import ApplyToEachExample
 from .collate import Collate
 from .connect import Parallel
 from .connect import Sequential
+from .passage import GeneratePassages
 from .tokenizer import TokenizerPipe

@@ -58,6 +58,21 @@ class FilterKeys(Pipe):
         return {k: v for k, v in batch.items() if self.keys(k)}
 
 
+class DropKeys(Pipe):
+    """
+    Filter the keys in the batch.
+    """
+
+    def __init__(self, keys: List[str]):
+        self.keys = keys
+
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        """The call of the pipeline process"""
+        for key in self.keys:
+            batch.pop(key)
+        return batch
+
+
 class AddPrefix(Pipe):
     """
     Append the keys with a prefix.

@@ -1,9 +1,11 @@
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 import rich
 import torch
+from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
@@ -19,7 +21,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils import HgDataset
 from fz_openqa.datamodules.utils import take_subset
-from fz_openqa.modeling.functional import Batch
+from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
@@ -127,8 +129,8 @@ class BaseDataModule(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         """
         Load data and preprocess the data.
-        1. Store into the attribute `self.dataset`.
-        2. Build the operator to collate examples into a batch.
+        1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
+        2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
 
         # preprocess
@@ -176,7 +178,7 @@ class BaseDataModule(LightningDataModule):
         return dataset
 
     def train_dataloader(self):
-        dset = self.dataset[Split.TRAIN]
+        dset = self.get_dataset_split(Split.TRAIN)
         if self.train_sampler_cfg is not None:
             dset = instantiate(self.train_sampler_cfg, dataset=dset)
 
@@ -191,7 +193,7 @@ class BaseDataModule(LightningDataModule):
         )
 
     def _eval_loader(self, split):
-        dset = self.dataset[split]
+        dset = self.get_dataset_split(split)
         if self.eval_sampler_cfg is not None:
             dset = instantiate(self.eval_sampler_cfg, dataset=dset)
 
@@ -210,6 +212,18 @@ class BaseDataModule(LightningDataModule):
 
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
+
+    def get_dataset_split(self, split: Union[str, Split]) -> Dataset:
+        """Return the dataset corresponding to the split,
+        or the dataset iteself if there is no split."""
+        if isinstance(self.dataset, Dataset):
+            return self.dataset
+        elif isinstance(self.dataset, DatasetDict):
+            return self.dataset[split]
+        else:
+            raise TypeError(
+                f"Unknown dataset type <{type(self.dataset).__name__}>"
+            )
 
     def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.

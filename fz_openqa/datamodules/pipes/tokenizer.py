@@ -4,7 +4,7 @@ from typing import Union
 
 from transformers import PreTrainedTokenizerFast
 
-from ...modeling.functional import Batch
+from ...modeling.functional import TorchBatch
 from .base import Pipe
 
 
@@ -29,7 +29,7 @@ class TokenizerPipe(Pipe):
             **kwargs,
         }
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def __call__(self, batch: TorchBatch, **kwargs) -> TorchBatch:
         tokenizer_input = {field: batch[field] for field in self.fields}
 
         batch_encoding = self.tokenizer(
