@@ -20,7 +20,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      filter_mode=None),
                             verbose=False,
                             num_proc=4,
-                            use_subset=False,
+                            use_subset=True,
                             train_batch_size=3)
 
 # load the QA dataset
@@ -30,7 +30,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      verbose=True,
                      corpus=corpus,
                      n_documents=100,
-                     train_batch_size=500,
+                     train_batch_size=100,
                      relevance_classifier=ExactMatch(
                          question_field='question.text',
                          document_field='document.text',
@@ -54,4 +54,4 @@ pprint_batch(batch)
 print(get_separator())
 count = batch['document.positive_count'].sum().float()
 total = batch['document.is_positive'].shape[1]
-rich.print(f">> proportion of positive docs: {100.*count / total:.4f}%")
+rich.print(f">> Number of positive docs: {count:.0f} ({100.*count / total:.2f}%)")

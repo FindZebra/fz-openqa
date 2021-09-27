@@ -53,16 +53,16 @@ def es_create_index(index_name: str):
     Create ElasticSearch Index
     """
     es.indices.delete(index=index_name, ignore=[400, 404])
-    response = es.indices.create(index=index_name)
-    print(response)
+    return es.indices.create(index=index_name)
+    # print(response)
 
 
 def es_remove_index(index_name: str):
     """
     Remove ElasticSearch Index
     """
-    response = es.indices.delete(index=index_name)
-    print(response)
+    return es.indices.delete(index=index_name)
+    # print(response)
 
 
 def es_ingest(index_name: str, title: str, paragraph: str):
@@ -70,10 +70,8 @@ def es_ingest(index_name: str, title: str, paragraph: str):
     Ingest to ElasticSearch Index
     """
     doc = {"title": title, "text": paragraph}
-    response = es.create(
-        index=index_name, body=doc, refresh="true", timeout=60
-    )
-    print(response)
+    return es.create(index=index_name, body=doc, refresh="true", timeout=60)
+    # print(response)
 
 
 def es_bulk(

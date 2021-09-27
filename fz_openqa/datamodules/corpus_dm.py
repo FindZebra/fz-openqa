@@ -154,13 +154,14 @@ class CorpusDataModule(BaseDataModule):
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
-            # add index column
-            dataset = dataset.map(
-                set_example_idx,
-                batched=False,
-                with_indices=True,
-                desc="Indexing documents",
-            )
+        # add index column
+        dataset = dataset.map(
+            set_example_idx,
+            batched=False,
+            num_proc=self.num_proc,
+            with_indices=True,
+            desc="Indexing documents",
+        )
 
         # casting to tensors
         dataset.set_format(
@@ -316,7 +317,7 @@ class CorpusDataModule(BaseDataModule):
         return query
 
 
-class MedQaEnDataModule(CorpusDataModule):
+class MedQaCorpusDataModule(CorpusDataModule):
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 
