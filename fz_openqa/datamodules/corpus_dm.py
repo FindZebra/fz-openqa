@@ -12,24 +12,23 @@ from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
-from datasets import Split
 from pytorch_lightning.utilities import rank_zero_only
-from torch import Tensor
 
 from .base_dm import BaseDataModule
 from .datasets import file_corpus
 from .datasets import fz_corpus
 from .datasets import meqa_en_corpus
+from .index.base import Index
 from .pipes import AddPrefix
 from .pipes import Apply
 from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
-from .pipes import Forward
 from .pipes import Identity
 from .pipes import Lambda
 from .pipes import MetaMapFilter
+from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import PrintBatch
@@ -37,7 +36,6 @@ from .pipes import ReplaceInKeys
 from .pipes import SciSpacyFilter
 from .pipes import Sequential
 from .pipes import TokenizerPipe
-from .pipes import ToNumpy
 from .pipes.passage import GeneratePassages
 from .utils import add_spec_token
 from .utils import set_example_idx
@@ -45,7 +43,6 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import es_bulk
 from fz_openqa.utils.es_functions import es_create_index
-from fz_openqa.utils.es_functions import es_search
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
@@ -89,6 +86,7 @@ class CorpusDataModule(BaseDataModule):
         *args,
         passage_length: int = 200,
         passage_stride: int = 100,
+        index: Optional[Index] = None,
         add_encoding_tokens: bool = True,
         append_document_title: bool = False,
         max_length: Optional[int] = None,
@@ -101,6 +99,7 @@ class CorpusDataModule(BaseDataModule):
             "and should be left to None. "
             "Use the argument `passage_length` instead."
         )
+        self._index = index
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
@@ -267,7 +266,7 @@ class CorpusDataModule(BaseDataModule):
 
         return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
 
-    def index(
+    def build_index(
         self,
         model: Optional[Callable] = None,
         index_mode: Optional[str] = "faiss",
@@ -281,6 +280,8 @@ class CorpusDataModule(BaseDataModule):
         :@param index: string that determines which index to use (faiss or bm25).
         :@param filtering: string that determines whether SciSpacy filtering is used.
         """
+        return self._index.build(self.dataset, model=model, **kwargs)
+
         if index_mode == "faiss":
             assert (
                 model is not None
@@ -300,152 +301,6 @@ class CorpusDataModule(BaseDataModule):
             )
         else:
             raise NotImplementedError
-
-    def filter_text(
-        self, dataset: Dataset, text_key: str, filter_mode: Optional[str]
-    ) -> Dataset:
-        if filter_mode is None:
-            return dataset
-
-        # select the right pipe constructor
-        filter_pipe_cls = {
-            "scispacy": SciSpacyFilter,
-            "metamap": MetaMapFilter,
-        }[filter_mode]
-
-        # process the dataset using the filtering pipe
-        return self.dataset.map(
-            Sequential(
-                # @idariis: added this line for debugging
-                PrintBatch(header="filtering input"),
-                filter_pipe_cls(text_key=text_key),
-                # @idariis: added this line for debugging
-                PrintBatch(header="filtering output"),
-            ),
-            batched=True,
-            # @idariis: we need to device how to set this
-            batch_size=self.eval_batch_size,
-            # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
-            num_proc=1,
-            desc="Computing corpus vectors",
-        )
-
-    def build_es_index(
-        self,
-        dataset: Dataset,
-        *,
-        index_key: str,
-        text_key: str,
-        verbose: bool = False,
-    ):
-        """Index the dataset using elastic search.
-        We make sure a unique index is created for each dataset"""
-        es_create_index(dataset._fingerprint)
-
-        response = es_bulk(
-            index_name=dataset._fingerprint,
-            # todo: find a way to extract document titles
-            title="__no_title__",
-            document_idx=dataset[index_key],
-            document_txt=dataset[text_key],
-        )
-
-        if verbose:
-            print(get_separator("="))
-            print("=== build_es_index response ===")
-            print(get_separator())
-            rich.print(response)
-            print(get_separator("="))
-
-    def build_faiss_index(self, model: Callable, **kwargs):
-        """Index the dataset using dense vectors"""
-
-        # compute the dense vector for the whole dataset
-        self.dataset = self.dataset.map(
-            self.get_batch_processing_pipe(model),
-            batched=True,
-            batch_size=self.eval_batch_size,
-            num_proc=1,
-            desc="Computing corpus vectors",
-        )
-        # add the dense index
-        self.dataset.add_faiss_index(column=self.vectors_id, **kwargs)
-
-    def get_batch_processing_pipe(
-        self, model: Union[Callable, torch.nn.Module]
-    ) -> Pipe:
-        """returns a pipe that allows processing a batch of data using the model."""
-        return Sequential(
-            Forward(model=model, output_key=self.vectors_id),
-            FilterKeys(lambda key: key == "_index_"),
-            ToNumpy(),
-        )
-
-    def search_index(
-        self,
-        batch: Batch,
-        *,
-        k: int = 1,
-        index_mode: Optional[str] = "faiss",
-        filter_mode: Optional[str] = None,
-        model: Optional[Union[Callable, torch.nn.Module]] = None,
-    ) -> Batch:
-        """
-        Query index given a input query
-
-        :@param query:
-        :@param vector:
-        :@param k: integer that sets number of results to be queried.
-        :@param index: string that determines which index to use (faiss or bm25).
-        :@param filtering: string that determines whether SciSpacy filtering is used.
-        :@param name: string for naming index 'group'.
-        """
-        if index_mode == "faiss":
-            # todo: this causes segmentation fault on MacOS, works fine on the cluster
-            batch = self.get_batch_processing_pipe(model=model)
-            vector = batch[self.vectors_id]
-            _ = self.dataset.get_nearest_examples(self.vectors_id, vector, k=k)
-            raise NotImplementedError
-
-        elif index_mode == "bm25":
-
-            # # select the right pipe constructor
-            # filter_pipe_cls = {'scispacy': SciSpacyFilter,
-            #                    'metamap': MetaMapFilter, }[filter_mode]
-            #
-            # batch = filter_pipe_cls("question.text")(batch)
-            eg = {k: v[0] for k, v in batch.items()}  # todo: temporary
-            return es_search(
-                index_name=self.dataset._fingerprint,
-                query=eg["question.text"],
-                results=k,
-            )
-
-        else:
-            raise NotImplementedError
-
-    def search_index_batch(
-        self,
-        batch: Batch,
-        k: int = 100,
-        index: str = "faiss",
-        **kwargs,
-    ):
-
-        """
-        Query index given a batch input of queries
-
-        :@param batch:
-        """
-        returned_evidence = []  # *
-        for idx in range(len(batch)):  # infer batch size
-            ex = {k: v[idx] for k, v in batch.items()}
-            response_idx = self.search_index(
-                ex["question.text"], k=k, index=index, name="corpus"
-            )
-            returned_evidence.append(response_idx)  # improve *
-
-        return returned_evidence
 
     def exact_method(
         self,
@@ -508,18 +363,44 @@ class CorpusDataModule(BaseDataModule):
 
         return out, discarded
 
-    def query_batch(self, vectors: Tensor, k: int = 1):
-        """Query the faiss index given a batch of vector queries of shape (bs, h,)"""
-        vectors = vectors.cpu().numpy()
-        return self.dataset.get_nearest_examples_batch(
-            self.vectors_id, vectors, k=k
+    def search_index(
+        self,
+        batch: Batch,
+        *,
+        k: int = 1,
+        model: Optional[Union[Callable, torch.nn.Module]] = None,
+        **kwargs,
+    ) -> Batch:
+        """
+        Query index given a input query
+
+        :@param query:
+        :@param vector:
+        :@param k: integer that sets number of results to be queried.
+        :@param index: string that determines which index to use (faiss or bm25).
+        :@param filtering: string that determines whether SciSpacy filtering is used.
+        :@param name: string for naming index 'group'.
+        """
+        search_result = self._index.search(
+            query=batch, k=k, model=model, **kwargs
         )
 
-    def pprint(self):
-        """Pretty print the dtaset"""
-        rich.print(
-            f">> Dataset: (use_subset={self.use_subset}): \n" f"{self.dataset}"
-        )
+        # retrieve the examples from the dataset (flat list)
+        examples = [
+            self.dataset[idx] for sub in search_result.index for idx in sub
+        ]
+
+        # collate the examples as a batch
+        flat_batch = self.collate_pipe(examples)
+
+        # nest the examples:
+        # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
+        batch = Nest(stride=k)(flat_batch)
+
+        # add the score to the batch
+        batch["score"] = torch.tensor(search_result.score)
+
+        return batch
 
 
 class MedQaEnDataModule(CorpusDataModule):
