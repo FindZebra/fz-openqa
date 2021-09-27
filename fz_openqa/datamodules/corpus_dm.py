@@ -280,67 +280,6 @@ class CorpusDataModule(BaseDataModule):
         """
         return self._index.build(self.dataset, model=model, **kwargs)
 
-    def exact_method(
-        self,
-        response,
-        key: Optional[str] = None,
-        queries: Optional[list] = None,
-        answers: Optional[list] = None,
-        answer_idxs: Optional[list] = None,
-        synonyms: Optional[list] = None,
-    ) -> Batch:
-        """
-        Compute exact matching based on whether answer is contained in document string.
-
-        :@param batch: {
-        question.text: list of N texts,
-        question.input_ids:tensor of shape [N, L_q],
-        answer.text: N lists of 4 texts,
-        answer.input_ids: tensor of shape [N, 4, L_a],
-        answer.target: tensor of shape [N,],
-        answer.synonyms: N lists of M texts,
-        }
-
-        """
-        out = {"version": "0.0.1", "data": []}
-        discarded = {"version": "0.0.1", "data": []}
-
-        for i, query in enumerate(queries):
-            response = self.search_index(query=query, k=100, index="bm25")
-            positives = []
-            negatives = []
-            for hit in response["hits"]:
-                if answers[i][answer_idxs[i]] in hit["_source"]["text"]:
-                    positives.append(hit["_source"]["text"])
-                elif any(
-                    synonym in hit["_source"]["text"]
-                    for synonym in synonyms[i]
-                ):
-                    positives.append(hit["_source"]["text"])
-                else:
-                    negatives.append(hit["_source"]["text"])
-
-            if positives:
-                out["data"].append(
-                    {
-                        "question": query,
-                        "answer": answers[i][0],
-                        "positive": positives[0],
-                        "negatives": negatives[0:10],
-                    }
-                )
-            else:
-                discarded["data"].append(
-                    {
-                        "question": query,
-                        "answer": answers[i][0],
-                        "synonyms": synonyms[i],
-                        "top 10": negatives[0:10],
-                    }
-                )
-
-        return out, discarded
-
     def search_index(
         self,
         query: Batch,
@@ -372,7 +311,7 @@ class CorpusDataModule(BaseDataModule):
         query = Nest(stride=k)(flat_batch)
 
         # add the score to the batch
-        query["document.score"] = torch.tensor(search_result.score)
+        query["document.retrieval_score"] = torch.tensor(search_result.score)
 
         return query
 

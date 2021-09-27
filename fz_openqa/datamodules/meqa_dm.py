@@ -18,6 +18,7 @@ from .pipes import FilterKeys
 from .pipes import Lambda
 from .pipes import Parallel
 from .pipes import Pipe
+from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
 from .pipes import TokenizerPipe
@@ -30,6 +31,7 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 
@@ -66,6 +68,7 @@ class MedQaDataModule(BaseDataModule):
         add_encoding_tokens: bool = True,
         corpus: Optional[BaseDataModule] = None,
         n_documents: int = 0,
+        relevance_classifier: Optional[RelevanceClassifier] = None,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
@@ -76,6 +79,7 @@ class MedQaDataModule(BaseDataModule):
             assert corpus is not None
         self.corpus = corpus
         self.n_documents = n_documents
+        self.relevance_classifier = relevance_classifier
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -213,6 +217,9 @@ class MedQaDataModule(BaseDataModule):
                 query=batch, k=self.n_documents
             )
             batch.update(**corpus_batch)
+
+            if self.relevance_classifier is not None:
+                batch = self.relevance_classifier(batch)
 
         return batch
 
