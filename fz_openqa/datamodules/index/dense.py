@@ -20,6 +20,7 @@ class FaissIndex(Index):
 
     vectors_column_name = "__vectors__"
     dataset: Dataset = None
+    model: Callable = None
 
     def __init__(
         self,
@@ -37,7 +38,7 @@ class FaissIndex(Index):
     ):
         """Index a dataset."""
         assert model is not None
-
+        self.model = model
         self.dataset = dataset.map(
             self.get_batch_processing_pipe(model),
             batched=True,
@@ -54,6 +55,9 @@ class FaissIndex(Index):
             column=self.vectors_column_name, device=None
         )
 
+        # set status
+        self.is_indexed = True
+
     def search(
         self,
         query: Batch,
@@ -65,6 +69,7 @@ class FaissIndex(Index):
         """Search the index using the `query` and
         return the index of the results within the original dataset."""
         assert self.dataset is not None
+        model = model or self.model
         assert model is not None
 
         query = self.get_batch_processing_pipe(model=model)(query)

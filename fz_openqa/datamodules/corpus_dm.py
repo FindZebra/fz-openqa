@@ -175,7 +175,7 @@ class CorpusDataModule(BaseDataModule):
             GeneratePassages(
                 size=self.passage_length,
                 stride=self.passage_stride,
-                start_tokens=self.get_start_tokens(),
+                start_tokens=self.get_prefix_tokens(),
                 end_tokens=[self.tokenizer.sep_token_id],
                 pad_token_id=self.tokenizer.pad_token_id,
                 verbose=self.verbose,
@@ -208,7 +208,7 @@ class CorpusDataModule(BaseDataModule):
 
         return Parallel(Identity(), tokenizer_pipe)
 
-    def get_start_tokens(self):
+    def get_prefix_tokens(self):
         doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
         start_tokens = (
             [self.tokenizer.cls_token_id, doc_token_id]
@@ -269,8 +269,6 @@ class CorpusDataModule(BaseDataModule):
     def build_index(
         self,
         model: Optional[Callable] = None,
-        index_mode: Optional[str] = "faiss",
-        filter_mode: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -281,26 +279,6 @@ class CorpusDataModule(BaseDataModule):
         :@param filtering: string that determines whether SciSpacy filtering is used.
         """
         return self._index.build(self.dataset, model=model, **kwargs)
-
-        if index_mode == "faiss":
-            assert (
-                model is not None
-            ), "A model must be provided when using `faiss` indexing."
-            self.build_faiss_index(model, **kwargs)
-
-        elif index_mode == "bm25":
-
-            # potentially filter the text field, this returns a copy of
-            # `self.dataset` so it is not modified.
-            dataset = self.filter_text(
-                self.dataset, "document.text", filter_mode
-            )
-
-            self.build_es_index(
-                dataset, index_key="idx", text_key="document.text", **kwargs
-            )
-        else:
-            raise NotImplementedError
 
     def exact_method(
         self,
@@ -365,7 +343,7 @@ class CorpusDataModule(BaseDataModule):
 
     def search_index(
         self,
-        batch: Batch,
+        query: Batch,
         *,
         k: int = 1,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
@@ -374,15 +352,11 @@ class CorpusDataModule(BaseDataModule):
         """
         Query index given a input query
 
-        :@param query:
-        :@param vector:
+        :@param query: query data stored as a Batch
         :@param k: integer that sets number of results to be queried.
-        :@param index: string that determines which index to use (faiss or bm25).
-        :@param filtering: string that determines whether SciSpacy filtering is used.
-        :@param name: string for naming index 'group'.
         """
         search_result = self._index.search(
-            query=batch, k=k, model=model, **kwargs
+            query=query, k=k, model=model, **kwargs
         )
 
         # retrieve the examples from the dataset (flat list)
@@ -395,12 +369,12 @@ class CorpusDataModule(BaseDataModule):
 
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        batch = Nest(stride=k)(flat_batch)
+        query = Nest(stride=k)(flat_batch)
 
         # add the score to the batch
-        batch["score"] = torch.tensor(search_result.score)
+        query["document.score"] = torch.tensor(search_result.score)
 
-        return batch
+        return query
 
 
 class MedQaEnDataModule(CorpusDataModule):

@@ -18,6 +18,8 @@ class SearchResult:
 class Index:
     """Keep an index of a Dataset and search using queries."""
 
+    is_indexed: bool = False
+
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
         raise NotImplementedError

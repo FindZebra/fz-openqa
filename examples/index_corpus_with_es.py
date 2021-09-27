@@ -26,10 +26,10 @@ dm = FzCorpusDataModule(tokenizer=tokenizer,
 dm.prepare_data()
 dm.setup()
 
-print(f">> indexing the dataset using Faiss")
+print(f">> indexing the dataset using Elastic Search")
 dm.build_index()
 
-print(f">> query the dataset using Faiss")
+print(f">> query the dataset using Elastic Search")
 result = dm.search_index(query, k=3)
 
 display_search_results(query, result)

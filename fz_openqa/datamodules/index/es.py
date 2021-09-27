@@ -86,6 +86,8 @@ class ElasticSearchIndex(Index):
             rich.print(response)
             print(get_separator("="))
 
+        self.is_indexed = True
+
     def search(
         self, query: Batch, field: str = "question.text", **kwargs
     ) -> SearchResult:

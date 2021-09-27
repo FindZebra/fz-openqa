@@ -4,11 +4,12 @@ import os
 import re
 
 import gdown
-from es_functions import es_create_index
-from es_functions import es_ingest
-from es_functions import es_remove_index
-from es_functions import es_search
 from tqdm import tqdm
+
+from .es_functions import es_create_index
+from .es_functions import es_ingest
+from .es_functions import es_remove_index
+from .es_functions import es_search
 
 """
 Generate FZxMedQA Dataset
@@ -107,76 +108,87 @@ def ingest_all(data: dict, dateset_name: str):
                     _ = es_ingest(dateset_name, article["title"], doc)
 
 
-train_url = "https://drive.google.com/uc?id=1K8Lu0rI2rK-WZFLxmuQ60mRNWIbSmiy2"
-dev_url = "https://drive.google.com/uc?id=16sJUgYCVwYSp5Zy35xW7NlUUBGhDNdWO"
-test_url = "https://drive.google.com/uc?id=1WZFwLpM_2RNHP2QE-JHlCm5mcb7I0FtN"
+if __name__ == "__main__":
+    train_url = (
+        "https://drive.google.com/uc?id=1K8Lu0rI2rK-WZFLxmuQ60mRNWIbSmiy2"
+    )
+    dev_url = (
+        "https://drive.google.com/uc?id=16sJUgYCVwYSp5Zy35xW7NlUUBGhDNdWO"
+    )
+    test_url = (
+        "https://drive.google.com/uc?id=1WZFwLpM_2RNHP2QE-JHlCm5mcb7I0FtN"
+    )
 
-output = [
-    str(os.path.join(args.cache_dir, "train.json")),
-    str(os.path.join(args.cache_dir, "dev.json")),
-    str(os.path.join(args.cache_dir, "test.json")),
-]
+    output = [
+        str(os.path.join(args.cache_dir, "train.json")),
+        str(os.path.join(args.cache_dir, "dev.json")),
+        str(os.path.join(args.cache_dir, "test.json")),
+    ]
 
-gdown.cached_download(train_url, output[0], quiet=False)
-gdown.cached_download(dev_url, output[1], quiet=False)
-gdown.cached_download(test_url, output[2], quiet=False)
+    gdown.cached_download(train_url, output[0], quiet=False)
+    gdown.cached_download(dev_url, output[1], quiet=False)
+    gdown.cached_download(test_url, output[2], quiet=False)
 
-with open(output[0], "rb") as f:
-    train = json.load(f)
+    with open(output[0], "rb") as f:
+        train = json.load(f)
 
-with open(output[1], "rb") as f:
-    val = json.load(f)
+    with open(output[1], "rb") as f:
+        val = json.load(f)
 
-with open(output[2], "rb") as f:
-    test = json.load(f)
+    with open(output[2], "rb") as f:
+        test = json.load(f)
 
-datasets = [train, val, test]
-ds_names = ["train", "val", "test"]
+    datasets = [train, val, test]
+    ds_names = ["train", "val", "test"]
 
-counter = 0
-for ds_id, ds in enumerate(datasets):
-    # offical HuggingFace datastructure
-    # see: https://huggingface.co/docs/datasets/loading_datasets.html
-    out = {"version": "0.0.1", "data": []}
+    counter = 0
+    for ds_id, ds in enumerate(datasets):
+        # offical HuggingFace datastructure
+        # see: https://huggingface.co/docs/datasets/loading_datasets.html
+        out = {"version": "0.0.1", "data": []}
 
-    print("Ingesting all articles to ElasticSearch")
-    ingest_all(ds, ds_names[ds_id])
-    print("Finish ingesting all articles")
+        print("Ingesting all articles to ElasticSearch")
+        ingest_all(ds, ds_names[ds_id])
+        print("Finish ingesting all articles")
 
-    # this loop creates a list of dicts appending samples to the dataset
-    for key in tqdm(ds.keys()):
-        if ds[key]["FZ_results"]:
-            counter += 1
-            rank = 0
-            q_id = key[1:]
-            answer_options = [
-                ds[key]["answer_options"][opt]
-                for opt in ds[key]["answer_options"].keys()
-            ]
+        # this loop creates a list of dicts appending samples to the dataset
+        for key in tqdm(ds.keys()):
+            if ds[key]["FZ_results"]:
+                counter += 1
+                rank = 0
+                q_id = key[1:]
+                answer_options = [
+                    ds[key]["answer_options"][opt]
+                    for opt in ds[key]["answer_options"].keys()
+                ]
 
-            # returning top n hits from es index based on question (query input)
-            es_res = es_search(ds_names[ds_id], ds[key]["question"], args.topn)
-            # es_res is sorted by BM25 score where the first instance has the highest score
-            for hit in es_res["hits"]:
-                rank += 1
-                # creating a sample for each hit returned from elasticsearch
-                out["data"].append(
-                    {
-                        "idx": counter,
-                        "question_id": q_id,
-                        "question": ds[key]["question"],
-                        "answer_choices": answer_options,
-                        "answer_idx": answer_options.index(ds[key]["answer"]),
-                        "document": hit["_source"]["title"]
-                        + ". "
-                        + hit["_source"]["text"],
-                        "rank": rank,  # rank based on BM25
-                    }
+                # returning top n hits from es index based on question (query input)
+                es_res = es_search(
+                    ds_names[ds_id], ds[key]["question"], args.topn
                 )
-    # this line ensures to remove the elasticsearch index when finished
-    es_remove_index(ds_names[ds_id])
+                # es_res is sorted by BM25 score where the first instance has the highest score
+                for hit in es_res["hits"]:
+                    rank += 1
+                    # creating a sample for each hit returned from elasticsearch
+                    out["data"].append(
+                        {
+                            "idx": counter,
+                            "question_id": q_id,
+                            "question": ds[key]["question"],
+                            "answer_choices": answer_options,
+                            "answer_idx": answer_options.index(
+                                ds[key]["answer"]
+                            ),
+                            "document": hit["_source"]["title"]
+                            + ". "
+                            + hit["_source"]["text"],
+                            "rank": rank,  # rank based on BM25
+                        }
+                    )
+        # this line ensures to remove the elasticsearch index when finished
+        es_remove_index(ds_names[ds_id])
 
-    with open(
-        os.path.join(args.output, ds_names[ds_id] + "_FZ-MedQA.json"), "w"
-    ) as file:
-        json.dump(out, file, indent=6)
+        with open(
+            os.path.join(args.output, ds_names[ds_id] + "_FZ-MedQA.json"), "w"
+        ) as file:
+            json.dump(out, file, indent=6)

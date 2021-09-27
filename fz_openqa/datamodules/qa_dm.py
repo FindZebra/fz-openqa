@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Callable
+from typing import List
 from typing import Optional
 
 import rich
@@ -63,13 +65,17 @@ class QaDatamodule(BaseDataModule):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         corpus: Optional[BaseDataModule] = None,
+        n_documents: int = 0,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
         self.add_encoding_tokens = add_encoding_tokens
 
         # corpus object
+        if n_documents > 0:
+            assert corpus is not None
         self.corpus = corpus
+        self.n_documents = n_documents
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -194,6 +200,21 @@ class QaDatamodule(BaseDataModule):
         return Parallel(
             raw_text_pipe, simple_attr_pipe, question_pipe, answer_pipe
         )
+
+    def build_index(self, model: Optional[Callable] = None, **kwargs):
+        self.corpus.build_index(model=model, **kwargs)
+
+    def collate_fn(self, examples: List[Batch]) -> Batch:
+        """The function that is used to merge examples into a batch.
+        Concatenating sequences with different length requires padding them."""
+        batch = self.collate_pipe(examples)
+        if self.n_documents > 0 and self.corpus.dataset is not None:
+            corpus_batch = self.corpus.search_index(
+                query=batch, k=self.n_documents
+            )
+            batch.update(**corpus_batch)
+
+        return batch
 
     def display_one_sample(self, example: Batch):
         """Decode and print one example from the batch"""
