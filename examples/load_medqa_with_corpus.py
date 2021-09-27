@@ -2,7 +2,7 @@ import datasets
 
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
-from fz_openqa.datamodules.qa_dm import QaDatamodule
+from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 
@@ -22,12 +22,12 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             train_batch_size=3)
 
 # load the QA dataset
-dm = QaDatamodule(tokenizer=tokenizer,
-                  num_proc=1,
-                  use_subset=True,
-                  verbose=True,
-                  corpus=corpus,
-                  n_documents=3)
+dm = MedQaDataModule(tokenizer=tokenizer,
+                     num_proc=1,
+                     use_subset=True,
+                     verbose=True,
+                     corpus=corpus,
+                     n_documents=3)
 
 # prepare both the QA dataset and the corpus
 dm.prepare_data()

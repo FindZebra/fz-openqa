@@ -33,7 +33,7 @@ from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
 
 
-class QaDatamodule(BaseDataModule):
+class MedQaDataModule(BaseDataModule):
     """A base DataModule for question answering."""
 
     # HuggingFace dataset id or local path to script

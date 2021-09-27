@@ -13,8 +13,8 @@ from datasets import Split
 
 from .corpus_dm import CorpusDataModule
 from .datasets import fz_x_medqa
+from .meqa_dm import MedQaDataModule
 from .pipes import Parallel
-from .qa_dm import QaDatamodule
 from .utils import HgDataset
 from .utils import set_example_idx
 
@@ -69,7 +69,7 @@ def isolate_corpus(
     return filtered_dataset, corpus
 
 
-class FZxMedQADataModule(QaDatamodule):
+class FZxMedQADataModule(MedQaDataModule):
     """A PyTorch Lightning DataModule wrapping the FZxMedQA dataset."""
 
     # HuggingFace dataset id or local path to script
