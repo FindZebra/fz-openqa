@@ -1,5 +1,6 @@
 from unittest import TestCase
-from fz_openqa.datamodules.passage import gen_passages
+from fz_openqa.datamodules.pipes.passage import gen_passages
+
 
 class TestPassage(TestCase):
     def test_gen_passages(self):

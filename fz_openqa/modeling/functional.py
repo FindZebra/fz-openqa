@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 
 BatchValue = Union[Sequence[Tensor], Tensor]
-Batch = Dict[str, BatchValue]
+TorchBatch = Dict[str, BatchValue]
 
 
 def count_right_padding(
@@ -58,12 +58,12 @@ def is_valid_seq_attr(x: BatchValue, ref: BatchValue):
 
 
 def padless_cat(
-    a: Batch,
-    b: Batch,
+    a: TorchBatch,
+    b: TorchBatch,
     pad_token: Any,
     master_key: str = "input_ids",
     aux_pad_tokens: Optional[Dict[str, Any]] = None,
-) -> Batch:
+) -> TorchBatch:
     """Concatenate the input tensors across the dimension 1 such that there is no padding between a and b."""
     if aux_pad_tokens is None:
         aux_pad_tokens = {}

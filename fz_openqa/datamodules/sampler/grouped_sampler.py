@@ -62,7 +62,7 @@ class GroupedSampler(Sampler):
             (counts["document.is_positive"] >= n_pos)
             & (counts["document.is_negative"] >= n_neg)
         ]
-        self.index = self.index[self.index["question.idx"].isin(counts.index)]
+        self.index = self.index[self.index["question.idx"].isin(counts.build)]
 
         # question index
         self.q_index = list(self.index["question.idx"].unique())

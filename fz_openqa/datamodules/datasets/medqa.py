@@ -3,29 +3,31 @@ import json
 import datasets
 
 
-class FZxMedQAConfig(datasets.BuilderConfig):
-    """BuilderConfig for FZxMedQA."""
+class MedQAxCorpusConfig(datasets.BuilderConfig):
+    """BuilderConfig for MedQAxCorpus."""
 
     def __init__(self, **kwargs):
         """BuilderConfig for FZxMedQA.
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(FZxMedQAConfig, self).__init__(**kwargs)
+        super(MedQAxCorpusConfig, self).__init__(**kwargs)
 
 
-_TRAIN_URL = "https://drive.google.com/file/d/1-0yhF7QxAH6bWLO1Dn9V7K9pUc0VtCCA/view?usp=sharing"
-_VALID_URL = "https://drive.google.com/file/d/1AAyNRxGevRj5mA7BeMsc2M5TtztN9LpZ/view?usp=sharing"
-_TEST_URL = "https://drive.google.com/file/d/1kKcYiNvPs1vw9AibXmtyrFChmtnbEDXw/view?usp=sharing"
+_TRAIN_URL = "https://drive.google.com/file/d/18a1TxYHHlNqXNBHaSgfLRgI4kBmYXcyn/view?usp=sharing"
+_VALID_URL = "https://drive.google.com/file/d/1m4zUJoET3WDqpYvQ_aOJVmJbiSjGGhB0/view?usp=sharing"
+_TEST_URL = "https://drive.google.com/file/d/1cOOSjOjBIOlzi3Wk31kxnp-eIV6Ekslh/view?usp=sharing"
 
-_DESCRIPTION = "A mapping between the FinzdZebra corpus and the MedQA dataset"
+_DESCRIPTION = (
+    "A mapping between the MedQA dataset and the MedQA corpus (18 books)"
+)
 _VERSION = "0.0.1"
-_HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
+_HOMEPAGE = ""
 _CITATION = ""
 
 
-class FZxMedQADataset(datasets.GeneratorBasedBuilder):
-    """FZxMedQA Dataset. Version 0.0.1"""
+class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
+    """MedQAxCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
     force = False
@@ -40,15 +42,13 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "idx": datasets.Value("int32"),
-                    "question.text": datasets.Value("string"),
                     "question.idx": datasets.Value("int32"),
+                    "question.text": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
                     "answer.text": datasets.Sequence(datasets.Value("string")),
-                    "document.text": datasets.Value("string"),
-                    "document.title": datasets.Value("string"),
-                    "document.rank": datasets.Value("int32"),
-                    "document.is_positive": datasets.Value("bool"),
+                    "synonyms.text": datasets.Sequence(
+                        datasets.Value("string")
+                    ),
                 }
             ),
             supervised_keys=None,
@@ -81,18 +81,10 @@ class FZxMedQADataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
-                # extract document text and title
-                document = d.pop("document")
-                title, *text = document.split(". ")
-                text = ". ".join(text)
-                d["document.text"] = text
-                d["document.title"] = title
-
-                # adjust other values
-                d["document.rank"] = d.pop("rank_bm25") - 1  # start from zero
-                d["document.is_positive"] = d.pop("is_positive")
+                # adjust values
                 d["question.idx"] = d.pop("question_id")
                 d["answer.target"] = d.pop("answer_idx")
-                d["answer.text"] = d.pop("answer_choices")
+                d["answer.text"] = d.pop("answer_options")
                 d["question.text"] = d.pop("question")
+                d["synonyms.text"] = d.pop("synonyms")
                 yield i, d

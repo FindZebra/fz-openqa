@@ -1,15 +1,11 @@
-import shutil
-from functools import partial
-from typing import Any
-from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
-import datasets
 import rich
 import torch
+from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
@@ -18,50 +14,65 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
-from transformers import BatchEncoding
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.utils.datastruct import pprint_batch
-
-HgDataset = Union[Dataset, DatasetDict]
+from fz_openqa.datamodules.pipes import Lambda
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.utils import HgDataset
+from fz_openqa.datamodules.utils import take_subset
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.utils.pretty import pretty_decode
 
 
 class BaseDataModule(LightningDataModule):
     """
-    A base LightningDataModule for the PennTreeBank dataset as example.
+    A task agnostic base datamodule. This implements and showcase the
+    basic functionalities of a text DataModule.
+
+    Implementing a sub-class of a `BaseDataModule` mostly requires overriding the
+    `.preprocessing()` and `.collate_fn()` methods.
+
+    <original documentation>
     A DataModule implements 5 key methods:
-        - prepare_data (things to do on 1 GPU/TPU, not on every GPU/TPU in distributed mode)
+        - prepare_data (things to do on every noe)
         - setup (things to do on every accelerator in distributed mode)
         - train_dataloader (the training dataloader)
         - val_dataloader (the validation dataloader(s))
         - test_dataloader (the test dataloader(s))
+
     This allows you to share a full dataset without explaining how to download,
     split, transform and process the data
     Read the docs:
         https://pytorch-lightning.readthedocs.io/en/latest/extensions/datamodules.html
     """
 
-    dset_script_path_or_id = (
-        "ptb_text_only"  # HuggingFace dataset id or local path to script
-    )
-    text_fields = ["sentence"]  # text fields that should be tokenized
-    split_ids = [
-        datasets.Split.TRAIN,
-        datasets.Split.VALIDATION,
-        datasets.Split.TEST,
-    ]  # split names
-    pt_attributes = [
-        "input_ids",
-        "attention_mask",
-    ]  # attributes to be converted into Tensors
+    # HuggingFace dataset id or local path to script
+    dset_script_path_or_id = "ptb_text_only"
+
+    # text fields from the raw datasets that should be tokenized and concatenated
+    text_fields = ["sentence"]
+
+    # name of the attributes that will be converted to
+    # tensors in the preprocessing function
+    pt_attributes = ["input_ids", "attention_mask"]
+
+    # number of data points per subset train/val/test
+    subset_size = [100, 10, 10]
+
+    # the attribute used to store the dataset
+    dataset: HgDataset = None
+
+    # define the operator that allows converting a sequence of
+    # examples into a Batch
+    collate_pipe: Pipe = None
 
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool = True,
-        append_document_title: bool = True,
         cache_dir: str = "cache/",
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
@@ -72,7 +83,6 @@ class BaseDataModule(LightningDataModule):
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = True,
-        corpus: Optional["BaseDataModule"] = None,
         train_sampler: Optional[DictConfig] = None,
         eval_sampler: Optional[DictConfig] = None,
         **kwargs,
@@ -89,18 +99,11 @@ class BaseDataModule(LightningDataModule):
         self.num_proc = num_proc
         self.verbose = verbose
 
-        # corpus object
-        self.corpus = corpus
-
         # tokenizer and dataset
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.dataset: Optional[HgDataset] = None
-        self.text_data: Optional[HgDataset] = None
-        self.add_encoding_tokens = add_encoding_tokens
-        self.append_document_title = append_document_title
 
-        # sampler
+        # samplers -- samplers wrap the original dataset and override the __get_item__ method
         self.train_sampler_cfg = (
             dict(train_sampler)
             if train_sampler is not None and len(train_sampler)
@@ -112,118 +115,70 @@ class BaseDataModule(LightningDataModule):
             else None
         )
 
-    def tokenize_examples(
-        self,
-        examples: Dict[str, List[Any]],
-        *,
-        fields: List[str],
-        output_key: Optional[str],
-        tokenizer: PreTrainedTokenizerFast,
-        max_length: Optional[int],
-        preprocess_fn: Optional[Callable] = None,
-        add_encoding_tokens: bool = True,
-        **kwargs,
-    ) -> Union[Dict, BatchEncoding]:
-        """Tokenize a batch of examples and truncate if `max_length` is provided.
-        The input format is:
-        examples = {
-            attribute_name: list of attribute values
-        }
-        """
-        # preprocess
-        examples = {field: examples[field] for field in fields}
-        if preprocess_fn is not None:
-            examples = {
-                field: list(map(preprocess_fn, values))
-                for field, values in examples.items()
-            }
-
-        if add_encoding_tokens:
-            examples = {
-                field: list(map(preprocess_fn, values))
-                for field, values in examples.items()
-            }
-
-        output = tokenizer(
-            *examples.values(),
-            max_length=max_length,
-            truncation=max_length is not None,
-            **kwargs,
-        )
-
-        if output_key is None:
-            return output
-        else:
-            return {f"{output_key}.{attr}": v for attr, v in output.items()}
-
-    def prepare_data(self):
-        """Download data if needed. This method is called only from a single GPU.
-        Do not use it to assign state (self.x = y)."""
-        self.load_base_dataset()
-        if self.corpus is not None:
-            self.corpus.prepare_data()
-
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(
             self.dset_script_path_or_id, cache_dir=self.data_dir
         )
 
-    def setup(self, stage: Optional[str] = None):
-        """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        self.text_data: HgDataset = self.load_base_dataset()
-        self.text_data = self.filter_dataset(self.text_data)
-        if self.use_subset:
-            self.text_data = self.take_subset(self.text_data)
-        self.dataset = self.preprocess_dataset(self.text_data)
+    def prepare_data(self):
+        """Download data if needed. This method is called only from a single GPU.
+        Do not use it to assign state (self.x = y)."""
+        self.load_base_dataset()
 
+    def setup(self, stage: Optional[str] = None):
+        """
+        Load data and preprocess the data.
+        1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
+        2. Build the operator to collate examples into a batch (`self.collate_pipe`).
+        """
+
+        # preprocess
+        self.dataset: HgDataset = self.load_base_dataset()
+        self.dataset = self.filter_dataset(self.dataset)
+        if self.use_subset:
+            self.dataset = take_subset(self.dataset, self.subset_size)
+        self.dataset = self.preprocess_dataset(self.dataset)
+
+        # define the collate operator
+        self.collate_pipe = self.get_collate_pipe()
+
+        # display the dataset
         if self.verbose:
             self.pprint()
             self.display_sample()
 
-        if self.corpus is not None:
-            self.corpus.setup()
-
-    @staticmethod
-    def take_subset(dataset: HgDataset) -> HgDataset:
-        """Take a subset of the dataset and return."""
-        if isinstance(dataset, DatasetDict):
-            return DatasetDict(
-                {
-                    k: dset.select(range(n))
-                    for n, (k, dset) in zip([100, 10, 10], dataset.items())
-                }
-            )
-        elif isinstance(dataset, Dataset):
-            return dataset.select(range(100))
-        else:
-            raise NotImplementedError
-
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
-        """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
-        fn = partial(
-            self.tokenize_examples,
-            tokenizer=self.tokenizer,
+        """Apply processing steps to the dataset.
+        Tokenization and formatting as PyTorch tensors"""
+        pipe = TokenizerPipe(
+            self.tokenizer,
             max_length=self.max_length,
+            fields=self.text_fields,
+            return_token_type_ids=False,
+            add_special_tokens=False,
+            return_offsets_mapping=False,
         )
+
         dataset = dataset.map(
-            fn, batched=True, num_proc=self.num_proc, desc="Tokenizing"
+            pipe,
+            batched=True,
+            num_proc=self.num_proc,
+            desc="Tokenizing",
+            remove_columns=self.text_fields,
         )
         dataset.set_format(type="torch", columns=self.pt_attributes)
         return dataset
+
+    def get_collate_pipe(self) -> Pipe:
+        return Lambda(lambda examples: self.tokenizer.pad(examples))
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
 
-    def pprint(self):
-        """Pretty print the dtaset"""
-        rich.print(
-            f">> Dataset: [use_subset={self.use_subset}]: \n" f"{self.dataset}"
-        )
-
     def train_dataloader(self):
-        dset = self.dataset[Split.TRAIN]
+        dset = self.get_dataset_split(Split.TRAIN)
         if self.train_sampler_cfg is not None:
             dset = instantiate(self.train_sampler_cfg, dataset=dset)
 
@@ -238,7 +193,7 @@ class BaseDataModule(LightningDataModule):
         )
 
     def _eval_loader(self, split):
-        dset = self.dataset[split]
+        dset = self.get_dataset_split(split)
         if self.eval_sampler_cfg is not None:
             dset = instantiate(self.eval_sampler_cfg, dataset=dset)
 
@@ -258,50 +213,54 @@ class BaseDataModule(LightningDataModule):
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
 
-    def collate_fn(
-        self, batch: Any
-    ) -> Union[BatchEncoding, List[Dict[str, torch.Tensor]]]:
+    def get_dataset_split(self, split: Union[str, Split]) -> Dataset:
+        """Return the dataset corresponding to the split,
+        or the dataset iteself if there is no split."""
+        if isinstance(self.dataset, Dataset):
+            return self.dataset
+        elif isinstance(self.dataset, DatasetDict):
+            return self.dataset[split]
+        else:
+            raise TypeError(
+                f"Unknown dataset type <{type(self.dataset).__name__}>"
+            )
+
+    def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
-        return self.tokenizer.pad(batch)
+        return self.collate_pipe(examples)
 
-    @staticmethod
-    def _append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:
-        example[
-            "document"
-        ] = f"{example['document.title']}. {example['document']}"
-        return example
+    def pprint(self):
+        """Pretty print the dtaset"""
+        rich.print(
+            f">> Dataset: [use_subset={self.use_subset}]: \n" f"{self.dataset}"
+        )
 
     @rank_zero_only
     def display_sample(self):
         """Sample a batch and pretty print it."""
         batch = next(iter(self.train_dataloader()))
         eval_batch = next(iter(self.val_dataloader()))
-        console_width, _ = shutil.get_terminal_size()
-        print(console_width * "=")
+        print(get_separator("="))
         print("=== Training Batch ===")
-        print(console_width * "-")
+        print(get_separator())
         pprint_batch(batch)
+        print(get_separator())
         print("=== Validation Batch ===")
-        print(console_width * "-")
+        print(get_separator())
         pprint_batch(eval_batch)
-        print(console_width * "=")
+        print(get_separator())
+        print("=== Training Example ===")
+        print(get_separator())
         self.display_one_sample({k: v[0] for k, v in batch.items()})
+        print(get_separator("="))
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
         """Decode and print one example from the batch"""
-        console_width, _ = shutil.get_terminal_size()
-        print("=== Sample ===")
-        print(console_width * "-")
         rich.print(
-            self.repr_ex(example, "input_ids", skip_special_tokens=True)
-        )
-        print(console_width * "=")
-
-    def repr_ex(self, example, key, **kwargs):
-        n_pad_tokens = list(example[key]).count(self.tokenizer.pad_token_id)
-        txt = self.tokenizer.decode(example[key], **kwargs)
-        return (
-            f"length={len(example[key])}, padding={n_pad_tokens}, "
-            f"text: [deep_sky_blue3]`{txt.replace('[PAD]', '').strip()}`"
+            pretty_decode(
+                example["input_ids"],
+                tokenizer=self.tokenizer,
+                skip_special_tokens=True,
+            )
         )

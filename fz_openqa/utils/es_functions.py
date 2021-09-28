@@ -1,6 +1,11 @@
+import warnings
+
 from elasticsearch import Elasticsearch
+from elasticsearch import helpers
+from elasticsearch.exceptions import RequestError
 
 """
+Deprecated:
 OBS: remember to run the following line of code before execution:
 
 'docker compose up'
@@ -9,21 +14,64 @@ with the supplied docker-compose.yml file to start two containers (ElasticSearch
 
 """
 
-es = Elasticsearch(timeout=30)  # ElasticSearch instance
+es_config = {
+    "settings": {
+        "number_of_shards": 1,
+        "analysis": {
+            "analyzer": {
+                "stop_standard": {
+                    "type": "standard",
+                    " stopwords": "_english_",
+                }
+            }
+        },
+    },
+    "mappings": {
+        "properties": {
+            "ducment.attention_mask": {"type": "dense_vector", "dims": 2},
+            "document.idx": {"type": "dense_vector", "dims": 1},
+            "ducment.input_ids": {"type": "dense_vector", "dims": 2},
+            "document.text": {
+                "type": "text",
+                "analyzer": "standard",
+                "similarity": "BM25",
+            },
+            "docment.passage_idx": {"type": "dense_vector", "dims": 1},
+            "document.passage_mask": {"type": "dense_vector", "dims": 2},
+            "document.vectors": {"type": "dense_vector", "dims": 2},
+        }
+    },
+}
+
+es = Elasticsearch(timeout=60)  # ElasticSearch instance
 
 
-def es_create_index(index_name: str, ignore=[400]):
+def es_create_index(index_name: str) -> bool:
     """
     Create ElasticSearch Index
     """
-    es.indices.create(index=index_name)
+    # todo @MotzWanted: don't override the dataset if existing.
+    #  The index is generated given the dataset fingerprint, and should be unique.
+
+    try:
+        # es.indices.delete(index=index_name, ignore=[400, 404])
+        _ = es.indices.create(index=index_name)
+        created = True
+
+    # todo: handle specific exceptions
+    except RequestError as err:
+        warnings.warn(f"{err}")
+        created = False
+
+    return created
 
 
 def es_remove_index(index_name: str):
     """
     Remove ElasticSearch Index
     """
-    es.indices.delete(index=index_name)
+    return es.indices.delete(index=index_name)
+    # print(response)
 
 
 def es_ingest(index_name: str, title: str, paragraph: str):
@@ -31,14 +79,42 @@ def es_ingest(index_name: str, title: str, paragraph: str):
     Ingest to ElasticSearch Index
     """
     doc = {"title": title, "text": paragraph}
-    response = es.index(index=index_name, body=doc)
-    return response
+    return es.create(index=index_name, body=doc, refresh="true", timeout=60)
+    # print(response)
+
+
+def es_bulk(
+    index_name: str, title: str, document_idx: list, document_txt: list
+):
+    actions = [
+        {
+            "_index": index_name,
+            "_title": title,
+            "_source": {
+                "title": title,
+                "idx": document_idx[i],
+                "text": document_txt[i],
+            },
+        }
+        for i in range(len(document_txt))
+    ]
+
+    response = helpers.parallel_bulk(
+        es, actions, chunk_size=1000, request_timeout=200, refresh="true"
+    )
+    indices = []
+    for succes, info in response:
+        if succes:
+            indices.append(info["index"]["_id"])
+
+    return indices
 
 
 def es_search(index_name: str, query: str, results: int):
     """
     Search in ElasticSearch Index
     """
+    # todo: @MotzWanted batch search
     response = es.search(
         index=index_name,
         body={

@@ -4,8 +4,10 @@ outputs/
 .cache/
 cache/
 runs/
-examples/
+text_examples/
 sandbox*
+elasticsearch-*
+*__copy.py
 
 # Editors
 .vscode/
