@@ -114,6 +114,7 @@ class MedQaDataModule(BaseDataModule):
         dataset = dataset.map(
             set_example_idx,
             batched=False,
+            num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing",
         )

@@ -32,7 +32,9 @@ class ElasticSearchIndex(Index):
         text_key: str,
         batch_size: int = 32,
         filter_mode: Optional[str] = None,
+        **kwargs,
     ):
+        super(ElasticSearchIndex, self).__init__(**kwargs)
         self.index_key = index_key
         self.text_key = text_key
         self.batch_size = batch_size
@@ -68,16 +70,17 @@ class ElasticSearchIndex(Index):
 
         # init the index
         self.index_name = dataset._fingerprint
-        es_create_index(self.index_name)
+        is_new_index = es_create_index(self.index_name)
 
         # build the index
-        response = es_bulk(
-            index_name=self.index_name,
-            # todo: find a way to extract document titles
-            title="__no_title__",
-            document_idx=dataset[self.index_key],
-            document_txt=dataset[self.text_key],
-        )
+        if is_new_index:
+            response = es_bulk(
+                index_name=self.index_name,
+                # todo: find a way to extract document titles
+                title="__no_title__",
+                document_idx=dataset[self.index_key],
+                document_txt=dataset[self.text_key],
+            )
 
         if verbose:
             print(get_separator("="))

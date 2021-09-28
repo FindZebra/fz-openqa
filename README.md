@@ -33,14 +33,14 @@ poetry install
 pip install pre-commit
 pre-commit install
 ```
- 
-4. setting up ElasticSearch
+
+4. setting up ElasticSearchIndex
 
 ```shell
 wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
 tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
 ```
- 
+
 5. setting up Kibana
 
 ```shell
@@ -367,6 +367,18 @@ When running the HPO, checkpoints may quickly clog the disks with hundreds of GB
 ```bash
 # every 5 minutes, delete all checkpoints for which the best `metric` is bellow the `metric_threshold` and that was last updated `age` hours ago
 screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/valv/raytune/ --frequency 5  --metric_threshold=0.1 --age 1
+```
+</details>
+
+<details>
+<summary>Deleting ElasticSearch indexes</summary>
+
+```bash
+# check indexes
+curl 'localhost:9200/_cat/indices?v'
+
+# delete all
+curl -X DELETE 'http://localhost:9200/_all'
 ```
 </details>
 

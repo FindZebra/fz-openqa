@@ -9,7 +9,6 @@ from fz_openqa.datamodules.index.base import SearchResult
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Forward
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import ToNumpy
 from fz_openqa.utils.datastruct import Batch
@@ -22,11 +21,8 @@ class FaissIndex(Index):
     dataset: Dataset = None
     model: Callable = None
 
-    def __init__(
-        self,
-        *,
-        batch_size: int = 32,
-    ):
+    def __init__(self, *, batch_size: int = 32, **kwargs):
+        super(FaissIndex, self).__init__(**kwargs)
         self.batch_size = batch_size
 
     def build(

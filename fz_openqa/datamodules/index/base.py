@@ -5,6 +5,7 @@ from typing import List
 from typing import Tuple
 
 from datasets import Dataset
+from rich.progress import track
 
 from fz_openqa.utils.datastruct import Batch
 
@@ -19,6 +20,9 @@ class Index:
     """Keep an index of a Dataset and search using queries."""
 
     is_indexed: bool = False
+
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose
 
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
@@ -39,7 +43,13 @@ class Index:
         """
         batch_size = len(next(iter(query.values())))
         scores, indexes = [], []
-        for i in range(batch_size):
+        _iter = range(batch_size)
+        if self.verbose:
+            _iter = track(
+                _iter,
+                description=f"Searching {self.__class__.__name__} for batch..",
+            )
+        for i in _iter:
             eg = self.get_example(query, i)
             scores_i, indexes_i = self.search_one(eg, k=k, **kwargs)
             scores += [scores_i]

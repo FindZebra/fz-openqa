@@ -1,10 +1,8 @@
-from datetime import datetime
+import warnings
 
-import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
-from numpy import array
-from torch.functional import Tensor
+from elasticsearch.exceptions import RequestError
 
 """
 Deprecated:
@@ -48,13 +46,24 @@ es_config = {
 es = Elasticsearch(timeout=60)  # ElasticSearch instance
 
 
-def es_create_index(index_name: str):
+def es_create_index(index_name: str) -> bool:
     """
     Create ElasticSearch Index
     """
-    es.indices.delete(index=index_name, ignore=[400, 404])
-    return es.indices.create(index=index_name)
-    # print(response)
+    # todo @MotzWanted: don't override the dataset if existing.
+    #  The index is generated given the dataset fingerprint, and should be unique.
+
+    try:
+        # es.indices.delete(index=index_name, ignore=[400, 404])
+        _ = es.indices.create(index=index_name)
+        created = True
+
+    # todo: handle specific exceptions
+    except RequestError as err:
+        warnings.warn(f"{err}")
+        created = False
+
+    return created
 
 
 def es_remove_index(index_name: str):
@@ -105,6 +114,7 @@ def es_search(index_name: str, query: str, results: int):
     """
     Search in ElasticSearch Index
     """
+    # todo: @MotzWanted batch search
     response = es.search(
         index=index_name,
         body={
