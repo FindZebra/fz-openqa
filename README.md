@@ -41,7 +41,7 @@ wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-d
 tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
 ```
 To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and type `./bin/elasticsearch`.
- 
+
 5. setting up Kibana
 
 ```shell
