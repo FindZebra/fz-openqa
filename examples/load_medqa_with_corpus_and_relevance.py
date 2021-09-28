@@ -55,10 +55,13 @@ print(get_separator())
 # iterate through the dataset and check the number of positive documents
 count = 0
 total = 0
+n_samples = 1000
 for batch in track(dm.train_dataloader(),
                    description=f"Iterating through the dataset.."):
     count += (batch['document.positive_count'] > 0).float().sum()
     total += batch['document.positive_count'].shape[0]
+    if count > n_samples:
+        break
 
 rich.print(f">> Number of questions with at least one positive document: {count:.0f} ({100.*count / total:.2f}%)")
 
