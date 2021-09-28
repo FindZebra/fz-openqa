@@ -383,6 +383,16 @@ curl 'localhost:9200/_cat/indices?v'
 curl -X DELETE 'http://localhost:9200/_all'
 ```
 </details>
+ 
+ <details>
+<summary>Export `elasticsearch`/summary>
+
+Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
+```bash
+export ES_HOME=/home/valv/libs/elasticsearch/elasticsearch-7.15.0
+export PATH="$ES_HOME/bin:$PATH"
+```
+</details>
 
 ## Implemented papers
 
