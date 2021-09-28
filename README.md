@@ -385,7 +385,7 @@ curl -X DELETE 'http://localhost:9200/_all'
 </details>
  
  <details>
-<summary>Export `elasticsearch`/summary>
+<summary>Export `elasticsearch`</summary>
 
 Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
 ```bash
