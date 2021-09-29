@@ -8,9 +8,7 @@ import rich
 from datasets import Dataset
 
 from ...utils.datastruct import Batch
-from ...utils.es_functions import es_bulk
-from ...utils.es_functions import es_create_index
-from ...utils.es_functions import es_search
+from ...utils.es_functions import ElasticSearch
 from ...utils.pretty import get_separator
 from ..pipes import MetaMapFilter
 from ..pipes import Pipe
@@ -70,11 +68,11 @@ class ElasticSearchIndex(Index):
 
         # init the index
         self.index_name = dataset._fingerprint
-        is_new_index = es_create_index(self.index_name)
+        is_new_index = ElasticSearch.es_create_index(self.index_name)
 
         # build the index
         if is_new_index:
-            response = es_bulk(
+            response = ElasticSearch.es_bulk(
                 index_name=self.index_name,
                 # todo: find a way to extract document titles
                 title="__no_title__",
@@ -105,7 +103,7 @@ class ElasticSearchIndex(Index):
     ) -> Tuple[List[float], List[int]]:
         """Search the index using the elastic search index"""
 
-        results = es_search(
+        results = ElasticSearch.es_search(
             index_name=self.index_name,
             query=query[field],
             results=k,

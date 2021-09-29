@@ -41,8 +41,7 @@ from .utils import add_spec_token
 from .utils import set_example_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.es_functions import es_bulk
-from fz_openqa.utils.es_functions import es_create_index
+#from fz_openqa.utils.es_functions import ElasticSearch 
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode

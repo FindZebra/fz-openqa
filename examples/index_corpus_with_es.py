@@ -2,9 +2,11 @@ import sys
 
 import datasets
 
+#from fz_openqa.utils.run_elasticsearch import *
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from examples.utils import gen_example_query, display_search_results
+from fz_openqa.utils.es_functions import *
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 datasets.set_caching_enabled(False)
