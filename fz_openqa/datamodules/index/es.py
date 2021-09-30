@@ -42,6 +42,7 @@ class ElasticSearchIndex(Index):
             filter_pipe_cls = {
                 "scispacy": SciSpacyFilter,
                 "metamap": MetaMapFilter,
+                # @vlievin: fyi has to be included in the datamodule
                 "stopwords": StopWordsFilter,
             }[filter_mode]
 
@@ -58,12 +59,12 @@ class ElasticSearchIndex(Index):
         We make sure a unique index is created for each dataset"""
 
         # preprocess the dataset
-        unued_columns = [
+        unused_columns = [
             c
             for c in dataset.column_names
             if c not in [self.index_key, self.text_key]
         ]
-        dataset = dataset.remove_columns(unued_columns)
+        dataset = dataset.remove_columns(unused_columns)
         dataset = self.filter_text(dataset)
 
         # init the index
@@ -77,6 +78,7 @@ class ElasticSearchIndex(Index):
                 # todo: find a way to extract document titles
                 title="__no_title__",
                 document_idx=dataset[self.index_key],
+                passage_idx=dataset[self.passage_key],
                 document_txt=dataset[self.text_key],
             )
 
@@ -93,7 +95,7 @@ class ElasticSearchIndex(Index):
         self, query: Batch, field: str = "question.text", **kwargs
     ) -> SearchResult:
         """filter the incoming batch using the same pipe as the one
-        use to build the index."""
+        used to build the index."""
         if self.filter_pipe is not None:
             query = self.filter_pipe(query, text_key=field)
         return super().search(query, field=field, **kwargs)
