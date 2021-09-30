@@ -30,12 +30,14 @@ class ElasticSearchIndex(Index):
         text_key: str,
         batch_size: int = 32,
         filter_mode: Optional[str] = None,
+        es=ElasticSearch(),
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
         self.index_key = index_key
         self.text_key = text_key
         self.batch_size = batch_size
+        self.es = es
 
         # pipe used to potentially filter the input text
         if filter_mode is not None:
@@ -69,11 +71,11 @@ class ElasticSearchIndex(Index):
 
         # init the index
         self.index_name = dataset._fingerprint
-        is_new_index = ElasticSearch.es_create_index(self.index_name)
+        is_new_index = self.es.es_create_index(self.index_name)
 
         # build the index
         if is_new_index:
-            response = ElasticSearch.es_bulk(
+            response = self.es.es_bulk(
                 index_name=self.index_name,
                 # todo: find a way to extract document titles
                 title="__no_title__",
@@ -104,7 +106,7 @@ class ElasticSearchIndex(Index):
     ) -> Tuple[List[float], List[int]]:
         """Search the index using the elastic search index"""
 
-        results = ElasticSearch.es_search(
+        results = self.es.es_search(
             index_name=self.index_name,
             query=query[field],
             results=k,
