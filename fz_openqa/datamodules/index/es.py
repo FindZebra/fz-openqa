@@ -7,17 +7,16 @@ from typing import Tuple
 import rich
 from datasets import Dataset
 
-from ...utils.datastruct import Batch
-from ...utils.es_functions import ElasticSearch
-from ...utils.pretty import get_separator
-from ..pipes import MetaMapFilter
-from ..pipes import Pipe
-from ..pipes import PrintBatch
-from ..pipes import SciSpacyFilter
-from ..pipes import Sequential
-from ..pipes import StopWordsFilter
 from .base import Index
 from .base import SearchResult
+from fz_openqa.datamodules.pipes import MetaMapFilter
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import SciSpacyFilter
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import StopWordsFilter
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.es_functions import ElasticSearch
+from fz_openqa.utils.pretty import get_separator
 
 
 class ElasticSearchIndex(Index):
@@ -52,10 +51,10 @@ class ElasticSearchIndex(Index):
 
             self.filter_pipe = Sequential(
                 # @idariis: added this line for debugging
-                PrintBatch(header="filtering input"),
+                # PrintBatch(header="filtering input"),
                 filter_pipe_cls(text_key=self.text_key),
                 # @filter_pipe_cls: added this line for debugging
-                PrintBatch(header="filtering output"),
+                # PrintBatch(header="filtering output"),
             )
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
@@ -94,23 +93,15 @@ class ElasticSearchIndex(Index):
 
         self.is_indexed = True
 
-    def search(
-        self, query: Batch, k: int = 1, **kwargs
-    ) -> SearchResult:
+    def search(self, query: Batch, k: int = 1, **kwargs) -> SearchResult:
         """filter the incoming batch using the same pipe as the one
         used to build the index."""
         if self.filter_pipe is not None:
             query = self.filter_pipe(query, text_key=self.query_key)
 
         scores, indexes = self.engine.es_search_bulk(
-            self.index_name, 
-            query[self.query_key], 
-            k=k
+            self.index_name, query[self.query_key], k=k
         )
-        rich.print(indexes)
-        # todo:  check that this works, not sure if that does the trick
-        # make sure that "indexes" correspond to the global index field "idx",
-        # so we can use the index values to index the dataset object: (i.e. `corpus.dataset[idx]`)
         return SearchResult(score=scores, index=indexes)
 
     def search_one(
@@ -136,7 +127,8 @@ class ElasticSearchIndex(Index):
         return dataset.map(
             self.filter_pipe,
             batched=True,
-            # @idariis: we need to decide how to set this
+            # @idariis: we need to decide how to set this, it depends on
+            # the scispacy models
             batch_size=self.batch_size,
             # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
             num_proc=1,

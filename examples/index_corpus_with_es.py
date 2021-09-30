@@ -1,6 +1,5 @@
 import os
 import sys
-import rich
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -8,11 +7,9 @@ sys.path.append(parent_dir)
 
 import datasets
 
-#from fz_openqa.utils.run_elasticsearch import *
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
-from examples.utils import gen_example_query, display_search_results
-from fz_openqa.utils.es_functions import *
+from utils import gen_example_query, display_search_results
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 datasets.set_caching_enabled(False)
@@ -29,7 +26,7 @@ dm = FzCorpusDataModule(tokenizer=tokenizer,
                                                  query_key="question.text",
                                                  filter_mode="stopwords"),
                         verbose=True,
-                        num_proc=1,
+                        num_proc=4,
                         use_subset=True,
                         train_batch_size=3)
 dm.prepare_data()
