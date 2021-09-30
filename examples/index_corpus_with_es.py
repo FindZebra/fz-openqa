@@ -25,6 +25,7 @@ query = gen_example_query(tokenizer)
 dm = FzCorpusDataModule(tokenizer=tokenizer,
                         index=ElasticSearchIndex(index_key="idx",
                                                  text_key="document.text",
+                                                 query_key="question.text",
                                                  filter_mode="stopwords"),
                         verbose=True,
                         num_proc=1,

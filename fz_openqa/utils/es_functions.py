@@ -82,7 +82,7 @@ class ElasticSearch:
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
-                "query": {"match": {"document.text": queries[i]}},
+                "query": {"match": {"text": queries[i]}},
                 "from": 0,
                 "size": k,
             }
@@ -97,8 +97,10 @@ class ElasticSearch:
 
         indexes, scores = [], []
         for query in result["responses"]:
+            print(query)
             temp_indexes, temp_scores = [], []
             for hit in query["hits"]["hits"]:
+                print(hit)
                 temp_scores.append(hit["_score"])
                 temp_indexes.append(hit["_source"]["idx"])
             indexes.append(temp_indexes)
@@ -113,7 +115,7 @@ class ElasticSearch:
         response = self.es.search(
             index=index_name,
             body={
-                "query": {"match": {"text": query.lower()}},
+                "query": {"match": {"text": query}},
                 "from": 0,
                 "size": results,
             },

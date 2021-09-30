@@ -28,6 +28,7 @@ class ElasticSearchIndex(Index):
         self,
         index_key: str,
         text_key: str,
+        query_key: str,
         batch_size: int = 32,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearch] = None,
@@ -36,6 +37,7 @@ class ElasticSearchIndex(Index):
         super(ElasticSearchIndex, self).__init__(**kwargs)
         self.index_key = index_key
         self.text_key = text_key
+        self.query_key = query_key
         self.batch_size = batch_size
         self.engine = es or ElasticSearch()
 
@@ -75,7 +77,7 @@ class ElasticSearchIndex(Index):
 
         # build the index
         if is_new_index:
-            response = self.engine.es_bulk(
+            _ = self.engine.es_bulk(
                 index_name=self.index_name,
                 # todo: find a way to extract document titles
                 title="__no_title__",
@@ -93,15 +95,17 @@ class ElasticSearchIndex(Index):
         self.is_indexed = True
 
     def search(
-        self, query: Batch, field: str = "question.text", k: int = 1, **kwargs
+        self, query: Batch, k: int = 1, **kwargs
     ) -> SearchResult:
         """filter the incoming batch using the same pipe as the one
         used to build the index."""
         if self.filter_pipe is not None:
-            query = self.filter_pipe(query, text_key=field)
+            query = self.filter_pipe(query, text_key=self.query_key)
 
         scores, indexes = self.engine.es_search_bulk(
-            self.index_name, query[self.text_key], k=k
+            self.index_name, 
+            query[self.query_key], 
+            k=k
         )
 
         # todo:  check that this works, not sure if that does the trick
