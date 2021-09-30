@@ -99,7 +99,12 @@ class ElasticSearchIndex(Index):
         used to build the index."""
         if self.filter_pipe is not None:
             query = self.filter_pipe(query, text_key=field)
-        return super().search(query[field], k, **kwargs)
+        
+        PrintBatch(query)
+        return super().search(
+            index_name=self.index_name, 
+            query=query[field], 
+            k=k)
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

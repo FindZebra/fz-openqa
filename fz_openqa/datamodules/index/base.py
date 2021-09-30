@@ -22,8 +22,9 @@ class Index:
 
     is_indexed: bool = False
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, es = ElasticSearch(), verbose: bool = False):
         self.verbose = verbose
+        self.es = es
 
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
@@ -35,23 +36,27 @@ class Index:
         """Search the index using one `query`"""
         raise NotImplementedError
 
-    def search(self, query: Batch, *, k: int = 1, **kwargs) -> SearchResult:
+    def search(self, index_name: str, query: Batch, *, k: int = 1, **kwargs) -> SearchResult:
         """Batch search the index using the `query` and
         return the scores and the indexes of the results
         within the original dataset.
 
         The default method search for each example sequentially.
         """
-        batch_size = len(next(iter(query.values())))
+        #batch_size = len(next(iter(query.values())))
         scores, indexes = [], []
-        _iter = range(batch_size)
-        if self.verbose:
-            _iter = track(
-                _iter,
-                description=f"Searching {self.__class__.__name__} for batch..",
-            )
+        #_iter = range(batch_size)
+        # if self.verbose:
+        #     _iter = track(
+        #         _iter,
+        #         description=f"Searching {self.__class__.__name__} for batch..",
+        #     )
 
-        scores, indexes = ElasticSearch.es_search_bulk(query, k=k, **kwargs)
+        scores, indexes = self.es.es_search_bulk(
+            index_name=index_name,
+            queries=query, 
+            k=k, 
+            **kwargs)
 
         return SearchResult(index=indexes, score=scores)
 
