@@ -1,10 +1,10 @@
 from typing import Optional
 
-from ...utils.datastruct import Batch
+import spacy
+
 from .base import Pipe
 from .static import STOP_WORDS
-
-import spacy
+from fz_openqa.utils.datastruct import Batch
 
 
 class TextFilter(Pipe):
@@ -38,18 +38,19 @@ class SciSpacyFilter(TextFilter):
         model: A pretrained model from spaCy or scispaCy
         document: text data to be analysed
     """
+
     def __init__(self, spacy_model=None, **kwargs):
         super().__init__(**kwargs)
 
         if spacy_model is None:
             self.model = spacy.load("en_core_sci_sm")
-        
+
         else:
             self.model = spacy_model.load()
 
     def filter(self, text: str) -> str:
         doc = self.model(text)
-        return ' '.join([str(el) for el in list(doc.ents)])
+        return " ".join([str(el) for el in list(doc.ents)])
 
 
 class MetaMapFilter(TextFilter):

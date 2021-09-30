@@ -9,8 +9,8 @@ python = "^3.7"
 torch = "^1.8.1"
 rich = "^10.2.2"
 wandb = "^0.10.30"
-pytorch-lightning = { git = "https://github.com/PyTorchLightning/pytorch-lightning.git", tag = "1.3.8" }
-torchmetrics = {git= "https://github.com/PyTorchLightning/metrics.git", tag="v0.4.1rc0"}
+pytorch-lightning = {version="^1.4", allow-prereleases = true}
+torchmetrics = {version="^0.5", allow-prereleases = true}
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"
 datasets = "^1.6.2"
@@ -21,6 +21,13 @@ gdown = "^3.13.0"
 elasticsearch = "^7.13.2"
 ray = {extras = ["default", "tune"], version = "^1.3.0", allow-prereleases = true}
 hyperopt = "^0.2.5"
+spacy =  {version = "^3.0", allow-prereleases = true }
+scispacy =  {version = "^0.4.0", allow-prereleases = true }
+en_core_sci_sm = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_sm-0.4.0.tar.gz" }
+en_core_sci_md = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_md-0.4.0.tar.gz" }
+en_core_sci_lg = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz" }
+en_ner_bc5cdr_md = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_ner_bc5cdr_md-0.4.0.tar.gz" }
+
 
 [tool.poetry.scripts]
 fzqa = "fz_openqa.cli:main"
