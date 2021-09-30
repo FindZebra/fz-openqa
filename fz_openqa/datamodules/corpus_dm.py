@@ -27,13 +27,10 @@ from .pipes import DropKeys
 from .pipes import FilterKeys
 from .pipes import Identity
 from .pipes import Lambda
-from .pipes import MetaMapFilter
 from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
-from .pipes import PrintBatch
 from .pipes import ReplaceInKeys
-from .pipes import SciSpacyFilter
 from .pipes import Sequential
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
@@ -41,8 +38,6 @@ from .utils import add_spec_token
 from .utils import set_example_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.es_functions import es_bulk
-from fz_openqa.utils.es_functions import es_create_index
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
@@ -261,7 +256,7 @@ class CorpusDataModule(BaseDataModule):
         document_pipe = Sequential(
             Collate(keys=["document.input_ids", "document.attention_mask"]),
             ReplaceInKeys("document.", ""),
-            Lambda(lambda batch: self.tokenizer.pad(batch)),
+            Lambda(self.tokenizer.pad),
             AddPrefix("document."),
         )
 
