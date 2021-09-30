@@ -77,7 +77,7 @@ class ElasticSearchIndex(Index):
 
         # build the index
         if is_new_index:
-            _ = self.engine.es_bulk(
+            response = self.engine.es_bulk(
                 index_name=self.index_name,
                 # todo: find a way to extract document titles
                 title="__no_title__",
@@ -107,7 +107,7 @@ class ElasticSearchIndex(Index):
             query[self.query_key], 
             k=k
         )
-
+        rich.print(indexes)
         # todo:  check that this works, not sure if that does the trick
         # make sure that "indexes" correspond to the global index field "idx",
         # so we can use the index values to index the dataset object: (i.e. `corpus.dataset[idx]`)

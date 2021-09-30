@@ -97,10 +97,8 @@ class ElasticSearch:
 
         indexes, scores = [], []
         for query in result["responses"]:
-            print(query)
             temp_indexes, temp_scores = [], []
             for hit in query["hits"]["hits"]:
-                print(hit)
                 temp_scores.append(hit["_score"])
                 temp_indexes.append(hit["_source"]["idx"])
             indexes.append(temp_indexes)
