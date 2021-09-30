@@ -30,14 +30,14 @@ class ElasticSearchIndex(Index):
         text_key: str,
         batch_size: int = 32,
         filter_mode: Optional[str] = None,
-        es=ElasticSearch(),
+        es: Optional[ElasticSearch] = None,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
         self.index_key = index_key
         self.text_key = text_key
         self.batch_size = batch_size
-        self.es = es
+        self.engine = es or ElasticSearch()
 
         # pipe used to potentially filter the input text
         if filter_mode is not None:
@@ -71,11 +71,11 @@ class ElasticSearchIndex(Index):
 
         # init the index
         self.index_name = dataset._fingerprint
-        is_new_index = self.es.es_create_index(self.index_name)
+        is_new_index = self.engine.es_create_index(self.index_name)
 
         # build the index
         if is_new_index:
-            response = self.es.es_bulk(
+            response = self.engine.es_bulk(
                 index_name=self.index_name,
                 # todo: find a way to extract document titles
                 title="__no_title__",
@@ -99,19 +99,22 @@ class ElasticSearchIndex(Index):
         used to build the index."""
         if self.filter_pipe is not None:
             query = self.filter_pipe(query, text_key=field)
-        
-        PrintBatch(query)
-        return super().search(
-            index_name=self.index_name, 
-            query=query[field], 
-            k=k)
+
+        scores, indexes = self.engine.es_search_bulk(
+            self.index_name, query[self.text_key], k=k
+        )
+
+        # todo:  check that this works, not sure if that does the trick
+        # make sure that "indexes" correspond to the global index field "idx",
+        # so we can use the index values to index the dataset object: (i.e. `corpus.dataset[idx]`)
+        return SearchResult(score=scores, index=indexes)
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs
     ) -> Tuple[List[float], List[int]]:
         """Search the index using the elastic search index"""
 
-        results = self.es.es_search(
+        results = self.engine.es_search(
             index_name=self.index_name,
             query=query[field],
             results=k,
@@ -129,7 +132,7 @@ class ElasticSearchIndex(Index):
         return dataset.map(
             self.filter_pipe,
             batched=True,
-            # @idariis: we need to device how to set this
+            # @idariis: we need to decide how to set this
             batch_size=self.batch_size,
             # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
             num_proc=1,

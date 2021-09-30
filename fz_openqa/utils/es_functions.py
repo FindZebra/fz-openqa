@@ -1,4 +1,5 @@
 import warnings
+from typing import List
 
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
@@ -57,9 +58,9 @@ class ElasticSearch:
                 "_index": index_name,
                 "_title": title,
                 "_source": {
-                    "document.title": title,
-                    "document.idx": document_idx[i],
-                    "document.text": document_txt[i],
+                    "title": title,
+                    "idx": document_idx[i],
+                    "text": document_txt[i],
                 },
             }
             for i in range(len(document_txt))
@@ -73,7 +74,7 @@ class ElasticSearch:
             refresh="true",
         )
 
-    def es_search_bulk(self, index_name: str, queries: list, k: int):
+    def es_search_bulk(self, index_name: str, queries: List[str], k: int):
         """
         Batch search in ElasticSearch Index
         """
@@ -81,7 +82,7 @@ class ElasticSearch:
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
-                "query": {"match": {"document.text": queries[i].lower()}},
+                "query": {"match": {"document.text": queries[i]}},
                 "from": 0,
                 "size": k,
             }
@@ -99,7 +100,7 @@ class ElasticSearch:
             temp_indexes, temp_scores = [], []
             for hit in query["hits"]["hits"]:
                 temp_scores.append(hit["_score"])
-                temp_indexes.append(hit["_source"]["document.idx"])
+                temp_indexes.append(hit["_source"]["idx"])
             indexes.append(temp_indexes)
             scores.append(temp_scores)
 
