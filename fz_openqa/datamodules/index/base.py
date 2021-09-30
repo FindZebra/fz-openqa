@@ -8,6 +8,7 @@ from datasets import Dataset
 from rich.progress import track
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.es_functions import ElasticSearch
 
 
 @dataclass
@@ -49,11 +50,8 @@ class Index:
                 _iter,
                 description=f"Searching {self.__class__.__name__} for batch..",
             )
-        for i in _iter:
-            eg = self.get_example(query, i)
-            scores_i, indexes_i = self.search_one(eg, k=k, **kwargs)
-            scores += [scores_i]
-            indexes += [indexes_i]
+
+        scores, indexes = ElasticSearch.es_search_bulk(query, k=k, **kwargs)
 
         return SearchResult(index=indexes, score=scores)
 

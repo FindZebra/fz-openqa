@@ -78,7 +78,6 @@ class ElasticSearchIndex(Index):
                 # todo: find a way to extract document titles
                 title="__no_title__",
                 document_idx=dataset[self.index_key],
-                passage_idx=dataset[self.passage_key],
                 document_txt=dataset[self.text_key],
             )
 
@@ -92,13 +91,13 @@ class ElasticSearchIndex(Index):
         self.is_indexed = True
 
     def search(
-        self, query: Batch, field: str = "question.text", **kwargs
+        self, query: Batch, field: str = "question.text", k: int = 1, **kwargs
     ) -> SearchResult:
         """filter the incoming batch using the same pipe as the one
         used to build the index."""
         if self.filter_pipe is not None:
             query = self.filter_pipe(query, text_key=field)
-        return super().search(query, field=field, **kwargs)
+        return super().search(query[field], k, **kwargs)
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

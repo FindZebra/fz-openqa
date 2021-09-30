@@ -9,7 +9,7 @@ class ElasticSearch:
     def __init__(self, timeout=60):
 
         super().__init__()
-        self.es = ElasticSearch(timeout=timeout)  # ElasticSearch instance
+        self.es = Elasticsearch(timeout=timeout)  # ElasticSearch instance
 
     def es_create_index(self, index_name: str) -> bool:
         """
@@ -50,7 +50,6 @@ class ElasticSearch:
         index_name: str,
         title: str,
         document_idx: list,
-        passage_idx: list,
         document_txt: list,
     ):
         actions = [
@@ -60,8 +59,7 @@ class ElasticSearch:
                 "_source": {
                     "document.title": title,
                     "document.idx": document_idx[i],
-                    "document.passage_idx": passage_idx[i],
-                    "text": document_txt[i],
+                    "document.text": document_txt[i],
                 },
             }
             for i in range(len(document_txt))
@@ -83,7 +81,7 @@ class ElasticSearch:
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
-                "query": {"match": {"text": queries[i].lower()}},
+                "query": {"match": {"document.text": queries[i].lower()}},
                 "from": 0,
                 "size": k,
             }
@@ -96,20 +94,16 @@ class ElasticSearch:
 
         result = self.es.msearch(body=request)
 
-        indexes = []
+        indexes, scores = [], []
         for query in result["responses"]:
-            temp_indexes = []
+            temp_indexes, temp_scores = [], []
             for hit in query["hits"]["hits"]:
-                print(hit)
-                temp_indexes.append(
-                    (
-                        hit["_source"]["document.idx"],
-                        hit["_source"]["document.passage_idx"],
-                    )
-                )
+                temp_scores.append(hit["_score"])
+                temp_indexes.append(hit["_source"]["document.idx"])
             indexes.append(temp_indexes)
+            scores.append(temp_scores)
 
-        return indexes
+        return scores, indexes
 
     def es_search(self, index_name: str, query: str, results: int):
         """
