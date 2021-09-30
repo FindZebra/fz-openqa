@@ -318,6 +318,9 @@ class CorpusDataModule(BaseDataModule):
 
 
 class MedQaCorpusDataModule(CorpusDataModule):
+    subset_size = [
+        1,
+    ]
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 
