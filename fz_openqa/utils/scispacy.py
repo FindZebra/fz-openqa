@@ -12,10 +12,8 @@ import scispacy
 import spacy
 from spacy import displacy
 
-from . import Pipe
 
-
-def display_entities_pipe(model, document) -> Pipe:
+def display_entities_pipe(model, document):
     """
     Build a Pipe to return a tuple of displacy image of named or unnamed word entities and a set of unique entities recognized based on scispacy model in use
     Args:
