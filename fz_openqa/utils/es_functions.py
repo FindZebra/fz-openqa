@@ -6,11 +6,10 @@ from elasticsearch.exceptions import RequestError
 
 
 class ElasticSearch:
-    def __init__(self, es=Elasticsearch(timeout=60)):  # ElasticSearch instance
+    def __init__(self, timeout=60):
 
         super().__init__()
-
-        self.es = es
+        self.es = ElasticSearch(timeout=timeout)  # ElasticSearch instance
 
     def es_create_index(self, index_name: str) -> bool:
         """
@@ -80,8 +79,6 @@ class ElasticSearch:
         """
         Batch search in ElasticSearch Index
         """
-        # todo: @MotzWanted batch search
-
         request = []
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
@@ -103,6 +100,7 @@ class ElasticSearch:
         for query in result["responses"]:
             temp_indexes = []
             for hit in query["hits"]["hits"]:
+                print(hit)
                 temp_indexes.append(
                     (
                         hit["_source"]["document.idx"],
@@ -114,7 +112,9 @@ class ElasticSearch:
         return indexes
 
     def es_search(self, index_name: str, query: str, results: int):
-        # todo: @MotzWanted batch search
+        """
+        Sequential search in ElasticSearch Index
+        """
         response = self.es.search(
             index=index_name,
             body={
