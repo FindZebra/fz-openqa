@@ -69,7 +69,7 @@ class ElasticSearch():
             for i in range(len(document_txt))
         ]
 
-        response = helpers.parallel_bulk(
+        response = helpers.bulk(
             self.es, actions, chunk_size=1000, request_timeout=200, refresh="true"
         )
 

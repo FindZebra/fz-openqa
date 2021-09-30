@@ -24,9 +24,9 @@ corpus.setup()
 data = corpus.dataset
 
 es = ElasticSearch()
-es.es_create_index("es_bulk")
+es.es_create_index("corpus")
 _ = es.es_bulk(
-    index_name = "es_bulk", 
+    index_name = "corpus", 
     title="book1", 
     document_idx=data['document.idx'],
     passage_idx=data['document.passage_idx'], 
@@ -40,7 +40,7 @@ qst = [
     "What is the president of united states?"
 ]
 
-indexes = es.es_search_bulk(index_name="es_bulk", queries=qst, k=3)
+indexes = es.es_search_bulk(index_name="corpus", queries=qst, k=3)
 
 print(f">> Query response")
 rich.print(indexes)
