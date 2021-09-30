@@ -2,20 +2,20 @@ from fz_openqa.datamodules.medqa_dm import MedQaDataModule
 import numpy as np
 import rich, json, os
 
-from fz_openqa.datamodules.corpus_dm import MedQaEnDataModule, FzCorpusDataModule
+from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule, FzCorpusDataModule
 from fz_openqa.datamodules.medqa_dm import MedQaDataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from torch.utils.data import DataLoader
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
 
-corpus = MedQaEnDataModule(tokenizer=tokenizer,
-                            passage_length=200,
-                            passage_stride=100,
-                            append_document_title=False,
-                            num_proc=4,
-                            use_subset=True,
-                            verbose=False)
+corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
+                               passage_length=200,
+                               passage_stride=100,
+                               append_document_title=False,
+                               num_proc=4,
+                               use_subset=True,
+                               verbose=False)
 corpus.prepare_data()
 corpus.setup()
 #print(corpus.dataset['train'])
@@ -24,10 +24,10 @@ print(f">> get corpus")
 rich.print(corpus.dataset["train"])
 
 print(f">> indexing the dataset using vectors")
-corpus.index(model=lambda batch:  batch['document.input_ids'], index_mode="faiss")
+corpus.build_index(model=lambda batch:  batch['document.input_ids'], index_mode="faiss")
 
 print(f">> indexing the dataset using bm25")
-indices = corpus.index(index_mode="bm25")
+indices = corpus.build_index(index_mode="bm25")
 
 # todo: make it possible to lookup the idx in the corpus
 #for idx in indices:

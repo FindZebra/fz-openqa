@@ -33,22 +33,16 @@ poetry install
 pip install pre-commit
 pre-commit install
 ```
- 
-4. setting up ElasticSearch
+
+4. setting up ElasticSearchIndex
 
 ```shell
-wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
-tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-linux-x86_64.tar.gz
+tar -xzf elasticsearch-7.14.1-linux-x86_64.tar.gz
 ```
- 
-5. setting up Kibana
+To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and type `./bin/elasticsearch`.
 
-```shell
-curl -O https://artifacts.elastic.co/downloads/kibana/kibana-7.14.1-linux-x86_64.tar.gz
-tar -xzf kibana-7.14.1-linux-x86_64.tar.gz
-```
-
-6. Run something using the environment
+5. Run something using the environment
 
 ```shell
 poetry run python <file.py>
@@ -367,6 +361,28 @@ When running the HPO, checkpoints may quickly clog the disks with hundreds of GB
 ```bash
 # every 5 minutes, delete all checkpoints for which the best `metric` is bellow the `metric_threshold` and that was last updated `age` hours ago
 screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/valv/raytune/ --frequency 5  --metric_threshold=0.1 --age 1
+```
+</details>
+
+<details>
+<summary>Deleting ElasticSearch indexes</summary>
+
+```bash
+# check indexes
+curl 'localhost:9200/_cat/indices?v'
+
+# delete all
+curl -X DELETE 'http://localhost:9200/_all'
+```
+</details>
+ 
+ <details>
+<summary>Export `elasticsearch`</summary>
+
+Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
+```bash
+export ES_HOME=/home/valv/libs/elasticsearch/elasticsearch-7.15.0
+export PATH="$ES_HOME/bin:$PATH"
 ```
 </details>
 

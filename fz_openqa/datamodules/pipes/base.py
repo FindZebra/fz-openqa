@@ -1,3 +1,4 @@
+from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -5,6 +6,7 @@ from typing import Optional
 from typing import Union
 
 import rich
+from torch import Tensor
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -180,3 +182,20 @@ class PrintBatch(Pipe):
         print(get_separator())
 
         return batch
+
+
+class Nest(ApplyToAll):
+    """Nest a flattened batch:
+    {key: [values]} -> {key: [[group] for group in groups]}"""
+
+    def __init__(self, stride: int):
+        super(Nest, self).__init__(element_wise=False, op=self.flatten)
+        self.stride = stride
+
+    def flatten(self, x: Union[Tensor, List[Any]]):
+        if isinstance(x, Tensor):
+            return x.view(-1, self.stride, *x.shape[1:])
+        else:
+            return [
+                x[i : i + self.stride] for i in range(0, len(x), self.stride)
+            ]

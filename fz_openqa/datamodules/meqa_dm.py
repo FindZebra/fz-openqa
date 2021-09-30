@@ -1,4 +1,6 @@
 from functools import partial
+from typing import Callable
+from typing import List
 from typing import Optional
 
 import rich
@@ -16,6 +18,7 @@ from .pipes import FilterKeys
 from .pipes import Lambda
 from .pipes import Parallel
 from .pipes import Pipe
+from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
 from .pipes import TokenizerPipe
@@ -28,10 +31,11 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 
-class QaDatamodule(BaseDataModule):
+class MedQaDataModule(BaseDataModule):
     """A base DataModule for question answering."""
 
     # HuggingFace dataset id or local path to script
@@ -63,13 +67,19 @@ class QaDatamodule(BaseDataModule):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         corpus: Optional[BaseDataModule] = None,
+        n_documents: int = 0,
+        relevance_classifier: Optional[RelevanceClassifier] = None,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
         self.add_encoding_tokens = add_encoding_tokens
 
         # corpus object
+        if n_documents > 0:
+            assert corpus is not None
         self.corpus = corpus
+        self.n_documents = n_documents
+        self.relevance_classifier = relevance_classifier
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -104,6 +114,7 @@ class QaDatamodule(BaseDataModule):
         dataset = dataset.map(
             set_example_idx,
             batched=False,
+            num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing",
         )
@@ -194,6 +205,24 @@ class QaDatamodule(BaseDataModule):
         return Parallel(
             raw_text_pipe, simple_attr_pipe, question_pipe, answer_pipe
         )
+
+    def build_index(self, model: Optional[Callable] = None, **kwargs):
+        self.corpus.build_index(model=model, **kwargs)
+
+    def collate_fn(self, examples: List[Batch]) -> Batch:
+        """The function that is used to merge examples into a batch.
+        Concatenating sequences with different length requires padding them."""
+        batch = self.collate_pipe(examples)
+        if self.n_documents > 0 and self.corpus.dataset is not None:
+            corpus_batch = self.corpus.search_index(
+                query=batch, k=self.n_documents
+            )
+            batch.update(**corpus_batch)
+
+            if self.relevance_classifier is not None:
+                batch = self.relevance_classifier(batch)
+
+        return batch
 
     def display_one_sample(self, example: Batch):
         """Decode and print one example from the batch"""
