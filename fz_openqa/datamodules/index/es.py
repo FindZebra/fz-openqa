@@ -63,7 +63,11 @@ class ElasticSearchIndex(Index):
             # @idariis: added this line for debugging
             # PrintBatch(header="filtering input"),
             filter_pipe,
-            TextCleaner(text_key=self.text_key)
+            TextCleaner(
+                text_key=self.text_key,
+                lowercase=True,
+                aggressive_cleaning=True,
+            )
             # @filter_pipe_cls: added this line for debugging
             # PrintBatch(header="filtering output"),
         )

@@ -20,7 +20,6 @@ from .connect import Sequential
 from .passage import GeneratePassages
 from .relevance import ExactMatch
 from .relevance import RelevanceClassifier
-from .text_cleaning import TextCleaner
 from .text_filtering import MetaMapFilter
 from .text_filtering import SciSpacyFilter
 from .text_filtering import StopWordsFilter

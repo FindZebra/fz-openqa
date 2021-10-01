@@ -56,7 +56,7 @@ print(get_separator())
 count = 0
 total = 0
 n_batches = 0
-n_samples = 10000
+n_samples = 100
 t0 = time()
 for batch in track(dm.train_dataloader(),
                    total=min(n_samples // dm.train_batch_size,
