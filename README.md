@@ -37,20 +37,12 @@ pre-commit install
 4. setting up ElasticSearchIndex
 
 ```shell
-wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-darwin-x86_64.tar.gz
-tar -xzf elasticsearch-7.14.1-darwin-x86_64.tar.gz
+wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-linux-x86_64.tar.gz
+tar -xzf elasticsearch-7.14.1-linux-x86_64.tar.gz
 ```
 To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and type `./bin/elasticsearch`.
 
-5. setting up Kibana
-
-```shell
-curl -O https://artifacts.elastic.co/downloads/kibana/kibana-7.14.1-linux-x86_64.tar.gz
-tar -xzf kibana-7.14.1-linux-x86_64.tar.gz
-```
-To run Kibana navigate to the `kibana-7.14.1` folder in the terminal and type `./bin/kibana`.
-
-6. Run something using the environment
+5. Run something using the environment
 
 ```shell
 poetry run python <file.py>
@@ -383,7 +375,7 @@ curl 'localhost:9200/_cat/indices?v'
 curl -X DELETE 'http://localhost:9200/_all'
 ```
 </details>
- 
+
  <details>
 <summary>Export `elasticsearch`</summary>
 
