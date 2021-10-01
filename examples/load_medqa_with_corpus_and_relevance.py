@@ -44,8 +44,6 @@ dm = MedQaDataModule(tokenizer=tokenizer,
 # prepare both the QA dataset and the corpus
 dm.prepare_data()
 dm.setup()
-corpus.prepare_data()
-corpus.setup()
 
 print(get_separator())
 dm.build_index()
