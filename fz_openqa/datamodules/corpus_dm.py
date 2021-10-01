@@ -256,7 +256,7 @@ class CorpusDataModule(BaseDataModule):
         document_pipe = Sequential(
             Collate(keys=["document.input_ids", "document.attention_mask"]),
             ReplaceInKeys("document.", ""),
-            Lambda(lambda batch: self.tokenizer.pad(batch)),
+            Lambda(self.tokenizer.pad),
             AddPrefix("document."),
         )
 

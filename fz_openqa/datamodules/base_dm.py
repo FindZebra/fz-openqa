@@ -143,11 +143,6 @@ class BaseDataModule(LightningDataModule):
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
 
-        # display the dataset
-        if self.verbose:
-            self.pprint()
-            self.display_sample()
-
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
