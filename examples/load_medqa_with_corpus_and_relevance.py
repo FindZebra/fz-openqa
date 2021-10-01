@@ -1,3 +1,5 @@
+from time import time
+
 import datasets
 import rich
 from rich.progress import track
@@ -27,12 +29,12 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
-                     num_proc=1,
+                     num_proc=4,
                      use_subset=False,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
-                     n_documents=100,
+                     n_documents=1000,
                      # retrieve the whole training set
                      train_batch_size=10,
                      relevance_classifier=ExactMatch(
@@ -53,19 +55,22 @@ print(get_separator())
 # iterate through the dataset and check the number of positive documents
 count = 0
 total = 0
-n_samples = 100
+n_batches = 0
+n_samples = 10000
+t0 = time()
 for batch in track(dm.train_dataloader(),
-                   total=min(n_samples // dm.train_batch_size, len(dm.train_dataloader())),
+                   total=min(n_samples // dm.train_batch_size,
+                             len(dm.train_dataloader())),
                    description=f"Iterating through the dataset.."):
 
     at_least_one_positive = batch['document.is_positive'].sum(1) > 0
     count += (at_least_one_positive > 0).float().sum()
     total += at_least_one_positive.shape[0]
+    n_batches += 1
     if total > n_samples:
         break
 
-rich.print(
-    f">> Number of questions with at least one positive document: {count:.0f} ({100. * count / total:.2f}%)")
+runtime = time() - t0
 
 # display a batch
 print(get_separator())
@@ -82,3 +87,10 @@ for k in range(3):
         rich.print(
             f" - rank={m}: score={batch['document.retrieval_score'][k][m]:.2f}, is_positive={batch['document.is_positive'][k][m]}")
         print(batch['document.text'][k][m].strip().replace("\n", ""))
+
+# display prop. of positive documents and runtime
+print(get_separator())
+rich.print(
+    f">> Processing speed: {runtime / n_batches:.3f}s/batch")
+rich.print(
+    f">> Number of questions with at least one positive document: {count:.0f} ({100. * count / total:.2f}%)")
