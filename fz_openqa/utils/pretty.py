@@ -30,8 +30,14 @@ def get_separator(char="\u2500"):
     return console_width * char
 
 
-def pprint_batch(batch: Batch):
-    u = f"Batch <{type(batch).__name__}>:"
+def pprint_batch(batch: Batch, header=None):
+    u = ""
+    if header is not None:
+        u += get_separator() + "\n"
+        u += f"=== {header} ===\n"
+
+    u += get_separator() + "\n"
+    u += f"Batch <{type(batch).__name__}>:"
     for k, v in batch.items():
         if isinstance(v, Tensor):
             u += f"\n   - {k}: {v.shape} <{v.dtype}> ({v.device})"
@@ -40,7 +46,7 @@ def pprint_batch(batch: Batch):
                 lens = [len(vv) for vv in v]
                 u += f"\n   - {k}: {len(v)} items with {min(lens)} to {max(lens)} characters <list<text>>"
             elif isinstance(v[0], list):
-                dtype = type(v[0][0]).__name__
+                dtype = type(v[0][0]).__name__ if len(v[0]) else "<empty>"
                 lengths = list(set([len(vv) for vv in v]))
                 if len(lengths) == 1:
                     w = f"shape = [{len(v)}, {lengths[0]}]"
@@ -53,4 +59,5 @@ def pprint_batch(batch: Batch):
         else:
             u += f"\n   - {k}: {v} {type(v)}"
 
+    u += "\n" + get_separator()
     rich.print(u)

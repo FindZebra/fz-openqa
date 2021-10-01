@@ -1,12 +1,12 @@
 import cProfile
 import pstats
 from functools import partial
+from time import time
 from timeit import Timer
 
 import datasets
 import numpy as np
 import rich
-from time import time
 
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
@@ -32,8 +32,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      filter_mode=None),
                             verbose=False,
                             num_proc=4,
-                            use_subset=False,
-                            train_batch_size=3)
+                            use_subset=False)
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
@@ -43,7 +42,8 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      corpus=corpus,
                      num_workers=1,
                      train_batch_size=16,
-                     n_documents=10)
+                     n_documents=100,
+                     use_corpus_sampler=False)
 
 # prepare both the QA dataset and the corpus
 dm.prepare_data()
@@ -83,11 +83,14 @@ elif MODE == "ctime":
     duration = time() - t0
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats('time')
-    stats.print_stats(100)
+    stats.print_stats(20)
     print(get_separator())
-    rich.print(f">> duration={duration/repeats:.3f}s/batch")
+    rich.print(f">> duration={duration / repeats:.3f}s/batch")
 else:
     raise NotImplementedError
 
-# Results:
-# with corpus sampling in collate:
+# Results: Corpus sampler is slower
+# batch_size=16, num_workers=1, n_documents=100
+# with corpus sampler (sample in __getitem__): >> duration=4.908s/batch
+# without corpus sampler (sample in collate_fn): >> duration=2.947s/batch
+# Comment: Corpus Sampler is expected to run faster if num_workers>1, this however crashes with JSONDecodeError

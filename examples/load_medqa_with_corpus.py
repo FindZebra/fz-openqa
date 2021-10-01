@@ -1,5 +1,5 @@
 import datasets
-
+import rich
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
@@ -15,6 +15,8 @@ tokenizer = init_pretrained_tokenizer(
 corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             index=ElasticSearchIndex(index_key="idx",
                                                      text_key="document.text",
+                                                     query_key="question.text",
+                                                     num_proc=4,
                                                      filter_mode=None),
                             verbose=False,
                             num_proc=1,
@@ -35,7 +37,7 @@ dm.setup()
 
 print(get_separator())
 dm.build_index()
-print(f">> index is built.")
+rich.print(f"[green]>> index is built.")
 print(get_separator())
 
 batch = next(iter(dm.train_dataloader()))
