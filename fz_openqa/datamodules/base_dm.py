@@ -83,8 +83,6 @@ class BaseDataModule(LightningDataModule):
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = True,
-        train_sampler: Optional[DictConfig] = None,
-        eval_sampler: Optional[DictConfig] = None,
         **kwargs,
     ):
         super().__init__()
@@ -102,18 +100,6 @@ class BaseDataModule(LightningDataModule):
         # tokenizer and dataset
         self.max_length = max_length
         self.tokenizer = tokenizer
-
-        # samplers -- samplers wrap the original dataset and override the __get_item__ method
-        self.train_sampler_cfg = (
-            dict(train_sampler)
-            if train_sampler is not None and len(train_sampler)
-            else None
-        )
-        self.eval_sampler_cfg = (
-            dict(eval_sampler)
-            if eval_sampler is not None and len(eval_sampler)
-            else None
-        )
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -142,11 +128,6 @@ class BaseDataModule(LightningDataModule):
 
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
-
-        # display the dataset
-        if self.verbose:
-            self.pprint()
-            self.display_sample()
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -178,9 +159,7 @@ class BaseDataModule(LightningDataModule):
         return dataset
 
     def train_dataloader(self):
-        dset = self.get_dataset_split(Split.TRAIN)
-        if self.train_sampler_cfg is not None:
-            dset = instantiate(self.train_sampler_cfg, dataset=dset)
+        dset = self.get_dataset(Split.TRAIN)
 
         return DataLoader(
             dataset=dset,
@@ -193,9 +172,7 @@ class BaseDataModule(LightningDataModule):
         )
 
     def _eval_loader(self, split):
-        dset = self.get_dataset_split(split)
-        if self.eval_sampler_cfg is not None:
-            dset = instantiate(self.eval_sampler_cfg, dataset=dset)
+        dset = self.get_dataset(split)
 
         return DataLoader(
             dataset=dset,
@@ -213,7 +190,7 @@ class BaseDataModule(LightningDataModule):
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
 
-    def get_dataset_split(self, split: Union[str, Split]) -> Dataset:
+    def get_dataset(self, split: Union[str, Split]) -> Dataset:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""
         if isinstance(self.dataset, Dataset):

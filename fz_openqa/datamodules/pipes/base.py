@@ -52,12 +52,17 @@ class FilterKeys(Pipe):
     Filter the keys in the batch.
     """
 
-    def __init__(self, keys: Callable):
-        self.keys = keys
+    def __init__(self, condition: Callable):
+        self.condition = condition
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def __call__(
+        self, batch: Union[List[Batch], Batch], **kwargs
+    ) -> Union[List[Batch], Batch]:
         """The call of the pipeline process"""
-        return {k: v for k, v in batch.items() if self.keys(k)}
+        return self.filter(batch)
+
+    def filter(self, batch):
+        return {k: v for k, v in batch.items() if self.condition(k)}
 
 
 class DropKeys(Pipe):
@@ -174,12 +179,7 @@ class PrintBatch(Pipe):
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
-        if self.header is not None:
-            print(get_separator())
-            rich.print(f"=== {self.header} ===")
-        print(get_separator())
-        pprint_batch(batch)
-        print(get_separator())
+        pprint_batch(batch, header=self.header)
 
         return batch
 
