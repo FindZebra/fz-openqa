@@ -14,6 +14,7 @@ from .batchify import Batchify
 from .batchify import DeBatchify
 from .collate import ApplyToEachExample
 from .collate import Collate
+from .connect import Gate
 from .connect import Parallel
 from .connect import Sequential
 from .passage import GeneratePassages

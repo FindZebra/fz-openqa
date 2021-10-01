@@ -1,3 +1,4 @@
+from typing import Callable
 from typing import List
 from typing import Optional
 from typing import Union
@@ -39,3 +40,26 @@ class Parallel(Pipe):
             output.update(**pipe_out)
 
         return output
+
+
+class Gate(Pipe):
+    """Execute the pipe if the condition is valid, else return {}"""
+
+    def __init__(
+        self, condition: Union[bool, Callable], pipe: Optional[Pipe]
+    ) -> object:
+        self.condition = condition
+        self.pipe = pipe
+
+    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+        """Call the pipes sequentially."""
+
+        if isinstance(self.condition, (bool, int)):
+            switched_on = self.condition
+        else:
+            switched_on = self.condition(batch)
+
+        if switched_on and self.pipe is not None:
+            return self.pipe(batch)
+        else:
+            return {}
