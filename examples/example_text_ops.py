@@ -22,15 +22,3 @@ corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
 corpus.prepare_data()
 corpus.setup()
 rich.print(corpus.dataset['document.text'])
-
-# load the QA dataset
-#dm = MedQaDataModule(tokenizer=tokenizer,
-#                     num_proc=1,
-#                     use_subset=True,
-#                     verbose=True,
-#                     corpus=corpus,
-#                     n_documents=3)
-
-#dm.prepare_data()
-#dm.setup()
-#rich.print(dm.dataset[0])
