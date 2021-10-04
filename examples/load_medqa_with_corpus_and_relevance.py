@@ -24,7 +24,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      filter_mode=None,
                                                      verbose=False),
                             verbose=False,
-                            num_proc=4,
+                            num_proc=1,
                             use_subset=True,
                             train_batch_size=3)
 
@@ -41,7 +41,6 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      relevance_classifier=ExactMatch(
                          answer_prefix='answer.',
                          document_prefix='document.',
-                         synonyms_prefix='synonyms.',
                          output_key='document.is_positive'
                      ))
 

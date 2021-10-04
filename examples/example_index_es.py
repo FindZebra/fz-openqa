@@ -50,3 +50,7 @@ output = es.es_search_bulk(index_name="corpus", queries=qst, k=3)
 
 print(f">> Query response")
 rich.print(output)
+
+rich.print(data[344])
+rich.print(data[190])
+rich.print(data[2])

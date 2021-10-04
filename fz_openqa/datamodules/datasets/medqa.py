@@ -46,6 +46,9 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                     "question.text": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
                     "answer.text": datasets.Sequence(datasets.Value("string")),
+                    "answer.cui": datasets.Sequence(
+                        datasets.Value("string")
+                    ),
                     "synonyms.text": datasets.Sequence(
                         datasets.Value("string")
                     ),
@@ -81,7 +84,6 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
-                print(d)
                 # adjust values
                 d["question.idx"] = d.pop("question_id")
                 d["answer.target"] = d.pop("answer_idx")

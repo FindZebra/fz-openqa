@@ -112,10 +112,9 @@ class MedQaDataModule(BaseDataModule):
 
         # Tokenize the text fields (question and answers)
         dataset = dataset.map(
-            Sequential(
-                TextCleaner(text_key="text"),
-                self.get_tokenizer_pipe(),
-                self.get_generate_passages_pipe(),
+            Parallel(
+                self.get_question_tokenizer_pipe(),
+                self.get_answer_tokenizer_pipe(),
             ),
             batched=True,
             num_proc=self.num_proc,
