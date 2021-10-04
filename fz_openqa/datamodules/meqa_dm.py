@@ -26,6 +26,7 @@ from .pipes import Pipe
 from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
+from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
@@ -111,13 +112,14 @@ class MedQaDataModule(BaseDataModule):
 
         # Tokenize the text fields (question and answers)
         dataset = dataset.map(
-            Parallel(
-                self.get_question_tokenizer_pipe(),
-                self.get_answer_tokenizer_pipe(),
+            Sequential(
+                TextCleaner(text_key="text"),
+                self.get_tokenizer_pipe(),
+                self.get_generate_passages_pipe(),
             ),
             batched=True,
             num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
+            desc="Tokenizing documents and extracting overlapping passages",
         )
 
         # add an index column
