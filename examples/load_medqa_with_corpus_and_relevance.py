@@ -18,17 +18,18 @@ tokenizer = init_pretrained_tokenizer(
 corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             index=ElasticSearchIndex(index_key="idx",
                                                      text_key="document.text",
+                                                     query_key="question.text",
                                                      filter_mode=None,
                                                      verbose=False),
                             verbose=False,
                             num_proc=4,
-                            use_subset=False,
+                            use_subset=True,
                             train_batch_size=3)
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
                      num_proc=1,
-                     use_subset=False,
+                     use_subset=True,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
@@ -38,6 +39,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      relevance_classifier=ExactMatch(
                          answer_prefix='answer.',
                          document_prefix='document.',
+                         synonyms_prefix='synonyms.',
                          output_key='document.is_positive'
                          ))
 
