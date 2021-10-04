@@ -2,9 +2,12 @@ from functools import partial
 from typing import Callable
 from typing import List
 from typing import Optional
+from typing import Union
 
 import rich
 import torch
+from datasets import Dataset
+from datasets import Split
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
@@ -15,13 +18,16 @@ from .pipes import Apply
 from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import FilterKeys
+from .pipes import Gate
 from .pipes import Lambda
+from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
 from .pipes import TokenizerPipe
+from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
 from .utils import flatten_nested
 from .utils import HgDataset
@@ -31,7 +37,6 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 
@@ -69,6 +74,7 @@ class MedQaDataModule(BaseDataModule):
         corpus: Optional[BaseDataModule] = None,
         n_documents: int = 0,
         relevance_classifier: Optional[RelevanceClassifier] = None,
+        use_corpus_sampler: bool = False,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
@@ -80,6 +86,10 @@ class MedQaDataModule(BaseDataModule):
         self.corpus = corpus
         self.n_documents = n_documents
         self.relevance_classifier = relevance_classifier
+        # sample the corpus, before or after the collate function
+        # when using the corpus sampler, documents are fetched for each question in __getitem__
+        # without corpus sampler, documents are fetched in the collate_fn (in batch).
+        self.use_corpus_sampler = use_corpus_sampler
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -202,26 +212,82 @@ class MedQaDataModule(BaseDataModule):
             AddPrefix("answer."),
         )
 
+        # Optional: get the pipe to process the sampled documents
+        documents_pipe = Gate(
+            self.use_corpus_sampler and self.n_documents > 0,
+            self.documents_collate_pipe(),
+        )
+
         return Parallel(
-            raw_text_pipe, simple_attr_pipe, question_pipe, answer_pipe
+            raw_text_pipe,
+            simple_attr_pipe,
+            question_pipe,
+            answer_pipe,
+            documents_pipe,
+        )
+
+    def documents_collate_pipe(self):
+        """
+        Build a pipe to collate a batch of retrieved document.
+        """
+        # get the raw text
+        raw_text_pipe = FilterKeys(lambda key: key in ["document.text"])
+
+        # Get the simple attribute and cast to tensor
+        simple_attr_pipe = Sequential(
+            FilterKeys(
+                lambda key: key
+                in [
+                    "document.idx",
+                    "document.passage_idx",
+                    "document.retrieval_score",
+                    "document.is_positive",
+                ]
+            ),
+            ApplyToAll(op=lambda x: torch.tensor(x)),
+        )
+
+        # collate the questions attributes (question.input_ids, question.idx, ...)
+        tokens_pipe = Sequential(
+            FilterKeys(
+                lambda key: key
+                in ["document.input_ids", "document.attention_mask"]
+            ),
+            ReplaceInKeys("document.", ""),
+            Lambda(self.tokenizer.pad),
+            AddPrefix("document."),
+        )
+
+        return Sequential(
+            Collate(
+                keys=[
+                    "document.idx",
+                    "document.passage_idx",
+                    "document.retrieval_score",
+                    "document.is_positive",
+                    "document.positive_count",
+                    "document.input_ids",
+                    "document.attention_mask",
+                    "document.text",
+                ]
+            ),
+            ApplyToAll(flatten_nested, element_wise=False),
+            Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe),
+            Nest(stride=self.n_documents),
         )
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)
 
-    def collate_fn(self, examples: List[Batch]) -> Batch:
-        """The function that is used to merge examples into a batch.
-        Concatenating sequences with different length requires padding them."""
-        batch = self.collate_pipe(examples)
-        if self.n_documents > 0 and self.corpus.dataset is not None:
-            corpus_batch = self.corpus.search_index(
-                query=batch, k=self.n_documents
-            )
-            batch.update(**corpus_batch)
+    def add_documents_to_batch(self, batch):
+        """Query the corpus for a given batch of questions and collate."""
+        corpus_batch = self.corpus.search_index(
+            query=batch, k=self.n_documents
+        )
+        batch.update(**corpus_batch)
 
-            if self.relevance_classifier is not None:
-                batch = self.relevance_classifier(batch)
-
+        if self.relevance_classifier is not None:
+            batch = self.relevance_classifier(batch)
         return batch
 
     def display_one_sample(self, example: Batch):
@@ -243,3 +309,29 @@ class MedQaDataModule(BaseDataModule):
                 f"   - [{'x' if idx == i else ' '}] "
                 f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"
             )
+
+    def get_dataset(self, split: Union[str, Split]) -> Dataset:
+        """Return the dataset corresponding to the split,
+        or the dataset iteself if there is no split."""
+        dataset = super().get_dataset(split)
+        if self.use_corpus_sampler:
+            if self.n_documents > 0 and self.corpus.dataset is not None:
+                dataset = CorpusSampler(
+                    dataset,
+                    corpus=self.corpus,
+                    n_documents=self.n_documents,
+                    relevance_classifier=self.relevance_classifier,
+                )
+
+        return dataset
+
+    def collate_fn(self, examples: List[Batch]) -> Batch:
+        """The function that is used to merge examples into a batch.
+        Concatenating sequences with different length requires padding them."""
+        batch = self.collate_pipe(examples)
+
+        if not self.use_corpus_sampler:
+            if self.n_documents > 0 and self.corpus.dataset is not None:
+                batch = self.add_documents_to_batch(batch)
+
+        return batch
