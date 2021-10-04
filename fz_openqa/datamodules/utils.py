@@ -24,17 +24,6 @@ def get_column_names(dataset: HgDataset) -> List[str]:
         return dataset.column_names
 
 
-def flatten_nested(values: List[List[Any]]) -> List[Any]:
-    return [sub_x for x in values for sub_x in x]
-
-
-def nested_list(values: List[Any], *, stride: int) -> List[List[Any]]:
-    output = []
-    for i in range(0, len(values), stride):
-        output += [[values[j] for j in range(i, i + stride)]]
-    return output
-
-
 def add_spec_token(
     special_token: str,
     text: str,

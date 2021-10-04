@@ -5,7 +5,6 @@ from .base import DropKeys
 from .base import FilterKeys
 from .base import Identity
 from .base import Lambda
-from .base import Nest
 from .base import Pipe
 from .base import PrintBatch
 from .base import Rename
@@ -18,9 +17,13 @@ from .collate import DeCollate
 from .connect import Gate
 from .connect import Parallel
 from .connect import Sequential
+from .nesting import Flatten
+from .nesting import Nest
+from .nesting import Nested
 from .passage import GeneratePassages
 from .relevance import ExactMatch
 from .relevance import RelevanceClassifier
+from .sorting import Sort
 from .text_filtering import MetaMapFilter
 from .text_filtering import SciSpacyFilter
 from .text_filtering import StopWordsFilter

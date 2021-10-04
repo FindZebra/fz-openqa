@@ -23,19 +23,23 @@ from .pipes import Gate
 from .pipes import Itemize
 from .pipes import Lambda
 from .pipes import Nest
+from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
+from .pipes import Rename
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
+from .pipes import Sort
 from .pipes import TokenizerPipe
+from .pipes.nesting import Flatten
+from .pipes.nesting import flatten_nested
+from .pipes.nesting import nested_list
 from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
-from .utils import flatten_nested
 from .utils import get_column_names
 from .utils import HgDataset
-from .utils import nested_list
 from .utils import set_example_idx
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
@@ -213,9 +217,9 @@ class MedQaDataModule(BaseDataModule):
         answer_pipe = Sequential(
             Collate(keys=["answer.input_ids", "answer.attention_mask"]),
             ReplaceInKeys("answer.", ""),
-            ApplyToAll(flatten_nested, element_wise=False),
+            Flatten(),
             Lambda(lambda batch: self.tokenizer.pad(batch)),
-            ApplyToAll(lambda x: x.view(-1, self.n_options, x.size(-1))),
+            Nest(stride=4),
             AddPrefix("answer."),
         )
 
@@ -278,7 +282,7 @@ class MedQaDataModule(BaseDataModule):
                     "document.text",
                 ]
             ),
-            ApplyToAll(flatten_nested, element_wise=False),
+            Flatten(),
             Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe),
             Nest(stride=self.n_documents),
         )
@@ -291,11 +295,23 @@ class MedQaDataModule(BaseDataModule):
         corpus_batch = self.corpus.search_index(
             query=batch, k=self.n_documents
         )
+        corpus_batch = Rename({"idx": "document.global_idx"})(corpus_batch)
         batch.update(**corpus_batch)
 
         if self.relevance_classifier is not None:
             batch = self.relevance_classifier(batch)
+            batch = self.get_doc_sorting_pipe()(batch)
         return batch
+
+    def get_doc_sorting_pipe(self):
+        sort_pipe = Nested(
+            Sequential(
+                Sort(key="document.retrieval_score"),
+                Sort(key="document.is_positive"),
+            ),
+            filter=lambda key: str(key).startswith("document."),
+        )
+        return sort_pipe
 
     def display_one_sample(self, example: Batch):
         """Decode and print one example from the batch"""
@@ -359,6 +375,7 @@ class MedQaDataModule(BaseDataModule):
             PrintBatch(header="compile in"),
             DeCollate(),
             self.collate_fn,
+            PrintBatch(header="collate_fn out"),
             Itemize(),
         )
 

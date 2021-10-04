@@ -23,25 +23,31 @@ class RelevanceClassifier(Pipe):
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         results = []
-        batch_size = len(next(iter(batch.values())))
+        batch_size = self.batch_size(batch)
         for i in range(batch_size):
-            a_data_i = {
-                k: v[i] for k, v in batch.items() if self.answer_prefix in k
-            }
-            d_data_i = {
-                k: v[i] for k, v in batch.items() if self.document_prefix in k
-            }
+            eg_ans_i = self.eg(
+                batch,
+                i,
+                filter_op=lambda key: str(key).startswith(self.answer_prefix),
+            )
+            eg_doc_i = self.eg(
+                batch,
+                i,
+                filter_op=lambda key: str(key).startswith(
+                    self.document_prefix
+                ),
+            )
 
             # iterate through each document
             results_i = []
-            n_docs = len(next(iter(d_data_i.values())))
+            n_docs = len(next(iter(eg_doc_i.values())))
             for j in range(n_docs):
-                d_data_ij = {k: v[j] for k, v in d_data_i.items()}
-                results_i += [self.classify(a_data_i, d_data_ij)]
+                d_data_ij = {k: v[j] for k, v in eg_doc_i.items()}
+                results_i += [self.classify(eg_ans_i, d_data_ij)]
             results += [results_i]
-
         results = torch.tensor(results)
         batch[self.output_key] = results
+
         return batch
 
 
