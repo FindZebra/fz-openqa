@@ -1,8 +1,10 @@
 import os
 import re
 from functools import partial
+from typing import Any
 from typing import Callable
 from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -32,6 +34,7 @@ from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
+from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
 from .utils import add_spec_token
@@ -138,7 +141,9 @@ class CorpusDataModule(BaseDataModule):
 
         dataset = dataset.map(
             Sequential(
-                self.get_tokenizer_pipe(), self.get_generate_passages_pipe()
+                TextCleaner(text_key="text"),
+                self.get_tokenizer_pipe(),
+                self.get_generate_passages_pipe(),
             ),
             batched=True,
             num_proc=self.num_proc,
@@ -248,7 +253,14 @@ class CorpusDataModule(BaseDataModule):
 
         # collate simple attributes
         simple_attr_pipe = Sequential(
-            Collate(keys=["idx", "document.idx", "document.passage_idx"]),
+            Collate(
+                keys=[
+                    "idx",
+                    "document.idx",
+                    "document.passage_idx",
+                    "document.retrieval_score",
+                ]
+            ),
             ApplyToAll(op=lambda x: torch.tensor(x)),
         )
 
@@ -256,7 +268,7 @@ class CorpusDataModule(BaseDataModule):
         document_pipe = Sequential(
             Collate(keys=["document.input_ids", "document.attention_mask"]),
             ReplaceInKeys("document.", ""),
-            Lambda(lambda batch: self.tokenizer.pad(batch)),
+            Lambda(self.tokenizer.pad),
             AddPrefix("document."),
         )
 
@@ -282,8 +294,9 @@ class CorpusDataModule(BaseDataModule):
         *,
         k: int = 1,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
+        simple_collate: bool = False,
         **kwargs,
-    ) -> Batch:
+    ) -> Union[Batch, List[Dict[str, Any]]]:
         """
         Query index given a input query
 
@@ -295,21 +308,20 @@ class CorpusDataModule(BaseDataModule):
         )
 
         # retrieve the examples from the dataset (flat list)
-        examples = [
-            self.dataset[idx] for sub in search_result.index for idx in sub
+        flat_indexes = (idx for sub in search_result.index for idx in sub)
+        flat_scores = (score for sub in search_result.score for score in sub)
+        retrieved_docs = [
+            {**self.dataset[idx], "document.retrieval_score": score}
+            for idx, score in zip(flat_indexes, flat_scores)
         ]
-
-        # collate the examples as a batch
-        flat_batch = self.collate_pipe(examples)
+        if simple_collate:
+            flat_docs_batch = Collate(keys=None)(retrieved_docs)
+        else:
+            flat_docs_batch = self.collate_pipe(retrieved_docs)
 
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        query = Nest(stride=k)(flat_batch)
-
-        # add the score to the batch
-        query["document.retrieval_score"] = torch.tensor(search_result.score)
-
-        return query
+        return Nest(stride=k)(flat_docs_batch)
 
 
 class MedQaCorpusDataModule(CorpusDataModule):

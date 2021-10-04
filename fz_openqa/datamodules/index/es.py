@@ -6,14 +6,18 @@ from typing import Tuple
 
 import rich
 from datasets import Dataset
+from rich.status import Status
 
 from .base import Index
 from .base import SearchResult
+from fz_openqa.datamodules.pipes import Batchify
+from fz_openqa.datamodules.pipes import DeBatchify
 from fz_openqa.datamodules.pipes import MetaMapFilter
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SciSpacyFilter
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import StopWordsFilter
+from fz_openqa.datamodules.pipes import TextCleaner
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import ElasticSearch
 from fz_openqa.utils.pretty import get_separator
@@ -21,7 +25,7 @@ from fz_openqa.utils.pretty import get_separator
 
 class ElasticSearchIndex(Index):
     index_name: Optional[str] = None
-    filter_pipe: Optional[Pipe] = None
+    preprocesing_pipe: Optional[Pipe] = None
 
     def __init__(
         self,
@@ -29,6 +33,7 @@ class ElasticSearchIndex(Index):
         text_key: str,
         query_key: str,
         batch_size: int = 32,
+        num_proc: int = 1,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearch] = None,
         **kwargs,
@@ -38,6 +43,7 @@ class ElasticSearchIndex(Index):
         self.text_key = text_key
         self.query_key = query_key
         self.batch_size = batch_size
+        self.num_proc = num_proc
         self.engine = es or ElasticSearch()
 
         # pipe used to potentially filter the input text
@@ -48,14 +54,23 @@ class ElasticSearchIndex(Index):
                 # @vlievin: fyi has to be included in the datamodule
                 "stopwords": StopWordsFilter,
             }[filter_mode]
+            filter_pipe = filter_pipe_cls(text_key=self.text_key)
+        else:
+            filter_pipe = None
 
-            self.filter_pipe = Sequential(
-                # @idariis: added this line for debugging
-                # PrintBatch(header="filtering input"),
-                filter_pipe_cls(text_key=self.text_key),
-                # @filter_pipe_cls: added this line for debugging
-                # PrintBatch(header="filtering output"),
+        # text cleaning and filtering
+        self.preprocesing_pipe = Sequential(
+            # @idariis: added this line for debugging
+            # PrintBatch(header="filtering input"),
+            filter_pipe,
+            TextCleaner(
+                text_key=self.text_key,
+                lowercase=True,
+                aggressive_cleaning=True,
             )
+            # @filter_pipe_cls: added this line for debugging
+            # PrintBatch(header="filtering output"),
+        )
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
@@ -68,7 +83,7 @@ class ElasticSearchIndex(Index):
             if c not in [self.index_key, self.text_key]
         ]
         dataset = dataset.remove_columns(unused_columns)
-        dataset = self.filter_text(dataset)
+        dataset = self.preprocess_text(dataset)
 
         # init the index
         self.index_name = dataset._fingerprint
@@ -76,13 +91,18 @@ class ElasticSearchIndex(Index):
 
         # build the index
         if is_new_index:
-            response = self.engine.es_bulk(
-                index_name=self.index_name,
-                # todo: find a way to extract document titles
-                title="__no_title__",
-                document_idx=dataset[self.index_key],
-                document_txt=dataset[self.text_key],
-            )
+            with Status("ingesting ES index.."):
+                try:
+                    response = self.engine.es_bulk(
+                        index_name=self.index_name,
+                        # todo: find a way to extract document titles
+                        title="__no_title__",
+                        document_idx=dataset[self.index_key],
+                        document_txt=dataset[self.text_key],
+                    )
+                except Exception as ex:
+                    self.engine.es_remove_index(self.index_name)
+                    raise ex
 
         if verbose:
             print(get_separator("="))
@@ -94,10 +114,12 @@ class ElasticSearchIndex(Index):
         self.is_indexed = True
 
     def search(self, query: Batch, k: int = 1, **kwargs) -> SearchResult:
-        """filter the incoming batch using the same pipe as the one
+        """
+        Search the ES index for q batch of examples (query).
+
+        Filter the incoming batch using the same pipe as the one
         used to build the index."""
-        if self.filter_pipe is not None:
-            query = self.filter_pipe(query, text_key=self.query_key)
+        query = self.preprocesing_pipe(query, text_key=self.query_key)
 
         scores, indexes = self.engine.es_search_bulk(
             self.index_name, query[self.query_key], k=k
@@ -107,7 +129,10 @@ class ElasticSearchIndex(Index):
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs
     ) -> Tuple[List[float], List[int]]:
-        """Search the index using the elastic search index"""
+        """Search the index using the elastic search index for a single example."""
+        query = Batchify()(query)
+        query = self.preprocesing_pipe(query, text_key=self.query_key)
+        query = DeBatchify()(query)
 
         results = self.engine.es_search(
             index_name=self.index_name,
@@ -119,18 +144,16 @@ class ElasticSearchIndex(Index):
         indexes = [eg["_source"]["idx"] for eg in results["hits"]]
         return scores, indexes
 
-    def filter_text(self, dataset: Dataset) -> Dataset:
-        if self.filter_pipe is None:
-            return dataset
+    def preprocess_text(self, dataset: Dataset) -> Dataset:
 
         # process the dataset using the filtering pipe
         return dataset.map(
-            self.filter_pipe,
+            self.preprocesing_pipe,
             batched=True,
             # @idariis: we need to decide how to set this, it depends on
             # the scispacy models
-            batch_size=self.batch_size,
+            # batch_size=self.batch_size,
             # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
-            num_proc=1,
-            desc="Computing corpus vectors",
+            num_proc=self.num_proc,
+            desc="ES Indexing: preprocessing",
         )
