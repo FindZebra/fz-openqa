@@ -11,7 +11,7 @@ from fz_openqa.utils.datastruct import Batch
 class Sequential(Pipe):
     """A sequence of Pipes."""
 
-    def __init__(self, *pipes: Optional[Union[Collate, Pipe]]):
+    def __init__(self, *pipes: Optional[Union[Callable, Pipe]]):
         self.pipes = [pipe for pipe in pipes if pipe is not None]
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
@@ -25,7 +25,7 @@ class Sequential(Pipe):
 class Parallel(Pipe):
     """Execute pipes in parallel and merge."""
 
-    def __init__(self, *pipes: Optional[Union[Collate, Pipe]]):
+    def __init__(self, *pipes: Optional[Union[Callable, Pipe]]):
         self.pipes = [pipe for pipe in pipes if pipe is not None]
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:

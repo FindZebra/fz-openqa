@@ -14,6 +14,7 @@ from .batchify import Batchify
 from .batchify import DeBatchify
 from .collate import ApplyToEachExample
 from .collate import Collate
+from .collate import DeCollate
 from .connect import Gate
 from .connect import Parallel
 from .connect import Sequential
@@ -27,4 +28,5 @@ from .text_filtering import TextFilter
 from .text_ops import TextCleaner
 from .tokenizer import TokenizerPipe
 from .torch import Forward
+from .torch import Itemize
 from .torch import ToNumpy

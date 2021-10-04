@@ -17,12 +17,15 @@ from .pipes import AddPrefix
 from .pipes import Apply
 from .pipes import ApplyToAll
 from .pipes import Collate
+from .pipes import DeCollate
 from .pipes import FilterKeys
 from .pipes import Gate
+from .pipes import Itemize
 from .pipes import Lambda
 from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
+from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
@@ -30,6 +33,7 @@ from .pipes import TokenizerPipe
 from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
 from .utils import flatten_nested
+from .utils import get_column_names
 from .utils import HgDataset
 from .utils import nested_list
 from .utils import set_example_idx
@@ -63,8 +67,11 @@ class MedQaDataModule(BaseDataModule):
     # number of options
     n_options = 4
 
-    # optional corpus
+    # Optional: corpus
     corpus: Optional[CorpusDataModule] = None
+
+    # Optional: compiled dataset (pre-computed)
+    compiled_dataset: Optional[HgDataset] = None
 
     def __init__(
         self,
@@ -212,9 +219,9 @@ class MedQaDataModule(BaseDataModule):
             AddPrefix("answer."),
         )
 
-        # Optional: get the pipe to process the sampled documents
+        # et the pipe to process the sampled documents only if available (Gate)
         documents_pipe = Gate(
-            self.use_corpus_sampler and self.n_documents > 0,
+            lambda exs: any("document." in k for eg in exs for k in eg.keys()),
             self.documents_collate_pipe(),
         )
 
@@ -313,7 +320,15 @@ class MedQaDataModule(BaseDataModule):
     def get_dataset(self, split: Union[str, Split]) -> Dataset:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""
+
+        # if the dataset is compiled, return its split
+        if self.compiled_dataset is not None:
+            return super().get_dataset(split, self.compiled_dataset)
+
+        # retrieve the dataset split
         dataset = super().get_dataset(split)
+
+        # potentially sample the documents
         if self.use_corpus_sampler:
             if self.n_documents > 0 and self.corpus.dataset is not None:
                 dataset = CorpusSampler(
@@ -330,8 +345,36 @@ class MedQaDataModule(BaseDataModule):
         Concatenating sequences with different length requires padding them."""
         batch = self.collate_pipe(examples)
 
-        if not self.use_corpus_sampler:
+        if not self.use_corpus_sampler and self.compiled_dataset is None:
             if self.n_documents > 0 and self.corpus.dataset is not None:
                 batch = self.add_documents_to_batch(batch)
 
         return batch
+
+    def compile_dataset(self):
+        """Process the whole dataset with `collate_fn` and store
+        into `self.compiled_dataset`"""
+
+        pipe = Sequential(
+            PrintBatch(header="compile in"),
+            DeCollate(),
+            self.collate_fn,
+            Itemize(),
+        )
+
+        # Compile the dataset
+        self.compiled_dataset = self.dataset.map(
+            pipe,
+            batched=True,
+            num_proc=self.num_proc,
+            desc="Compiling dataset",
+        )
+
+        # cast as tensors
+        pt_cols = self.pt_attributes + self.corpus.pt_attributes
+        pt_cols = [
+            c for c in pt_cols if c in get_column_names(self.compiled_dataset)
+        ]
+        self.compiled_dataset.set_format(
+            type="torch", columns=pt_cols, output_all_columns=True
+        )

@@ -1,4 +1,6 @@
+from typing import Any
 from typing import Callable
+from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
@@ -50,6 +52,17 @@ class Collate:
         if self.keys is not None:
             keys = set.intersection(keys, self.keys)
         return keys
+
+
+class DeCollate:
+    def __call__(self, batch: Batch) -> List[Dict[str, Any]]:
+        keys = list(batch.keys())
+        length = len(batch[keys[0]])
+        lengths = {k: len(v) for k, v in batch.items()}
+        assert all(
+            length == eg_l for eg_l in lengths.values()
+        ), f"un-equal lengths: {lengths}"
+        return [{k: batch[k][i] for k in keys} for i in range(length)]
 
 
 class ApplyToEachExample:
