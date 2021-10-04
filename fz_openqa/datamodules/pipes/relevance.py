@@ -1,18 +1,19 @@
-import re
 from typing import Any
 from typing import Dict
 from typing import Optional
 
-import scispacy
-import spacy
 import torch
-from scispacy.abbreviation import AbbreviationDetector
-from scispacy.linking import EntityLinker
-from spacy import displacy
 
-from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+from .static import DISCARD_TUIs
+
+import re
+import spacy
+import scispacy
+from spacy import displacy
+from scispacy.abbreviation import AbbreviationDetector
+from scispacy.linking import EntityLinker
 
 
 class RelevanceClassifier(Pipe):
@@ -35,7 +36,7 @@ class RelevanceClassifier(Pipe):
         results = []
         batch_size = len(next(iter(batch.values())))
         for i in range(batch_size):
-            a_data_i = {
+            q_data_i = {
                 k: v[i] for k, v in batch.items() if self.answer_prefix in k
             }
             d_data_i = {
@@ -44,14 +45,15 @@ class RelevanceClassifier(Pipe):
 
             # iterate through each document
             results_i = []
-            n_docs = len(next(iter(d_data_i.values())))
+            n_docs = len(next(iter(d_data_i)))
             for j in range(n_docs):
                 d_data_ij = {k: v[j] for k, v in d_data_i.items()}
-                results_i += [self.classify(a_data_i, d_data_ij)]
+                results_i += [self.classify(q_data_i, d_data_ij)]
             results += [results_i]
 
         results = torch.tensor(results)
         batch[self.output_key] = results
+        batch[self.output_count_key] = results.float().sum(-1).long()
         return batch
 
 
@@ -87,7 +89,7 @@ class SciSpacyMatch(RelevanceClassifier):
         answer_index = answer["answer.target"]
         answer_text = answer["answer.text"][answer_index]
 
-        scispacy_doc = model(doc_text)
+        scispacy_doc = model(answer_text)
 
         answer_aliases = []
         for entity in scispacy_doc.ents:
@@ -97,7 +99,7 @@ class SciSpacyMatch(RelevanceClassifier):
         return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
 class ExactMatch(RelevanceClassifier):
     def classify(
-        self, answer: Dict[str, Any], document: Dict[str, Any], method: str
+        self, answer: Dict[str, Any], document: Dict[str, Any]
     ) -> bool:
 
         doc_text = document["document.text"]
