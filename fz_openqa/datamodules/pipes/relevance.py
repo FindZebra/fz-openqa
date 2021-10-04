@@ -23,13 +23,11 @@ class RelevanceClassifier(Pipe):
         document_prefix: str = "document.",
         output_key: str = "document.is_positive",
         output_count_key: str = "document.positive_count",
-        match_method: Optional[str] = None,
     ):
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
         self.output_count_key = output_count_key
-        self.match_method = match_method
 
     def classify(self, question: Any, document: Any) -> bool:
         raise NotImplementedError
@@ -59,38 +57,50 @@ class RelevanceClassifier(Pipe):
         return batch
 
 
+class MetaMapMatch(RelevanceClassifier):
+    def classify(
+        self, answer: Dict[str, Any], document: Dict[str, Any], model_name: Optional[str] = "en_core_sci_lg"
+    ) -> bool:
+
+        model = spacy.load(model_name)
+        model.add_pipe("abbreviation_detector")
+        model.add_pipe("scispacy_linker", config={"resolve_abbreviations": True, "linker_name": "umls", "max_entities_per_mention":1})
+        linker = model.get_pipe("scispacy_linker")
+
+        doc_text = document["document.text"]
+        answer_index = answer["answer.target"]
+        answer_aliases = [answer["answer.text"][answer_index]]
+        answer_cui = answer["answer.cui"][0]
+        answer_aliases.extend(set(linker.kb.cui_to_entity[answer_cui][2]))
+
+        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
+
+class SciSpacyMatch(RelevanceClassifier):
+    def classify(
+        self, answer: Dict[str, Any], document: Dict[str, Any], model_name: Optional[str] = "en_core_sci_lg"
+    ) -> bool:
+
+        model = spacy.load(model_name)
+        model.add_pipe("abbreviation_detector")
+        model.add_pipe("scispacy_linker", config={"resolve_abbreviations": True, "linker_name": "umls", "max_entities_per_mention":1})
+        linker = model.get_pipe("scispacy_linker")
+
+        doc_text = document["document.text"]
+        answer_index = answer["answer.target"]
+        answer_text = answer["answer.text"][answer_index]
+
+        scispacy_doc = model(doc_text)
+
+        answer_aliases = []
+        for entity in scispacy_doc.ents:
+            if linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0] not in DISCARD_TUIs:
+                answer_aliases.extend(set(linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]))
+
+        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
 class ExactMatch(RelevanceClassifier):
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any], method: str
     ) -> bool:
-        if self.match_method is not None:
-            model = spacy.load("en_core_sci_lg")
-            model.add_pipe("abbreviation_detector")
-            model.add_pipe("scispacy_linker", config={"resolve_abbreviations": True, "linker_name": "umls", "max_entities_per_mention":1})
-            linker = model.get_pipe("scispacy_linker")
-
-            if self.match_method == "metamap":
-                doc_text = document["document.text"]
-                answer_index = answer["answer.target"]
-                answer_aliases = [answer["answer.text"][answer_index]]
-                answer_cui = answer["answer.cui"][0]
-                answer_aliases.extend(linker.kb.cui_to_entity[answer_cui][2])
-
-                return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
-                
-            elif self.match_method == "scispacy":
-                doc_text = document["document.text"]
-                answer_index = answer["answer.target"]
-                answer_text = answer["answer.text"][answer_index]
-
-                scispacy_doc = model(doc_text)
-
-                answer_aliases = []
-                for entity in scispacy_doc.ents:
-                    if linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0] not in DISCARD_TUIs:
-                        answer_aliases.extend(set(linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]))
-
-                return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
 
         doc_text = document["document.text"]
         answer_index = answer["answer.target"]
