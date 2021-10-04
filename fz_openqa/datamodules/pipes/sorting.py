@@ -34,12 +34,10 @@ class Sort(Pipe):
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         assert self.key in batch.keys()
-        index = np.argsort(batch[self.key])
-        if self.reversed:
-            if isinstance(index, Tensor):
-                index = index.flip(0)
-            else:
-                index = index[::-1]
+        values = batch[self.key]
+        index = sorted(
+            range(len(values)), key=values.__getitem__, reverse=self.reversed
+        )
 
         batch.update(
             {
