@@ -58,4 +58,4 @@ class ExactMatch(RelevanceClassifier):
         doc_text = document["document.text"]
         answer_index = answer["answer.target"]
         answer_text = answer["answer.text"][answer_index]
-        return bool(answer_text in doc_text)
+        return bool(answer_text.lower() in doc_text.lower())
