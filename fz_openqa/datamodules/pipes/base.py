@@ -18,7 +18,8 @@ class Pipe:
     modify and returns a batch of data.
     """
 
-    def eg(self, batch: Batch, idx: int, filter_op: Optional[Callable] = None):
+    @staticmethod
+    def eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
         """Extract example `idx` from a batch, potentially filter the keys"""
         filter_op = filter_op or always_true
         return {k: v[idx] for k, v in batch.items() if filter_op(k)}

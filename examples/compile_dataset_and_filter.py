@@ -1,8 +1,5 @@
-from time import time
-
 import datasets
 import rich
-from rich.progress import track
 
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
@@ -11,7 +8,7 @@ from fz_openqa.datamodules.pipes import ExactMatch, Pipe
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 
-datasets.set_caching_enabled(False)
+datasets.set_caching_enabled(True)
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
@@ -25,16 +22,16 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      filter_mode=None),
                             verbose=False,
                             num_proc=4,
-                            use_subset=True)
+                            use_subset=False)
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
-                     num_proc=1, # todo: increase to 4
+                     num_proc=1,  # todo: increase to 4
                      use_subset=True,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
-                     n_documents=10,
+                     n_documents=100,
                      # retrieve the whole training set
                      train_batch_size=10,
                      use_corpus_sampler=False,
@@ -54,7 +51,7 @@ rich.print(f"[green]>> index is built.")
 print(get_separator())
 
 # Compile the dataset
-dm.compile_dataset()
+dm.compile_dataset(filter_unmatched=True)
 rich.print(f"=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 print(get_separator())
@@ -63,11 +60,12 @@ pprint_batch(dm.compiled_dataset["train"][0], "Compiled dataset example")
 batch = next(iter(dm.train_dataloader()))
 pprint_batch(batch, "compiled batch")
 
-
 for idx in range(3):
     print(get_separator("-"))
     eg = Pipe.eg(batch, idx=idx)
-    rich.print(f"#{idx}: [magenta]{eg['question.text']}")
-    for j in range(min(len(eg['document.text']), 10)):
-        rich.print(f"# index={j}, score={eg['document.retrieval_score'][j]:.2f}, , is_positive={eg['document.is_positive'][j]}")
+    rich.print(f"#{idx}: [magenta]{eg['answer.text'][eg['answer.target']]}\n"
+               f"[cyan]{eg['question.text']}")
+    for j in range(min(len(eg['document.text']), 3)):
+        rich.print(
+            f"# index={j}, score={eg['document.retrieval_score'][j]:.2f}, , is_positive={eg['document.is_positive'][j]}")
         print(eg['document.text'][j].strip())

@@ -7,12 +7,15 @@ from typing import Union
 import rich
 import torch
 from datasets import Dataset
+from datasets import DatasetDict
 from datasets import Split
+from datasets.fingerprint import update_fingerprint
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
 from .corpus_dm import CorpusDataModule
 from .datasets import medqa
+from .index import ElasticSearchIndex
 from .pipes import AddPrefix
 from .pipes import Apply
 from .pipes import ApplyToAll
@@ -20,13 +23,13 @@ from .pipes import Collate
 from .pipes import DeCollate
 from .pipes import FilterKeys
 from .pipes import Gate
+from .pipes import Identity
 from .pipes import Itemize
 from .pipes import Lambda
 from .pipes import Nest
 from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
-from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
 from .pipes import Rename
 from .pipes import ReplaceInKeys
@@ -367,24 +370,29 @@ class MedQaDataModule(BaseDataModule):
 
         return batch
 
-    def compile_dataset(self):
+    def compile_dataset(self, filter_unmatched: bool = True):
         """Process the whole dataset with `collate_fn` and store
         into `self.compiled_dataset`"""
 
         pipe = Sequential(
-            PrintBatch(header="compile in"),
             DeCollate(),
             self.collate_fn,
-            PrintBatch(header="collate_fn out"),
             Itemize(),
         )
 
         # Compile the dataset
-        self.compiled_dataset = self.dataset.map(
-            pipe,
-            batched=True,
-            num_proc=self.num_proc,
-            desc="Compiling dataset",
+        fingerprints = self.infer_compile_fingerprint()
+        self.compiled_dataset = DatasetDict(
+            {
+                key: dset.map(
+                    pipe,
+                    batched=True,
+                    num_proc=self.num_proc,
+                    desc="Compiling dataset",
+                    new_fingerprint=fingerprints.get(key, None),
+                )
+                for key, dset in self.dataset.items()
+            }
         )
 
         # cast as tensors
@@ -395,3 +403,40 @@ class MedQaDataModule(BaseDataModule):
         self.compiled_dataset.set_format(
             type="torch", columns=pt_cols, output_all_columns=True
         )
+
+        # filter question without positive documents
+        if filter_unmatched:
+            prev_lengths = {
+                k: len(v) for k, v in self.compiled_dataset.items()
+            }
+            self.compiled_dataset = self.compiled_dataset.filter(
+                lambda row: sum(row["document.is_positive"]) > 0
+            )
+            new_lengths = {k: len(v) for k, v in self.compiled_dataset.items()}
+            if self.verbose:
+                print(get_separator())
+                rich.print(
+                    "> Dataset size after filtering questions with no positive document:"
+                )
+                for key in new_lengths.keys():
+                    rich.print(
+                        f">  - {key}: {new_lengths[key]} ({100 * new_lengths[key] / prev_lengths[key]:.2f}%)"
+                    )
+                print(get_separator())
+
+    def infer_compile_fingerprint(self):
+        if isinstance(self.corpus._index, ElasticSearchIndex):
+            new_fingerprint = {
+                k: update_fingerprint(
+                    dset._fingerprint,
+                    Identity(),
+                    {
+                        "k": self.n_documents,
+                        "es_index": self.corpus._index.index_name,
+                    },
+                )
+                for k, dset in self.dataset.items()
+            }
+        else:
+            new_fingerprint = {}
+        return new_fingerprint
