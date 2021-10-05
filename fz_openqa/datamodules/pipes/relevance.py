@@ -1,19 +1,15 @@
+import re
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
+import spacy
 import torch
 
+from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
-from .static import DISCARD_TUIs
-
-import re
-import spacy
-import scispacy
-from spacy import displacy
-from scispacy.abbreviation import AbbreviationDetector
-from scispacy.linking import EntityLinker
 
 
 class RelevanceClassifier(Pipe):
@@ -58,32 +54,63 @@ class RelevanceClassifier(Pipe):
 
 
 class MetaMapMatch(RelevanceClassifier):
-    def __init__(self, model_name:Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
+        super().__init__()
+        from scispacy.abbreviation import AbbreviationDetector
+        from scispacy.linking import EntityLinker
+
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
-        self.model.add_pipe("scispacy_linker", config={"resolve_abbreviations": True, "linker_name": "umls", "max_entities_per_mention":1})
+        self.model.add_pipe(
+            "scispacy_linker",
+            config={
+                "resolve_abbreviations": True,
+                "linker_name": "umls",
+                "max_entities_per_mention": 1,
+            },
+        )
         self.linker = self.model.get_pipe("scispacy_linker")
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
     ) -> bool:
-
         doc_text = document["document.text"]
         answer_index = answer["answer.target"]
         answer_aliases = [answer["answer.text"][answer_index]]
         answer_cui = answer["answer.cui"][0]
         answer_aliases.extend(set(self.linker.kb.cui_to_entity[answer_cui][2]))
 
-        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
+        return bool(
+            re.findall(r"(?=(" + "|".join(answer_aliases) + r"))", doc_text)
+        )
+
 
 class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name:Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
+        super().__init__()
+        from scispacy.abbreviation import AbbreviationDetector
+        from scispacy.linking import EntityLinker
+
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
-        self.model.add_pipe("scispacy_linker", config={"resolve_abbreviations": True, "linker_name": "umls", "max_entities_per_mention":1})
+        self.model.add_pipe(
+            "scispacy_linker",
+            config={
+                "resolve_abbreviations": True,
+                "linker_name": "umls",
+                "max_entities_per_mention": 1,
+            },
+        )
         self.linker = self.model.get_pipe("scispacy_linker")
+
+    def extract_aliases(self, entity) -> List[str]:
+        entity_tui = self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0]
+        if entity_tui not in DISCARD_TUIs:
+            return self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]
+        else:
+            return []
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
@@ -95,17 +122,26 @@ class SciSpacyMatch(RelevanceClassifier):
 
         scispacy_doc = self.model(answer_text)
 
-        answer_aliases = []
+        answer_aliases = set()
         for entity in scispacy_doc.ents:
-            if self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0] not in DISCARD_TUIs:
-                answer_aliases.extend(set(self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]))
+            e_aliases = self.extract_aliases(entity)
+            answer_aliases.union(set(e_aliases))
 
-        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
+        # lower case
+        answer_aliases = (txt.lower() for txt in answer_aliases)
+        doc_text = doc_text.lower()
+
+        # match
+        return any(alias in doc_text for alias in answer_aliases)
+        # return bool(re.findall(r"(?=(" + '|'.join(answer_aliases) + r"))", doc_text.lower()))
+
+
 class ExactMatch(RelevanceClassifier):
+    """Match the lower-cased answer string in the document."""
+
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
     ) -> bool:
-
         doc_text = document["document.text"]
         answer_index = answer["answer.target"]
         answer_text = answer["answer.text"][answer_index]
