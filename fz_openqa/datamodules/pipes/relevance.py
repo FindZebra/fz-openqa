@@ -10,10 +10,11 @@ from .static import DISCARD_TUIs
 
 import re
 import spacy
-import scispacy
-from spacy import displacy
 from scispacy.abbreviation import AbbreviationDetector
 from scispacy.linking import EntityLinker
+
+import numpy as np
+np.warnings.filterwarnings('error', category=np.VisibleDeprecationWarning)
 
 
 class RelevanceClassifier(Pipe):
@@ -95,7 +96,7 @@ class SciSpacyMatch(RelevanceClassifier):
 
         scispacy_doc = self.model(answer_text)
 
-        answer_aliases = []
+        answer_aliases = [answer["answer.text"][answer_index]]
         for entity in scispacy_doc.ents:
             if self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0] not in DISCARD_TUIs:
                 answer_aliases.extend(set(self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]))
