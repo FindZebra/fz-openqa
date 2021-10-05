@@ -4,12 +4,18 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import numpy as np
+import rich
 import spacy
 import torch
+from scispacy.abbreviation import AbbreviationDetector
+from scispacy.linking import EntityLinker
 
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+
+np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 
 class RelevanceClassifier(Pipe):
@@ -56,8 +62,8 @@ class RelevanceClassifier(Pipe):
 class MetaMapMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
         super().__init__()
-        from scispacy.abbreviation import AbbreviationDetector
-        from scispacy.linking import EntityLinker
+        # from scispacy.abbreviation import AbbreviationDetector
+        # from scispacy.linking import EntityLinker
 
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
@@ -80,17 +86,20 @@ class MetaMapMatch(RelevanceClassifier):
         answer_aliases = [answer["answer.text"][answer_index]]
         answer_cui = answer["answer.cui"][0]
         answer_aliases.extend(set(self.linker.kb.cui_to_entity[answer_cui][2]))
-
         return bool(
-            re.findall(r"(?=(" + "|".join(answer_aliases) + r"))", doc_text)
+            re.findall(
+                r"(?=(" + "|".join(answer_aliases) + r"))",
+                doc_text,
+                re.IGNORECASE,
+            )
         )
 
 
 class SciSpacyMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
         super().__init__()
-        from scispacy.abbreviation import AbbreviationDetector
-        from scispacy.linking import EntityLinker
+        # from scispacy.abbreviation import AbbreviationDetector
+        # from scispacy.linking import EntityLinker
 
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
@@ -122,18 +131,18 @@ class SciSpacyMatch(RelevanceClassifier):
 
         scispacy_doc = self.model(answer_text)
 
-        answer_aliases = set()
+        answer_aliases = {answer["answer.text"][answer_index]}
         for entity in scispacy_doc.ents:
-            e_aliases = self.extract_aliases(entity)
-            answer_aliases.union(set(e_aliases))
+            e_aliases = set(self.extract_aliases(entity))
+            answer_aliases = set.union(answer_aliases, e_aliases)
 
-        # lower case
-        answer_aliases = (txt.lower() for txt in answer_aliases)
-        doc_text = doc_text.lower()
-
-        # match
-        return any(alias in doc_text for alias in answer_aliases)
-        # return bool(re.findall(r"(?=(" + '|'.join(answer_aliases) + r"))", doc_text.lower()))
+        return bool(
+            re.findall(
+                r"(?=(" + "|".join(answer_aliases) + r"))",
+                doc_text,
+                re.IGNORECASE,
+            )
+        )
 
 
 class ExactMatch(RelevanceClassifier):
