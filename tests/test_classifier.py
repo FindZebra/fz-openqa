@@ -1,5 +1,7 @@
 from unittest import TestCase
 
+import torch
+
 from fz_openqa.datamodules.pipes.relevance import MetaMapMatch, SciSpacyMatch, ExactMatch
 
 class TestClassifier(TestCase):

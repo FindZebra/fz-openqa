@@ -59,7 +59,7 @@ class RelevanceClassifier(Pipe):
 
 
 class MetaMapMatch(RelevanceClassifier):
-    def __init__(self, model_name:Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name:Optional[str] = "en_core_sci_lg", **kwargs):
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
@@ -79,7 +79,7 @@ class MetaMapMatch(RelevanceClassifier):
         return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text, re.IGNORECASE))
 
 class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name:Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name:Optional[str] = "en_core_sci_lg", **kwargs):
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
