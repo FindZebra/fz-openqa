@@ -26,7 +26,6 @@ from .pipes import Pipe
 from .pipes import RelevanceClassifier
 from .pipes import ReplaceInKeys
 from .pipes import Sequential
-from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
@@ -105,6 +104,10 @@ class MedQaDataModule(BaseDataModule):
 
         if self.corpus is not None:
             self.corpus.setup()
+            assert self.n_documents <= len(self.corpus.dataset), (
+                f"The corpus is too small to retrieve that many documents\n:"
+                f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
+            )
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.

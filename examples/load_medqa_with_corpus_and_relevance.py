@@ -35,7 +35,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
-                     n_documents=1000,
+                     n_documents=100,
                      # retrieve the whole training set
                      train_batch_size=10,
                      relevance_classifier=ExactMatch(
