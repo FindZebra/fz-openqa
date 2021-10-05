@@ -21,11 +21,11 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             index=ElasticSearchIndex(index_key="idx",
                                                      text_key="document.text",
                                                      query_key="question.text",
-                                                     filter_mode="scispacy",
+                                                     filter_mode=None,
                                                      verbose=False),
                             verbose=False,
                             num_proc=4,
-                            use_subset=False,
+                            use_subset=True,
                             train_batch_size=3)
 
 # load the QA dataset

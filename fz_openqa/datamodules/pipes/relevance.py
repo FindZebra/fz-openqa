@@ -1,12 +1,14 @@
 import re
 from typing import Any
 from typing import Dict
-from typing import List
+from typing import Iterable
 from typing import Optional
 
 import numpy as np
+import rich
 import spacy
 import torch
+from scispacy.linking_utils import Entity
 
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
@@ -111,12 +113,30 @@ class SciSpacyMatch(RelevanceClassifier):
         )
         self.linker = self.model.get_pipe("scispacy_linker")
 
-    def extract_aliases(self, entity) -> List[str]:
-        entity_tui = self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0]
-        if entity_tui not in DISCARD_TUIs:
-            return self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]
-        else:
-            return []
+    def extract_aliases(self, entity) -> Iterable[str]:
+        # get the list of linked entity
+        linked_entities = self.get_linked_entities(entity)
+
+        # filter irrelevant entities based on TUIs
+        def keep_entity(ent: Entity) -> bool:
+            """
+            keep the entity if at least one of the TUIs is not in
+            the DISCARD_TUIs list.
+            # todo: is that the right behaviour?
+            """
+            return any(tui not in DISCARD_TUIs for tui in ent.types)
+
+        linked_entities = filter(lambda ent: keep_entity, linked_entities)
+
+        # return aliases
+        for linked_entity in linked_entities:
+            for alias in linked_entity.aliases:
+                yield alias
+
+    def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
+        for ent in entity._.kb_ents:
+            ent_str, _ = ent  # ent: (str, score)
+            yield self.linker.kb.cui_to_entity[ent_str]
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
@@ -133,13 +153,20 @@ class SciSpacyMatch(RelevanceClassifier):
             e_aliases = set(self.extract_aliases(entity))
             answer_aliases = set.union(answer_aliases, e_aliases)
 
-        return bool(
-            re.findall(
-                r"(?=(" + "|".join(answer_aliases) + r"))",
-                doc_text,
-                re.IGNORECASE,
-            )
+        # todo: investigate the aliases, some are too general
+        # rich.print(f">> aliases={answer_aliases}")
+
+        return any(
+            alias.lower() in doc_text.lower() for alias in answer_aliases
         )
+        # todo: fix this: crashes with re.error: nothing to repeat at position 33
+        # return bool(
+        #     re.findall(
+        #         r"(?=(" + "|".join(answer_aliases) + r"))",
+        #         doc_text,
+        #         re.IGNORECASE,
+        #     )
+        # )
 
 
 class ExactMatch(RelevanceClassifier):
