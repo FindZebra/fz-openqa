@@ -60,11 +60,10 @@ class RelevanceClassifier(Pipe):
 
 
 class MetaMapMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__()
         # from scispacy.abbreviation import AbbreviationDetector
         # from scispacy.linking import EntityLinker
-
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
@@ -96,11 +95,10 @@ class MetaMapMatch(RelevanceClassifier):
 
 
 class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg"):
+    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__()
         # from scispacy.abbreviation import AbbreviationDetector
         # from scispacy.linking import EntityLinker
-
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
         self.model.add_pipe("abbreviation_detector")
