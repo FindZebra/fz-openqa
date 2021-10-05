@@ -30,8 +30,8 @@ class TestClassifier(TestCase):
         self.assertTrue(ExactMatch.classify(answer = self.pos_answer, document = self.pos_document))
         #self.assertFalse(ExactMatch.classify(answer = self.neg_answer, document = self.neg_document))
 
-    def test_metamap_match(self):
-        self.assertTrue(MetaMapMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
+    #def test_metamap_match(self):
+    #    self.assertTrue(MetaMapMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
 
-    def test_scispacy_match(self):
-        self.assertTrue(SciSpacyMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
+    #def test_scispacy_match(self):
+    #    self.assertTrue(SciSpacyMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))

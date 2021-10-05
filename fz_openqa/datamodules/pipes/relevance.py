@@ -75,7 +75,7 @@ class MetaMapMatch(RelevanceClassifier):
         answer_cui = answer["answer.cui"][0]
         answer_aliases.extend(set(self.linker.kb.cui_to_entity[answer_cui][2]))
 
-        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
+        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text, re.IGNORECASE))
 
 class SciSpacyMatch(RelevanceClassifier):
     def __init__(self, model_name:Optional[str] = "en_core_sci_lg"):
@@ -100,7 +100,7 @@ class SciSpacyMatch(RelevanceClassifier):
             if self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][3][0] not in DISCARD_TUIs:
                 answer_aliases.extend(set(self.linker.kb.cui_to_entity[entity._.kb_ents[0][0]][2]))
 
-        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text))
+        return bool(re.findall(r"(?=("+'|'.join(answer_aliases)+r"))", doc_text, re.IGNORECASE))
 class ExactMatch(RelevanceClassifier):
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
