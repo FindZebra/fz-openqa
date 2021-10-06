@@ -1,10 +1,8 @@
-from random import choices
 from typing import List
 
-import rich
+import numpy as np
 
 from .base import Pipe
-from .base import PrintBatch
 from .nesting import Nested
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
@@ -52,7 +50,9 @@ class SelectDocsEg(Pipe):
         # get the positive indexes
         positive_idx = [i for i, x in enumerate(is_positive) if x]
         positive_idx = select_values(
-            positive_idx, k=self.max_pos_docs, mode=self.pos_select_mode
+            positive_idx,
+            k=min(self.max_pos_docs, len(positive_idx)),
+            mode=self.pos_select_mode,
         )
 
         # get the negative indexes
@@ -66,17 +66,26 @@ class SelectDocsEg(Pipe):
         # final index
         index = positive_idx + negative_idx
 
+        # check output
+        debug_str = (
+            f"The resulting index is smaller (N={len(index)}) "
+            f"than the expected size (total={self.total}). "
+            f"You probably need to increase `max_pos_docs` or "
+            f"reduce `total. "
+        )
+        assert len(index) == self.total, debug_str
+
+        # re-index and return
         return {k: reindex(v, index) for k, v in batch.items()}
 
 
 def select_values(
     values: List[int], *, k: int, mode: str = "first"
 ) -> List[int]:
-
     if mode == "first":
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return choices(values, k=k)
+        return [x for x in np.random.choice(values, size=k, replace=False)]
     else:
         raise ValueError(f"Unknown mode {mode}")

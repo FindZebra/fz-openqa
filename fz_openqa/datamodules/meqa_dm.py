@@ -89,6 +89,7 @@ class MedQaDataModule(BaseDataModule):
         corpus: Optional[BaseDataModule] = None,
         n_retrieved_documents: int = 0,
         n_documents: Optional[int] = None,
+        max_pos_docs: int = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
         **kwargs,
     ):
@@ -108,6 +109,7 @@ class MedQaDataModule(BaseDataModule):
 
         self.n_retrieved_documents = n_retrieved_documents
         self.n_documents = n_documents or n_retrieved_documents
+        self.max_pos_docs = max_pos_docs
         # the postprocessing pipe is applied after the documents are sampeld
         self.postprocessing = self.get_postprocessing_pipe(
             relevance_classifier
@@ -324,7 +326,9 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # select `n_documents`
-        selector = SelectDocs(total=self.n_documents, max_pos_docs=1)
+        selector = SelectDocs(
+            total=self.n_documents, max_pos_docs=self.max_pos_docs
+        )
 
         return Sequential(
             relevance_classifier,
