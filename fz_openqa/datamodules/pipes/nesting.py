@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from fz_openqa.datamodules.pipes.base import always_true
 from fz_openqa.datamodules.pipes.base import ApplyToAll
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -49,21 +50,18 @@ class Nested(Pipe):
 
     def __init__(self, pipe: Pipe, filter: Optional[Callable] = None):
         self.pipe = pipe
-        self.filter = filter
-
-    def filter_key(self, k: str) -> bool:
-        return self.filter is None or self.filter(k)
+        self.filter = filter or always_true
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
 
         exs = []
         for i in range(self.batch_size(batch)):
-            eg = self.eg(batch, i, filter_op=self.filter)
+            eg = self.get_eg(batch, i, filter_op=self.filter)
             eg = self.pipe(eg, **kwargs)
             exs += [eg]
 
-        types = {k: type(v) for k, v in batch.items() if self.filter_key(k)}
-        for key in filter(self.filter_key, batch.keys()):
+        types = {k: type(v) for k, v in batch.items() if self.filter(k)}
+        for key in filter(self.filter, batch.keys()):
             values = [eg[key] for eg in exs]
             values = reconcat(values, types[key])
 

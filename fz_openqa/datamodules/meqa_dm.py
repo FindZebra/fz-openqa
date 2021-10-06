@@ -33,13 +33,13 @@ from .pipes import Pipe
 from .pipes import RelevanceClassifier
 from .pipes import Rename
 from .pipes import ReplaceInKeys
+from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import Sort
 from .pipes import TokenizerPipe
 from .pipes.nesting import Flatten
 from .pipes.nesting import flatten_nested
 from .pipes.nesting import nested_list
-from .sampler.corpus_sampler import CorpusSampler
 from .utils import add_spec_token
 from .utils import get_column_names
 from .utils import HgDataset
@@ -86,24 +86,25 @@ class MedQaDataModule(BaseDataModule):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         corpus: Optional[BaseDataModule] = None,
-        n_documents: int = 0,
+        n_retrieved_documents: int = 0,
+        n_documents: Optional[int] = None,
         relevance_classifier: Optional[RelevanceClassifier] = None,
-        use_corpus_sampler: bool = False,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
         self.add_encoding_tokens = add_encoding_tokens
 
         # corpus object
-        if n_documents > 0:
+        if n_documents is not None:
+            assert n_retrieved_documents > 0
+        if n_retrieved_documents > 0:
             assert corpus is not None
         self.corpus = corpus
-        self.n_documents = n_documents
-        self.relevance_classifier = relevance_classifier
-        # sample the corpus, before or after the collate function
-        # when using the corpus sampler, documents are fetched for each question in __getitem__
-        # without corpus sampler, documents are fetched in the collate_fn (in batch).
-        self.use_corpus_sampler = use_corpus_sampler
+        self.n_retrieved_documents = n_retrieved_documents
+        self.n_documents = n_documents or n_retrieved_documents
+        self.postprocessing = self.get_postprocessing_pipe(
+            relevance_classifier
+        )
 
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
@@ -168,7 +169,7 @@ class MedQaDataModule(BaseDataModule):
                 add_special_tokens=False,
                 return_offsets_mapping=False,
             ),
-            ApplyToAll(partial(nested_list, stride=4)),
+            ApplyToAll(partial(nested_list, stride=self.n_options)),
             AddPrefix("answer."),
         )
         return answer_text_pipes
@@ -222,11 +223,11 @@ class MedQaDataModule(BaseDataModule):
             ReplaceInKeys("answer.", ""),
             Flatten(),
             Lambda(lambda batch: self.tokenizer.pad(batch)),
-            Nest(stride=4),
+            Nest(stride=self.n_options),
             AddPrefix("answer."),
         )
 
-        # et the pipe to process the sampled documents only if available (Gate)
+        # process documents only if they are available
         documents_pipe = Gate(
             lambda exs: any("document." in k for eg in exs for k in eg.keys()),
             self.documents_collate_pipe(),
@@ -296,25 +297,35 @@ class MedQaDataModule(BaseDataModule):
     def add_documents_to_batch(self, batch):
         """Query the corpus for a given batch of questions and collate."""
         corpus_batch = self.corpus.search_index(
-            query=batch, k=self.n_documents
+            query=batch, k=self.n_retrieved_documents
         )
         corpus_batch = Rename({"idx": "document.global_idx"})(corpus_batch)
         batch.update(**corpus_batch)
+        return self.postprocessing(batch)
 
-        if self.relevance_classifier is not None:
-            batch = self.relevance_classifier(batch)
-            batch = self.get_doc_sorting_pipe()(batch)
-        return batch
+    def get_postprocessing_pipe(
+        self, relevance_classifier: RelevanceClassifier
+    ) -> Pipe:
+        if relevance_classifier is None:
+            return Identity()
 
-    def get_doc_sorting_pipe(self):
-        sort_pipe = Nested(
+        # sort the documents based on score and `is_positive`
+        sorter = Nested(
             Sequential(
                 Sort(key="document.retrieval_score"),
                 Sort(key="document.is_positive"),
             ),
             filter=lambda key: str(key).startswith("document."),
         )
-        return sort_pipe
+
+        # select `n_documents`
+        selector = SelectDocs(total=self.n_documents, max_pos_docs=1)
+
+        return Sequential(
+            relevance_classifier,
+            sorter,
+            selector,
+        )
 
     def display_one_sample(self, example: Batch):
         """Decode and print one example from the batch"""
@@ -345,27 +356,18 @@ class MedQaDataModule(BaseDataModule):
             return super().get_dataset(split, self.compiled_dataset)
 
         # retrieve the dataset split
-        dataset = super().get_dataset(split)
-
-        # potentially sample the documents
-        if self.use_corpus_sampler:
-            if self.n_documents > 0 and self.corpus.dataset is not None:
-                dataset = CorpusSampler(
-                    dataset,
-                    corpus=self.corpus,
-                    n_documents=self.n_documents,
-                    relevance_classifier=self.relevance_classifier,
-                )
-
-        return dataset
+        return super().get_dataset(split)
 
     def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.
         Concatenating sequences with different length requires padding them."""
         batch = self.collate_pipe(examples)
 
-        if not self.use_corpus_sampler and self.compiled_dataset is None:
-            if self.n_documents > 0 and self.corpus.dataset is not None:
+        if self.compiled_dataset is None:
+            if (
+                self.n_retrieved_documents > 0
+                and self.corpus.dataset is not None
+            ):
                 batch = self.add_documents_to_batch(batch)
 
         return batch
@@ -374,6 +376,7 @@ class MedQaDataModule(BaseDataModule):
         """Process the whole dataset with `collate_fn` and store
         into `self.compiled_dataset`"""
 
+        # todo: clean padding
         pipe = Sequential(
             DeCollate(),
             self.collate_fn,
@@ -395,7 +398,39 @@ class MedQaDataModule(BaseDataModule):
             }
         )
 
-        # cast as tensors
+        # cast tensor values
+        self.cast_compiled_dataset()
+
+        if filter_unmatched:
+            self.compiled_dataset = self.filter_unmatched_questions(
+                self.compiled_dataset
+            )
+
+        # print the difference in length for each split
+        if self.verbose:
+            # store the previous split sizes
+            prev_lengths = {k: len(v) for k, v in self.dataset.items()}
+            new_lengths = {k: len(v) for k, v in self.compiled_dataset.items()}
+
+            print(get_separator())
+            rich.print(
+                "> Dataset size after filtering questions with no positive document:"
+            )
+            for key in new_lengths.keys():
+                rich.print(
+                    f">  - {key}: {new_lengths[key]} ({100 * new_lengths[key] / prev_lengths[key]:.2f}%)"
+                )
+            print(get_separator())
+
+    def filter_unmatched_questions(self, dataset: DatasetDict):
+        def _filter(row):
+            n = sum(row["document.is_positive"])
+            return n > 0
+
+        # filter the datasets
+        return dataset.filter(_filter)
+
+    def cast_compiled_dataset(self):
         pt_cols = self.pt_attributes + self.corpus.pt_attributes
         pt_cols = [
             c for c in pt_cols if c in get_column_names(self.compiled_dataset)
@@ -404,32 +439,12 @@ class MedQaDataModule(BaseDataModule):
             type="torch", columns=pt_cols, output_all_columns=True
         )
 
-        # filter question without positive documents
-        if filter_unmatched:
-            prev_lengths = {
-                k: len(v) for k, v in self.compiled_dataset.items()
-            }
-            self.compiled_dataset = self.compiled_dataset.filter(
-                lambda row: sum(row["document.is_positive"]) > 0
-            )
-            new_lengths = {k: len(v) for k, v in self.compiled_dataset.items()}
-            if self.verbose:
-                print(get_separator())
-                rich.print(
-                    "> Dataset size after filtering questions with no positive document:"
-                )
-                for key in new_lengths.keys():
-                    rich.print(
-                        f">  - {key}: {new_lengths[key]} ({100 * new_lengths[key] / prev_lengths[key]:.2f}%)"
-                    )
-                print(get_separator())
-
     def infer_compile_fingerprint(self):
         if isinstance(self.corpus._index, ElasticSearchIndex):
             new_fingerprint = {
                 k: update_fingerprint(
                     dset._fingerprint,
-                    Identity(),
+                    self.postprocessing,
                     {
                         "k": self.n_documents,
                         "es_index": self.corpus._index.index_name,

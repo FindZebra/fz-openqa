@@ -42,6 +42,18 @@ class Parallel(Pipe):
         return output
 
 
+class Update(Pipe):
+    def __init__(self, pipe: Pipe):
+        self.pipe = pipe
+
+    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+        """Call the pipes sequentially."""
+
+        batch.update(self.pipe(batch, **kwargs))
+
+        return batch
+
+
 class Gate(Pipe):
     """Execute the pipe if the condition is valid, else return {}"""
 

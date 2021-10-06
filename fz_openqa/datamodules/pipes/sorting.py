@@ -5,6 +5,7 @@ from typing import Optional
 import numpy as np
 from torch import Tensor
 
+from .base import always_true
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -29,21 +30,19 @@ class Sort(Pipe):
         reversed: bool = True,
     ):
         self.key = key
-        self.filter = filter
+        self.filter = filter or always_true
         self.reversed = reversed
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        assert self.key in batch.keys()
+        assert (
+            self.key in batch.keys()
+        ), f"key={self.key} not in batch with keys={list(batch.keys())}"
         values = batch[self.key]
         index = sorted(
             range(len(values)), key=values.__getitem__, reverse=self.reversed
         )
 
         batch.update(
-            {
-                k: reindex(v, index)
-                for k, v in batch.items()
-                if self.filter is None or self.filter(k)
-            }
+            {k: reindex(v, index) for k, v in batch.items() if self.filter(k)}
         )
         return batch

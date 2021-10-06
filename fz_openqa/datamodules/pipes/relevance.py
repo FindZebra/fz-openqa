@@ -25,12 +25,12 @@ class RelevanceClassifier(Pipe):
         results = []
         batch_size = self.batch_size(batch)
         for i in range(batch_size):
-            eg_ans_i = self.eg(
+            eg_ans_i = self.get_eg(
                 batch,
                 i,
                 filter_op=lambda key: str(key).startswith(self.answer_prefix),
             )
-            eg_doc_i = self.eg(
+            eg_doc_i = self.get_eg(
                 batch,
                 i,
                 filter_op=lambda key: str(key).startswith(

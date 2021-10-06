@@ -17,6 +17,9 @@ from .collate import DeCollate
 from .connect import Gate
 from .connect import Parallel
 from .connect import Sequential
+from .connect import Update
+from .documents import SelectDocs
+from .filtering import FilterExamples
 from .nesting import Flatten
 from .nesting import Nest
 from .nesting import Nested
