@@ -26,12 +26,14 @@ from .nesting import Nested
 from .passage import GeneratePassages
 from .relevance import ExactMatch
 from .relevance import RelevanceClassifier
+from .search import SearchCorpus
 from .sorting import Sort
 from .text_filtering import MetaMapFilter
 from .text_filtering import SciSpacyFilter
 from .text_filtering import StopWordsFilter
 from .text_filtering import TextFilter
 from .text_ops import TextCleaner
+from .tokenizer import CleanupPadTokens
 from .tokenizer import TokenizerPipe
 from .torch import Forward
 from .torch import Itemize

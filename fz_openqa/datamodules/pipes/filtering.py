@@ -1,10 +1,8 @@
 from typing import Callable
 
-from . import Gate
-from . import Nested
-from ...utils.datastruct import Batch
 from .base import Pipe
 from .nesting import reconcat
+from fz_openqa.utils.datastruct import Batch
 
 
 class FilterExamples(Pipe):

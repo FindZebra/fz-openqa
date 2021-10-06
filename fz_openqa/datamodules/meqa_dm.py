@@ -1,6 +1,6 @@
 from functools import partial
 from typing import Callable
-from typing import List
+from typing import Dict
 from typing import Optional
 from typing import Union
 
@@ -31,8 +31,8 @@ from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import RelevanceClassifier
-from .pipes import Rename
 from .pipes import ReplaceInKeys
+from .pipes import SearchCorpus
 from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import Sort
@@ -40,6 +40,7 @@ from .pipes import TokenizerPipe
 from .pipes.nesting import Flatten
 from .pipes.nesting import flatten_nested
 from .pipes.nesting import nested_list
+from .pipes.tokenizer import CleanupPadTokens
 from .utils import add_spec_token
 from .utils import get_column_names
 from .utils import HgDataset
@@ -95,13 +96,19 @@ class MedQaDataModule(BaseDataModule):
         self.add_encoding_tokens = add_encoding_tokens
 
         # corpus object
+        self.corpus = corpus
+
+        # document retrieval
         if n_documents is not None:
             assert n_retrieved_documents > 0
+            assert n_documents <= n_retrieved_documents
+
         if n_retrieved_documents > 0:
             assert corpus is not None
-        self.corpus = corpus
+
         self.n_retrieved_documents = n_retrieved_documents
         self.n_documents = n_documents or n_retrieved_documents
+        # the postprocessing pipe is applied after the documents are sampeld
         self.postprocessing = self.get_postprocessing_pipe(
             relevance_classifier
         )
@@ -227,23 +234,28 @@ class MedQaDataModule(BaseDataModule):
             AddPrefix("answer."),
         )
 
-        # process documents only if they are available
-        documents_pipe = Gate(
-            lambda exs: any("document." in k for eg in exs for k in eg.keys()),
-            self.documents_collate_pipe(),
+        # search corpus pipe
+        search_docs_pipe = Gate(
+            self.n_retrieved_documents > 0,
+            SearchCorpus(self.corpus, k=self.n_retrieved_documents),
         )
 
-        return Parallel(
-            raw_text_pipe,
-            simple_attr_pipe,
-            question_pipe,
-            answer_pipe,
-            documents_pipe,
+        return Sequential(
+            Parallel(
+                raw_text_pipe, simple_attr_pipe, question_pipe, answer_pipe
+            ),
+            search_docs_pipe,
+            self.postprocessing,
         )
 
     def documents_collate_pipe(self):
         """
         Build a pipe to collate a batch of retrieved document.
+        This is used only if documents are available in each example returned by
+        `dataset.__getitem__` and not use if documents are retrieved
+        in the `collate_fn`.
+
+        Unused at the moment.
         """
         # get the raw text
         raw_text_pipe = FilterKeys(lambda key: key in ["document.text"])
@@ -294,18 +306,11 @@ class MedQaDataModule(BaseDataModule):
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)
 
-    def add_documents_to_batch(self, batch):
-        """Query the corpus for a given batch of questions and collate."""
-        corpus_batch = self.corpus.search_index(
-            query=batch, k=self.n_retrieved_documents
-        )
-        corpus_batch = Rename({"idx": "document.global_idx"})(corpus_batch)
-        batch.update(**corpus_batch)
-        return self.postprocessing(batch)
-
     def get_postprocessing_pipe(
         self, relevance_classifier: RelevanceClassifier
     ) -> Pipe:
+        """Get the pipe that classify documents as `is_positive`,
+        sort them and select `n_documents` among the `n_retrieved_docs`"""
         if relevance_classifier is None:
             return Identity()
 
@@ -349,42 +354,45 @@ class MedQaDataModule(BaseDataModule):
 
     def get_dataset(self, split: Union[str, Split]) -> Dataset:
         """Return the dataset corresponding to the split,
-        or the dataset iteself if there is no split."""
+        or the dataset itself if there is no split."""
 
-        # if the dataset is compiled, return its split
-        if self.compiled_dataset is not None:
-            return super().get_dataset(split, self.compiled_dataset)
+        # use the compiled dataset if available
+        dset = self.compiled_dataset or self.dataset
 
         # retrieve the dataset split
-        return super().get_dataset(split)
-
-    def collate_fn(self, examples: List[Batch]) -> Batch:
-        """The function that is used to merge examples into a batch.
-        Concatenating sequences with different length requires padding them."""
-        batch = self.collate_pipe(examples)
-
-        if self.compiled_dataset is None:
-            if (
-                self.n_retrieved_documents > 0
-                and self.corpus.dataset is not None
-            ):
-                batch = self.add_documents_to_batch(batch)
-
-        return batch
+        return super().get_dataset(split, dset)
 
     def compile_dataset(self, filter_unmatched: bool = True):
         """Process the whole dataset with `collate_fn` and store
         into `self.compiled_dataset`"""
 
-        # todo: clean padding
         pipe = Sequential(
             DeCollate(),
-            self.collate_fn,
+            self.collate_pipe,
             Itemize(),
+            CleanupPadTokens(self.tokenizer),
         )
 
+        # Infer the fingerprint when this cannot be done automatically
+        if isinstance(self.corpus._index, ElasticSearchIndex):
+            op = Sequential(
+                DeCollate(),
+                # self.collate_pipe,
+                Itemize(),
+                CleanupPadTokens(self.tokenizer),
+            )
+            params = {
+                "k": self.n_documents,
+                "es_index": self.corpus._index.index_name,
+            }
+            fingerprints = self.generate_fingerprint(op, params)
+        else:
+            fingerprints = {}
+
         # Compile the dataset
-        fingerprints = self.infer_compile_fingerprint()
+        rich.print(
+            f"> storing compiled dataset with fingerprint=`{fingerprints}`"
+        )
         self.compiled_dataset = DatasetDict(
             {
                 key: dset.map(
@@ -402,25 +410,14 @@ class MedQaDataModule(BaseDataModule):
         self.cast_compiled_dataset()
 
         if filter_unmatched:
+            # filter out questions that are not match to any  positive document
             self.compiled_dataset = self.filter_unmatched_questions(
                 self.compiled_dataset
             )
 
         # print the difference in length for each split
         if self.verbose:
-            # store the previous split sizes
-            prev_lengths = {k: len(v) for k, v in self.dataset.items()}
-            new_lengths = {k: len(v) for k, v in self.compiled_dataset.items()}
-
-            print(get_separator())
-            rich.print(
-                "> Dataset size after filtering questions with no positive document:"
-            )
-            for key in new_lengths.keys():
-                rich.print(
-                    f">  - {key}: {new_lengths[key]} ({100 * new_lengths[key] / prev_lengths[key]:.2f}%)"
-                )
-            print(get_separator())
+            print_size_difference(self.dataset, self.compiled_dataset)
 
     def filter_unmatched_questions(self, dataset: DatasetDict):
         def _filter(row):
@@ -439,19 +436,24 @@ class MedQaDataModule(BaseDataModule):
             type="torch", columns=pt_cols, output_all_columns=True
         )
 
-    def infer_compile_fingerprint(self):
-        if isinstance(self.corpus._index, ElasticSearchIndex):
-            new_fingerprint = {
-                k: update_fingerprint(
-                    dset._fingerprint,
-                    self.postprocessing,
-                    {
-                        "k": self.n_documents,
-                        "es_index": self.corpus._index.index_name,
-                    },
-                )
-                for k, dset in self.dataset.items()
-            }
-        else:
-            new_fingerprint = {}
-        return new_fingerprint
+    def generate_fingerprint(self, op: Callable, params: Dict):
+        return {
+            k: update_fingerprint(
+                dset._fingerprint,
+                op,
+                params,
+            )
+            for k, dset in self.dataset.items()
+        }
+
+
+def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
+    # store the previous split sizes
+    prev_lengths = {k: len(v) for k, v in old_dataset.items()}
+    new_lengths = {k: len(v) for k, v in new_dataset.items()}
+    print(get_separator())
+    rich.print("> New dataset size:")
+    for key in new_lengths.keys():
+        ratio = new_lengths[key] / prev_lengths[key]
+        rich.print(f">  - {key}: {new_lengths[key]} ({100 * ratio:.2f}%)")
+    print(get_separator())
