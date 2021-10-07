@@ -9,13 +9,12 @@ import rich
 import spacy
 import torch
 from scispacy.linking_utils import Entity
+from scispacy.abbreviation import AbbreviationDetector  # type: ignore
+from scispacy.linking import EntityLinker  # type: ignore
 
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
-
-np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
-
 
 class RelevanceClassifier(Pipe):
     def __init__(
@@ -61,7 +60,6 @@ class RelevanceClassifier(Pipe):
 class MetaMapMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__()
-        from scispacy.abbreviation import AbbreviationDetector  # type: ignore
         from scispacy.linking import EntityLinker  # type: ignore
 
         self.model_name = model_name
@@ -76,6 +74,9 @@ class MetaMapMatch(RelevanceClassifier):
             },
         )
         self.linker = self.model.get_pipe("scispacy_linker")
+    
+    def get_linked_entities(self, cui: str) -> Iterable[Entity]:
+        yield self.linker.kb.cui_to_entity[cui]
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
@@ -84,29 +85,28 @@ class MetaMapMatch(RelevanceClassifier):
         answer_index = answer["answer.target"]
         answer_aliases = [answer["answer.text"][answer_index]]
         answer_cui = answer["answer.cui"][0]
-        answer_aliases.extend(set(self.linker.kb.cui_to_entity[answer_cui][2]))
+        answer_synonyms = answer["answer.synonyms"]
+
+        e_aliases = self.linker.kb.cui_to_entity[answer_cui][2]
+
+        answer_aliases = set.union(answer_aliases, answer_synonyms, e_aliases)
+        
         return bool(
-            re.findall(
-                r"(?=(" + "|".join(answer_aliases) + r"))",
-                doc_text,
-                re.IGNORECASE,
-            )
+            re.search(
+                re.compile('|'.join(re.escape(x) for x in answer_aliases), re.IGNORECASE)
+                , doc_text)
         )
 
 
 class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
+    def __init__(self, model_name: Optional[str] = "en_ner_bc5cdr_md", **kwargs):
         super().__init__()
-        from scispacy.abbreviation import AbbreviationDetector  # type: ignore
-        from scispacy.linking import EntityLinker  # type: ignore
 
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
-        self.model.add_pipe("abbreviation_detector")
         self.model.add_pipe(
             "scispacy_linker",
             config={
-                "resolve_abbreviations": True,
                 "linker_name": "umls",
                 "max_entities_per_mention": 1,
             },
@@ -122,7 +122,7 @@ class SciSpacyMatch(RelevanceClassifier):
             """
             keep the entity if at least one of the TUIs is not in
             the DISCARD_TUIs list.
-            # todo: is that the right behaviour?
+            # todo: is that the right behaviour? No, only return those entities not associated to a TUI in the DISCARD_TUIs list
             """
             
             return bool(tui not in DISCARD_TUIs for tui in ent.types)
@@ -146,28 +146,33 @@ class SciSpacyMatch(RelevanceClassifier):
         doc_text = document["document.text"]
         answer_index = answer["answer.target"]
         answer_text = answer["answer.text"][answer_index]
+        answer_synonyms = answer["answer.synonyms"]
 
         scispacy_doc = self.model(answer_text)
 
         answer_aliases = {answer["answer.text"][answer_index]}
+        
         for entity in scispacy_doc.ents:
             e_aliases = set(self.extract_aliases(entity))
-            answer_aliases = set.union(answer_aliases, e_aliases)
+            answer_aliases = set.union(answer_aliases, answer_synonyms, e_aliases)
 
         # todo: investigate the aliases, some are too general
-        # rich.print(f">> aliases={answer_aliases}")
+        rich.print(f">> aliases={answer_aliases}, doc_ents={scispacy_doc.ents}")
 
-        return any(
-            alias.lower() in doc_text.lower() for alias in answer_aliases
-        )
-        # todo: fix this: crashes with re.error: nothing to repeat at position 33
-        # return bool(
-        #     re.findall(
-        #         r"(?=(" + "|".join(answer_aliases) + r"))",
-        #         doc_text,
-        #         re.IGNORECASE,
-        #     )
+        # return any(
+        #     alias.lower() in doc_text.lower() for alias in answer_aliases
         # )
+        # todo: fix this: crashes with re.error: nothing to repeat at position 33
+
+        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+        # re.IGNORECASE: Perform case-insensitive matching
+
+        return bool(
+            re.search(
+                re.compile('|'.join(re.escape(x) for x in answer_aliases), re.IGNORECASE)
+                , doc_text)
+        )
 
 
 class ExactMatch(RelevanceClassifier):

@@ -45,9 +45,11 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                     "question.idx": datasets.Value("int32"),
                     "question.text": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
-                    "answer.text": datasets.Sequence(datasets.Value("string")),
-                    "answer.cui": datasets.Sequence(datasets.Value("string")),
-                    "synonyms.text": datasets.Sequence(
+                    "answer.text": datasets.Sequence(
+                        datasets.Value("string")),
+                    "answer.cui": datasets.Sequence(
+                        datasets.Value("string")),
+                    "answer.synonyms": datasets.Sequence(
                         datasets.Value("string")
                     ),
                 }
@@ -87,6 +89,6 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                 d["answer.target"] = d.pop("answer_idx")
                 d["answer.text"] = d.pop("answer_options")
                 d["answer.cui"] = d.pop("CUIs")
+                d["answer.synonyms"] = d.pop("synonyms")
                 d["question.text"] = d.pop("question")
-                d["synonyms.text"] = d.pop("synonyms")
                 yield i, d
