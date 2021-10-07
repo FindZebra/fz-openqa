@@ -4,10 +4,10 @@ import datasets
 import rich
 from rich.progress import track
 
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule, MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, SciSpacyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 
@@ -21,8 +21,8 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                             index=ElasticSearchIndex(index_key="idx",
                                                      text_key="document.text",
                                                      query_key="question.text",
-                                                     num_proc=4,
-                                                     filter_mode=None),
+                                                     filter_mode=None,
+                                                     verbose=False),
                             verbose=False,
                             num_proc=4,
                             use_subset=True)
@@ -30,7 +30,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
                      num_proc=4,
-                     use_subset=False,
+                     use_subset=True,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 1000 documents for each question
@@ -39,7 +39,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      n_documents=None,
                      # retrieve the whole training set
                      train_batch_size=10,
-                     relevance_classifier=ExactMatch(
+                     relevance_classifier=SciSpacyMatch(
                          answer_prefix='answer.',
                          document_prefix='document.',
                          output_key='document.is_positive'

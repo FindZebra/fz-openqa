@@ -128,6 +128,10 @@ class MedQaDataModule(BaseDataModule):
 
         if self.corpus is not None:
             self.corpus.setup()
+            assert self.n_documents <= len(self.corpus.dataset), (
+                f"The corpus is too small to retrieve that many documents\n:"
+                f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
+            )
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -141,7 +145,7 @@ class MedQaDataModule(BaseDataModule):
             ),
             batched=True,
             num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
+            desc="Tokenizing documents and extracting overlapping passages",
         )
 
         # add an index column
