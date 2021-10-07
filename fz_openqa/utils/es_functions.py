@@ -22,15 +22,21 @@ class ElasticSearchEngine:
         self._instance = self.instantiate_es()
         self.proc_id = get_process_id()
 
+    def __getstate__(self):
+        """this method is called when attempting pickling"""
+        state = self.__dict__.copy()
+        # Don't pickle the ES instance
+        del state["_instance"]
+        state["_instance"] = None
+        return state
+
     def instantiate_es(self) -> Elasticsearch:
         return Elasticsearch(timeout=self.timeout)
 
     @property
     def instance(self):
         curr_id = get_process_id()
-        rich.print(f"> proc={curr_id}: getting instance (es={self._instance})")
-        if curr_id != self.proc_id:
-            rich.print(f"> proc={curr_id}: creating new es instance")
+        if curr_id != self.proc_id or self._instance is None:
             self._instance = self.instantiate_es()
             self.proc_id = curr_id
 
