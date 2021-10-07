@@ -124,7 +124,8 @@ class SciSpacyMatch(RelevanceClassifier):
             the DISCARD_TUIs list.
             # todo: is that the right behaviour?
             """
-            return any(tui not in DISCARD_TUIs for tui in ent.types)
+            
+            return bool(tui not in DISCARD_TUIs for tui in ent.types)
 
         linked_entities = filter(lambda ent: keep_entity, linked_entities)
 
