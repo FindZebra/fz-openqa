@@ -4,6 +4,7 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
+import dill
 import rich
 from datasets import Dataset
 from rich.status import Status
@@ -71,6 +72,13 @@ class ElasticSearchIndex(Index):
             # @filter_pipe_cls: added this line for debugging
             # PrintBatch(header="filtering output"),
         )
+
+    def dill_inspect(self) -> Dict[str, Any]:
+        return {
+            "__all__": dill.pickles(self),
+            "engine": dill.pickles(self.engine),
+            "preprocesing_pipe": dill.pickles(self.preprocesing_pipe),
+        }
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.

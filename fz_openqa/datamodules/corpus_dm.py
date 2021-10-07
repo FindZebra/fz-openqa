@@ -29,10 +29,10 @@ from .pipes import DropKeys
 from .pipes import FilterKeys
 from .pipes import Identity
 from .pipes import Lambda
-from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import ReplaceInKeys
+from .pipes import SearchCorpus
 from .pipes import Sequential
 from .pipes import TextCleaner
 from .pipes import TokenizerPipe
@@ -303,25 +303,9 @@ class CorpusDataModule(BaseDataModule):
         :@param query: query data stored as a Batch
         :@param k: integer that sets number of results to be queried.
         """
-        search_result = self._index.search(
-            query=query, k=k, model=model, **kwargs
+        return SearchCorpus(self)(
+            query, model=model, k=k, simple_collate=simple_collate, **kwargs
         )
-
-        # retrieve the examples from the dataset (flat list)
-        flat_indexes = (idx for sub in search_result.index for idx in sub)
-        flat_scores = (score for sub in search_result.score for score in sub)
-        retrieved_docs = [
-            {**self.dataset[idx], "document.retrieval_score": score}
-            for idx, score in zip(flat_indexes, flat_scores)
-        ]
-        if simple_collate:
-            flat_docs_batch = Collate(keys=None)(retrieved_docs)
-        else:
-            flat_docs_batch = self.collate_pipe(retrieved_docs)
-
-        # nest the examples:
-        # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        return Nest(stride=k)(flat_docs_batch)
 
 
 class MedQaCorpusDataModule(CorpusDataModule):

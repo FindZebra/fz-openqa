@@ -1,4 +1,8 @@
+from collections import OrderedDict
+from typing import Any
 from typing import Callable
+from typing import Dict
+from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Union
@@ -8,11 +12,31 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.utils.datastruct import Batch
 
 
+def reduce_dict_values(x: Union[bool, Dict[str, Any]]) -> bool:
+    if isinstance(x, dict):
+        outputs = []
+        for v in x.values():
+            if isinstance(v, dict):
+                outputs += [reduce_dict_values(v)]
+            else:
+                assert isinstance(v, bool)
+                outputs += [v]
+
+        return all(outputs)
+
+    else:
+        assert isinstance(x, bool)
+        return x
+
+
 class Sequential(Pipe):
     """A sequence of Pipes."""
 
-    def __init__(self, *pipes: Optional[Union[Callable, Pipe]]):
+    def __init__(
+        self, *pipes: Optional[Union[Callable, Pipe]], id: Optional[str] = None
+    ):
         self.pipes = [pipe for pipe in pipes if pipe is not None]
+        self.id = id
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -21,12 +45,28 @@ class Sequential(Pipe):
 
         return batch
 
+    @staticmethod
+    def get_pipe_id(p: Pipe):
+        cls = str(type(p).__name__)
+        if p.id is None:
+            return cls
+        else:
+            return f"{cls}({p.id})"
 
-class Parallel(Pipe):
+    def dill_inspect(
+        self, reduce: bool = False
+    ) -> Union[Dict[str, Any], bool]:
+        diagnostic = {
+            self.get_pipe_id(p): p.dill_inspect() for p in self.pipes
+        }
+        if reduce:
+            return reduce_dict_values(diagnostic)
+        else:
+            return diagnostic
+
+
+class Parallel(Sequential):
     """Execute pipes in parallel and merge."""
-
-    def __init__(self, *pipes: Optional[Union[Callable, Pipe]]):
-        self.pipes = [pipe for pipe in pipes if pipe is not None]
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -53,6 +93,9 @@ class Update(Pipe):
 
         return batch
 
+    def dill_inspect(self) -> bool:
+        return self.pipe.dill_inspect()
+
 
 class Gate(Pipe):
     """Execute the pipe if the condition is valid, else return {}"""
@@ -62,6 +105,10 @@ class Gate(Pipe):
     ) -> object:
         self.condition = condition
         self.pipe = pipe
+
+    @property
+    def id(self):
+        return str(type(self.pipe).__name__)
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -75,3 +122,6 @@ class Gate(Pipe):
             return self.pipe(batch)
         else:
             return {}
+
+    def dill_inspect(self) -> bool:
+        return self.pipe.dill_inspect()

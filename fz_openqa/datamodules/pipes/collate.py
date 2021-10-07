@@ -10,7 +10,7 @@ from . import Pipe
 from ...utils.datastruct import Batch
 
 
-class Collate:
+class Collate(Pipe):
     """
     Create a Batch object from a list of examples, where an
     example is defined as a batch of one element.
@@ -54,7 +54,7 @@ class Collate:
         return keys
 
 
-class DeCollate:
+class DeCollate(Pipe):
     def __call__(self, batch: Batch) -> List[Dict[str, Any]]:
         keys = list(batch.keys())
         length = len(batch[keys[0]])
@@ -65,7 +65,7 @@ class DeCollate:
         return [{k: batch[k][i] for k in keys} for i in range(length)]
 
 
-class ApplyToEachExample:
+class ApplyToEachExample(Pipe):
     def __init__(self, pipe: Pipe):
         self.pipe = pipe
 
