@@ -15,15 +15,13 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 HgDataset = Union[Dataset, DatasetDict]
 
 
-def flatten_nested(values: List[List[Any]]) -> List[Any]:
-    return [sub_x for x in values for sub_x in x]
-
-
-def nested_list(values: List[Any], *, stride: int) -> List[List[Any]]:
-    output = []
-    for i in range(0, len(values), stride):
-        output += [[values[j] for j in range(i, i + stride)]]
-    return output
+def get_column_names(dataset: HgDataset) -> List[str]:
+    if isinstance(dataset, DatasetDict):
+        return list(
+            set.union(*(set(d.column_names) for d in dataset.values()))
+        )
+    else:
+        return dataset.column_names
 
 
 def add_spec_token(

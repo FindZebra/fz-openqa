@@ -190,17 +190,18 @@ class BaseDataModule(LightningDataModule):
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
 
-    def get_dataset(self, split: Union[str, Split]) -> Dataset:
+    def get_dataset(
+        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+    ) -> Dataset:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""
-        if isinstance(self.dataset, Dataset):
-            return self.dataset
-        elif isinstance(self.dataset, DatasetDict):
-            return self.dataset[split]
+        dataset = dataset or self.dataset
+        if isinstance(dataset, Dataset):
+            return dataset
+        elif isinstance(dataset, DatasetDict):
+            return dataset[split]
         else:
-            raise TypeError(
-                f"Unknown dataset type <{type(self.dataset).__name__}>"
-            )
+            raise TypeError(f"Unknown dataset type <{type(dataset).__name__}>")
 
     def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.

@@ -5,7 +5,6 @@ from typing import Iterable
 from typing import Optional
 
 import numpy as np
-import rich
 import spacy
 import torch
 from scispacy.linking_utils import Entity
@@ -35,32 +34,37 @@ class RelevanceClassifier(Pipe):
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         results = []
-        batch_size = len(next(iter(batch.values())))
+        batch_size = self.batch_size(batch)
         for i in range(batch_size):
-            q_data_i = {
-                k: v[i] for k, v in batch.items() if self.answer_prefix in k
-            }
-            d_data_i = {
-                k: v[i] for k, v in batch.items() if self.document_prefix in k
-            }
+            eg_ans_i = self.get_eg(
+                batch,
+                i,
+                filter_op=lambda key: str(key).startswith(self.answer_prefix),
+            )
+            eg_doc_i = self.get_eg(
+                batch,
+                i,
+                filter_op=lambda key: str(key).startswith(
+                    self.document_prefix
+                ),
+            )
 
             # iterate through each document
             results_i = []
-            n_docs = len(next(iter(d_data_i)))
+            n_docs = len(next(iter(eg_doc_i.values())))
             for j in range(n_docs):
-                d_data_ij = {k: v[j] for k, v in d_data_i.items()}
-                results_i += [self.classify(q_data_i, d_data_ij)]
+                d_data_ij = {k: v[j] for k, v in eg_doc_i.items()}
+                results_i += [self.classify(eg_ans_i, d_data_ij)]
             results += [results_i]
-
         results = torch.tensor(results)
         batch[self.output_key] = results
-        batch[self.output_count_key] = results.float().sum(-1).long()
+
         return batch
 
 
 class MetaMapMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
         from scispacy.abbreviation import AbbreviationDetector  # type: ignore
         from scispacy.linking import EntityLinker  # type: ignore
 
@@ -96,7 +100,7 @@ class MetaMapMatch(RelevanceClassifier):
 
 class SciSpacyMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
         from scispacy.abbreviation import AbbreviationDetector  # type: ignore
         from scispacy.linking import EntityLinker  # type: ignore
 
@@ -179,4 +183,4 @@ class ExactMatch(RelevanceClassifier):
         answer_index = answer["answer.target"]
         answer_text = answer["answer.text"][answer_index]
 
-        return bool(answer_text in doc_text)
+        return bool(answer_text.lower() in doc_text.lower())

@@ -89,4 +89,6 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                 d["answer.cui"] = d.pop("CUIs")
                 d["question.text"] = d.pop("question")
                 d["synonyms.text"] = d.pop("synonyms")
+                # tmp
+                d.pop("CUIs", None)
                 yield i, d

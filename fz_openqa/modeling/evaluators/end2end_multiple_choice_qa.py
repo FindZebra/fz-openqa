@@ -12,10 +12,10 @@ from torch import Tensor
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
+from ...datamodules.pipes.nesting import nested_list
 from .base import BaseEvaluator
 from .metrics import SplitMetrics
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.datamodules.utils import nested_list
 from fz_openqa.utils.datastruct import add_prefix
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import filter_prefix

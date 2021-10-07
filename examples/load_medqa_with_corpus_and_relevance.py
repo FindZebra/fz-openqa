@@ -25,8 +25,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      verbose=False),
                             verbose=False,
                             num_proc=4,
-                            use_subset=True,
-                            train_batch_size=3)
+                            use_subset=True)
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
@@ -34,8 +33,12 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      use_subset=True,
                      verbose=True,
                      corpus=corpus,
-                     # retrieve 100 documents for each question
-                     n_documents=100,
+                     # retrieve 1000 documents for each question
+                     n_retrieved_documents=100,
+                     # allow any number of positive documents
+                     max_pos_docs=int(1e9),
+                     # setting `n_documents` to None will effectively use `n_retrieved_documents`
+                     n_documents=None,
                      # retrieve the whole training set
                      train_batch_size=10,
                      relevance_classifier=SciSpacyMatch(

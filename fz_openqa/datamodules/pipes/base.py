@@ -1,16 +1,15 @@
-from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
-from torch import Tensor
-
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
+
+
+def always_true(*args, **kwargs):
+    return True
 
 
 class Pipe:
@@ -18,6 +17,15 @@ class Pipe:
     A pipe is a small unit of computation that ingests,
     modify and returns a batch of data.
     """
+
+    @staticmethod
+    def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
+        """Extract example `idx` from a batch, potentially filter the keys"""
+        filter_op = filter_op or always_true
+        return {k: v[idx] for k, v in batch.items() if filter_op(k)}
+
+    def batch_size(self, batch: Batch) -> int:
+        return len(next(iter(batch.values())))
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -182,20 +190,3 @@ class PrintBatch(Pipe):
         pprint_batch(batch, header=self.header)
 
         return batch
-
-
-class Nest(ApplyToAll):
-    """Nest a flattened batch:
-    {key: [values]} -> {key: [[group] for group in groups]}"""
-
-    def __init__(self, stride: int):
-        super(Nest, self).__init__(element_wise=False, op=self.flatten)
-        self.stride = stride
-
-    def flatten(self, x: Union[Tensor, List[Any]]):
-        if isinstance(x, Tensor):
-            return x.view(-1, self.stride, *x.shape[1:])
-        else:
-            return [
-                x[i : i + self.stride] for i in range(0, len(x), self.stride)
-            ]
