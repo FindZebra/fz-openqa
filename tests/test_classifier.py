@@ -12,10 +12,8 @@ class TestClassifier(TestCase):
             ]
         self.pos_answer = [
             {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':'C0235782'},
-            {'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':'C0003872'},
             ]
         self.neg_answer = [
-            {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':'C0235782'},
             {'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':'C0003872'}
             ]
         self.pos_document = [
@@ -28,12 +26,15 @@ class TestClassifier(TestCase):
             ]
         self.model_name = "en_core_sci_lg"
 
+        self.ExactMatch = ExactMatch()
+        self.SciSpacyMatch = SciSpacyMatch()
+
     def test_exact_match(self):
-        self.assertTrue(ExactMatch.classify(answer = self.pos_answer, document = self.pos_document))
+        self.assertFalse(self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
         #self.assertFalse(ExactMatch.classify(answer = self.neg_answer, document = self.neg_document))
 
     #def test_metamap_match(self):
     #    self.assertTrue(MetaMapMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
 
-    #def test_scispacy_match(self):
-    #    self.assertTrue(SciSpacyMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
+    def test_scispacy_match(self):
+        self.assertTrue(self.SciSpacyMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
