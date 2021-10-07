@@ -53,7 +53,7 @@ print(get_separator())
 # SciSpacyMatch: process speed: ?/batch
 dm.compile_dataset(filter_unmatched=True,
                    # todo: increase num_proc to 4
-                   num_proc=1,
+                   num_proc=2,
                    batch_size=100)
 rich.print(f"=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
