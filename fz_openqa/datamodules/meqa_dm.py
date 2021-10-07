@@ -370,7 +370,9 @@ class MedQaDataModule(BaseDataModule):
         # retrieve the dataset split
         return super().get_dataset(split, dset)
 
-    def compile_dataset(self, filter_unmatched: bool = True):
+    def compile_dataset(
+        self, filter_unmatched: bool = True, num_proc: int = 1
+    ):
         """Process the whole dataset with `collate_fn` and store
         into `self.compiled_dataset`"""
 
@@ -398,15 +400,12 @@ class MedQaDataModule(BaseDataModule):
             fingerprints = {}
 
         # Compile the dataset
-        rich.print(
-            f"> storing compiled dataset with fingerprint=`{fingerprints}`"
-        )
         self.compiled_dataset = DatasetDict(
             {
                 key: dset.map(
                     pipe,
                     batched=True,
-                    num_proc=self.num_proc,
+                    num_proc=num_proc,
                     desc="Compiling dataset",
                     new_fingerprint=fingerprints.get(key, None),
                 )

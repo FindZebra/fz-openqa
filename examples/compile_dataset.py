@@ -26,8 +26,8 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
-                     num_proc=1,  # todo: increase to 4
-                     use_subset=True,
+                     num_proc=4,
+                     use_subset=False,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
@@ -52,7 +52,7 @@ rich.print(f"[green]>> index is built.")
 print(get_separator())
 
 # Compile the dataset
-dm.compile_dataset()
+dm.compile_dataset(filter_unmatched=True, num_proc=1)  # todo: increase to 4
 rich.print(f"=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 
