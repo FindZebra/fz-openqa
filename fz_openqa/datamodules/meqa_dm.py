@@ -329,9 +329,11 @@ class MedQaDataModule(BaseDataModule):
             filter=lambda key: str(key).startswith("document."),
         )
 
-        # select `n_documents`
+        # select `n_documents` where count(is_positive) <= max_pos_docs
         selector = SelectDocs(
-            total=self.n_documents, max_pos_docs=self.max_pos_docs
+            total=self.n_documents,
+            max_pos_docs=self.max_pos_docs,
+            strict=False,
         )
 
         return Sequential(
@@ -371,7 +373,10 @@ class MedQaDataModule(BaseDataModule):
         return super().get_dataset(split, dset)
 
     def compile_dataset(
-        self, filter_unmatched: bool = True, num_proc: int = 1
+        self,
+        filter_unmatched: bool = True,
+        num_proc: int = 1,
+        batch_size: int = 100,
     ):
         """Process the whole dataset with `collate_fn` and store
         into `self.compiled_dataset`"""
@@ -406,6 +411,7 @@ class MedQaDataModule(BaseDataModule):
                     pipe,
                     batched=True,
                     num_proc=num_proc,
+                    batch_size=batch_size,
                     desc="Compiling dataset",
                     new_fingerprint=fingerprints.get(key, None),
                 )
@@ -427,12 +433,8 @@ class MedQaDataModule(BaseDataModule):
             print_size_difference(self.dataset, self.compiled_dataset)
 
     def filter_unmatched_questions(self, dataset: DatasetDict):
-        def _filter(row):
-            n = sum(row["document.is_positive"])
-            return n > 0
-
-        # filter the datasets
-        return dataset.filter(_filter)
+        fn = partial(filter_questions, max_pos_docs=self.max_pos_docs)
+        return dataset.filter(fn)
 
     def cast_compiled_dataset(self):
         pt_cols = self.pt_attributes + self.corpus.pt_attributes
@@ -464,3 +466,8 @@ def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
         ratio = new_lengths[key] / prev_lengths[key]
         rich.print(f">  - {key}: {new_lengths[key]} ({100 * ratio:.2f}%)")
     print(get_separator())
+
+
+def filter_questions(row, *, max_pos_docs: int):
+    n = sum(row["document.is_positive"])
+    return n > 0 and n <= max_pos_docs

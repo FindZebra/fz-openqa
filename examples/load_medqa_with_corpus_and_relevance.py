@@ -35,7 +35,9 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      corpus=corpus,
                      # retrieve 1000 documents for each question
                      n_retrieved_documents=100,
+                     # allow any number of positive documents
                      max_pos_docs=int(1e9),
+                     # setting `n_documents` to None will effectively use `n_retrieved_documents`
                      n_documents=None,
                      # retrieve the whole training set
                      train_batch_size=10,
