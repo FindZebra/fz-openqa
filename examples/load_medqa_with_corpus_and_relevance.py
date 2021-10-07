@@ -10,8 +10,9 @@ from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, SciSpacyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
-
+from fz_openqa.utils.train_utils import setup_safe_env
 datasets.set_caching_enabled(True)
+setup_safe_env()
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
@@ -29,6 +30,7 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
+                     num_workers=4,
                      num_proc=4,
                      use_subset=True,
                      verbose=True,
@@ -41,11 +43,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      n_documents=None,
                      # retrieve the whole training set
                      train_batch_size=10,
-                     relevance_classifier=SciSpacyMatch(
-                         answer_prefix='answer.',
-                         document_prefix='document.',
-                         output_key='document.is_positive'
-                     ))
+                     relevance_classifier=ExactMatch())
 
 # prepare both the QA dataset and the corpus
 dm.prepare_data()

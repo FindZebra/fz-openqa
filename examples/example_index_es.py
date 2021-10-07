@@ -11,7 +11,7 @@ import rich, json, os
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule, FzCorpusDataModule
 #from fz_openqa.datamodules.medqa_dm import MedQaDataModule
-from fz_openqa.utils.es_functions import ElasticSearch
+from fz_openqa.utils.es_functions import ElasticSearchEngine
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 #from fz_openqa.utils.run_elasticsearch import *
@@ -30,7 +30,7 @@ corpus.setup()
 
 data = corpus.dataset
 
-es = ElasticSearch()
+es = ElasticSearchEngine()
 es.es_create_index("corpus")
 _ = es.es_bulk(
     index_name = "corpus",
