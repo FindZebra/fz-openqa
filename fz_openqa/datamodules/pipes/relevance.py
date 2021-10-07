@@ -15,6 +15,8 @@ from scispacy.linking import EntityLinker  # type: ignore
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.datamodules.pipes.text_ops import TextCleaner
+
 
 class RelevanceClassifier(Pipe):
     def __init__(
@@ -64,13 +66,12 @@ class MetaMapMatch(RelevanceClassifier):
 
         self.model_name = model_name
         self.model = spacy.load(self.model_name)
-        self.model.add_pipe("abbreviation_detector")
         self.model.add_pipe(
             "scispacy_linker",
             config={
-                "resolve_abbreviations": True,
-                "linker_name": "umls",
-                "max_entities_per_mention": 1,
+                "linker_name" : "umls",
+                "max_entities_per_mention" : 3,
+                "threshold" : 0.95
             },
         )
         self.linker = self.model.get_pipe("scispacy_linker")
@@ -87,7 +88,7 @@ class MetaMapMatch(RelevanceClassifier):
         answer_cui = answer["answer.cui"][0]
         answer_synonyms = answer["answer.synonyms"]
 
-        e_aliases = self.linker.kb.cui_to_entity[answer_cui][2]
+        e_aliases = [alias.lower() for alias in self.linker.kb.cui_to_entity[answer_cui][2]]
 
         answer_aliases = set.union(answer_aliases, answer_synonyms, e_aliases)
         
@@ -99,7 +100,7 @@ class MetaMapMatch(RelevanceClassifier):
 
 
 class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_ner_bc5cdr_md", **kwargs):
+    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__()
 
         self.model_name = model_name
@@ -107,12 +108,13 @@ class SciSpacyMatch(RelevanceClassifier):
         self.model.add_pipe(
             "scispacy_linker",
             config={
-                "linker_name": "umls",
-                "max_entities_per_mention": 1,
+                "linker_name" : "umls",
+                "max_entities_per_mention" : 3,
+                "threshold" : 0.95
             },
         )
         self.linker = self.model.get_pipe("scispacy_linker")
-
+    
     def extract_aliases(self, entity) -> Iterable[str]:
         # get the list of linked entity
         linked_entities = self.get_linked_entities(entity)
@@ -120,9 +122,7 @@ class SciSpacyMatch(RelevanceClassifier):
         # filter irrelevant entities based on TUIs
         def keep_entity(ent: Entity) -> bool:
             """
-            keep the entity if at least one of the TUIs is not in
-            the DISCARD_TUIs list.
-            # todo: is that the right behaviour? No, only return those entities not associated to a TUI in the DISCARD_TUIs list
+            keep those entities not in the DISCARD_TUIs list.
             """
             
             return bool(tui not in DISCARD_TUIs for tui in ent.types)
@@ -132,7 +132,7 @@ class SciSpacyMatch(RelevanceClassifier):
         # return aliases
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
-                yield alias
+                yield alias.lower()
 
     def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
         for ent in entity._.kb_ents:
@@ -154,26 +154,19 @@ class SciSpacyMatch(RelevanceClassifier):
         
         for entity in scispacy_doc.ents:
             e_aliases = set(self.extract_aliases(entity))
-            answer_aliases = set.union(answer_aliases, answer_synonyms, e_aliases)
+            answer_aliases = sorted(set.union(answer_aliases, answer_synonyms, e_aliases), key=len)
 
         # todo: investigate the aliases, some are too general
-        rich.print(f">> aliases={answer_aliases}, doc_ents={scispacy_doc.ents}")
-
-        # return any(
-        #     alias.lower() in doc_text.lower() for alias in answer_aliases
-        # )
-        # todo: fix this: crashes with re.error: nothing to repeat at position 33
+        rich.print(f">> aliases={answer_aliases}, count={len(answer_aliases)} doc_ents={scispacy_doc.ents}")
 
         # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
         # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
         # re.IGNORECASE: Perform case-insensitive matching
-
         return bool(
             re.search(
                 re.compile('|'.join(re.escape(x) for x in answer_aliases), re.IGNORECASE)
                 , doc_text)
         )
-
 
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
