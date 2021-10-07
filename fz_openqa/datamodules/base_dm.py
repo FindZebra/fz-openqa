@@ -118,16 +118,22 @@ class BaseDataModule(LightningDataModule):
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
+        # load the dataset and potentially filter it
+        self.dataset = self.load_and_filter_dataset()
 
         # preprocess
-        self.dataset: HgDataset = self.load_base_dataset()
-        self.dataset = self.filter_dataset(self.dataset)
-        if self.use_subset:
-            self.dataset = take_subset(self.dataset, self.subset_size)
         self.dataset = self.preprocess_dataset(self.dataset)
 
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
+
+    def load_and_filter_dataset(self) -> HgDataset:
+        dataset: HgDataset = self.load_base_dataset()
+        dataset = self.filter_dataset(dataset)
+        if self.use_subset:
+            dataset = take_subset(dataset, self.subset_size)
+
+        return dataset
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.

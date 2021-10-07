@@ -1,9 +1,11 @@
+import warnings
 from functools import partial
 from typing import Callable
 from typing import Dict
 from typing import Optional
 from typing import Union
 
+import dill
 import rich
 import torch
 from datasets import Dataset
@@ -124,14 +126,22 @@ class MedQaDataModule(BaseDataModule):
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        super().setup(stage)
+        # load the dataset and potentially filter it
+        self.dataset = self.load_and_filter_dataset()
 
+        # preprocess
+        self.dataset = self.preprocess_dataset(self.dataset)
+
+        # setup the corpus object
         if self.corpus is not None:
             self.corpus.setup()
             assert self.n_documents <= len(self.corpus.dataset), (
                 f"The corpus is too small to retrieve that many documents\n:"
                 f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
             )
+
+        # define the collate operator
+        self.collate_pipe = self.get_collate_pipe()
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -220,14 +230,16 @@ class MedQaDataModule(BaseDataModule):
         simple_attr_pipe = Sequential(
             Collate(keys=["idx", "answer.target", "answer.n_options"]),
             ApplyToAll(op=lambda x: torch.tensor(x)),
+            id="simple-attrs",
         )
 
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = Sequential(
             Collate(keys=["question.input_ids", "question.attention_mask"]),
             ReplaceInKeys("question.", ""),
-            Lambda(lambda batch: self.tokenizer.pad(batch)),
+            Lambda(self.tokenizer.pad),
             AddPrefix("question."),
+            id="questions",
         )
 
         # collate answer options
@@ -235,9 +247,10 @@ class MedQaDataModule(BaseDataModule):
             Collate(keys=["answer.input_ids", "answer.attention_mask"]),
             ReplaceInKeys("answer.", ""),
             Flatten(),
-            Lambda(lambda batch: self.tokenizer.pad(batch)),
+            Lambda(self.tokenizer.pad),
             Nest(stride=self.n_options),
             AddPrefix("answer."),
+            id="answers",
         )
 
         # search corpus pipe
@@ -248,10 +261,15 @@ class MedQaDataModule(BaseDataModule):
 
         return Sequential(
             Parallel(
-                raw_text_pipe, simple_attr_pipe, question_pipe, answer_pipe
+                raw_text_pipe,
+                simple_attr_pipe,
+                question_pipe,
+                answer_pipe,
+                id="qa-collate",
             ),
             search_docs_pipe,
             self.postprocessing,
+            id="collate-fn",
         )
 
     def documents_collate_pipe(self):
@@ -388,21 +406,28 @@ class MedQaDataModule(BaseDataModule):
             CleanupPadTokens(self.tokenizer),
         )
 
-        # Infer the fingerprint when this cannot be done automatically
-        if isinstance(self.corpus._index, ElasticSearchIndex):
-            op = Sequential(
-                DeCollate(),
-                # self.collate_pipe,
-                Itemize(),
-                CleanupPadTokens(self.tokenizer),
-            )
-            params = {
-                "k": self.n_documents,
-                "es_index": self.corpus._index.index_name,
-            }
-            fingerprints = self.generate_fingerprint(op, params)
-        else:
+        if pipe.dill_inspect(reduce=True):
             fingerprints = {}
+        else:
+            warnings.warn(
+                "Couldn't pickle pipe. Will attempt running this "
+                "code using a partial fingerprint. "
+                "Code will fail if `num_proc`>1"
+            )
+            rich.print(pipe.dill_inspect())
+            # Infer the fingerprint when this cannot be done automatically
+            if isinstance(self.corpus._index, ElasticSearchIndex):
+                op = Sequential(
+                    DeCollate(),
+                    # self.collate_pipe,
+                    Itemize(),
+                    CleanupPadTokens(self.tokenizer),
+                )
+                params = {
+                    "k": self.n_documents,
+                    "es_index": self.corpus._index.index_name,
+                }
+                fingerprints = self.generate_fingerprint(op, params)
 
         # Compile the dataset
         self.compiled_dataset = DatasetDict(

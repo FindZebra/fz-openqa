@@ -4,6 +4,7 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 
+import dill
 from datasets import Dataset
 from rich.progress import track
 
@@ -23,6 +24,10 @@ class Index:
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
+
+    def dill_inspect(self) -> bool:
+        """check if the module can be pickled."""
+        return dill.pickles(self)
 
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""

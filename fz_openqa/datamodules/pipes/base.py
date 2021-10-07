@@ -1,8 +1,11 @@
+from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
+
+import dill
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
@@ -18,6 +21,8 @@ class Pipe:
     modify and returns a batch of data.
     """
 
+    id: Optional[str] = None
+
     @staticmethod
     def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
         """Extract example `idx` from a batch, potentially filter the keys"""
@@ -30,6 +35,10 @@ class Pipe:
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """The call of the pipeline process"""
         raise NotImplementedError
+
+    def dill_inspect(self) -> bool:
+        """check if the module can be pickled."""
+        return dill.pickles(self)
 
 
 class Identity(Pipe):
