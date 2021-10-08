@@ -13,7 +13,7 @@ pytorch-lightning = {version="^1.4", allow-prereleases = true}
 torchmetrics = {version="^0.5", allow-prereleases = true}
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"
-datasets = "^1.6.2"
+datasets = {git="https://github.com/vlievin/datasets.git", branch="inconsistent-caching-map-multiprocessing"}
 hydra-core = {version="^1.1", allow-prereleases = true}
 hydra-colorlog = {version="^1.0.1", allow-prereleases = true}
 faiss-cpu = { version = "^1.7.1", allow-prereleases = true }
@@ -27,7 +27,6 @@ en_core_sci_sm = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/rel
 en_core_sci_md = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_md-0.4.0.tar.gz" }
 en_core_sci_lg = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz" }
 en_ner_bc5cdr_md = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_ner_bc5cdr_md-0.4.0.tar.gz" }
-
 
 
 [tool.poetry.scripts]
