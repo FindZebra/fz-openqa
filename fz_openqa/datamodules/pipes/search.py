@@ -45,6 +45,14 @@ class SearchCorpus(Pipe):
             "collate_pipe": dill.pickles(self.collate_pipe),
         }
 
+    def fingerprint(self) -> Dict[str, Any]:
+        return {
+            "__all__": self._fingerprint(self),
+            "index": self._fingerprint(self),
+            "dataset": self._fingerprint(self),
+            "collate_pipe": self._fingerprint(self),
+        }
+
     def __call__(
         self,
         query: Batch,

@@ -1,11 +1,10 @@
-import warnings
+import os
 from functools import partial
 from typing import Callable
 from typing import Dict
 from typing import Optional
 from typing import Union
 
-import dill
 import rich
 import torch
 from datasets import Dataset
@@ -220,7 +219,7 @@ class MedQaDataModule(BaseDataModule):
         )
         return question_pipes
 
-    def get_collate_pipe(self) -> Pipe:
+    def get_collate_pipe(self, safe_pickle: bool = False) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate
@@ -254,9 +253,13 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # search corpus pipe
-        search_docs_pipe = Gate(
-            self.n_retrieved_documents > 0,
-            SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+        search_docs_pipe = (
+            Gate(
+                self.n_retrieved_documents > 0,
+                SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+            )
+            if not safe_pickle
+            else None
         )
 
         return Sequential(
@@ -406,28 +409,32 @@ class MedQaDataModule(BaseDataModule):
             CleanupPadTokens(self.tokenizer),
         )
 
-        if pipe.dill_inspect(reduce=True):
-            fingerprints = {}
-        else:
-            warnings.warn(
-                "Couldn't pickle pipe. Will attempt running this "
-                "code using a partial fingerprint. "
-                "Code will fail if `num_proc`>1"
-            )
+        # check that the pipe can be pickled
+        if not pipe.dill_inspect(reduce=True):
             rich.print(pipe.dill_inspect())
-            # Infer the fingerprint when this cannot be done automatically
-            if isinstance(self.corpus._index, ElasticSearchIndex):
-                op = Sequential(
-                    DeCollate(),
-                    # self.collate_pipe,
-                    Itemize(),
-                    CleanupPadTokens(self.tokenizer),
-                )
-                params = {
-                    "k": self.n_documents,
-                    "es_index": self.corpus._index.index_name,
-                }
-                fingerprints = self.generate_fingerprint(op, params)
+            raise ValueError(
+                "Couldn't pickle pipe. Code would fail if `num_proc`>1"
+            )
+
+        # infer the fingerprints using the same pipe minus pipes that cannot
+        # be pickled deterministically
+        # Todo: adapt for faiss
+        # todo: add pipe method to get fingerprintable modules only
+        if isinstance(self.corpus._index, ElasticSearchIndex):
+            op = Sequential(
+                DeCollate(),
+                # self.get_collate_pipe(safe_pickle=True),
+                Itemize(),
+                CleanupPadTokens(self.tokenizer),
+            )
+            params = {
+                "k_retrieved": self.n_retrieved_documents,
+                "k": self.n_documents,
+                "es_index": self.corpus._index.index_name,
+            }
+            fingerprints = self.generate_fingerprint(self.dataset, op, params)
+        else:
+            fingerprints = {}
 
         # Compile the dataset
         self.compiled_dataset = DatasetDict(
@@ -439,6 +446,7 @@ class MedQaDataModule(BaseDataModule):
                     batch_size=batch_size,
                     desc="Compiling dataset",
                     new_fingerprint=fingerprints.get(key, None),
+                    load_from_cache_file=True,
                 )
                 for key, dset in self.dataset.items()
             }
@@ -470,14 +478,16 @@ class MedQaDataModule(BaseDataModule):
             type="torch", columns=pt_cols, output_all_columns=True
         )
 
-    def generate_fingerprint(self, op: Callable, params: Dict):
+    def generate_fingerprint(
+        self, dataset: DatasetDict, op: Callable, params: Dict
+    ):
         return {
             k: update_fingerprint(
                 dset._fingerprint,
                 op,
                 params,
             )
-            for k, dset in self.dataset.items()
+            for k, dset in dataset.items()
         }
 
 

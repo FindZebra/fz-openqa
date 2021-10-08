@@ -1,12 +1,13 @@
 import datasets
 import rich
 
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule, MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import ExactMatch, Pipe, SciSpacyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
+from datasets import Dataset
 
 datasets.set_caching_enabled(True)
 
@@ -14,7 +15,7 @@ tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
 
 # load the corpus object
-corpus = FzCorpusDataModule(tokenizer=tokenizer,
+corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
                             index=ElasticSearchIndex(index_key="idx",
                                                      text_key="document.text",
                                                      query_key="question.text",
@@ -31,7 +32,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
-                     n_retrieved_documents=1000,
+                     n_retrieved_documents=100,
                      # keep only one positive doc
                      max_pos_docs=1,
                      # keep only 10 docs (1 pos + 9 neg)
@@ -40,6 +41,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      relevance_classifier=ExactMatch())
 
 # prepare both the QA dataset and the corpus
+dm.subset_size = [100, 20, 20]
 dm.prepare_data()
 dm.setup()
 
@@ -52,9 +54,9 @@ print(get_separator())
 # ExactMatch: process speed: ~60s/batch
 # SciSpacyMatch: process speed: ?/batch
 dm.compile_dataset(filter_unmatched=True,
-                   # todo: increase num_proc to 4
                    num_proc=2,
-                   batch_size=100)
+                   batch_size=10)
+exit()
 rich.print(f"=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 

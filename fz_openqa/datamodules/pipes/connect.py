@@ -1,18 +1,16 @@
-from collections import OrderedDict
+from numbers import Number
 from typing import Any
 from typing import Callable
 from typing import Dict
-from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Union
 
 from fz_openqa.datamodules.pipes.base import Pipe
-from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.utils.datastruct import Batch
 
 
-def reduce_dict_values(x: Union[bool, Dict[str, Any]]) -> bool:
+def reduce_dict_values(x: Union[bool, Dict[str, Any]], op=all) -> bool:
     if isinstance(x, dict):
         outputs = []
         for v in x.values():
@@ -22,10 +20,16 @@ def reduce_dict_values(x: Union[bool, Dict[str, Any]]) -> bool:
                 assert isinstance(v, bool)
                 outputs += [v]
 
-        return all(outputs)
+        return op(outputs)
 
     else:
-        assert isinstance(x, bool)
+        assert isinstance(
+            x,
+            (
+                bool,
+                Number,
+            ),
+        )
         return x
 
 
@@ -64,6 +68,9 @@ class Sequential(Pipe):
         else:
             return diagnostic
 
+    def fingerprint(self) -> Dict[str, Any]:
+        return {self.get_pipe_id(p): p.fingerprint() for p in self.pipes}
+
 
 class Parallel(Sequential):
     """Execute pipes in parallel and merge."""
@@ -101,8 +108,10 @@ class Gate(Pipe):
     """Execute the pipe if the condition is valid, else return {}"""
 
     def __init__(
-        self, condition: Union[bool, Callable], pipe: Optional[Pipe]
-    ) -> object:
+        self,
+        condition: Union[bool, Callable],
+        pipe: Optional[Pipe],
+    ):
         self.condition = condition
         self.pipe = pipe
 
@@ -123,5 +132,8 @@ class Gate(Pipe):
         else:
             return {}
 
-    def dill_inspect(self) -> bool:
+    def dill_inspect(self) -> Any:
         return self.pipe.dill_inspect()
+
+    def fingerprint(self) -> Any:
+        return self.pipe.fingerprint()

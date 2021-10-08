@@ -1,4 +1,3 @@
-from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -6,6 +5,7 @@ from typing import Optional
 from typing import Union
 
 import dill
+from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
@@ -39,6 +39,15 @@ class Pipe:
     def dill_inspect(self) -> bool:
         """check if the module can be pickled."""
         return dill.pickles(self)
+
+    def fingerprint(self) -> str:
+        return self._fingerprint(self)
+
+    @staticmethod
+    def _fingerprint(x):
+        hash = Hasher()
+        hash.update(x)
+        return hash.hexdigest()
 
 
 class Identity(Pipe):
