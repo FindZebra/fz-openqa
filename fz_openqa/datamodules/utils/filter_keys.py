@@ -1,7 +1,12 @@
 from typing import List
 
 
-class KeyIn:
+class FilterKey:
+    def __call__(self, key: str) -> bool:
+        raise NotImplementedError
+
+
+class KeyIn(FilterKey):
     """check if the key is in the allowed_keys"""
 
     def __init__(self, allowed_keys: List[str]):
@@ -11,7 +16,7 @@ class KeyIn:
         return key in self.allowed_keys
 
 
-class KeyWithPrefix:
+class KeyWithPrefix(FilterKey):
     """check if the key starts with a given prefix"""
 
     def __init__(self, prefix: str):

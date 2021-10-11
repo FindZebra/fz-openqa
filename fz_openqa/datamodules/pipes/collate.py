@@ -20,7 +20,7 @@ class Collate(Pipe):
 
     def __init__(
         self,
-        keys: Optional[Union[str, List[str]]],
+        keys: Optional[Union[str, List[str], Callable]],
         key_op: Optional[Callable] = None,
     ):
         self.keys = keys
@@ -50,7 +50,12 @@ class Collate(Pipe):
     def get_keys_form_eg(self, first_eg):
         keys = set(first_eg.keys())
         if self.keys is not None:
-            keys = set.intersection(keys, self.keys)
+            if isinstance(self.keys, (list, set, tuple)):
+                _keys = set(self.keys)
+            else:
+                _keys = set(filter(self.keys, keys))
+
+            keys = set.intersection(keys, _keys)
         return keys
 
 
@@ -63,6 +68,11 @@ class DeCollate(Pipe):
             length == eg_l for eg_l in lengths.values()
         ), f"un-equal lengths: {lengths}"
         return [{k: batch[k][i] for k in keys} for i in range(length)]
+
+
+class FirstEg(Pipe):
+    def __call__(self, examples: List[Batch]) -> Batch:
+        return examples[0]
 
 
 class ApplyToEachExample(Pipe):

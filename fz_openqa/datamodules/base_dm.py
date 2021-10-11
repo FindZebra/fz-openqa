@@ -158,7 +158,7 @@ class BaseDataModule(LightningDataModule):
         return dataset
 
     def get_collate_pipe(self) -> Pipe:
-        return Lambda(lambda examples: self.tokenizer.pad(examples))
+        return Lambda(self.tokenizer.pad)
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filter operation to the dataset and return"""

@@ -3,6 +3,7 @@ from typing import Callable
 from typing import Optional
 from typing import Union
 
+import dill  # type: ignore
 import rich
 import torch
 from datasets import Dataset
@@ -19,6 +20,7 @@ from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import DeCollate
 from .pipes import FilterKeys
+from .pipes import FirstEg
 from .pipes import Gate
 from .pipes import Identity
 from .pipes import Itemize
@@ -34,16 +36,21 @@ from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import Sort
 from .pipes import TokenizerPipe
+from .pipes import Update
 from .pipes.nesting import Flatten
 from .pipes.nesting import flatten_nested
 from .pipes.nesting import nested_list
 from .pipes.tokenizer import CleanupPadTokens
+from .utils.condition import HasKeyWithPrefix
+from .utils.condition import Not
+from .utils.condition import Reduce
+from .utils.condition import Static
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
+from .utils.filter_keys import KeyIn
+from .utils.filter_keys import KeyWithPrefix
 from .utils.fingerprintable_map import FingerprintableMap
-from .utils.keys import KeyIn
-from .utils.keys import KeyWithPrefix
 from .utils.transformations import add_spec_token
 from .utils.transformations import set_example_idx
 from .utils.typing import HgDataset
@@ -173,6 +180,9 @@ class MedQaDataModule(BaseDataModule):
         )
         return dataset
 
+    def build_index(self, model: Optional[Callable] = None, **kwargs):
+        self.corpus.build_index(model=model, **kwargs)
+
     def get_answer_tokenizer_pipe(self):
         """create a Pipe to tokenize the answer choices."""
         answer_text_pipes = Sequential(
@@ -220,7 +230,7 @@ class MedQaDataModule(BaseDataModule):
         )
         return question_pipes
 
-    def get_collate_pipe(self, safe_pickle: bool = False) -> Pipe:
+    def get_collate_pipe(self) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate
@@ -253,37 +263,48 @@ class MedQaDataModule(BaseDataModule):
             id="answers",
         )
 
-        # search corpus pipe
-        search_docs_pipe = (
+        # the full pipe to collate question and answer fields
+        qa_collate_pipe = Parallel(
+            raw_text_pipe,
+            simple_attr_pipe,
+            question_pipe,
+            answer_pipe,
+            id="qa-collate",
+        )
+
+        # Search corpus pipe: this pipe is activated only if
+        # the batch does not already contains documents (Gate).
+        condition = Reduce(
+            Static(self.n_retrieved_documents > 0),
+            Not(HasKeyWithPrefix("document.")),
+        )
+        search_docs_pipe = Update(
             Gate(
-                self.n_retrieved_documents > 0,
-                SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+                condition,
+                Sequential(
+                    SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+                    self.postprocessing,
+                ),
             )
-            if not safe_pickle
-            else None
         )
 
         return Sequential(
             Parallel(
-                raw_text_pipe,
-                simple_attr_pipe,
-                question_pipe,
-                answer_pipe,
-                id="qa-collate",
+                # A. pipe to collate documents if already stored (compiled dataset)
+                self.get_documents_collate_pipe(),
+                # B. this one colalte the question and answer fields
+                qa_collate_pipe,
             ),
+            # C. Query the corpus for documents, only if A. did not return anything
             search_docs_pipe,
-            self.postprocessing,
             id="collate-fn",
         )
 
-    def documents_collate_pipe(self):
+    def get_documents_collate_pipe(self):
         """
         Build a pipe to collate a batch of retrieved document.
-        This is used only if documents are available in each example returned by
-        `dataset.__getitem__` and not use if documents are retrieved
-        in the `collate_fn`.
-
-        Unused at the moment.
+        This is used only if documents are already stored with each q-a pair,
+        which is the case when compiling datasets.
         """
         # get the raw text
         raw_text_pipe = FilterKeys(KeyIn(["document.text"]))
@@ -313,7 +334,8 @@ class MedQaDataModule(BaseDataModule):
             AddPrefix("document."),
         )
 
-        return Sequential(
+        # the full pipe used to collate documents
+        doc_collate_pipe = Sequential(
             Collate(
                 keys=[
                     "document.idx",
@@ -331,8 +353,8 @@ class MedQaDataModule(BaseDataModule):
             Nest(stride=self.n_documents),
         )
 
-    def build_index(self, model: Optional[Callable] = None, **kwargs):
-        self.corpus.build_index(model=model, **kwargs)
+        condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))
+        return Gate(condition, doc_collate_pipe)
 
     def get_postprocessing_pipe(
         self, relevance_classifier: RelevanceClassifier
