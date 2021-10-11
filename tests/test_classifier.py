@@ -11,7 +11,7 @@ class TestClassifier(TestCase):
             "A 67-year-old man who was diagnosed with arthritis 16 years ago presents with right knee swelling and pain. His left knee was swollen a few weeks ago, but now with both joints affected, he has difficulty walking and feels frustrated. He also has back pain which makes it extremely difficult to move around and be active during the day. He says his pain significantly improves with rest. He also suffers from dandruff for which he uses special shampoos. Physical examination is notable for pitting of his nails. Which of the following is the most likely diagnosis?"
             ]
         self.pos_answer = [
-            {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':'C0235782'},
+            {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':['C0235782'], "answer.synonyms": []},
             ]
         self.neg_answer = [
             {'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':'C0003872'}
@@ -28,13 +28,14 @@ class TestClassifier(TestCase):
 
         self.ExactMatch = ExactMatch()
         self.SciSpacyMatch = SciSpacyMatch()
+        self.MetaMapMatch = MetaMapMatch()
 
     def test_exact_match(self):
+        self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0])
         self.assertFalse(self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
-        #self.assertFalse(ExactMatch.classify(answer = self.neg_answer, document = self.neg_document))
 
-    #def test_metamap_match(self):
-    #    self.assertTrue(MetaMapMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
+    def test_metamap_match(self):
+        self.assertTrue(self.MetaMapMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
 
     def test_scispacy_match(self):
         self.assertTrue(self.SciSpacyMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
