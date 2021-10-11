@@ -31,8 +31,8 @@ class TestClassifier(TestCase):
         self.MetaMapMatch = MetaMapMatch()
 
     def test_exact_match(self):
+        self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0])
         self.assertFalse(self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
-        #self.assertFalse(ExactMatch.classify(answer = self.neg_answer, document = self.neg_document))
 
     def test_metamap_match(self):
         self.assertTrue(self.MetaMapMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
