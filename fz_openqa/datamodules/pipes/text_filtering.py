@@ -43,7 +43,7 @@ class SciSpacyFilter(TextFilter):
         super().__init__(**kwargs)
 
         if spacy_model is None:
-            self.model = spacy.load("en_core_sci_sm")
+            self.model = spacy.load("en_core_sci_sm", disable=["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer"])
 
         else:
             self.model = spacy_model.load()

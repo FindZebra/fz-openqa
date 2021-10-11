@@ -65,7 +65,7 @@ class MetaMapMatch(RelevanceClassifier):
         from scispacy.linking import EntityLinker  # type: ignore
 
         self.model_name = model_name
-        self.model = spacy.load(self.model_name)
+        self.model = spacy.load(self.model_name, disable=["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer"])
         self.model.add_pipe(
             "scispacy_linker",
             config={
@@ -104,7 +104,7 @@ class SciSpacyMatch(RelevanceClassifier):
         super().__init__()
 
         self.model_name = model_name
-        self.model = spacy.load(self.model_name)
+        self.model = spacy.load(self.model_name, disable=["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer"])
         self.model.add_pipe(
             "scispacy_linker",
             config={
