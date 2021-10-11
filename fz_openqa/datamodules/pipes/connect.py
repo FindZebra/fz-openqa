@@ -1,4 +1,3 @@
-from numbers import Number
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -7,44 +6,10 @@ from typing import Optional
 from typing import Union
 
 from fz_openqa.datamodules.pipes.base import Pipe
+from fz_openqa.datamodules.pipes.utils import reduce_dict_values
+from fz_openqa.datamodules.pipes.utils import safe_fingerprint
+from fz_openqa.datamodules.pipes.utils import safe_todict
 from fz_openqa.utils.datastruct import Batch
-
-
-def safe_todict(x):
-    if isinstance(x, Pipe):
-        return x.todict()
-    else:
-        return dict(x)
-
-
-def safe_fingerprint(x):
-    if isinstance(x, Pipe):
-        return x.fingerprint()
-    else:
-        return Pipe._fingerprint(x)
-
-
-def reduce_dict_values(x: Union[bool, Dict[str, Any]], op=all) -> bool:
-    if isinstance(x, dict):
-        outputs = []
-        for v in x.values():
-            if isinstance(v, dict):
-                outputs += [reduce_dict_values(v)]
-            else:
-                assert isinstance(v, bool)
-                outputs += [v]
-
-        return op(outputs)
-
-    else:
-        assert isinstance(
-            x,
-            (
-                bool,
-                Number,
-            ),
-        )
-        return x
 
 
 class Sequential(Pipe):
@@ -64,6 +29,7 @@ class Sequential(Pipe):
         return batch
 
     def todict(self) -> Dict:
+        """return a dictionary representation of this pipe."""
         d = super().todict()
         d["pipes"] = [safe_todict(p) for p in self.pipes]
         return d

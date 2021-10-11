@@ -410,7 +410,7 @@ class MedQaDataModule(BaseDataModule):
             CleanupPadTokens(self.tokenizer),
         )
 
-        # check that the pipe can be pickled
+        # run dataset.map() with extra steps to allow safe caching and multiprocessing
         mapper = FingerprintableMap(
             pipe,
             batched=True,
