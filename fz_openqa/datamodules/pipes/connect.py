@@ -10,6 +10,20 @@ from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
+def safe_todict(x):
+    if isinstance(x, Pipe):
+        return x.todict()
+    else:
+        return dict(x)
+
+
+def safe_fingerprint(x):
+    if isinstance(x, Pipe):
+        return x.fingerprint()
+    else:
+        return Pipe._fingerprint(x)
+
+
 def reduce_dict_values(x: Union[bool, Dict[str, Any]], op=all) -> bool:
     if isinstance(x, dict):
         outputs = []
@@ -49,10 +63,15 @@ class Sequential(Pipe):
 
         return batch
 
+    def todict(self) -> Dict:
+        d = super().todict()
+        d["pipes"] = [safe_todict(p) for p in self.pipes]
+        return d
+
     @staticmethod
     def get_pipe_id(p: Pipe):
         cls = str(type(p).__name__)
-        if p.id is None:
+        if not isinstance(p, Pipe) or p.id is None:
             return cls
         else:
             return f"{cls}({p.id})"
@@ -69,7 +88,13 @@ class Sequential(Pipe):
             return diagnostic
 
     def fingerprint(self) -> Dict[str, Any]:
-        return {self.get_pipe_id(p): p.fingerprint() for p in self.pipes}
+        return {self.get_pipe_id(p): safe_fingerprint(p) for p in self.pipes}
+
+    def as_fingerprintable(self) -> Any:
+        pipes = [p.as_fingerprintable() for p in self.pipes]
+        # pipes = [p for p in pipes if isinstance(p, Pipe)]
+        new_cls = type(self)(*pipes, id=self.id)
+        return new_cls
 
 
 class Parallel(Sequential):
@@ -115,6 +140,9 @@ class Gate(Pipe):
         self.condition = condition
         self.pipe = pipe
 
+    def as_fingerprintable(self) -> Pipe:
+        return Gate(self.condition, self.pipe.as_fingerprintable())
+
     @property
     def id(self):
         return str(type(self.pipe).__name__)
@@ -132,8 +160,13 @@ class Gate(Pipe):
         else:
             return {}
 
+    def todict(self) -> Dict:
+        d = super().todict()
+        d["pipe"] = safe_todict(self.pipe)
+        return d
+
     def dill_inspect(self) -> Any:
         return self.pipe.dill_inspect()
 
     def fingerprint(self) -> Any:
-        return self.pipe.fingerprint()
+        return safe_fingerprint(self.pipe)

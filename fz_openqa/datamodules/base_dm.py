@@ -19,8 +19,8 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.utils import HgDataset
-from fz_openqa.datamodules.utils import take_subset
+from fz_openqa.datamodules.utils.dataset import take_subset
+from fz_openqa.datamodules.utils.typing import HgDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch

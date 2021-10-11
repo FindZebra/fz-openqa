@@ -8,6 +8,7 @@ from fz_openqa.datamodules.pipes import ExactMatch, Pipe, SciSpacyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 from datasets import Dataset
+Dataset.map
 
 datasets.set_caching_enabled(True)
 
@@ -32,7 +33,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      verbose=True,
                      corpus=corpus,
                      # retrieve 100 documents for each question
-                     n_retrieved_documents=100,
+                     n_retrieved_documents=1000,
                      # keep only one positive doc
                      max_pos_docs=1,
                      # keep only 10 docs (1 pos + 9 neg)
@@ -41,7 +42,7 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      relevance_classifier=ExactMatch())
 
 # prepare both the QA dataset and the corpus
-dm.subset_size = [100, 20, 20]
+dm.subset_size = [1000, 10, 10]
 dm.prepare_data()
 dm.setup()
 
@@ -54,9 +55,19 @@ print(get_separator())
 # ExactMatch: process speed: ~60s/batch
 # SciSpacyMatch: process speed: ?/batch
 dm.compile_dataset(filter_unmatched=True,
-                   num_proc=2,
+                   num_proc=3,
                    batch_size=10)
-exit()
+
+# check that rows are not repeated (gihtub)
+c = 0
+txt = dm.compiled_dataset['train'][0]['question.text']
+for row in dm.compiled_dataset['train']:
+    if txt == row['question.text']:
+        c += 1
+rich.print(f">> item #0 found {c} times")
+
+
+
 rich.print(f"=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 

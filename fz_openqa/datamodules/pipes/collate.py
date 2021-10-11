@@ -23,7 +23,7 @@ class Collate(Pipe):
         keys: Optional[Union[str, List[str]]],
         key_op: Optional[Callable] = None,
     ):
-        self.keys = keys if keys is None else set(keys)
+        self.keys = keys
         self.key_op = key_op
 
     def __call__(self, examples: Iterable[Batch]) -> Batch:

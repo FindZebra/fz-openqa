@@ -1,27 +1,12 @@
 from typing import Any
 from typing import Dict
-from typing import List
-from typing import Union
 
 import torch
-from datasets import Dataset
-from datasets import DatasetDict
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
-
-HgDataset = Union[Dataset, DatasetDict]
-
-
-def get_column_names(dataset: HgDataset) -> List[str]:
-    if isinstance(dataset, DatasetDict):
-        return list(
-            set.union(*(set(d.column_names) for d in dataset.values()))
-        )
-    else:
-        return dataset.column_names
 
 
 def add_spec_token(
@@ -35,22 +20,6 @@ def add_spec_token(
     """
     assert special_token in [QUERY_TOKEN, ANS_TOKEN, DOC_TOKEN]
     return f"{special_token}{text}"
-
-
-def take_subset(dataset: HgDataset, subset_size: List[int]) -> HgDataset:
-    """Take a subset of the dataset and return."""
-    if isinstance(dataset, DatasetDict):
-        return DatasetDict(
-            {
-                k: dset.select(range(n))
-                for n, (k, dset) in zip(subset_size, dataset.items())
-            }
-        )
-    elif isinstance(dataset, Dataset):
-        size = next(iter(subset_size))
-        return dataset.select(range(size))
-    else:
-        raise NotImplementedError
 
 
 def set_example_idx(
