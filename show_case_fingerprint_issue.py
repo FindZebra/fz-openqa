@@ -1,11 +1,12 @@
+import fnmatch
 import hashlib
 import json
 import os
+from glob import glob
 from typing import Dict, Any
 from rich import print
 import numpy as np
 from datasets import load_dataset, Dataset
-Dataset.map
 
 Batch = Dict[str, Any]
 filename = 'example.json'
@@ -21,6 +22,9 @@ class Transformation():
         batch['x'] = [np.random.random() for _ in batch['x']]
         return batch
 
+def should_not_run(*args, **kwargs):
+    assert False
+
 
 def generate_dataset():
     """generate a simple dataset"""
@@ -35,7 +39,8 @@ def generate_dataset():
     return filename
 
 
-def process_dataset_with_cache(num_proc=1, remove_cache=False,
+def process_dataset_with_cache(num_proc=1,
+                               remove_cache=False,
                                cache_expected_to_exist=False):
 
     # load the generated dataset
@@ -45,19 +50,15 @@ def process_dataset_with_cache(num_proc=1, remove_cache=False,
 
     # get the expected cached path
     cache_path = dset._get_cache_file_path(new_fingerprint)
-    if remove_cache and os.path.exists(cache_path):
-        os.remove(cache_path)
-
-     # check that the cache exists, and print a statement
-    # if was actually expected to exist
-    cache_exist = os.path.exists(cache_path)
-    print(f"> cache file exists={cache_exist}")
-    if cache_expected_to_exist and not cache_exist:
-        print("=== Cache does not exist! ====")
+    if remove_cache:
+        base_path = cache_path.replace('.arrow', '')
+        for fn in glob(f"{base_path}*"):
+            print(f">> remove: {fn}")
+            os.remove(fn)
 
     # apply the transformation with the new fingerprint
     dset = dset.map(
-        Transformation(),
+        should_not_run if cache_expected_to_exist else Transformation(),
         batched=True,
         num_proc=num_proc,
         new_fingerprint=new_fingerprint,
