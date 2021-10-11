@@ -1,29 +1,26 @@
-import warnings
 from functools import partial
 from typing import Callable
-from typing import Dict
 from typing import Optional
 from typing import Union
 
-import dill
+import dill  # type: ignore
 import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
-from datasets.fingerprint import update_fingerprint
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
 from .corpus_dm import CorpusDataModule
 from .datasets import medqa
-from .index import ElasticSearchIndex
 from .pipes import AddPrefix
 from .pipes import Apply
 from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import DeCollate
 from .pipes import FilterKeys
+from .pipes import FirstEg
 from .pipes import Gate
 from .pipes import Identity
 from .pipes import Itemize
@@ -39,14 +36,24 @@ from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import Sort
 from .pipes import TokenizerPipe
+from .pipes import Update
 from .pipes.nesting import Flatten
 from .pipes.nesting import flatten_nested
 from .pipes.nesting import nested_list
 from .pipes.tokenizer import CleanupPadTokens
-from .utils import add_spec_token
-from .utils import get_column_names
-from .utils import HgDataset
-from .utils import set_example_idx
+from .utils.condition import HasKeyWithPrefix
+from .utils.condition import Not
+from .utils.condition import Reduce
+from .utils.condition import Static
+from .utils.dataset import filter_questions_by_pos_docs
+from .utils.dataset import get_column_names
+from .utils.dataset import print_size_difference
+from .utils.filter_keys import KeyIn
+from .utils.filter_keys import KeyWithPrefix
+from .utils.fingerprintable_map import FingerprintableMap
+from .utils.transformations import add_spec_token
+from .utils.transformations import set_example_idx
+from .utils.typing import HgDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
@@ -173,10 +180,13 @@ class MedQaDataModule(BaseDataModule):
         )
         return dataset
 
+    def build_index(self, model: Optional[Callable] = None, **kwargs):
+        self.corpus.build_index(model=model, **kwargs)
+
     def get_answer_tokenizer_pipe(self):
         """create a Pipe to tokenize the answer choices."""
         answer_text_pipes = Sequential(
-            FilterKeys(lambda key: key == "answer.text"),
+            FilterKeys(KeyIn(["answer.text"])),
             ReplaceInKeys("answer.", ""),
             ApplyToAll(flatten_nested, element_wise=False),
             Apply(
@@ -200,7 +210,7 @@ class MedQaDataModule(BaseDataModule):
     def get_question_tokenizer_pipe(self):
         """create a Pipe to tokenize the questions."""
         question_pipes = Sequential(
-            FilterKeys(lambda key: "question.text" in key),
+            FilterKeys(KeyIn(["question.text"])),
             ReplaceInKeys("question.", ""),
             Apply(
                 {"text": partial(add_spec_token, QUERY_TOKEN)},
@@ -229,7 +239,7 @@ class MedQaDataModule(BaseDataModule):
         # collate simple attributes
         simple_attr_pipe = Sequential(
             Collate(keys=["idx", "answer.target", "answer.n_options"]),
-            ApplyToAll(op=lambda x: torch.tensor(x)),
+            ApplyToAll(torch.tensor),
             id="simple-attrs",
         )
 
@@ -253,63 +263,79 @@ class MedQaDataModule(BaseDataModule):
             id="answers",
         )
 
-        # search corpus pipe
-        search_docs_pipe = Gate(
-            self.n_retrieved_documents > 0,
-            SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+        # the full pipe to collate question and answer fields
+        qa_collate_pipe = Parallel(
+            raw_text_pipe,
+            simple_attr_pipe,
+            question_pipe,
+            answer_pipe,
+            id="qa-collate",
+        )
+
+        # Search corpus pipe: this pipe is activated only if
+        # the batch does not already contains documents (Gate).
+        condition = Reduce(
+            Static(self.n_retrieved_documents > 0),
+            Not(HasKeyWithPrefix("document.")),
+        )
+        search_docs_pipe = Update(
+            Gate(
+                condition,
+                Sequential(
+                    SearchCorpus(self.corpus, k=self.n_retrieved_documents),
+                    self.postprocessing,
+                ),
+            )
         )
 
         return Sequential(
             Parallel(
-                raw_text_pipe,
-                simple_attr_pipe,
-                question_pipe,
-                answer_pipe,
-                id="qa-collate",
+                # A. pipe to collate documents if already stored (compiled dataset)
+                self.get_documents_collate_pipe(),
+                # B. this one colalte the question and answer fields
+                qa_collate_pipe,
             ),
+            # C. Query the corpus for documents, only if A. did not return anything
             search_docs_pipe,
-            self.postprocessing,
             id="collate-fn",
         )
 
-    def documents_collate_pipe(self):
+    def get_documents_collate_pipe(self):
         """
         Build a pipe to collate a batch of retrieved document.
-        This is used only if documents are available in each example returned by
-        `dataset.__getitem__` and not use if documents are retrieved
-        in the `collate_fn`.
-
-        Unused at the moment.
+        This is used only if documents are already stored with each q-a pair,
+        which is the case when compiling datasets.
         """
         # get the raw text
-        raw_text_pipe = FilterKeys(lambda key: key in ["document.text"])
+        raw_text_pipe = FilterKeys(KeyIn(["document.text"]))
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
             FilterKeys(
-                lambda key: key
-                in [
-                    "document.idx",
-                    "document.passage_idx",
-                    "document.retrieval_score",
-                    "document.is_positive",
-                ]
+                KeyIn(
+                    [
+                        "document.idx",
+                        "document.passage_idx",
+                        "document.retrieval_score",
+                        "document.is_positive",
+                    ]
+                )
             ),
-            ApplyToAll(op=lambda x: torch.tensor(x)),
+            ApplyToAll(op=torch.tensor),
         )
 
         # collate the questions attributes (question.input_ids, question.idx, ...)
         tokens_pipe = Sequential(
             FilterKeys(
-                lambda key: key
-                in ["document.input_ids", "document.attention_mask"]
+                KeyIn(["document.input_ids", "document.attention_mask"])
             ),
             ReplaceInKeys("document.", ""),
             Lambda(self.tokenizer.pad),
             AddPrefix("document."),
         )
 
-        return Sequential(
+        # the full pipe used to collate documents
+        doc_collate_pipe = Sequential(
             Collate(
                 keys=[
                     "document.idx",
@@ -327,8 +353,8 @@ class MedQaDataModule(BaseDataModule):
             Nest(stride=self.n_documents),
         )
 
-    def build_index(self, model: Optional[Callable] = None, **kwargs):
-        self.corpus.build_index(model=model, **kwargs)
+        condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))
+        return Gate(condition, doc_collate_pipe)
 
     def get_postprocessing_pipe(
         self, relevance_classifier: RelevanceClassifier
@@ -344,7 +370,7 @@ class MedQaDataModule(BaseDataModule):
                 Sort(key="document.retrieval_score"),
                 Sort(key="document.is_positive"),
             ),
-            filter=lambda key: str(key).startswith("document."),
+            filter=KeyWithPrefix("document."),
         )
 
         # select `n_documents` where count(is_positive) <= max_pos_docs
@@ -406,43 +432,16 @@ class MedQaDataModule(BaseDataModule):
             CleanupPadTokens(self.tokenizer),
         )
 
-        if pipe.dill_inspect(reduce=True):
-            fingerprints = {}
-        else:
-            warnings.warn(
-                "Couldn't pickle pipe. Will attempt running this "
-                "code using a partial fingerprint. "
-                "Code will fail if `num_proc`>1"
-            )
-            rich.print(pipe.dill_inspect())
-            # Infer the fingerprint when this cannot be done automatically
-            if isinstance(self.corpus._index, ElasticSearchIndex):
-                op = Sequential(
-                    DeCollate(),
-                    # self.collate_pipe,
-                    Itemize(),
-                    CleanupPadTokens(self.tokenizer),
-                )
-                params = {
-                    "k": self.n_documents,
-                    "es_index": self.corpus._index.index_name,
-                }
-                fingerprints = self.generate_fingerprint(op, params)
-
-        # Compile the dataset
-        self.compiled_dataset = DatasetDict(
-            {
-                key: dset.map(
-                    pipe,
-                    batched=True,
-                    num_proc=num_proc,
-                    batch_size=batch_size,
-                    desc="Compiling dataset",
-                    new_fingerprint=fingerprints.get(key, None),
-                )
-                for key, dset in self.dataset.items()
-            }
+        # run dataset.map() with extra steps to allow safe caching and multiprocessing
+        mapper = FingerprintableMap(
+            pipe,
+            batched=True,
+            num_proc=num_proc,
+            batch_size=batch_size,
+            desc="Compiling dataset",
         )
+
+        self.compiled_dataset = mapper(self.dataset)
 
         # cast tensor values
         self.cast_compiled_dataset()
@@ -458,7 +457,9 @@ class MedQaDataModule(BaseDataModule):
             print_size_difference(self.dataset, self.compiled_dataset)
 
     def filter_unmatched_questions(self, dataset: DatasetDict):
-        fn = partial(filter_questions, max_pos_docs=self.max_pos_docs)
+        fn = partial(
+            filter_questions_by_pos_docs, max_pos_docs=self.max_pos_docs
+        )
         return dataset.filter(fn)
 
     def cast_compiled_dataset(self):
@@ -469,30 +470,3 @@ class MedQaDataModule(BaseDataModule):
         self.compiled_dataset.set_format(
             type="torch", columns=pt_cols, output_all_columns=True
         )
-
-    def generate_fingerprint(self, op: Callable, params: Dict):
-        return {
-            k: update_fingerprint(
-                dset._fingerprint,
-                op,
-                params,
-            )
-            for k, dset in self.dataset.items()
-        }
-
-
-def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
-    # store the previous split sizes
-    prev_lengths = {k: len(v) for k, v in old_dataset.items()}
-    new_lengths = {k: len(v) for k, v in new_dataset.items()}
-    print(get_separator())
-    rich.print("> New dataset size:")
-    for key in new_lengths.keys():
-        ratio = new_lengths[key] / prev_lengths[key]
-        rich.print(f">  - {key}: {new_lengths[key]} ({100 * ratio:.2f}%)")
-    print(get_separator())
-
-
-def filter_questions(row, *, max_pos_docs: int):
-    n = sum(row["document.is_positive"])
-    return n > 0 and n <= max_pos_docs

@@ -17,6 +17,8 @@ from fz_openqa.utils.datastruct import Batch
 class SearchCorpus(Pipe):
     """Search a Corpus object given a query"""
 
+    skip_fingerprint = True
+
     def __init__(
         self,
         corpus,
@@ -37,12 +39,32 @@ class SearchCorpus(Pipe):
         self.simple_collate = simple_collate
         self.model = model
 
+    def __repr__(self):
+        return self.as_fingerprintable().__repr__()
+
     def dill_inspect(self) -> Dict[str, Any]:
         return {
             "__all__": dill.pickles(self),
             "index": self.index.dill_inspect(),
             "dataset": dill.pickles(self.dataset),
             "collate_pipe": dill.pickles(self.collate_pipe),
+        }
+
+    def fingerprint(self) -> Dict[str, Any]:
+        return {
+            "__all__": self._fingerprint(self),
+            "index": self._fingerprint(self),
+            "dataset": self._fingerprint(self),
+            "collate_pipe": self._fingerprint(self),
+        }
+
+    def as_fingerprintable(self) -> Optional:
+        return {
+            "__type__": type(self),
+            "k": self.k,
+            "dataset": self.dataset._fingerprint,
+            "es_index": self.index.index_name,
+            # todo 'preprocesing_pipe': self.index.preprocesing_pipe,
         }
 
     def __call__(

@@ -37,8 +37,8 @@ from .pipes import Sequential
 from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
-from .utils import add_spec_token
-from .utils import set_example_idx
+from .utils.transformations import add_spec_token
+from .utils.transformations import set_example_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator

@@ -6,6 +6,7 @@ from typing import Optional
 from typing import Union
 
 import dill
+from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
@@ -36,9 +37,34 @@ class Pipe:
         """The call of the pipeline process"""
         raise NotImplementedError
 
-    def dill_inspect(self) -> bool:
-        """check if the module can be pickled."""
+    def dill_inspect(self, reduce=True) -> bool:
+        """Returns True if the module can be pickled."""
         return dill.pickles(self)
+
+    def fingerprint(self) -> str:
+        """return the fingerprint of this object"""
+        return self._fingerprint(self)
+
+    def as_fingerprintable(self) -> Any:
+        """return a fingerprintable version of the object. This version does
+        not necessarily run as a pipe, but the fingerprint of the returned object
+        must be deterministic."""
+        return self
+
+    def todict(self) -> Dict[str, Any]:
+        """Return a dictionary representation of the object"""
+        d = {"__type__": type(self).__name__}
+        if self.id is not None:
+            d["__id__"] = self.id
+
+        return d
+
+    @staticmethod
+    def _fingerprint(x):
+        """Return the fingerprint of an object."""
+        hash = Hasher()
+        hash.update(x)
+        return hash.hexdigest()
 
 
 class Identity(Pipe):
