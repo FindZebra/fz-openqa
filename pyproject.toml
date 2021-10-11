@@ -54,5 +54,6 @@ exclude = '''
   | build
   | dist
   | \sandbox*.py
+  | \.github
 )/
 '''
