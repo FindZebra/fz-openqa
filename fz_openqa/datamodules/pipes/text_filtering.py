@@ -49,8 +49,8 @@ class SciSpacyFilter(TextFilter):
             self.model = spacy_model.load()
 
     def filter(self, text: str) -> str:
-        doc = self.model(text)
-        return " ".join([str(el) for el in list(doc.ents)])
+        for doc in self.model.pipe([text]):
+            return " ".join([str(ent.text) for ent in doc.ents])
 
 
 class MetaMapFilter(TextFilter):

@@ -11,10 +11,10 @@ class TestClassifier(TestCase):
             "A 67-year-old man who was diagnosed with arthritis 16 years ago presents with right knee swelling and pain. His left knee was swollen a few weeks ago, but now with both joints affected, he has difficulty walking and feels frustrated. He also has back pain which makes it extremely difficult to move around and be active during the day. He says his pain significantly improves with rest. He also suffers from dandruff for which he uses special shampoos. Physical examination is notable for pitting of his nails. Which of the following is the most likely diagnosis?"
             ]
         self.pos_answer = [
-            {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':'C0235782'},
+            {'answer.target': 1, 'answer.text': ["Acute cholecystitis", "Gallbladder cancer", "Choledocholithiasis","Pancreatitis"], 'answer.cui':['C0235782'], 'answer.synonyms':[]},
             ]
         self.neg_answer = [
-            {'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':'C0003872'}
+            {'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':['C0003872'], 'answer.synonyms':[]}
             ]
         self.pos_document = [
             {'document.text': "Carcinoma of the gallbladder (GBC) is the most common and aggressive form of biliary tract cancer (BTC; see this term) usually arising in the fundus of the gallbladder, rapidly metastasizing to lymph nodes and distant sites. Epidemiology Annual incidence rates vary from 1/100,000 to 1/ 4,350 between different ethnic groups and geographical regions. It is rare in developed Western countries but has a high incidence in Japan (1/19,000), northern India, Chile and certain regions of Eastern Europe. Clinical description GBC is a rare neoplasm occurring more often in females (3-4:1 female to male ratio) with an average age of onset of 65 years. Most patients are asymptomatic until the disease is advanced but presenting symptoms include abdominal pain (usually in the upper right quadrant), nausea, vomiting, jaundice, anorexia and weight loss. Gallstones are often present in patients with GBC. GBC is extremely aggressive and invasion of the lymph nodes, liver and other organs occurs rapidly in many cases. Etiology The exact etiology is unknown. Genetic susceptibility elicited by chronic inflammation of the gallbladder leading to dysplasia and malignant change is one possibility. Risk factors associated with GBC include a history of gallstones, cholelithiasis, porcelain gallbladder, bacterial infections, high caloric diet"},
@@ -28,13 +28,14 @@ class TestClassifier(TestCase):
 
         self.ExactMatch = ExactMatch()
         self.SciSpacyMatch = SciSpacyMatch()
+        self.MetaMapMatch = MetaMapMatch()
 
     def test_exact_match(self):
         self.assertFalse(self.ExactMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
         #self.assertFalse(ExactMatch.classify(answer = self.neg_answer, document = self.neg_document))
 
-    #def test_metamap_match(self):
-    #    self.assertTrue(MetaMapMatch.classify(answer = self.answer, document = self.document, model_name=self.model_name))
+    def test_metamap_match(self):
+        self.assertTrue(self.MetaMapMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))
 
     def test_scispacy_match(self):
         self.assertTrue(self.SciSpacyMatch.classify(answer = self.pos_answer[0], document = self.pos_document[0]))

@@ -17,7 +17,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.datamodules.pipes.text_ops import TextCleaner
 
-
+np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 class RelevanceClassifier(Pipe):
     def __init__(
         self,
@@ -75,9 +75,6 @@ class MetaMapMatch(RelevanceClassifier):
             },
         )
         self.linker = self.model.get_pipe("scispacy_linker")
-    
-    def get_linked_entities(self, cui: str) -> Iterable[Entity]:
-        yield self.linker.kb.cui_to_entity[cui]
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
@@ -90,8 +87,11 @@ class MetaMapMatch(RelevanceClassifier):
 
         e_aliases = [alias.lower() for alias in self.linker.kb.cui_to_entity[answer_cui][2]]
 
-        answer_aliases = set.union(answer_aliases, answer_synonyms, e_aliases)
+        answer_aliases = sorted(set(answer_aliases + answer_synonyms + e_aliases), key=len)
         
+        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+        # re.IGNORECASE: Perform case-insensitive matching
         return bool(
             re.search(
                 re.compile('|'.join(re.escape(x) for x in answer_aliases), re.IGNORECASE)
@@ -125,7 +125,7 @@ class SciSpacyMatch(RelevanceClassifier):
             keep those entities not in the DISCARD_TUIs list.
             """
             
-            return bool(tui not in DISCARD_TUIs for tui in ent.types)
+            return bool(any(tui not in DISCARD_TUIs for tui in ent.types))
 
         linked_entities = filter(lambda ent: keep_entity, linked_entities)
 
@@ -135,9 +135,10 @@ class SciSpacyMatch(RelevanceClassifier):
                 yield alias.lower()
 
     def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
-        for ent in entity._.kb_ents:
-            ent_str, _ = ent  # ent: (str, score)
-            yield self.linker.kb.cui_to_entity[ent_str]
+        for cui in entity._.kb_ents:
+            print(cui)
+            cui_str, _ = cui  # ent: (str, score)
+            yield self.linker.kb.cui_to_entity[cui_str]
 
     def classify(
         self, answer: Dict[str, Any], document: Dict[str, Any]
@@ -148,16 +149,15 @@ class SciSpacyMatch(RelevanceClassifier):
         answer_text = answer["answer.text"][answer_index]
         answer_synonyms = answer["answer.synonyms"]
 
-        scispacy_doc = self.model(answer_text)
-
         answer_aliases = {answer["answer.text"][answer_index]}
-        
-        for entity in scispacy_doc.ents:
-            e_aliases = set(self.extract_aliases(entity))
-            answer_aliases = sorted(set.union(answer_aliases, answer_synonyms, e_aliases), key=len)
+
+        for doc in self.model.pipe([answer_text]):
+            for ent in doc.ents:
+                e_aliases = set(self.extract_aliases(ent))
+                answer_aliases = sorted(set.union(answer_aliases, answer_synonyms, e_aliases), key=len)
 
         # todo: investigate the aliases, some are too general
-        rich.print(f">> aliases={answer_aliases}, count={len(answer_aliases)} doc_ents={scispacy_doc.ents}")
+        rich.print(f">> aliases={answer_aliases}, count={len(answer_aliases)} doc_ents={doc.ents}")
 
         # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
         # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
