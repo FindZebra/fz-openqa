@@ -129,6 +129,6 @@ class FZxMedQADataModule(MedQaDataModule):
             questions_ids = dset["question.idx"]
             selected_ids = random.sample(questions_ids, k=subset_size[key])
             fn = partial(FZxMedQADataModule.filter_question_id, selected_ids)
-            dataset[key] = dset.filter(fn)
+            dataset[key] = dset.filter_one(fn)
 
         return dataset
