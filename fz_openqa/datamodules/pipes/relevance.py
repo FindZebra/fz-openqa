@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from itertools import tee
 from itertools import zip_longest
 from typing import Any
 from typing import Dict
@@ -191,7 +192,7 @@ class SciSpacyMatch(RelevanceClassifier):
         # filter irrelevant entities based on TUIs
         def keep_entity(ent: Entity) -> bool:
             """
-            keep those entities not in the DISCARD_TUIs list.
+            keep entities that are not in the DISCARD_TUIs list.
             """
 
             return any(tui not in DISCARD_TUIs for tui in ent.types)
@@ -212,7 +213,7 @@ class SciSpacyMatch(RelevanceClassifier):
     def classify(self, pair: Pair) -> bool:
 
         doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer.get("answer.aliases", [])
+        answer_aliases = pair.answer["answer.aliases"]
 
         # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
         # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
@@ -233,17 +234,21 @@ class SciSpacyMatch(RelevanceClassifier):
         return pair.answer["answer.text"][answer_index]
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+        """Generate the field `pair.answer["aliases"]`"""
+        # An iterator can only be consumed once, generate two of them
+        # casting as a list would also work
+        pairs_1, pairs_2 = tee(pairs, 2)
 
-        # extract the answer tetxt from each Pair
-        texts = list(map(self._answer_text, pairs))
+        # extract the answer text from each Pair
+        texts = map(self._answer_text, pairs_1)
 
         # batch processing of texts
         docs = self.model.pipe(texts)
 
         # join the aliases
-        for pair, txt, doc in zip_longest(texts, docs, pairs):
+        for pair, doc in zip_longest(pairs_2, docs):
             answer_synonyms = set(pair.answer.get("answer.synonyms", []))
-            answer_aliases = set.union({txt}, answer_synonyms)
+            answer_aliases = set.union({str(doc)}, answer_synonyms)
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
 
@@ -252,9 +257,13 @@ class SciSpacyMatch(RelevanceClassifier):
                 answer_aliases = set.union(answer_aliases, e_aliases)
             # todo: investigate the aliases, some are too general
             rich.print(
-                f">> aliases={answer_aliases}, count={len(answer_aliases)} doc_ents={doc.ents}"
+                f">> aliases={answer_aliases}, "
+                f"count={len(answer_aliases)}, "
+                f"doc_ents={doc.ents}"
             )
-            pair.answer["aliases"] = answer_aliases
+
+            # update the pair and return
+            pair.answer["answer.aliases"] = answer_aliases
             yield pair
 
 
