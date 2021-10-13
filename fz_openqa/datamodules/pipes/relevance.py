@@ -160,7 +160,7 @@ class MetaMapMatch(RelevanceClassifier):
         )
 
 
-class SciSpacyMatch(RelevanceClassifier):
+class ScispaCyMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__()
 
