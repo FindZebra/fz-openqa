@@ -130,21 +130,14 @@ class MetaMapMatch(RelevanceClassifier):
         )
         self.linker = self.model.get_pipe("scispacy_linker")
 
+    def extract_aliases(self, cui) -> Iterable[str]:
+        for alias in self.linker.kb.cui_to_entity[cui][2]:
+            yield alias.lower()
+
     def classify(self, pair: Pair) -> bool:
+
         doc_text = pair.document["document.text"]
-        answer_index = pair.answer["answer.target"]
-        answer_aliases = [pair.answer["answer.text"][answer_index]]
-        answer_cui = pair.answer["answer.cui"][0]
-        answer_synonyms = pair.answer["answer.synonyms"]
-
-        e_aliases = [
-            alias.lower()
-            for alias in self.linker.kb.cui_to_entity[answer_cui][2]
-        ]
-
-        answer_aliases = sorted(
-            set(answer_aliases + answer_synonyms + e_aliases), key=len
-        )
+        answer_aliases = pair.answer["answer.aliases"]
 
         # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
         # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
@@ -158,7 +151,33 @@ class MetaMapMatch(RelevanceClassifier):
                 doc_text,
             )
         )
+    
+    @staticmethod
+    def _answer_text(pair: Pair) -> str:
+        answer_index = pair.answer["answer.target"]
+        return pair.answer["answer.text"][answer_index]
 
+    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+        """Generate the field `pair.answer["aliases"]`"""
+        # An iterator can only be consumed once, generate two of them
+        # casting as a list would also work
+        pairs_1, pairs_2 = tee(pairs, 2)
+
+        # extract the answer text from each Pair
+        texts = map(self._answer_text, pairs_1)
+
+        # join the aliases
+        for pair, text in zip_longest(pairs_2, texts):
+            answer_cuis = pair.answer.get("answer.cui", None)
+            answer_synonyms = set(pair.answer.get("answer.synonyms", []))
+            answer_aliases = set.union({str(text)}, answer_synonyms)
+            if len(answer_cuis)>0:
+                e_aliases = set(self.extract_aliases(answer_cuis[0]))
+                answer_aliases = set.union(answer_aliases, e_aliases)
+
+            # update the pair and return
+            pair.answer["answer.aliases"] = answer_aliases
+            yield pair
 
 class ScispaCyMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
