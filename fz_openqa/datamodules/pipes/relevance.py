@@ -252,7 +252,7 @@ class SciSpacyMatch(RelevanceClassifier):
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
 
-                # todo: why sorting here? doesn't look necessary
+                # todo: why sorting here? doesn't look necessary  
                 # answer_aliases = sorted(set.union(answer_aliases, e_aliases), key=len)
                 answer_aliases = set.union(answer_aliases, e_aliases)
             # todo: investigate the aliases, some are too general
