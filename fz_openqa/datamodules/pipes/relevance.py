@@ -206,7 +206,7 @@ class ScispaCyMatch(RelevanceClassifier):
 
     def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
         for cui in entity._.kb_ents:
-            print(cui)
+            # print(cui)
             cui_str, _ = cui  # ent: (str, score)
             yield self.linker.kb.cui_to_entity[cui_str]
 
@@ -253,15 +253,15 @@ class ScispaCyMatch(RelevanceClassifier):
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
 
-                # todo: why sorting here? doesn't look necessary  
+                # todo: why sorting here? doesn't look necessary
                 # answer_aliases = sorted(set.union(answer_aliases, e_aliases), key=len)
                 answer_aliases = set.union(answer_aliases, e_aliases)
             # todo: investigate the aliases, some are too general
-            rich.print(
-                f">> aliases={answer_aliases}, "
-                f"count={len(answer_aliases)}, "
-                f"doc_ents={doc.ents}"
-            )
+            # rich.print(
+            #    f">> aliases={answer_aliases}, "
+            #    f"count={len(answer_aliases)}, "
+            #    f"doc_ents={doc.ents}"
+            # )
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
