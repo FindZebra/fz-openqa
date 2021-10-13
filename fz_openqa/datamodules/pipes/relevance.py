@@ -247,6 +247,7 @@ class SciSpacyMatch(RelevanceClassifier):
 
         # join the aliases
         for pair, doc in zip_longest(pairs_2, docs):
+            # the dict method get allows you to provide a default value if the key is missing
             answer_synonyms = set(pair.answer.get("answer.synonyms", []))
             answer_aliases = set.union({str(doc)}, answer_synonyms)
             for ent in doc.ents:
