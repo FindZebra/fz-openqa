@@ -39,7 +39,13 @@ def find_one(
 ) -> bool:
     """check if one of the queries is in the input text
     # todo: unit tests"""
+    assert isinstance(text, str)
     queries = set(queries)
+    if len(queries) == 0:
+        return False
+    if len(text) == 0:
+        return False
+
     if sort_by is not None:
         queries = sorted(queries, key=sort_by)
 

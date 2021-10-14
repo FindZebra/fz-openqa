@@ -3,8 +3,8 @@ from copy import copy
 
 import torch
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes.relevance import MetaMapMatch, ScispaCyMatch, ExactMatch, Pair
-
+from fz_openqa.datamodules.pipes.relevance import MetaMapMatch, ScispaCyMatch, \
+    ExactMatch, Pair, find_one
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
       "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"],
@@ -23,23 +23,69 @@ b3 = {'question.text': "A 67-year-old man who was diagnosed with arthritis 16 ye
       "document.text": ["the fingers, nails, and skin. Sausage-like swelling in the fingers or toes, known as dactylitis, may occur. Psoriasis can also cause changes to the nails, such as pitting or separation from the nail bed, onycholysis, hyperkeratosis under the nails, and horizontal ridging. Psoriasis classically presents with scaly skin lesions, which are most commonly seen over extensor surfaces such as the scalp, natal cleft and umbilicus. In psoriatic arthritis, pain can occur in the area of the sacrum (the lower back, above the tailbone), as a result of sacroiliitis or spondylitis, which is present in 40% of cases. Pain can occur in and around the feet and ankles, especially enthesitis in the Achilles tendon (inflammation of the Achilles tendon where it inserts into the bone) or plantar fasciitis in the sole of the foot. Along with the above-noted pain and inflammation, there is extreme exhaustion that does not go away with adequate rest. The exhaustion may last for days or weeks without abatement. Psoriatic arthritis may remain mild or may progress to more destructive joint disease. Periods of active disease, or flares, will typically alternate with periods of remission. In severe forms, psoriatic arthritis may progress to arthritis mutilans which on"]}
 
 
-class TestClassifier(TestCase):
+class TestRelevanceClassifier(TestCase):
+    """test the RelevanceClassifier"""
     def setUp(self) -> None:
-        self.exs = [b0, b1, b2, b3]
-        self.batch = Collate(keys=None)(self.exs)
-
-        self.classifiers = [ExactMatch(), ScispaCyMatch()]
-        self.output = {c:c(copy(self.batch)) for c in self.classifiers}
+        exs = [b0, b1, b2, b3]
+        self.batch = Collate(keys=None)(exs)
 
     def test_exact_match(self):
-        self.assertTrue(self.output.get(self.classifiers[0])['document.is_positive'][3])
-        self.assertFalse(self.output.get(self.classifiers[0])['document.is_positive'][0])
+        classifier = ExactMatch()
+        output = classifier(copy(self.batch))
+        self.assertTrue(output['document.is_positive'][3])
+        self.assertFalse(output['document.is_positive'][0])
 
 
     def test_scispacy_match(self):
-        self.assertTrue(self.output.get(self.classifiers[1])['document.is_positive'][3])
-        self.assertTrue(self.output.get(self.classifiers[1])['document.is_positive'][2])
-        self.assertFalse(self.output.get(self.classifiers[1])['document.is_positive'][1])
+        classifier = ScispaCyMatch()
+        output = classifier(copy(self.batch))
+        self.assertTrue(output['document.is_positive'][3])
+        self.assertTrue(output['document.is_positive'][2])
+        self.assertFalse(output['document.is_positive'][1])
+
+class TestFindOne(TestCase):
+    """Test the function find one"""
+    def setUp(self) -> None:
+        self.ops = [None, len, lambda x: -len(x)]
+
+    def test_hello_world(self):
+        """test that matching with simple queries and documents"""
+        for op in self.ops:
+            for doc, queries in [("hello world", ["hello"]),
+                                 ("hello world", ["hello", "world"]),
+                                 ("hello world", ["world"]),
+                                 ("hello world", ["ll"]),]:
+                self.assertTrue(find_one(doc, queries, sort_by=op))
+
+    def test_str_case(self):
+        """test that matching with simple queries and documents,
+        with upper and lowercase inputs."""
+        for op in self.ops:
+            for doc, queries in [("hello world", ["Hello"]),
+                                 ("hello world", ["HELLO"]),
+                                 ("hello WOrLd", ["world"]),
+                                 ("heLLo world", ["ll"]),]:
+                self.assertTrue(find_one(doc, queries, sort_by=op))
+
+    def test_negatives(self):
+        """test that find_one returns False where queries are not in the doc."""
+        for op in self.ops:
+            for doc, queries in [("hello world", ["paris"]),
+                                 ("hello world", ["paris", "amsterdam"]),
+                                 ("hello world", ["helllo"])]:
+                self.assertFalse(find_one(doc, queries, sort_by=op))
+
+    def test_empty_query(self):
+        """test the output for empty queries"""
+        for op in self.ops:
+            for doc, queries in [("hello world", [])]:
+                self.assertFalse(find_one(doc, queries, sort_by=op))
+
+    def test_empty_doc(self):
+        """test the output for empty docs"""
+        for op in self.ops:
+            for doc, queries in [("", ["hello", "world"])]:
+                self.assertFalse(find_one(doc, queries, sort_by=op))
 
 
     #def test_metamap_match(self):
