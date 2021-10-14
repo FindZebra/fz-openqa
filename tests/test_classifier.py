@@ -23,30 +23,28 @@ class TestClassifier(TestCase):
             "document.text": ["Post polio syndrome is a condition that affects polio survivors years after recovery from the initial polio illness. Symptoms and severity vary among affected people and may include muscle weakness and a gradual decrease in the size of muscles (atrophy); muscle and joint pain; fatigue;difficulty with gait; respiratory problems; and/or swallowing problems.\xa0Only a polio survivor can develop PPS. While polio is a contagious disease, PPS is not. The exact cause of PPS years after the first episode of polio is unclear, although several theories have been proposed. Treatment focuses on reducing symptoms and improving quality of life."]
             }
             #,"Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"
-        self.answer4 = {
-            'answer.target': 0, 'answer.text': ["Psoriatic arthritis"], 'answer.cui':['C0003872'], "answer.synonyms":["Arthritis, Psoriatic"]}
-        self.qst4 = {
-            'question.text': "A 67-year-old man who was diagnosed with arthritis 16 years ago presents with right knee swelling and pain. His left knee was swollen a few weeks ago, but now with both joints affected, he has difficulty walking and feels frustrated. He also has back pain which makes it extremely difficult to move around and be active during the day. He says his pain significantly improves with rest. He also suffers from dandruff for which he uses special shampoos. Physical examination is notable for pitting of his nails. Which of the following is the most likely diagnosis?"}
-        self.document4 = {
-            "document.text": ["the fingers, nails, and skin. Sausage-like swelling in the fingers or toes, known as dactylitis, may occur. Psoriasis can also cause changes to the nails, such as pitting or separation from the nail bed, onycholysis, hyperkeratosis under the nails, and horizontal ridging. Psoriasis classically presents with scaly skin lesions, which are most commonly seen over extensor surfaces such as the scalp, natal cleft and umbilicus. In psoriatic arthritis, pain can occur in the area of the sacrum (the lower back, above the tailbone), as a result of sacroiliitis or spondylitis, which is present in 40% of cases. Pain can occur in and around the feet and ankles, especially enthesitis in the Achilles tendon (inflammation of the Achilles tendon where it inserts into the bone) or plantar fasciitis in the sole of the foot. Along with the above-noted pain and inflammation, there is extreme exhaustion that does not go away with adequate rest. The exhaustion may last for days or weeks without abatement. Psoriatic arthritis may remain mild or may progress to more destructive joint disease. Periods of active disease, or flares, will typically alternate with periods of remission. In severe forms, psoriatic arthritis may progress to arthritis mutilans which on"]
+        self.ex4 = {
+            'answer.target': 0, 'answer.text': ["Psoriatic arthritis"], 'answer.cui':['C0003872'], "answer.synonyms":["Arthritis, Psoriatic"], 'question.text': "A 67-year-old man who was diagnosed with arthritis 16 years ago presents with right knee swelling and pain. His left knee was swollen a few weeks ago, but now with both joints affected, he has difficulty walking and feels frustrated. He also has back pain which makes it extremely difficult to move around and be active during the day. He says his pain significantly improves with rest. He also suffers from dandruff for which he uses special shampoos. Physical examination is notable for pitting of his nails. Which of the following is the most likely diagnosis?", "document.text": ["the fingers, nails, and skin. Sausage-like swelling in the fingers or toes, known as dactylitis, may occur. Psoriasis can also cause changes to the nails, such as pitting or separation from the nail bed, onycholysis, hyperkeratosis under the nails, and horizontal ridging. Psoriasis classically presents with scaly skin lesions, which are most commonly seen over extensor surfaces such as the scalp, natal cleft and umbilicus. In psoriatic arthritis, pain can occur in the area of the sacrum (the lower back, above the tailbone), as a result of sacroiliitis or spondylitis, which is present in 40% of cases. Pain can occur in and around the feet and ankles, especially enthesitis in the Achilles tendon (inflammation of the Achilles tendon where it inserts into the bone) or plantar fasciitis in the sole of the foot. Along with the above-noted pain and inflammation, there is extreme exhaustion that does not go away with adequate rest. The exhaustion may last for days or weeks without abatement. Psoriatic arthritis may remain mild or may progress to more destructive joint disease. Periods of active disease, or flares, will typically alternate with periods of remission. In severe forms, psoriatic arthritis may progress to arthritis mutilans which on"]
             }
 
-        #exs = [ex1, ex2, ex3, ex4]
-        #batch = Collate(keys=None)(exs)
+        exs = [self.ex1, self.ex2, self.ex3, self.ex4]
+        batch = Collate(keys=None)(exs)
+        ExactMatch.__call__(batch)
 
-        self.ExactMatch = ExactMatch()
+        #self.ExactMatch = ExactMatch()
         #self.SciSpacyMatch = ScispaCyMatch()
         #self.MetaMapMatch = MetaMapMatch()
 
         #self.classifiers = [ExactMatch(), ScispaCyMatch(), MetaMapMatch()]
-
-    def test_exact_match(self):
-        Pair.document = self.document4
-        Pair.answer = self.answer4
-        self.assertTrue(self.ExactMatch.classify(Pair))
+        #self.output = {c:c(copy(batch)) for c in self.classifiers}
 
     #def test_exact_match(self):
-    #    self.assertTrue(self.output.get(self.classifiers[0])['document.is_positive'][4])
+    #    Pair.document = self.document4
+    #    Pair.answer = self.answer4
+    #    self.assertTrue(self.ExactMatch.classify(Pair))
+
+    def test_exact_match(self):
+        self.assertTrue(self.output.get(self.classifiers[0])['document.is_positive'][4])
         #self.assertTrue(self.ExactMatch.classify(answer=))
 
     #def test_metamap_match(self):
