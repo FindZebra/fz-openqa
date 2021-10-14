@@ -35,12 +35,10 @@ class RelevanceClassifier(Pipe):
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
         output_key: str = "document.is_positive",
-        output_count_key: str = "document.positive_count",
     ):
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
-        self.output_count_key = output_count_key
 
     def classify(self, pair: Pair) -> bool:
         """Classify each pair."""
@@ -79,7 +77,6 @@ class RelevanceClassifier(Pipe):
 
         # return results
         batch[self.output_key] = results
-        batch[self.output_count_key] = results.float().sum(-1).long()
         return batch
 
     def _get_data_pairs(
