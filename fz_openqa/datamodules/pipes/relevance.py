@@ -11,7 +11,6 @@ from typing import Sequence
 
 import dill
 import numpy as np
-import rich
 import spacy
 import torch
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
@@ -37,8 +36,7 @@ class Pair:
 def find_one(
     text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
 ) -> bool:
-    """check if one of the queries is in the input text
-    # todo: unit tests"""
+    """check if one of the queries is in the input text"""
     assert isinstance(text, str)
     queries = set(queries)
     if len(queries) == 0:
@@ -213,7 +211,6 @@ class ScispaCyMatch(RelevanceClassifier):
                 del state[key]
                 state[key] = None
 
-        rich.print(f">> get_state: {state.keys()}")
         return state
 
     def fingerprint(self) -> Any:
