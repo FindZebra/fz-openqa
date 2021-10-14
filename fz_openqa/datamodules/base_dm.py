@@ -19,8 +19,8 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.utils import HgDataset
-from fz_openqa.datamodules.utils import take_subset
+from fz_openqa.datamodules.utils.dataset import take_subset
+from fz_openqa.datamodules.utils.typing import HgDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -118,16 +118,22 @@ class BaseDataModule(LightningDataModule):
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
+        # load the dataset and potentially filter it
+        self.dataset = self.load_and_filter_dataset()
 
         # preprocess
-        self.dataset: HgDataset = self.load_base_dataset()
-        self.dataset = self.filter_dataset(self.dataset)
-        if self.use_subset:
-            self.dataset = take_subset(self.dataset, self.subset_size)
         self.dataset = self.preprocess_dataset(self.dataset)
 
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
+
+    def load_and_filter_dataset(self) -> HgDataset:
+        dataset: HgDataset = self.load_base_dataset()
+        dataset = self.filter_dataset(dataset)
+        if self.use_subset:
+            dataset = take_subset(dataset, self.subset_size)
+
+        return dataset
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -152,7 +158,7 @@ class BaseDataModule(LightningDataModule):
         return dataset
 
     def get_collate_pipe(self) -> Pipe:
-        return Lambda(lambda examples: self.tokenizer.pad(examples))
+        return Lambda(self.tokenizer.pad)
 
     def filter_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply filter operation to the dataset and return"""
@@ -190,17 +196,18 @@ class BaseDataModule(LightningDataModule):
     def test_dataloader(self):
         return self._eval_loader(Split.TEST)
 
-    def get_dataset(self, split: Union[str, Split]) -> Dataset:
+    def get_dataset(
+        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+    ) -> Dataset:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""
-        if isinstance(self.dataset, Dataset):
-            return self.dataset
-        elif isinstance(self.dataset, DatasetDict):
-            return self.dataset[split]
+        dataset = dataset or self.dataset
+        if isinstance(dataset, Dataset):
+            return dataset
+        elif isinstance(dataset, DatasetDict):
+            return dataset[split]
         else:
-            raise TypeError(
-                f"Unknown dataset type <{type(self.dataset).__name__}>"
-            )
+            raise TypeError(f"Unknown dataset type <{type(dataset).__name__}>")
 
     def collate_fn(self, examples: List[Batch]) -> Batch:
         """The function that is used to merge examples into a batch.

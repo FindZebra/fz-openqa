@@ -7,7 +7,7 @@ from typing import Union
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.datamodules.utils import nested_list
+from fz_openqa.datamodules.pipes.nesting import nested_list
 from fz_openqa.utils.datastruct import Batch
 
 ENCODING_ATTRIBUTES = ["input_ids", "attention_mask"]

@@ -15,6 +15,7 @@ from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 
+from ..utils.filter_keys import KeyWithPrefix
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -86,12 +87,12 @@ class RelevanceClassifier(Pipe):
     ) -> Iterable[Pair]:
         batch_size = batch_size or self._infer_batch_size(batch)
         for i in range(batch_size):
-            a_data_i = {
-                k: v[i] for k, v in batch.items() if self.answer_prefix in k
-            }
-            d_data_i = {
-                k: v[i] for k, v in batch.items() if self.document_prefix in k
-            }
+            a_data_i = self.get_eg(
+                batch, i, filter_op=KeyWithPrefix(self.answer_prefix)
+            )
+            d_data_i = self.get_eg(
+                batch, i, filter_op=KeyWithPrefix(self.document_prefix)
+            )
 
             # iterate through each document
             n_docs = len(next(iter(d_data_i.values())))
@@ -107,7 +108,7 @@ class RelevanceClassifier(Pipe):
 
 class MetaMapMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.model_name = model_name
         self.model = spacy.load(
@@ -162,7 +163,7 @@ class MetaMapMatch(RelevanceClassifier):
 
 class ScispaCyMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.model_name = model_name
         self.model = spacy.load(
@@ -276,4 +277,4 @@ class ExactMatch(RelevanceClassifier):
         answer_index = pair.answer["answer.target"]
         answer_text = pair.answer["answer.text"][answer_index]
 
-        return bool(answer_text in doc_text)
+        return bool(answer_text.lower() in doc_text.lower())

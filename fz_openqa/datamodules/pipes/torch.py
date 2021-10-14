@@ -1,8 +1,12 @@
+from typing import Any
 from typing import Callable
+from typing import List
+from typing import Optional
 from typing import Union
 
 import torch
 from pytorch_lightning.utilities import move_data_to_device
+from torch import Tensor
 
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -16,6 +20,21 @@ class ToNumpy(Pipe):
             k: v.to(device="cpu").numpy() if isinstance(v, torch.Tensor) else v
             for k, v in batch.items()
         }
+
+
+class Itemize(Pipe):
+    """Convert all values to lists."""
+
+    def itemize(self, values: Any):
+        if isinstance(values, Tensor) and values.dim() > 0:
+            return [self.itemize(x) for x in values]
+        elif isinstance(values, Tensor):
+            return values.item()
+        else:
+            return values
+
+    def __call__(self, batch: Batch) -> Batch:
+        return {k: self.itemize(v) for k, v in batch.items()}
 
 
 class Forward(Pipe):

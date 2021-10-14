@@ -45,10 +45,8 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                     "question.idx": datasets.Value("int32"),
                     "question.text": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
-                    "answer.text": datasets.Sequence(
-                        datasets.Value("string")),
-                    "answer.cui": datasets.Sequence(
-                        datasets.Value("string")),
+                    "answer.text": datasets.Sequence(datasets.Value("string")),
+                    "answer.cui": datasets.Sequence(datasets.Value("string")),
                     "answer.synonyms": datasets.Sequence(
                         datasets.Value("string")
                     ),

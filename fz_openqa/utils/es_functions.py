@@ -1,16 +1,46 @@
+import multiprocessing as mp
 import warnings
 from typing import List
 
+import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.exceptions import RequestError
 
 
-class ElasticSearch:
+def get_process_id():
+    return str(mp.current_process()._identity)
+
+
+class ElasticSearchEngine:
+    _instance: Elasticsearch
+
     def __init__(self, timeout=60):
 
         super().__init__()
-        self.es = Elasticsearch(timeout=timeout)  # ElasticSearch instance
+        self.timeout = timeout
+        self._instance = self.instantiate_es()
+        self.proc_id = get_process_id()
+
+    def __getstate__(self):
+        """this method is called when attempting pickling"""
+        state = self.__dict__.copy()
+        # Don't pickle the ES instance
+        del state["_instance"]
+        state["_instance"] = None
+        return state
+
+    def instantiate_es(self) -> Elasticsearch:
+        return Elasticsearch(timeout=self.timeout)
+
+    @property
+    def instance(self):
+        curr_id = get_process_id()
+        if curr_id != self.proc_id or self._instance is None:
+            self._instance = self.instantiate_es()
+            self.proc_id = curr_id
+
+        return self._instance
 
     def es_create_index(self, index_name: str) -> bool:
         """
@@ -21,7 +51,7 @@ class ElasticSearch:
 
         try:
             # self.es.indices.delete(index=index_name, ignore=[400, 404])
-            _ = self.es.indices.create(index=index_name)
+            _ = self.instance.indices.create(index=index_name)
             created = True
 
         # todo: handle specific exceptions
@@ -35,14 +65,14 @@ class ElasticSearch:
         """
         Remove ElasticSearch Index
         """
-        return self.es.indices.delete(index=index_name)
+        return self.instance.indices.delete(index=index_name)
 
     def es_ingest(self, index_name: str, title: str, paragraph: str):
         """
         Ingest to ElasticSearch Index
         """
         doc = {"title": title, "text": paragraph}
-        return self.es.create(
+        return self.instance.create(
             index=index_name, body=doc, refresh="true", timeout=60
         )
 
@@ -67,7 +97,7 @@ class ElasticSearch:
         ]
 
         _ = helpers.bulk(
-            self.es,
+            self.instance,
             actions,
             chunk_size=1000,
             request_timeout=200,
@@ -93,7 +123,7 @@ class ElasticSearch:
             item for sublist in zip(req_head, req_body) for item in sublist
         ]
 
-        result = self.es.msearch(body=request)
+        result = self.instance.msearch(body=request)
 
         indexes, scores = [], []
         for query in result["responses"]:
@@ -110,7 +140,7 @@ class ElasticSearch:
         """
         Sequential search in ElasticSearch Index
         """
-        response = self.es.search(
+        response = self.instance.search(
             index=index_name,
             body={
                 "query": {"match": {"text": query}},

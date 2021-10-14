@@ -4,6 +4,7 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
+import dill
 import rich
 from datasets import Dataset
 from rich.status import Status
@@ -19,7 +20,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.datamodules.pipes import TextCleaner
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.es_functions import ElasticSearch
+from fz_openqa.utils.es_functions import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
 
 
@@ -35,7 +36,7 @@ class ElasticSearchIndex(Index):
         batch_size: int = 32,
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
-        es: Optional[ElasticSearch] = None,
+        es: Optional[ElasticSearchEngine] = None,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -44,7 +45,7 @@ class ElasticSearchIndex(Index):
         self.query_key = query_key
         self.batch_size = batch_size
         self.num_proc = num_proc
-        self.engine = es or ElasticSearch()
+        self.engine = es or ElasticSearchEngine()
 
         # pipe used to potentially filter the input text
         if filter_mode is not None:
@@ -71,6 +72,13 @@ class ElasticSearchIndex(Index):
             # @filter_pipe_cls: added this line for debugging
             # PrintBatch(header="filtering output"),
         )
+
+    def dill_inspect(self) -> Dict[str, Any]:
+        return {
+            "__all__": dill.pickles(self),
+            "engine": dill.pickles(self.engine),
+            "preprocesing_pipe": dill.pickles(self.preprocesing_pipe),
+        }
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.

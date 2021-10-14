@@ -5,12 +5,15 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
-from torch import Tensor
+import dill
+from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
+
+
+def always_true(*args, **kwargs):
+    return True
 
 
 class Pipe:
@@ -19,9 +22,49 @@ class Pipe:
     modify and returns a batch of data.
     """
 
+    id: Optional[str] = None
+
+    @staticmethod
+    def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
+        """Extract example `idx` from a batch, potentially filter the keys"""
+        filter_op = filter_op or always_true
+        return {k: v[idx] for k, v in batch.items() if filter_op(k)}
+
+    def batch_size(self, batch: Batch) -> int:
+        return len(next(iter(batch.values())))
+
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """The call of the pipeline process"""
         raise NotImplementedError
+
+    def dill_inspect(self, reduce=True) -> bool:
+        """Returns True if the module can be pickled."""
+        return dill.pickles(self)
+
+    def fingerprint(self) -> str:
+        """return the fingerprint of this object"""
+        return self._fingerprint(self)
+
+    def as_fingerprintable(self) -> Any:
+        """return a fingerprintable version of the object. This version does
+        not necessarily run as a pipe, but the fingerprint of the returned object
+        must be deterministic."""
+        return self
+
+    def todict(self) -> Dict[str, Any]:
+        """Return a dictionary representation of the object"""
+        d = {"__type__": type(self).__name__}
+        if self.id is not None:
+            d["__id__"] = self.id
+
+        return d
+
+    @staticmethod
+    def _fingerprint(x):
+        """Return the fingerprint of an object."""
+        hash = Hasher()
+        hash.update(x)
+        return hash.hexdigest()
 
 
 class Identity(Pipe):
@@ -182,20 +225,3 @@ class PrintBatch(Pipe):
         pprint_batch(batch, header=self.header)
 
         return batch
-
-
-class Nest(ApplyToAll):
-    """Nest a flattened batch:
-    {key: [values]} -> {key: [[group] for group in groups]}"""
-
-    def __init__(self, stride: int):
-        super(Nest, self).__init__(element_wise=False, op=self.flatten)
-        self.stride = stride
-
-    def flatten(self, x: Union[Tensor, List[Any]]):
-        if isinstance(x, Tensor):
-            return x.view(-1, self.stride, *x.shape[1:])
-        else:
-            return [
-                x[i : i + self.stride] for i in range(0, len(x), self.stride)
-            ]
