@@ -3,10 +3,13 @@ from dataclasses import dataclass
 from itertools import tee
 from itertools import zip_longest
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import Optional
+from typing import Sequence
 
+import dill
 import numpy as np
 import rich
 import spacy
@@ -14,6 +17,8 @@ import torch
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
+from spacy import Language
+from spacy.tokens import Doc
 
 from ..utils.filter_keys import KeyWithPrefix
 from .static import DISCARD_TUIs
@@ -27,6 +32,29 @@ np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 class Pair:
     document: Dict[str, Any]
     answer: Dict[str, Any]
+
+
+def find_one(
+    text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
+) -> bool:
+    """check if one of the queries is in the input text
+    # todo: unit tests"""
+    queries = set(queries)
+    if sort_by is not None:
+        queries = sorted(queries, key=sort_by)
+
+    # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+    # re.IGNORECASE: Perform case-insensitive matching
+    return bool(
+        re.search(
+            re.compile(
+                "|".join(re.escape(x) for x in queries),
+                re.IGNORECASE,
+            ),
+            text,
+        )
+    )
 
 
 class RelevanceClassifier(Pipe):
@@ -140,31 +168,72 @@ class MetaMapMatch(RelevanceClassifier):
             for alias in self.linker.kb.cui_to_entity[answer_cui][2]
         ]
 
-        answer_aliases = sorted(
-            set(answer_aliases + answer_synonyms + e_aliases), key=len
-        )
+        answer_aliases = answer_aliases + answer_synonyms + e_aliases
 
         # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
         # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
         # re.IGNORECASE: Perform case-insensitive matching
-        return bool(
-            re.search(
-                re.compile(
-                    "|".join(re.escape(x) for x in answer_aliases),
-                    re.IGNORECASE,
-                ),
-                doc_text,
-            )
-        )
+        return find_one(doc_text, answer_aliases, sort_by=len)
 
 
 class ScispaCyMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
+    model: Optional[Language] = None
+    linker: Optional[Callable[[Doc], Doc]] = None
+
+    def __init__(
+        self,
+        model_name: Optional[str] = "en_core_sci_lg",
+        lazy_setup: bool = True,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         self.model_name = model_name
-        self.model = spacy.load(
-            self.model_name,
+        if not lazy_setup:
+            self._setup_models()
+
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        """Super-charge the __call__ method to load the spaCy models
+        if they are not already loaded."""
+        self._setup_models()
+        return super().__call__(batch, **kwargs)
+
+    def __getstate__(self):
+        """this method is called when attempting pickling"""
+        state = self.__dict__.copy()
+        # Serialize
+        for key in ["linker", "model"]:
+            if key in state:
+                del state[key]
+                state[key] = None
+
+        rich.print(f">> get_state: {state.keys()}")
+        return state
+
+    def fingerprint(self) -> Any:
+        return {
+            k: self._fingerprint(v) for k, v in self.__getstate__().items()
+        }
+
+    def dill_inspect(self, reduce=True) -> Dict:
+        return {**{k: dill.pickles(v) for k, v in self.__getstate__().items()}}
+
+    def _setup_models(self):
+        if self.model is None:
+            self.model = self._load_spacy_model(self.model_name)
+        if self.linker is None:
+            self.linker = self._setup_linker(self.model)
+
+    @staticmethod
+    def _setup_linker(model: Language):
+        if model is None:
+            return None
+        return model.get_pipe("scispacy_linker")
+
+    @staticmethod
+    def _load_spacy_model(model_name: str):
+        model = spacy.load(
+            model_name,
             disable=[
                 "tok2vec",
                 "tagger",
@@ -173,7 +242,7 @@ class ScispaCyMatch(RelevanceClassifier):
                 "lemmatizer",
             ],
         )
-        self.model.add_pipe(
+        model.add_pipe(
             "scispacy_linker",
             config={
                 "linker_name": "umls",
@@ -181,7 +250,7 @@ class ScispaCyMatch(RelevanceClassifier):
                 "threshold": 0.95,
             },
         )
-        self.linker = self.model.get_pipe("scispacy_linker")
+        return model
 
     def extract_aliases(self, entity) -> Iterable[str]:
         # get the list of linked entity
@@ -192,7 +261,6 @@ class ScispaCyMatch(RelevanceClassifier):
             """
             keep entities that are not in the DISCARD_TUIs list.
             """
-
             return any(tui not in DISCARD_TUIs for tui in ent.types)
 
         linked_entities = filter(lambda ent: keep_entity, linked_entities)
@@ -212,19 +280,7 @@ class ScispaCyMatch(RelevanceClassifier):
 
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-
-        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
-        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
-        # re.IGNORECASE: Perform case-insensitive matching
-        return bool(
-            re.search(
-                re.compile(
-                    "|".join(re.escape(x) for x in answer_aliases),
-                    re.IGNORECASE,
-                ),
-                doc_text,
-            )
-        )
+        return find_one(doc_text, answer_aliases, sort_by=len)
 
     @staticmethod
     def _answer_text(pair: Pair) -> str:
@@ -250,16 +306,7 @@ class ScispaCyMatch(RelevanceClassifier):
             answer_aliases = set.union({str(doc)}, answer_synonyms)
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
-
-                # todo: why sorting here? doesn't look necessary
-                # answer_aliases = sorted(set.union(answer_aliases, e_aliases), key=len)
                 answer_aliases = set.union(answer_aliases, e_aliases)
-            # todo: investigate the aliases, some are too general
-            # rich.print(
-            #    f">> aliases={answer_aliases}, "
-            #    f"count={len(answer_aliases)}, "
-            #    f"doc_ents={doc.ents}"
-            # )
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
