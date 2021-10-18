@@ -7,10 +7,11 @@ from .base import Pipe
 from .static import STOP_WORDS
 from fz_openqa.utils.datastruct import Batch
 
-
+import rich
 class TextFilter(Pipe):
-    def __init__(self, *, text_key: str):
+    def __init__(self, *, text_key: str, query_key):
         self.text_key = text_key
+        self.query_key = query_key
 
     def __call__(
         self, batch: Batch, text_key: Optional[str] = None, **kwargs
@@ -76,8 +77,23 @@ class SciSpacyFilter(TextFilter):
 
 
 class MetaMapFilter(TextFilter):
+    """
+    Build a Pipe to return a string of unique entities recognized based on offline processed MetaMap heuristic
+    Args:
+        MetaMapList: A list of recognised entities inferred from the question query
+        Question: query to be replaced by MetaMapList
+    """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def filter_one(self, text: str) -> str:
-        raise NotImplementedError
+    @staticmethod
+    def _join_ents(MetaMapList: list) -> str:
+        return " ".join([str(ent) for ent in MetaMapList])
+
+    def __call__(
+        self, batch: Batch, query_key: Optional[str] = None, **kwargs
+    ) -> Batch:
+        print("Printing keys...")
+        rich.print(f"[green]{batch.keys()}")
+        query_key = query_key or self.query_key
+        batch[query_key] = [self._join_ents(lst) for lst in batch['question.metamap']]

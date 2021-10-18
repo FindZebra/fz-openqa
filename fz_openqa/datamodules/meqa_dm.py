@@ -190,7 +190,12 @@ class MedQaDataModule(BaseDataModule):
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(keys=["answer.text", "question.text", "answer.cui", "answer.synonyms"])
+        raw_text_pipe = Collate(keys=[
+            "answer.text",
+            "question.text", 
+            "question.metamap" 
+            "answer.cui", 
+            "answer.synonyms"])
 
         # collate simple attributes
         simple_attr_pipe = Sequential(

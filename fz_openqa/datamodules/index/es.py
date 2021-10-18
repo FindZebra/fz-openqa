@@ -54,7 +54,7 @@ class ElasticSearchIndex(Index):
                 # @vlievin: fyi has to be included in the datamodule
                 "stopwords": StopWordsFilter,
             }[filter_mode]
-            filter_pipe = filter_pipe_cls(text_key=self.text_key)
+            filter_pipe = filter_pipe_cls(text_key=self.text_key, query_key=self.query_key)
         else:
             filter_pipe = None
 
