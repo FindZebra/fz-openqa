@@ -32,15 +32,19 @@ class TestRelevanceClassifier(TestCase):
     def test_exact_match(self):
         classifier = ExactMatch()
         output = classifier(copy(self.batch))
+        # test that exact match matches the document b3 to the answer
         self.assertTrue(output['document.is_positive'][3])
+        # test that exact match fails when answer is not contained in document
         self.assertFalse(output['document.is_positive'][0])
 
 
     def test_scispacy_match(self):
         classifier = ScispaCyMatch()
         output = classifier(copy(self.batch))
+        # test that scispacy match finds the answer in the document using filtering
         self.assertTrue(output['document.is_positive'][3])
         self.assertTrue(output['document.is_positive'][2])
+        # test that scispacy is not always true
         self.assertFalse(output['document.is_positive'][1])
 
 class TestFindOne(TestCase):
