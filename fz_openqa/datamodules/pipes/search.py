@@ -32,9 +32,11 @@ class SearchCorpus(Pipe):
 
         self.index = corpus._index
         self.dataset = corpus.dataset
-        assert (
-            self.dataset is not None
-        ), "Corpus.dataset is None, you probably need to `run corpus.setup()` before initializing this pipe"
+        msg = (
+            "Corpus.dataset is None, you probably need to "
+            "`run corpus.setup()` before initializing this pipe"
+        )
+        assert self.dataset is not None, msg
         self.collate_pipe = corpus.collate_pipe
         self.k = k
         self.simple_collate = simple_collate

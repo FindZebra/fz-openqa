@@ -51,8 +51,14 @@ def find_one(
     if sort_by is not None:
         queries = sorted(queries, key=sort_by)
 
-    # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
-    # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+    # re.search: Scan through string looking for a location where
+    # the regular expression pattern produces a match, and return a
+    # corresponding MatchObject instance. Return None if no position
+    # in the string matches the pattern; note that this is different
+    # from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed;
+    # this is useful if you want to match an arbitrary literal string
+    # that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
     return bool(
         re.search(
@@ -190,9 +196,6 @@ class MetaMapMatch(RelevanceClassifier):
 
         answer_aliases = answer_aliases + answer_synonyms + e_aliases
 
-        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
-        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
-        # re.IGNORECASE: Perform case-insensitive matching
         return find_one(doc_text, answer_aliases, sort_by=len)
 
 

@@ -26,29 +26,31 @@ class BaseModel(LightningModule):
     ## Main components
     This class contains 2 main components:
     * self.bert: the pretrained masked language model
-    * self.evaluator: the object that compute the loss and the evaluation metrics
+    * self.evaluator: the object that compute the loss and
+      the evaluation metrics
 
     ## Pipeline
     The main data processing flow can be described as follows:
 
-        1.     batch = next(iter(dataloader))               (device=k)
+        1.     batch = next(iter(dataloader))          (device=k)
                             |
-            [   _step(batch): evaluator.forward   ]         (processing on device k)
+            [   _step(batch): evaluator.forward   ]    (processing on device k)
                             v
-        2.             pre_output                           (device=k)
+        2.             pre_output                      (device=k)
                             |
-                  [ gather (lightning) ]                    (move data to device 0)
+                  [ gather (lightning) ]               (move data to device 0)
                             v
-        3.              pre_output                            (device=0)
+        3.              pre_output                     (device=0)
                             |
-    [ _step_end(pre_output): evaluator.forward_end + log_data ] (processing on device 0)
+    [ _step_end(pre_output): evaluator.forward_end + log_data ]
                             v
-        4.              output                              (device=0)
+        4.              output                         (device=0)
 
 
     ## Metrics:
     The evaluator keeps track of the metrics using `torchmetrics`.
-    The metrics are updated at each `_step_end` (e.g. keeping track of the true positives and false negatives).
+    The metrics are updated at each `_step_end` (e.g. keeping track of
+    the true positives and false negatives).
     The metrics are computed for the whole epoch in `_epoch_end`.
     """
 
