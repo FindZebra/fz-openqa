@@ -28,10 +28,10 @@ b4 = {'question.text': "A 67-year-old man who was diagnosed with arthritis 16 ye
 
 exs = [b0, b1, b2, b3, b4]
 batch = Collate(keys=None)(exs)
-pprint_batch(batch)
+pprint_batch(batch, header="Input batch")
 
 with Status("Loading classifiers.."):
-    classifiers = [ExactMatch(), ScispaCyMatch()]
+    classifiers = [ExactMatch(interpretable=True), ScispaCyMatch(interpretable=True)]
 output = {c:c(copy(batch)) for c in classifiers}
 
 for i, eg in enumerate(exs):
@@ -40,4 +40,5 @@ for i, eg in enumerate(exs):
     rich.print(f"[red]Answer: {eg['answer.text'][eg['answer.target']]}")
     rich.print(f"[white]Document: {eg['document.text'][0]}")
     for c, b in output.items():
-        rich.print(f"> {type(c).__name__}: is_positive={b['document.is_positive'][i, 0]}")
+        rich.print(f"> {type(c).__name__}: is_positive={b['document.is_positive'][i][0]}, "
+                   f"match_on={b['document.match_on'][i][0]}")
