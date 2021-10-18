@@ -34,7 +34,7 @@ from .pipes import Pipe
 from .pipes import ReplaceInKeys
 from .pipes import SearchCorpus
 from .pipes import Sequential
-from .pipes import TextCleaner
+from .pipes import TextFormatter
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
 from .utils.transformations import add_spec_token
@@ -143,7 +143,7 @@ class CorpusDataModule(BaseDataModule):
 
         dataset = dataset.map(
             Sequential(
-                TextCleaner(text_key="text"),
+                self.text_formatter.copy(text_key="text"),
                 self.get_tokenizer_pipe(),
                 self.get_generate_passages_pipe(),
             ),

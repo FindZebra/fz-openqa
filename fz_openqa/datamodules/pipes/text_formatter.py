@@ -1,11 +1,14 @@
 import re
+from typing import Callable
+from typing import List
 from typing import Optional
+from typing import Union
 
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
-class TextCleaner(Pipe):
+class TextFormatter(Pipe):
     """clean the text field (lower case, apply regex to remove special characters)"""
 
     def __init__(
@@ -16,7 +19,7 @@ class TextCleaner(Pipe):
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.text_key = text_key
@@ -24,9 +27,6 @@ class TextCleaner(Pipe):
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
-
-    def set_text_key(self, text_key: str):
-        self.text_key = text_key
 
     def clean(self, text: str) -> str:
 
@@ -51,10 +51,19 @@ class TextCleaner(Pipe):
 
         return text
 
+    @staticmethod
+    def _apply_to_leaves(x: Union[str, List], fn: Callable):
+        if isinstance(x, str):
+            return fn(x)
+        elif isinstance(x, (tuple, list)):
+            return [TextFormatter._apply_to_leaves(y, fn) for y in x]
+        else:
+            ValueError(f"Cannot handle type {type(x).__name__}.")
+
     def __call__(
         self, batch: Batch, text_key: Optional[str] = None, **kwargs
     ) -> Batch:
         text_key = text_key or self.text_key
-        assert text_key is not None
-        batch[text_key] = [self.clean(txt) for txt in batch[text_key]]
+        assert text_key is not None, "attribute `text_key` must be set."
+        batch[text_key] = self._apply_to_leaves(batch[text_key], self.clean)
         return batch

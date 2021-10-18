@@ -7,7 +7,7 @@ import torch
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.pipes import ExactMatch, Pipe, ScispaCyMatch
+from fz_openqa.datamodules.pipes import ExactMatch, Pipe, TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -18,8 +18,11 @@ setup_safe_env()
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
 
+text_formatter = TextFormatter(lowercase=True)
+
 # load the corpus object
 corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
+                               text_formatter=text_formatter,
                                index=ElasticSearchIndex(index_key="idx",
                                                         text_key="document.text",
                                                         query_key="question.text",
@@ -31,6 +34,7 @@ corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
+                     text_formatter=text_formatter,
                      train_batch_size=100,
                      num_proc=4,
                      num_workers=4,
