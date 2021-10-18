@@ -25,11 +25,11 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
-                     num_proc=1,
+                     num_proc=4,
                      use_subset=True,
                      verbose=True,
                      corpus=corpus,
-                     n_documents=3)
+                     n_retrieved_documents=100)
 
 # prepare both the QA dataset and the corpus
 dm.prepare_data()

@@ -1,4 +1,5 @@
 import datasets
+import rich
 
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -11,7 +12,8 @@ tokenizer = init_pretrained_tokenizer(
 dm = MedQaDataModule(tokenizer=tokenizer,
                      num_proc=1,
                      use_subset=True,
-                     verbose=True)
+                     verbose=True,
+                     n_retrieved_documents=0)
 
 dm.prepare_data()
 dm.setup()

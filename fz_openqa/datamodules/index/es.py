@@ -12,6 +12,7 @@ from rich.status import Status
 from .base import Index
 from .base import SearchResult
 from fz_openqa.datamodules.pipes import Batchify
+from fz_openqa.datamodules.pipes import Copy
 from fz_openqa.datamodules.pipes import DeBatchify
 from fz_openqa.datamodules.pipes import MetaMapFilter
 from fz_openqa.datamodules.pipes import Pipe
@@ -37,6 +38,7 @@ class ElasticSearchIndex(Index):
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearchEngine] = None,
+        text_cleaner: Optional[TextCleaner] = None,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -47,12 +49,14 @@ class ElasticSearchIndex(Index):
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
 
+        text_cleaner = text_cleaner or TextCleaner(lowercase=True)
+        text_cleaner.set_text_key(self.text_key)
+
         # pipe used to potentially filter the input text
         if filter_mode is not None:
             filter_pipe_cls = {
                 "scispacy": SciSpacyFilter,
                 "metamap": MetaMapFilter,
-                # @vlievin: fyi has to be included in the datamodule
                 "stopwords": StopWordsFilter,
             }[filter_mode]
             filter_pipe = filter_pipe_cls(text_key=self.text_key)
@@ -61,16 +65,9 @@ class ElasticSearchIndex(Index):
 
         # text cleaning and filtering
         self.preprocesing_pipe = Sequential(
-            # @idariis: added this line for debugging
-            # PrintBatch(header="filtering input"),
+            Copy(),
             filter_pipe,
-            TextCleaner(
-                text_key=self.text_key,
-                lowercase=True,
-                aggressive_cleaning=True,
-            )
-            # @filter_pipe_cls: added this line for debugging
-            # PrintBatch(header="filtering output"),
+            text_cleaner,
         )
 
     def dill_inspect(self) -> Dict[str, Any]:
@@ -109,6 +106,7 @@ class ElasticSearchIndex(Index):
                         document_txt=dataset[self.text_key],
                     )
                 except Exception as ex:
+                    # todo: catch a more precise exception
                     self.engine.es_remove_index(self.index_name)
                     raise ex
 
