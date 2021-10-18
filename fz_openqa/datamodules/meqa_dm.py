@@ -29,8 +29,6 @@ from .pipes import Nest
 from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
-from .pipes import PrintBatch
-from .pipes import PrintText
 from .pipes import RelevanceClassifier
 from .pipes import Rename
 from .pipes import ReplaceInKeys
@@ -101,7 +99,7 @@ class MedQaDataModule(BaseDataModule):
         corpus: Optional[BaseDataModule] = None,
         n_retrieved_documents: int = 0,
         n_documents: Optional[int] = None,
-        max_pos_docs: int = 1,
+        max_pos_docs: Optional[int] = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
         **kwargs,
     ):
@@ -317,7 +315,9 @@ class MedQaDataModule(BaseDataModule):
         which is the case when compiling datasets.
         """
         # get the raw text
-        raw_text_pipe = FilterKeys(KeyIn(["document.text"]))
+        raw_text_pipe = FilterKeys(
+            KeyIn(["document.text", "document.match_on"])
+        )
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
@@ -351,6 +351,7 @@ class MedQaDataModule(BaseDataModule):
                     "document.idx",
                     "document.passage_idx",
                     "document.retrieval_score",
+                    "document.match_on",
                     "document.is_positive",
                     "document.positive_count",
                     "document.input_ids",

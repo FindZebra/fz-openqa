@@ -6,8 +6,10 @@ from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import Iterable
+from typing import List
 from typing import Optional
 from typing import Sequence
+from typing import Tuple
 
 import dill
 import numpy as np
@@ -20,7 +22,9 @@ from spacy import Language
 from spacy.tokens import Doc
 
 from ..utils.filter_keys import KeyWithPrefix
+from .nesting import nested_list
 from .static import DISCARD_TUIs
+from fz_openqa.datamodules.pipes import Nest
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -67,12 +71,20 @@ class RelevanceClassifier(Pipe):
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
         output_key: str = "document.is_positive",
+        interpretable: bool = False,
+        interpretation_key: str = "document.match_on",
     ):
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
+        self.interpretable = interpretable
+        self.interpretation_key = interpretation_key
 
     def classify(self, pair: Pair) -> bool:
+        """Classify each pair."""
+        raise NotImplementedError
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
         """Classify each pair."""
         raise NotImplementedError
 
@@ -102,13 +114,17 @@ class RelevanceClassifier(Pipe):
         pairs = self.preprocess(pairs)
 
         # apply self.classify element-wise (to each pair)
-        results = list(map(self.classify, pairs))
+        if self.interpretable:
+            all_results = zip(*map(self.classify_and_interpret, pairs))
+            results, interpretations = map(list, all_results)
+            batch[self.interpretation_key] = nested_list(
+                interpretations, stride=n_documents
+            )
+        else:
+            results = list(map(self.classify, pairs))
 
         # reshape as [batch_size, n_documents] and cast as Tensor
-        results = torch.tensor(results).view(batch_size, n_documents)
-
-        # return results
-        batch[self.output_key] = results
+        batch[self.output_key] = nested_list(results, stride=n_documents)
         return batch
 
     def _get_data_pairs(
@@ -285,6 +301,15 @@ class ScispaCyMatch(RelevanceClassifier):
         answer_aliases = pair.answer["answer.aliases"]
         return find_one(doc_text, answer_aliases, sort_by=len)
 
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+        doc_text = pair.document["document.text"]
+        answer_aliases = pair.answer["answer.aliases"]
+
+        doc_text = doc_text.lower()
+        matches = [a for a in answer_aliases if a.lower() in doc_text]
+
+        return (len(matches) > 0, matches)
+
     @staticmethod
     def _answer_text(pair: Pair) -> str:
         answer_index = pair.answer["answer.target"]
@@ -325,3 +350,12 @@ class ExactMatch(RelevanceClassifier):
         answer_text = pair.answer["answer.text"][answer_index]
 
         return bool(answer_text.lower() in doc_text.lower())
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+        doc_text = pair.document["document.text"]
+        answer_index = pair.answer["answer.target"]
+        answer_text = pair.answer["answer.text"][answer_index]
+
+        match = bool(answer_text.lower() in doc_text.lower())
+        values = [answer_text] if match else []
+        return (match, values)
