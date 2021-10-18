@@ -1,4 +1,6 @@
+from typing import Any
 from typing import Callable
+from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
@@ -8,7 +10,7 @@ from . import Pipe
 from ...utils.datastruct import Batch
 
 
-class Collate:
+class Collate(Pipe):
     """
     Create a Batch object from a list of examples, where an
     example is defined as a batch of one element.
@@ -18,10 +20,10 @@ class Collate:
 
     def __init__(
         self,
-        keys: Optional[Union[str, List[str]]],
+        keys: Optional[Union[str, List[str], Callable]],
         key_op: Optional[Callable] = None,
     ):
-        self.keys = keys if keys is None else set(keys)
+        self.keys = keys
         self.key_op = key_op
 
     def __call__(self, examples: Iterable[Batch]) -> Batch:
@@ -48,11 +50,32 @@ class Collate:
     def get_keys_form_eg(self, first_eg):
         keys = set(first_eg.keys())
         if self.keys is not None:
-            keys = set.intersection(keys, self.keys)
+            if isinstance(self.keys, (list, set, tuple)):
+                _keys = set(self.keys)
+            else:
+                _keys = set(filter(self.keys, keys))
+
+            keys = set.intersection(keys, _keys)
         return keys
 
 
-class ApplyToEachExample:
+class DeCollate(Pipe):
+    def __call__(self, batch: Batch) -> List[Dict[str, Any]]:
+        keys = list(batch.keys())
+        length = len(batch[keys[0]])
+        lengths = {k: len(v) for k, v in batch.items()}
+        assert all(
+            length == eg_l for eg_l in lengths.values()
+        ), f"un-equal lengths: {lengths}"
+        return [{k: batch[k][i] for k in keys} for i in range(length)]
+
+
+class FirstEg(Pipe):
+    def __call__(self, examples: List[Batch]) -> Batch:
+        return examples[0]
+
+
+class ApplyToEachExample(Pipe):
     def __init__(self, pipe: Pipe):
         self.pipe = pipe
 

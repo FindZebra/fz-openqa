@@ -10,8 +10,9 @@ from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, ScispaCyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
-
+from fz_openqa.utils.train_utils import setup_safe_env
 datasets.set_caching_enabled(True)
+setup_safe_env()
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
@@ -25,24 +26,24 @@ corpus = FzCorpusDataModule(tokenizer=tokenizer,
                                                      verbose=False),
                             verbose=False,
                             num_proc=4,
-                            use_subset=True,
-                            train_batch_size=3)
+                            use_subset=True)
 
 # load the QA dataset
 dm = MedQaDataModule(tokenizer=tokenizer,
+                     num_workers=4,
                      num_proc=4,
                      use_subset=True,
                      verbose=True,
                      corpus=corpus,
-                     # retrieve 100 documents for each question
-                     n_documents=100,
+                     # retrieve 1000 documents for each question
+                     n_retrieved_documents=100,
+                     # allow any number of positive documents
+                     max_pos_docs=int(1e9),
+                     # setting `n_documents` to None will effectively use `n_retrieved_documents`
+                     n_documents=None,
                      # retrieve the whole training set
                      train_batch_size=10,
-                     relevance_classifier=ScispaCyMatch(
-                         answer_prefix='answer.',
-                         document_prefix='document.',
-                         output_key='document.is_positive'
-                     ))
+                     relevance_classifier=ExactMatch())
 
 # prepare both the QA dataset and the corpus
 dm.prepare_data()

@@ -8,6 +8,7 @@ text_examples/
 sandbox*
 elasticsearch-*
 *__copy.py
+compiled-dataset-*.jsonl
 
 # Editors
 .vscode/

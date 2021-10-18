@@ -38,7 +38,8 @@ def pprint_batch(batch: Batch, header=None):
 
     u += get_separator() + "\n"
     u += f"Batch <{type(batch).__name__}>:"
-    for k, v in batch.items():
+    for k in sorted(batch.keys()):
+        v = batch[k]
         if isinstance(v, Tensor):
             u += f"\n   - {k}: {v.shape} <{v.dtype}> ({v.device})"
         elif isinstance(v, list):

@@ -25,6 +25,9 @@ curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poet
 
 ```shell
 poetry install
+
+# temporary fix: run this line to force installing nmslib from source
+poetry run pip install --force-reinstall --no-binary :all: nmslib
 ```
 
 3. setting up git hooks

@@ -1,18 +1,25 @@
+from typing import Any
 from typing import Callable
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
 from fz_openqa.datamodules.pipes.base import Pipe
-from fz_openqa.datamodules.pipes.collate import Collate
+from fz_openqa.datamodules.pipes.utils import reduce_dict_values
+from fz_openqa.datamodules.pipes.utils import safe_fingerprint
+from fz_openqa.datamodules.pipes.utils import safe_todict
 from fz_openqa.utils.datastruct import Batch
 
 
 class Sequential(Pipe):
     """A sequence of Pipes."""
 
-    def __init__(self, *pipes: Optional[Union[Collate, Pipe]]):
+    def __init__(
+        self, *pipes: Optional[Union[Callable, Pipe]], id: Optional[str] = None
+    ):
         self.pipes = [pipe for pipe in pipes if pipe is not None]
+        self.id = id
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -21,12 +28,43 @@ class Sequential(Pipe):
 
         return batch
 
+    def todict(self) -> Dict:
+        """return a dictionary representation of this pipe."""
+        d = super().todict()
+        d["pipes"] = [safe_todict(p) for p in self.pipes]
+        return d
 
-class Parallel(Pipe):
+    @staticmethod
+    def get_pipe_id(p: Pipe):
+        cls = str(type(p).__name__)
+        if not isinstance(p, Pipe) or p.id is None:
+            return cls
+        else:
+            return f"{cls}({p.id})"
+
+    def dill_inspect(
+        self, reduce: bool = False
+    ) -> Union[Dict[str, Any], bool]:
+        diagnostic = {
+            self.get_pipe_id(p): p.dill_inspect() for p in self.pipes
+        }
+        if reduce:
+            return reduce_dict_values(diagnostic)
+        else:
+            return diagnostic
+
+    def fingerprint(self) -> Dict[str, Any]:
+        return {self.get_pipe_id(p): safe_fingerprint(p) for p in self.pipes}
+
+    def as_fingerprintable(self) -> Any:
+        pipes = [p.as_fingerprintable() for p in self.pipes]
+        # pipes = [p for p in pipes if isinstance(p, Pipe)]
+        new_cls = type(self)(*pipes, id=self.id)
+        return new_cls
+
+
+class Parallel(Sequential):
     """Execute pipes in parallel and merge."""
-
-    def __init__(self, *pipes: Optional[Union[Collate, Pipe]]):
-        self.pipes = [pipe for pipe in pipes if pipe is not None]
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -42,14 +80,38 @@ class Parallel(Pipe):
         return output
 
 
+class Update(Pipe):
+    def __init__(self, pipe: Pipe):
+        self.pipe = pipe
+
+    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+        """Call the pipes sequentially."""
+
+        batch.update(self.pipe(batch, **kwargs))
+
+        return batch
+
+    def dill_inspect(self) -> bool:
+        return self.pipe.dill_inspect()
+
+
 class Gate(Pipe):
     """Execute the pipe if the condition is valid, else return {}"""
 
     def __init__(
-        self, condition: Union[bool, Callable], pipe: Optional[Pipe]
-    ) -> object:
+        self,
+        condition: Union[bool, Callable],
+        pipe: Optional[Pipe],
+    ):
         self.condition = condition
         self.pipe = pipe
+
+    def as_fingerprintable(self) -> Pipe:
+        return Gate(self.condition, self.pipe.as_fingerprintable())
+
+    @property
+    def id(self):
+        return str(type(self.pipe).__name__)
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -63,3 +125,14 @@ class Gate(Pipe):
             return self.pipe(batch)
         else:
             return {}
+
+    def todict(self) -> Dict:
+        d = super().todict()
+        d["pipe"] = safe_todict(self.pipe)
+        return d
+
+    def dill_inspect(self) -> Any:
+        return self.pipe.dill_inspect()
+
+    def fingerprint(self) -> Any:
+        return safe_fingerprint(self.pipe)

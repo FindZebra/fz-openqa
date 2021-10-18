@@ -29,16 +29,16 @@ from .pipes import DropKeys
 from .pipes import FilterKeys
 from .pipes import Identity
 from .pipes import Lambda
-from .pipes import Nest
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import ReplaceInKeys
+from .pipes import SearchCorpus
 from .pipes import Sequential
 from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
-from .utils import add_spec_token
-from .utils import set_example_idx
+from .utils.transformations import add_spec_token
+from .utils.transformations import set_example_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -122,15 +122,17 @@ class CorpusDataModule(BaseDataModule):
             if self.input_dir is not None
             else None
         )
-        dataset = load_dataset(
+        return self._load_dataset(
             self.dset_script_path_or_id,
             cache_dir=self.data_dir,
             data_files=input_files,
         )
 
+    @staticmethod
+    def _load_dataset(script, **kwargs):
+        dataset = load_dataset(script, **kwargs)
         if isinstance(dataset, DatasetDict):
             dataset = concatenate_datasets(list(dataset.values()))
-
         return dataset
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
@@ -303,25 +305,9 @@ class CorpusDataModule(BaseDataModule):
         :@param query: query data stored as a Batch
         :@param k: integer that sets number of results to be queried.
         """
-        search_result = self._index.search(
-            query=query, k=k, model=model, **kwargs
+        return SearchCorpus(self)(
+            query, model=model, k=k, simple_collate=simple_collate, **kwargs
         )
-
-        # retrieve the examples from the dataset (flat list)
-        flat_indexes = (idx for sub in search_result.index for idx in sub)
-        flat_scores = (score for sub in search_result.score for score in sub)
-        retrieved_docs = [
-            {**self.dataset[idx], "document.retrieval_score": score}
-            for idx, score in zip(flat_indexes, flat_scores)
-        ]
-        if simple_collate:
-            flat_docs_batch = Collate(keys=None)(retrieved_docs)
-        else:
-            flat_docs_batch = self.collate_pipe(retrieved_docs)
-
-        # nest the examples:
-        # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        return Nest(stride=k)(flat_docs_batch)
 
 
 class MedQaCorpusDataModule(CorpusDataModule):
@@ -333,3 +319,19 @@ class MedQaCorpusDataModule(CorpusDataModule):
 
 class FzCorpusDataModule(CorpusDataModule):
     dset_script_path_or_id = fz_corpus.__file__
+
+
+class FZxMedQaCorpusDataModule(CorpusDataModule):
+    dset_script_path_or_id: List = [
+        fz_corpus.__file__,
+        meqa_en_corpus.__file__,
+    ]
+
+    def load_base_dataset(self) -> DatasetDict:
+        assert self.input_dir is None
+        kwargs = {"cache_dir": self.data_dir}
+        dsets = [
+            self._load_dataset(s, **kwargs)
+            for s in self.dset_script_path_or_id
+        ]
+        return concatenate_datasets(dsets)
