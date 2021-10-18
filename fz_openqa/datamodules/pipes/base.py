@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -9,7 +10,6 @@ import dill
 from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 
 def always_true(*args, **kwargs):
@@ -212,16 +212,6 @@ class ApplyToAll(Pipe):
         return batch
 
 
-class PrintBatch(Pipe):
-    """
-    Print the batch
-    """
-
-    def __init__(self, header: Optional[str] = None):
-        self.header = header
-
+class Copy(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        pprint_batch(batch, header=self.header)
-
-        return batch
+        return copy(batch)

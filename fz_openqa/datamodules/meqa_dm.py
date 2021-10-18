@@ -29,7 +29,10 @@ from .pipes import Nest
 from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
+from .pipes import PrintBatch
+from .pipes import PrintText
 from .pipes import RelevanceClassifier
+from .pipes import Rename
 from .pipes import ReplaceInKeys
 from .pipes import SearchCorpus
 from .pipes import SelectDocs
@@ -277,26 +280,33 @@ class MedQaDataModule(BaseDataModule):
         condition = Reduce(
             Static(self.n_retrieved_documents > 0),
             Not(HasKeyWithPrefix("document.")),
+            reduce_op=all,
         )
-        search_docs_pipe = Update(
-            Gate(
-                condition,
-                Sequential(
-                    SearchCorpus(self.corpus, k=self.n_retrieved_documents),
-                    self.postprocessing,
+        # todo: do not initialize SearchCorpus when no corpus is available
+        search_docs_pipe = Gate(
+            condition,
+            Sequential(
+                Update(
+                    Sequential(
+                        SearchCorpus(
+                            self.corpus, k=self.n_retrieved_documents
+                        ),
+                        Rename({"idx": "document.global_idx"}),
+                    )
                 ),
-            )
+                self.postprocessing,
+            ),
         )
 
         return Sequential(
             Parallel(
                 # A. pipe to collate documents if already stored (compiled dataset)
                 self.get_documents_collate_pipe(),
-                # B. this one colalte the question and answer fields
+                # B. this one collate the question and answer fields
                 qa_collate_pipe,
             ),
             # C. Query the corpus for documents, only if A. did not return anything
-            search_docs_pipe,
+            Update(search_docs_pipe),
             id="collate-fn",
         )
 

@@ -10,7 +10,7 @@ class TextCleaner(Pipe):
 
     def __init__(
         self,
-        text_key: str,
+        text_key: Optional[str] = None,
         *,
         remove_linebreaks: bool = True,
         remove_ref: bool = True,
@@ -24,6 +24,9 @@ class TextCleaner(Pipe):
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
+
+    def set_text_key(self, text_key: str):
+        self.text_key = text_key
 
     def clean(self, text: str) -> str:
 
@@ -52,5 +55,6 @@ class TextCleaner(Pipe):
         self, batch: Batch, text_key: Optional[str] = None, **kwargs
     ) -> Batch:
         text_key = text_key or self.text_key
+        assert text_key is not None
         batch[text_key] = [self.clean(txt) for txt in batch[text_key]]
         return batch
