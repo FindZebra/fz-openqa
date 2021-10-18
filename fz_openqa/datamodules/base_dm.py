@@ -29,8 +29,7 @@ from fz_openqa.utils.pretty import pretty_decode
 
 class BaseDataModule(LightningDataModule):
     """
-    A task agnostic base datamodule. This implements and showcase the
-    basic functionalities of a text DataModule.
+    A task agnostic base datamodule. This implements and showcase the basic functionalities of a text DataModule.
 
     Implementing a sub-class of a `BaseDataModule` mostly requires overriding the
     `.preprocessing()` and `.collate_fn()` methods.
@@ -55,8 +54,7 @@ class BaseDataModule(LightningDataModule):
     # text field from the raw datasets that should be tokenized
     text_field = "sentence"
 
-    # name of the attributes that will be converted to
-    # tensors in the preprocessing function
+    # name of the attributes that will be converted to tensors in the preprocessing function
     pt_attributes = ["input_ids", "attention_mask"]
 
     # number of data points per subset train/val/test
@@ -72,7 +70,7 @@ class BaseDataModule(LightningDataModule):
     def __init__(
         self,
         *,
-        tokenizer: PreTrainedTokenizerFast,
+        tokenizer:PreTrainedTokenizerFast,
         cache_dir: str = "cache/",
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
