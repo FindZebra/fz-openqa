@@ -27,7 +27,7 @@ from .nesting import Nested
 from .passage import GeneratePassages
 from .relevance import ExactMatch
 from .relevance import RelevanceClassifier
-from .relevance import SciSpacyMatch
+from .relevance import ScispaCyMatch
 from .search import SearchCorpus
 from .sorting import Sort
 from .text_filtering import MetaMapFilter

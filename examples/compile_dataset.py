@@ -1,17 +1,20 @@
 import datasets
 import rich
+import json
+import torch
 from torch.utils.data import DataLoader
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.pipes import ExactMatch, Pipe
+from fz_openqa.datamodules.pipes import ExactMatch, Pipe, ScispaCyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
 datasets.set_caching_enabled(True)
 setup_safe_env()
+
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path='bert-base-cased')
@@ -31,7 +34,7 @@ corpus = MedQaCorpusDataModule(tokenizer=tokenizer,
 dm = MedQaDataModule(tokenizer=tokenizer,
                      train_batch_size=100,
                      num_proc=4,
-                     num_workers=1,
+                     num_workers=4,
                      use_subset=True,
                      verbose=True,
                      corpus=corpus,
@@ -42,10 +45,11 @@ dm = MedQaDataModule(tokenizer=tokenizer,
                      # keep only 10 docs (1 pos + 9 neg)
                      n_documents=10,
                      # simple exact match
-                     relevance_classifier=ExactMatch())
+                     relevance_classifier=ScispaCyMatch()
+                     )
 
 # prepare both the QA dataset and the corpus
-dm.subset_size = [1000, 10, 10]
+dm.subset_size = [100, 10, 10]
 dm.prepare_data()
 dm.setup()
 
@@ -55,8 +59,15 @@ rich.print(f"[green]>> index is built.")
 print(get_separator())
 
 # Compile the dataset
-# ExactMatch: process speed: ~60s/batch
-# SciSpacyMatch: process speed: ?/batch
+# ExactMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
+# >  - train: 3473 (34.12%)
+# >  - validation: 474 (37.26%)
+# >  - test: 450 (35.35%)
+# SciSpacyMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~75s/batch, phoebe.compute.dtu.dk
+# >  - train: 7605 (74.72%)
+# >  - validation: 967 (76.02%)
+# >  - test: 954 (74.94%)
+
 dm.compile_dataset(filter_unmatched=True,
                    num_proc=4,
                    batch_size=10)
@@ -82,3 +93,24 @@ for idx in range(3):
             f" |-* document #{j}, score={eg['document.retrieval_score'][j]:.2f}, , is_positive={eg['document.is_positive'][j]}")
         txt = eg['document.text'][j].replace("\n", "")
         rich.print(f"[white]{txt}")
+
+
+# dump data
+for split, dset in dm.compiled_dataset.items():
+    with open(f'compiled-dataset-{split}.jsonl', mode='w') as fp:
+        for i, row in enumerate(dset):
+            row['split'] = str(split)
+            row['__index__'] = str(i)
+            for key in list(row.keys()):
+                if any(ptrn in key for ptrn in ['input_ids', 'attention_mask']):
+                    row.pop(key)
+
+            for k,v in row.items():
+                if isinstance(v, torch.Tensor):
+                    if v.numel() == 1:
+                        row[k] = v.item()
+                    else:
+                        row[k] =  str(v)
+
+
+            fp.write(f"{json.dumps(row)}\n")

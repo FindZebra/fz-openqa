@@ -7,7 +7,7 @@ from rich.progress import track
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule, MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, SciSpacyMatch
+from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, ScispaCyMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator, pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env

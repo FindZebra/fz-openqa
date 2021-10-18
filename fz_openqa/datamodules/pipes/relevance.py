@@ -1,19 +1,64 @@
 import re
+from dataclasses import dataclass
+from itertools import tee
+from itertools import zip_longest
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import Optional
+from typing import Sequence
 
+import dill
 import numpy as np
 import spacy
 import torch
+from scispacy.abbreviation import AbbreviationDetector  # type: ignore
+from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
+from spacy import Language
+from spacy.tokens import Doc
 
+from ..utils.filter_keys import KeyWithPrefix
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+
+
+@dataclass
+class Pair:
+    document: Dict[str, Any]
+    answer: Dict[str, Any]
+
+
+def find_one(
+    text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
+) -> bool:
+    """check if one of the queries is in the input text"""
+    assert isinstance(text, str)
+    queries = set(queries)
+    if len(queries) == 0:
+        return False
+    if len(text) == 0:
+        return False
+
+    if sort_by is not None:
+        queries = sorted(queries, key=sort_by)
+
+    # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+    # re.IGNORECASE: Perform case-insensitive matching
+    return bool(
+        re.search(
+            re.compile(
+                "|".join(re.escape(x) for x in queries),
+                re.IGNORECASE,
+            ),
+            text,
+        )
+    )
 
 
 class RelevanceClassifier(Pipe):
@@ -22,100 +67,193 @@ class RelevanceClassifier(Pipe):
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
         output_key: str = "document.is_positive",
-        output_count_key: str = "document.positive_count",
     ):
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
-        self.output_count_key = output_count_key
 
-    def classify(self, question: Any, document: Any) -> bool:
+    def classify(self, pair: Pair) -> bool:
+        """Classify each pair."""
         raise NotImplementedError
 
+    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+        """Preprocessing allows transforming all the pairs,
+        potentially in batch mode."""
+        return pairs
+
+    def _infer_n_docs(self, batch: Batch) -> int:
+        x = [
+            v
+            for k, v in batch.items()
+            if str(k).startswith(self.document_prefix)
+        ][0]
+        length = len(x[0])
+        assert all(length == len(y) for y in x)
+        return length
+
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        results = []
-        batch_size = self.batch_size(batch)
+        n_documents = self._infer_n_docs(batch)
+        batch_size = self._infer_batch_size(batch)
+
+        # get one pair: (question and document) size: [batch_size x n_documents]
+        pairs = self._get_data_pairs(batch, batch_size=batch_size)
+
+        # potentially transform all pairs (in batch)
+        pairs = self.preprocess(pairs)
+
+        # apply self.classify element-wise (to each pair)
+        results = list(map(self.classify, pairs))
+
+        # reshape as [batch_size, n_documents] and cast as Tensor
+        results = torch.tensor(results).view(batch_size, n_documents)
+
+        # return results
+        batch[self.output_key] = results
+        return batch
+
+    def _get_data_pairs(
+        self, batch: Batch, batch_size: Optional[int] = None
+    ) -> Iterable[Pair]:
+        batch_size = batch_size or self._infer_batch_size(batch)
         for i in range(batch_size):
-            eg_ans_i = self.get_eg(
-                batch,
-                i,
-                filter_op=lambda key: str(key).startswith(self.answer_prefix),
+            a_data_i = self.get_eg(
+                batch, i, filter_op=KeyWithPrefix(self.answer_prefix)
             )
-            eg_doc_i = self.get_eg(
-                batch,
-                i,
-                filter_op=lambda key: str(key).startswith(
-                    self.document_prefix
-                ),
+            d_data_i = self.get_eg(
+                batch, i, filter_op=KeyWithPrefix(self.document_prefix)
             )
 
             # iterate through each document
-            results_i = []
-            n_docs = len(next(iter(eg_doc_i.values())))
+            n_docs = len(next(iter(d_data_i.values())))
             for j in range(n_docs):
-                d_data_ij = {k: v[j] for k, v in eg_doc_i.items()}
-                results_i += [self.classify(eg_ans_i, d_data_ij)]
-            results += [results_i]
-        results = torch.tensor(results)
-        batch[self.output_key] = results
+                d_data_ij = {k: v[j] for k, v in d_data_i.items()}
+                yield Pair(answer=a_data_i, document=d_data_ij)
 
-        return batch
+    def _infer_batch_size(self, batch):
+        bs = len(next(iter(batch.values())))
+        assert all(bs == len(x) for x in batch.values())
+        return bs
 
 
 class MetaMapMatch(RelevanceClassifier):
     def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
         super().__init__(**kwargs)
-        from scispacy.abbreviation import AbbreviationDetector  # type: ignore
-        from scispacy.linking import EntityLinker  # type: ignore
 
         self.model_name = model_name
-        self.model = spacy.load(self.model_name)
-        self.model.add_pipe("abbreviation_detector")
+        self.model = spacy.load(
+            self.model_name,
+            disable=[
+                "tok2vec",
+                "tagger",
+                "parser",
+                "attribute_ruler",
+                "lemmatizer",
+            ],
+        )
         self.model.add_pipe(
             "scispacy_linker",
             config={
-                "resolve_abbreviations": True,
                 "linker_name": "umls",
-                "max_entities_per_mention": 1,
+                "max_entities_per_mention": 3,
+                "threshold": 0.95,
             },
         )
         self.linker = self.model.get_pipe("scispacy_linker")
 
-    def classify(
-        self, answer: Dict[str, Any], document: Dict[str, Any]
-    ) -> bool:
-        doc_text = document["document.text"]
-        answer_index = answer["answer.target"]
-        answer_aliases = [answer["answer.text"][answer_index]]
-        answer_cui = answer["answer.cui"][0]
-        answer_aliases.extend(set(self.linker.kb.cui_to_entity[answer_cui][2]))
-        return bool(
-            re.findall(
-                r"(?=(" + "|".join(answer_aliases) + r"))",
-                doc_text,
-                re.IGNORECASE,
-            )
-        )
+    def classify(self, pair: Pair) -> bool:
+        doc_text = pair.document["document.text"]
+        answer_index = pair.answer["answer.target"]
+        answer_aliases = [pair.answer["answer.text"][answer_index]]
+        answer_cui = pair.answer["answer.cui"][0]
+        answer_synonyms = pair.answer["answer.synonyms"]
+
+        e_aliases = [
+            alias.lower()
+            for alias in self.linker.kb.cui_to_entity[answer_cui][2]
+        ]
+
+        answer_aliases = answer_aliases + answer_synonyms + e_aliases
+
+        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+        # re.IGNORECASE: Perform case-insensitive matching
+        return find_one(doc_text, answer_aliases, sort_by=len)
 
 
-class SciSpacyMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
+class ScispaCyMatch(RelevanceClassifier):
+    model: Optional[Language] = None
+    linker: Optional[Callable[[Doc], Doc]] = None
+
+    def __init__(
+        self,
+        model_name: Optional[str] = "en_core_sci_lg",
+        lazy_setup: bool = True,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        from scispacy.abbreviation import AbbreviationDetector  # type: ignore
-        from scispacy.linking import EntityLinker  # type: ignore
 
         self.model_name = model_name
-        self.model = spacy.load(self.model_name)
-        self.model.add_pipe("abbreviation_detector")
-        self.model.add_pipe(
+        if not lazy_setup:
+            self._setup_models()
+
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        """Super-charge the __call__ method to load the spaCy models
+        if they are not already loaded."""
+        self._setup_models()
+        return super().__call__(batch, **kwargs)
+
+    def __getstate__(self):
+        """this method is called when attempting pickling"""
+        state = self.__dict__.copy()
+        # Serialize
+        for key in ["linker", "model"]:
+            if key in state:
+                del state[key]
+                state[key] = None
+
+        return state
+
+    def fingerprint(self) -> Any:
+        return {
+            k: self._fingerprint(v) for k, v in self.__getstate__().items()
+        }
+
+    def dill_inspect(self, reduce=True) -> Dict:
+        return {**{k: dill.pickles(v) for k, v in self.__getstate__().items()}}
+
+    def _setup_models(self):
+        if self.model is None:
+            self.model = self._load_spacy_model(self.model_name)
+        if self.linker is None:
+            self.linker = self._setup_linker(self.model)
+
+    @staticmethod
+    def _setup_linker(model: Language):
+        if model is None:
+            return None
+        return model.get_pipe("scispacy_linker")
+
+    @staticmethod
+    def _load_spacy_model(model_name: str):
+        model = spacy.load(
+            model_name,
+            disable=[
+                "tok2vec",
+                "tagger",
+                "parser",
+                "attribute_ruler",
+                "lemmatizer",
+            ],
+        )
+        model.add_pipe(
             "scispacy_linker",
             config={
-                "resolve_abbreviations": True,
                 "linker_name": "umls",
-                "max_entities_per_mention": 1,
+                "max_entities_per_mention": 3,
+                "threshold": 0.95,
             },
         )
-        self.linker = self.model.get_pipe("scispacy_linker")
+        return model
 
     def extract_aliases(self, entity) -> Iterable[str]:
         # get the list of linked entity
@@ -124,9 +262,7 @@ class SciSpacyMatch(RelevanceClassifier):
         # filter irrelevant entities based on TUIs
         def keep_entity(ent: Entity) -> bool:
             """
-            keep the entity if at least one of the TUIs is not in
-            the DISCARD_TUIs list.
-            # todo: is that the right behaviour?
+            keep entities that are not in the DISCARD_TUIs list.
             """
             return any(tui not in DISCARD_TUIs for tui in ent.types)
 
@@ -135,52 +271,57 @@ class SciSpacyMatch(RelevanceClassifier):
         # return aliases
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
-                yield alias
+                yield alias.lower()
 
     def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
-        for ent in entity._.kb_ents:
-            ent_str, _ = ent  # ent: (str, score)
-            yield self.linker.kb.cui_to_entity[ent_str]
+        for cui in entity._.kb_ents:
+            # print(cui)
+            cui_str, _ = cui  # ent: (str, score)
+            yield self.linker.kb.cui_to_entity[cui_str]
 
-    def classify(
-        self, answer: Dict[str, Any], document: Dict[str, Any]
-    ) -> bool:
+    def classify(self, pair: Pair) -> bool:
 
-        doc_text = document["document.text"]
-        answer_index = answer["answer.target"]
-        answer_text = answer["answer.text"][answer_index]
+        doc_text = pair.document["document.text"]
+        answer_aliases = pair.answer["answer.aliases"]
+        return find_one(doc_text, answer_aliases, sort_by=len)
 
-        scispacy_doc = self.model(answer_text)
+    @staticmethod
+    def _answer_text(pair: Pair) -> str:
+        answer_index = pair.answer["answer.target"]
+        return pair.answer["answer.text"][answer_index]
 
-        answer_aliases = {answer["answer.text"][answer_index]}
-        for entity in scispacy_doc.ents:
-            e_aliases = set(self.extract_aliases(entity))
-            answer_aliases = set.union(answer_aliases, e_aliases)
+    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+        """Generate the field `pair.answer["aliases"]`"""
+        # An iterator can only be consumed once, generate two of them
+        # casting as a list would also work
+        pairs_1, pairs_2 = tee(pairs, 2)
 
-        # todo: investigate the aliases, some are too general
-        # rich.print(f">> aliases={answer_aliases}")
+        # extract the answer text from each Pair
+        texts = map(self._answer_text, pairs_1)
 
-        return any(
-            alias.lower() in doc_text.lower() for alias in answer_aliases
-        )
-        # todo: fix this: crashes with re.error: nothing to repeat at position 33
-        # return bool(
-        #     re.findall(
-        #         r"(?=(" + "|".join(answer_aliases) + r"))",
-        #         doc_text,
-        #         re.IGNORECASE,
-        #     )
-        # )
+        # batch processing of texts
+        docs = self.model.pipe(texts)
+
+        # join the aliases
+        for pair, doc in zip_longest(pairs_2, docs):
+            # the dict method get allows you to provide a default value if the key is missing
+            answer_synonyms = set(pair.answer.get("answer.synonyms", []))
+            answer_aliases = set.union({str(doc)}, answer_synonyms)
+            for ent in doc.ents:
+                e_aliases = set(self.extract_aliases(ent))
+                answer_aliases = set.union(answer_aliases, e_aliases)
+
+            # update the pair and return
+            pair.answer["answer.aliases"] = answer_aliases
+            yield pair
 
 
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
-    def classify(
-        self, answer: Dict[str, Any], document: Dict[str, Any]
-    ) -> bool:
-        doc_text = document["document.text"]
-        answer_index = answer["answer.target"]
-        answer_text = answer["answer.text"][answer_index]
+    def classify(self, pair: Pair) -> bool:
+        doc_text = pair.document["document.text"]
+        answer_index = pair.answer["answer.target"]
+        answer_text = pair.answer["answer.text"][answer_index]
 
         return bool(answer_text.lower() in doc_text.lower())
