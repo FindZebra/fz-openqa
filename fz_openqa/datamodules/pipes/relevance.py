@@ -22,6 +22,7 @@ from spacy.tokens import Doc
 from ..utils.filter_keys import KeyWithPrefix
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.text_filtering import StopWordsFilter
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -312,6 +313,7 @@ class ScispaCyMatch(RelevanceClassifier):
                 answer_aliases = set.union(answer_aliases, e_aliases)
 
             # update the pair and return
+            [StopWordsFilter(text_key=alias) for alias in answer_aliases]
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
 

@@ -4,10 +4,13 @@ import rich
 from rich.status import Status
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes.relevance import ExactMatch, ScispaCyMatch
+from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.utils.pretty import pprint_batch, get_separator
 
+filter = StopWordsFilter(text_key="answer.synonyms")
+
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
-      "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"],
+      "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"], 'answer.synonyms': [],
     "document.text": ["Post polio syndrome is a condition that affects polio survivors years after recovery from the initial polio illness. Symptoms and severity vary among affected people and may include muscle weakness and a gradual decrease in the size of muscles (atrophy); muscle and joint pain; fatigue;difficulty with gait; respiratory problems; and/or swallowing problems.\xa0Only a polio survivor can develop PPS. While polio is a contagious disease, PPS is not. The exact cause of PPS years after the first episode of polio is unclear, although several theories have been proposed. Treatment focuses on reducing symptoms and improving quality of life."]}
 
 b1 = {'question.text': "A pulmonary autopsy specimen from a 58-year-old woman who died of acute hypoxic respiratory failure was examined. She had recently undergone surgery for a fractured femur 3 months ago. Initial hospital course was uncomplicated, and she was discharged to a rehab facility in good health. Shortly after discharge home from rehab, she developed sudden shortness of breath and had cardiac arrest. Resuscitation was unsuccessful. On histological examination of lung tissue, fibrous connective tissue around the lumen of the pulmonary artery is observed. Which of the following is the most likely pathogenesis for the present findings?",
@@ -25,13 +28,19 @@ b3 = {'question.text': "A 59-year-old overweight woman presents to the urgent ca
 b4 = {'question.text': "A 67-year-old man who was diagnosed with arthritis 16 years ago presents with right knee swelling and pain. His left knee was swollen a few weeks ago, but now with both joints affected, he has difficulty walking and feels frustrated. He also has back pain which makes it extremely difficult to move around and be active during the day. He says his pain significantly improves with rest. He also suffers from dandruff for which he uses special shampoos. Physical examination is notable for pitting of his nails. Which of the following is the most likely diagnosis?",
       'answer.target': 0, 'answer.text': ["Psoriatic arthritis","Arthritis mutilans","Rheumatoid arthritis","Mixed connective tissue disease"], 'answer.cui':['C0003872'], "answer.synonyms":["Arthritis, Psoriatic"],
       "document.text": ["the fingers, nails, and skin. Sausage-like swelling in the fingers or toes, known as dactylitis, may occur. Psoriasis can also cause changes to the nails, such as pitting or separation from the nail bed, onycholysis, hyperkeratosis under the nails, and horizontal ridging. Psoriasis classically presents with scaly skin lesions, which are most commonly seen over extensor surfaces such as the scalp, natal cleft and umbilicus. In psoriatic arthritis, pain can occur in the area of the sacrum (the lower back, above the tailbone), as a result of sacroiliitis or spondylitis, which is present in 40% of cases. Pain can occur in and around the feet and ankles, especially enthesitis in the Achilles tendon (inflammation of the Achilles tendon where it inserts into the bone) or plantar fasciitis in the sole of the foot. Along with the above-noted pain and inflammation, there is extreme exhaustion that does not go away with adequate rest. The exhaustion may last for days or weeks without abatement. Psoriatic arthritis may remain mild or may progress to more destructive joint disease. Periods of active disease, or flares, will typically alternate with periods of remission. In severe forms, psoriatic arthritis may progress to arthritis mutilans which on"]}
-
-exs = [b0, b1, b2, b3, b4]
+b5 = {'question.text': "a junior orthopaedic surgery resident is completing a carpal tunnel repair with the department chairman as the attending physician during the case the resident inadvertently cuts a flexor tendon the tendon is repaired without complication the attending tells the resident that the patient will do fine and there is no need to report this minor complication that will not harm the patient as he does not want to make the patient worry unnecessarily he tells the resident to leave this complication out of the operative report which of the following is the correct next action for the resident to take",
+      'answer.target': 0, 'answer.text': ["Tell the attending that he cannot fail to disclose this mistake"], 'answer.synonyms': ["error", "failed", "attending", "Attending (action)", "attends", "failing", "To", "Attending (provider role)", "attended", "Tryptophanase", "attend", "fail", "fails", "Togo"],
+      "document.text": ["professional norms of medicine (the Hippocratic oath, respect to patients and colleagues, ethical conduct, personal accountability, empathy, and altruism) are modeled in every personal encounter. It is imperative that all resident and attending surgeons under-stand that the medical students are observing them closely. When resident and attending surgeons model professional behavior, the hidden curriculum becomes a useful tool for professional devel-opment.147-150 This consistent modeling of professional behavior is one necessary component of leadership.During their clinical years, medical students experience both an exponential growth in knowledge and a measurable decline in empathy towards their patients. Initially, medical stu-dents are filled with excitement and wonder during their first patient encounters. The rapid pace of clinical work, acquisition of knowledge, and intense experiences create stress for the stu-dent, both positively and negatively. Scrubbing into the operat-ing room, witn"]}
+exs = [b0, b1, b2, b3, b4, b5]
+#for b in exs:
+      #print(b['answer.synonyms'])
+      #b['answer.synonyms'] = [filter(syn) for syn in b['answer.synonyms']]
+#print(exs)
 batch = Collate(keys=None)(exs)
 pprint_batch(batch)
 
 with Status("Loading classifiers.."):
-    classifiers = [ExactMatch(), ScispaCyMatch()]
+    classifiers = [ScispaCyMatch()]
 output = {c:c(copy(batch)) for c in classifiers}
 
 for i, eg in enumerate(exs):
