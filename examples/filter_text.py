@@ -12,7 +12,7 @@ txt = [
         ]
 txt2 = ["error", "failed", "attending", "Attending (action)", "attends", "failing", "To", "Attending (provider role)", "attended", "Tryptophanase", "attend", "fail", "fails", "Togo"]
 batch = {'text': txt2}
-new_batch = filter2(copy(batch))
+new_batch = filter(copy(batch))
 for original_txt, new_txt in zip(batch['text'], new_batch['text']):
     print(get_separator())
     print(f">> {original_txt}")

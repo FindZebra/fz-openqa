@@ -4,10 +4,7 @@ import rich
 from rich.status import Status
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes.relevance import ExactMatch, ScispaCyMatch
-from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.utils.pretty import pprint_batch, get_separator
-
-filter = StopWordsFilter(text_key="answer.synonyms")
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
       "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"], 'answer.synonyms': [],
@@ -32,10 +29,6 @@ b5 = {'question.text': "a junior orthopaedic surgery resident is completing a ca
       'answer.target': 0, 'answer.text': ["Tell the attending that he cannot fail to disclose this mistake"], 'answer.synonyms': ["error", "failed", "attending", "Attending (action)", "attends", "failing", "To", "Attending (provider role)", "attended", "Tryptophanase", "attend", "fail", "fails", "Togo"],
       "document.text": ["professional norms of medicine (the Hippocratic oath, respect to patients and colleagues, ethical conduct, personal accountability, empathy, and altruism) are modeled in every personal encounter. It is imperative that all resident and attending surgeons under-stand that the medical students are observing them closely. When resident and attending surgeons model professional behavior, the hidden curriculum becomes a useful tool for professional devel-opment.147-150 This consistent modeling of professional behavior is one necessary component of leadership.During their clinical years, medical students experience both an exponential growth in knowledge and a measurable decline in empathy towards their patients. Initially, medical stu-dents are filled with excitement and wonder during their first patient encounters. The rapid pace of clinical work, acquisition of knowledge, and intense experiences create stress for the stu-dent, both positively and negatively. Scrubbing into the operat-ing room, witn"]}
 exs = [b0, b1, b2, b3, b4, b5]
-#for b in exs:
-      #print(b['answer.synonyms'])
-      #b['answer.synonyms'] = [filter(syn) for syn in b['answer.synonyms']]
-#print(exs)
 batch = Collate(keys=None)(exs)
 pprint_batch(batch)
 
