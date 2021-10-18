@@ -1,4 +1,5 @@
 from copy import copy
+from copy import deepcopy
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -65,6 +66,13 @@ class Pipe:
         hash = Hasher()
         hash.update(x)
         return hash.hexdigest()
+
+    def copy(self, **kwargs):
+        """Copy the pipe and replace attributes using kwargs"""
+        obj = deepcopy(self)
+        for k, v in kwargs.items():
+            setattr(obj, k, v)
+        return obj
 
 
 class Identity(Pipe):
@@ -212,6 +220,6 @@ class ApplyToAll(Pipe):
         return batch
 
 
-class Copy(Pipe):
+class CopyBatch(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         return copy(batch)

@@ -28,7 +28,7 @@ class StopWordsFilter(TextFilter):
 
     def filter_one(self, text: str) -> str:
         return " ".join(
-            [word for word in text.split() if word not in STOP_WORDS]
+            [word for word in text.split() if word.lower() not in STOP_WORDS]
         )
 
 

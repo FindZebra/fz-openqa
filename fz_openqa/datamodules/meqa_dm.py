@@ -189,6 +189,7 @@ class MedQaDataModule(BaseDataModule):
         answer_text_pipes = Sequential(
             FilterKeys(KeyIn(["answer.text"])),
             ReplaceInKeys("answer.", ""),
+            self.text_formatter.copy(text_key="text"),
             ApplyToAll(flatten_nested, element_wise=False),
             Apply(
                 {"text": partial(add_spec_token, ANS_TOKEN)}, element_wise=True
@@ -213,6 +214,7 @@ class MedQaDataModule(BaseDataModule):
         question_pipes = Sequential(
             FilterKeys(KeyIn(["question.text"])),
             ReplaceInKeys("question.", ""),
+            self.text_formatter.copy(text_key="text"),
             Apply(
                 {"text": partial(add_spec_token, QUERY_TOKEN)},
                 element_wise=True,

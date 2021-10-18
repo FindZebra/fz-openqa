@@ -12,14 +12,14 @@ from rich.status import Status
 from .base import Index
 from .base import SearchResult
 from fz_openqa.datamodules.pipes import Batchify
-from fz_openqa.datamodules.pipes import Copy
+from fz_openqa.datamodules.pipes import CopyBatch
 from fz_openqa.datamodules.pipes import DeBatchify
 from fz_openqa.datamodules.pipes import MetaMapFilter
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SciSpacyFilter
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import StopWordsFilter
-from fz_openqa.datamodules.pipes import TextCleaner
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
@@ -38,7 +38,7 @@ class ElasticSearchIndex(Index):
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearchEngine] = None,
-        text_cleaner: Optional[TextCleaner] = None,
+        text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -49,8 +49,10 @@ class ElasticSearchIndex(Index):
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
 
-        text_cleaner = text_cleaner or TextCleaner(lowercase=True)
-        text_cleaner.set_text_key(self.text_key)
+        # text cleaning
+        if isinstance(text_cleaner, TextFormatter):
+            text_cleaner = text_cleaner.copy(text_key=self.text_key)
+        self.text_cleaner = text_cleaner
 
         # pipe used to potentially filter the input text
         if filter_mode is not None:
@@ -65,7 +67,7 @@ class ElasticSearchIndex(Index):
 
         # text cleaning and filtering
         self.preprocesing_pipe = Sequential(
-            Copy(),
+            CopyBatch(),
             filter_pipe,
             text_cleaner,
         )
