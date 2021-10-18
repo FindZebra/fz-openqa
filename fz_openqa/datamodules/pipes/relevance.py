@@ -261,18 +261,18 @@ class ScispaCyMatch(RelevanceClassifier):
         linked_entities = self.get_linked_entities(entity)
 
         # filter irrelevant entities based on TUIs
-        def keep_entity(ent: Entity) -> bool:
-            """
-            keep entities that are not in the DISCARD_TUIs list.
-            """
-            return any(tui not in DISCARD_TUIs for tui in ent.types)
-
-        linked_entities = filter(lambda ent: keep_entity, linked_entities)
+        linked_entities = filter(lambda ent: self.keep_entity, linked_entities)
 
         # return aliases
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
                 yield alias.lower()
+
+    def keep_entity(ent: Entity) -> bool:
+            """
+            keep entities that are not in the DISCARD_TUIs list.
+            """
+            return any(tui not in DISCARD_TUIs for tui in ent.types)
 
     def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
         for cui in entity._.kb_ents:
