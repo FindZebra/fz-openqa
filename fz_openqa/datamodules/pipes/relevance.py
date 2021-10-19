@@ -42,9 +42,8 @@ def find_one(
         return False
 
     if sort_by is not None:
-        print("sorting")
         queries = sorted(queries, key=sort_by)
-    print("Final aliases: ", queries)
+        
     # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
     # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
@@ -221,7 +220,6 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def get_linked_entities(self, entity: Entity) -> Iterable[dict]:
         for cui in entity._.kb_ents:
-            # print(cui)
             cui_str, _ = cui  # ent: (str, score)
             out = {
                 "entity" : str(entity), 
