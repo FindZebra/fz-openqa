@@ -9,8 +9,6 @@ from typing import Iterable
 from typing import Optional
 from typing import Sequence
 
-import copy
-
 import dill
 import numpy as np
 import spacy
@@ -272,7 +270,8 @@ class ScispaCyMatch(RelevanceClassifier):
 
         for linked_entity in filtered_entities:
             for alias in linked_entity['aliases']:
-                yield alias.lower()
+                if not self.detect_acronym(alias):
+                    yield alias.lower()
 
     def get_linked_entities(self, entity: Entity) -> Iterable[dict]:
         for cui in entity._.kb_ents:
@@ -305,22 +304,31 @@ class ScispaCyMatch(RelevanceClassifier):
     def _synonym_text(pair: Pair) -> str:
         return ','.join([synonym for synonym in pair.answer.get("answer.synonyms", [])])
 
+    def detect_acronym(self, alias: str) -> bool:
+        """
+        returns true if accronym is found in string
+            example: "AbIA AoP U.S.A. USA"
+        """
+        regex_pattern = r"\b[A-Z][a-zA-Z\.]*[A-Z]\b\.?"
+        return re.match(regex_pattern, alias)
+
     def filter_synonyms(self, synonyms) -> Iterable[str]:
         # print(synonyms.ents)
         for synonym in synonyms.ents:
             # get the list of linked synonyms
-            print(synonym)
+            # print(synonym)
             linked_synonyms = self.get_linked_entities(synonym)
-            linked_synonyms1, linked_synonyms2, linked_synonyms3 = tee(linked_synonyms,3)
-            print(list(linked_synonyms1))
+            # linked_synonyms1, linked_synonyms2, linked_synonyms3 = tee(linked_synonyms,3)
+            # print(list(linked_synonyms1))
             #filter irrelevant entities based on TUIs
-            for ele in linked_synonyms3:
-                if any(ele['tui'] not in DISCARD_TUIs for ele in linked_synonyms3):
-                    print(ele)
-            filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui'] if len(ent['tui']) >= 1), linked_synonyms2)
+            # for ele in linked_synonyms3:
+            #     if any(ele['tui'] not in DISCARD_TUIs for ele in linked_synonyms3):
+            #         print(ele)
+            filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui'] if len(ent['tui']) >= 1), linked_synonyms)
 
             for linked_entity in filtered_synonyms:
-                yield linked_entity['entity']
+                if not self.detect_acronym(linked_entity['entity']):
+                    yield linked_entity['entity'].lower()
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
