@@ -307,8 +307,8 @@ docs = ["docutils (==0.16.0)", "recommonmark", "sphinx (==3.1.2)", "sphinx-markd
 [package.source]
 type = "git"
 url = "https://github.com/vlievin/datasets.git"
-reference = "inconsistent-caching-map-multiprocessing"
-resolved_reference = "ca01eb61496ec08c6bbc915b501255be8fd9dde1"
+reference = "quick-and-dirty-fix"
+resolved_reference = "39e9fafa201d4f479aeb371a86ba12e489fa3006"
 
 [[package]]
 name = "dill"
@@ -2011,7 +2011,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "a6bb45e44d9aced54795ed40e5d04f133953dd381279d81bfe4a3419b1246481"
+content-hash = "e2f87a485ff08dfc9e5112541ff08b9b0bf2392c7e633e689a4211361d6fabf3"
 
 [metadata.files]
 absl-py = [
