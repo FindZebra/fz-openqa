@@ -9,6 +9,8 @@ from typing import Iterable
 from typing import Optional
 from typing import Sequence
 
+import copy
+
 import dill
 import numpy as np
 import spacy
@@ -303,31 +305,54 @@ class ScispaCyMatch(RelevanceClassifier):
 
     @staticmethod
     def _synonym_text(pair: Pair) -> str:
-        return ' '.join(synonym for synonym in [pair.answer["answer.synonyms"]])
+        return ','.join([synonym for synonym in pair.answer.get("answer.synonyms", [])])
 
     def filter_synonyms(self, synonyms) -> Iterable[str]:
-        for entity in synonyms.ents:
+        print(synonyms.ents)
+        for synonym in synonyms.ents:
             # get the list of linked synonyms
-            linked_synonyms = self.get_linked_entities(entity)
+            print(synonym)
+            linked_synonyms = self.get_linked_entities(synonym)
+            linked_synonyms1, linked_synonyms2, linked_synonyms3 = tee(linked_synonyms,3)
+            print(list(linked_synonyms1))
+            # filter irrelevant entities based on TUIs
+            for ele in linked_synonyms3:
+                if any(ele['tui'] not in DISCARD_TUIs for ele in linked_synonyms3):
+                    print(ele)
+            filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui']), linked_synonyms2)
+
+            for linked_entity in filtered_synonyms:
+                yield linked_entity['entity']
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         # An iterator can only be consumed once, generate two of them
         # casting as a list would also work
-        pairs_1, pairs_2 = tee(pairs, 2)
+        pairs_1, pairs_2, pairs3 = tee(pairs, 3)
 
         # extract the answer text from each Pair
-        texts = map(self._answer_text, pairs_1)
+        answer_texts = map(self._answer_text, pairs_1)
+
+        # extract the synonym text from each Pair
+        synonym_texts = map(self._synonym_text, pairs_2)
 
         # batch processing of texts
-        docs = self.model.pipe(texts)
+        answer_docs = self.model.pipe(answer_texts)
+
+        # batch processing of texts
+        synonym_docs = self.model.pipe(synonym_texts)
 
         # join the aliases
-        for pair, doc in zip_longest(pairs_2, docs):
+        for pair, answer_doc, synonym_doc in zip_longest(pairs3, answer_docs, synonym_docs):
             # the dict method get allows you to provide a default value if the key is missing
-            answer_synonyms = set(pair.answer.get("answer.synonyms", []))
-            answer_aliases = set.union({str(doc)}, answer_synonyms)
-            for ent in doc.ents:
+            print("Original synonyms:")
+            print(set(pair.answer.get("answer.synonyms", [])))
+            answer_synonyms = set(self.filter_synonyms(synonym_doc))
+            answer_synonyms1, answer_synonyms2 = tee(answer_synonyms,2)
+            print("Filtered synonyms: ")
+            print(list(answer_synonyms2))
+            answer_aliases = set.union({str(answer_doc)}, answer_synonyms1)
+            for ent in answer_doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
                 print("extracted aliases: ", e_aliases)
                 print("answer aliases: ", answer_aliases)
