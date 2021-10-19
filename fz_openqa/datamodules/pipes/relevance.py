@@ -22,7 +22,6 @@ from spacy.tokens import Doc
 from ..utils.filter_keys import KeyWithPrefix
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.text_filtering import SciSpacyFilter
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -256,45 +255,60 @@ class ScispaCyMatch(RelevanceClassifier):
         )
         return model
 
+
     def extract_aliases(self, entity) -> Iterable[str]:
         # get the list of linked entity
         linked_entities = self.get_linked_entities(entity)
-        print("Original entities")
-        print(list(linked_entities))
+
         # filter irrelevant entities based on TUIs
-        linked_entities = filter(lambda ent: self.keep_entity, linked_entities)
-        print("Filtered entities")
-        print(list(linked_entities))
-        # return aliases
-        for linked_entity in linked_entities:
-            print(linked_entity)
-            for alias in linked_entity.aliases:
-                print(alias)
+        # def keep_entity(ent: dict) -> bool:
+        #     """
+        #     keep entities that are not in the DISCARD_TUIs list.
+        #     """
+        #     return any(tui not in DISCARD_TUIs for tui in ent['tui'])
+        filtered_entities = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui']), linked_entities)
+
+        for linked_entity in filtered_entities:
+            for alias in linked_entity['aliases']:
                 yield alias.lower()
 
-    def keep_entity(ent: Entity) -> bool:
-            """
-            keep entities that are not in the DISCARD_TUIs list.
-            """
-            return any(tui not in DISCARD_TUIs for tui in ent.types)
-
-    def get_linked_entities(self, entity: Entity) -> Iterable[Entity]:
+    def get_linked_entities(self, entity: Entity) -> Iterable[dict]:
         for cui in entity._.kb_ents:
             # print(cui)
             cui_str, _ = cui  # ent: (str, score)
-            yield self.linker.kb.cui_to_entity[cui_str]
+            out = {
+                "entity" : str(entity), 
+                "tui" : self.linker.kb.cui_to_entity[cui_str].types, 
+                "aliases" : self.linker.kb.cui_to_entity[cui_str].aliases}
+            yield out
 
     def classify(self, pair: Pair) -> bool:
 
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-        print("Final aliases: ", answer_aliases)
+        print("Final aliases")
+        print(answer_aliases)
         return find_one(doc_text, answer_aliases, sort_by=len)
+
+    def keep_entity(ent: dict) -> bool:
+            """
+            keep entities that are not in the DISCARD_TUIs list.
+            """
+            return any(tui not in DISCARD_TUIs for tui in ent['tui'])
 
     @staticmethod
     def _answer_text(pair: Pair) -> str:
         answer_index = pair.answer["answer.target"]
         return pair.answer["answer.text"][answer_index]
+
+    @staticmethod
+    def _synonym_text(pair: Pair) -> str:
+        return ' '.join(synonym for synonym in [pair.answer["answer.synonyms"]])
+
+    def filter_synonyms(self, synonyms) -> Iterable[str]:
+        for entity in synonyms.ents:
+            # get the list of linked synonyms
+            linked_synonyms = self.get_linked_entities(entity)
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
@@ -311,17 +325,15 @@ class ScispaCyMatch(RelevanceClassifier):
         # join the aliases
         for pair, doc in zip_longest(pairs_2, docs):
             # the dict method get allows you to provide a default value if the key is missing
-            # answer_synonyms = set(pair.answer.get("answer.synonyms", []))
-            # answer_aliases = set.union({str(doc)}, answer_synonyms)
+            answer_synonyms = set(pair.answer.get("answer.synonyms", []))
+            answer_aliases = set.union({str(doc)}, answer_synonyms)
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
-                answer_aliases = set.union({str(doc)}, e_aliases)
-                # answer_aliases = [
-                #     SciSpacyFilter(text_key=alias) for alias in answer_aliases
-                # ]
+                print("extracted aliases: ", e_aliases)
+                print("answer aliases: ", answer_aliases)
+                answer_aliases = set.union(answer_aliases, e_aliases)
 
             # update the pair and return
-            # answer_aliases = [SciSpacyFilter(text_key=alias) for alias in answer_aliases]
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
 
