@@ -5,6 +5,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
+
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.utils import reduce_dict_values
 from fz_openqa.datamodules.pipes.utils import safe_fingerprint

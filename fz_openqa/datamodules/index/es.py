@@ -31,6 +31,7 @@ class ElasticSearchIndex(Index):
 
     def __init__(
         self,
+        *,
         index_key: str,
         text_key: str,
         query_key: str,

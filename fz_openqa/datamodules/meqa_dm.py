@@ -101,6 +101,7 @@ class MedQaDataModule(BaseDataModule):
         n_documents: Optional[int] = None,
         max_pos_docs: Optional[int] = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
+        compile: bool = True,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
@@ -110,6 +111,7 @@ class MedQaDataModule(BaseDataModule):
         self.corpus = corpus
 
         # document retrieval
+        self.compile = compile
         if n_documents is not None:
             assert n_retrieved_documents > 0
             assert n_documents <= n_retrieved_documents
@@ -143,6 +145,7 @@ class MedQaDataModule(BaseDataModule):
         # setup the corpus object
         if self.corpus is not None:
             self.corpus.setup()
+            assert self.corpus._index is not None, "An Index must be provided."
             assert self.n_documents <= len(self.corpus.dataset), (
                 f"The corpus is too small to retrieve that many documents\n:"
                 f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
@@ -150,6 +153,10 @@ class MedQaDataModule(BaseDataModule):
 
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
+
+        # compile
+        if self.compile:
+            self.compile_dataset(num_proc=self.num_proc)
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.

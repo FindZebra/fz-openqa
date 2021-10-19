@@ -41,17 +41,6 @@ model:
     attention_probs_dropout_prob: 0.3
 
 datamodule:
-  append_document_title: False
-  train_sampler:
-    n_pos: 1
-    n_neg: 3
-    pos_max_rank: 10
-    neg_max_rank: 10
-  eval_sampler:
-      n_pos: 1
-      n_neg: 3
-      pos_max_rank: 0
-      neg_max_rank: 10
   train_batch_size: 8
   valid_batch_size: 128
   max_length: 512

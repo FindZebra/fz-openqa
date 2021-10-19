@@ -1,18 +1,21 @@
 defaults:
-  - sampler/none@train_sampler
-  - sampler/none@eval_sampler
+  - relevance_classifier: exact_match
 
-_target_: fz_openqa.datamodules.fz_x_medqa_dm.FZxMedQADataModule
+_target_: fz_openqa.datamodules.meqa_dm.MedQaDataModule
+
 add_encoding_tokens: True
-append_document_title: True
 cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: 64
 eval_batch_size: 128
 num_workers: 4
+num_proc: 4
 pin_memory: True
 persistent_workers: False
 max_length: 512
 use_subset: False
-num_proc: 1
 verbose: ${verbose}
-filter_gold: True
+
+compile: True
+n_retrieved_documents: 10
+n_documents: null
+max_pos_docs: 1

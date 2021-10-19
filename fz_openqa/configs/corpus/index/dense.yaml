@@ -1,0 +1,5 @@
+_target_: fz_openqa.datamodules.index.FaissIndex
+
+index_key: "idx"
+text_key: "document.text"
+query_key: "question.text"
