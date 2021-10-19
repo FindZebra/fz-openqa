@@ -259,13 +259,17 @@ class ScispaCyMatch(RelevanceClassifier):
     def extract_aliases(self, entity) -> Iterable[str]:
         # get the list of linked entity
         linked_entities = self.get_linked_entities(entity)
-
+        print("Original entities")
+        print(list(linked_entities))
         # filter irrelevant entities based on TUIs
         linked_entities = filter(lambda ent: self.keep_entity, linked_entities)
-
+        print("Filtered entities")
+        print(list(linked_entities))
         # return aliases
         for linked_entity in linked_entities:
+            print(linked_entity)
             for alias in linked_entity.aliases:
+                print(alias)
                 yield alias.lower()
 
     def keep_entity(ent: Entity) -> bool:
@@ -284,6 +288,7 @@ class ScispaCyMatch(RelevanceClassifier):
 
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
+        print("Final aliases: ", answer_aliases)
         return find_one(doc_text, answer_aliases, sort_by=len)
 
     @staticmethod
@@ -306,14 +311,14 @@ class ScispaCyMatch(RelevanceClassifier):
         # join the aliases
         for pair, doc in zip_longest(pairs_2, docs):
             # the dict method get allows you to provide a default value if the key is missing
-            answer_synonyms = set(pair.answer.get("answer.synonyms", []))
-            answer_aliases = set.union({str(doc)}, answer_synonyms)
+            # answer_synonyms = set(pair.answer.get("answer.synonyms", []))
+            # answer_aliases = set.union({str(doc)}, answer_synonyms)
             for ent in doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
-                answer_aliases = set.union(answer_aliases, e_aliases)
-                answer_aliases = [
-                    SciSpacyFilter(text_key=alias) for alias in answer_aliases
-                ]
+                answer_aliases = set.union({str(doc)}, e_aliases)
+                # answer_aliases = [
+                #     SciSpacyFilter(text_key=alias) for alias in answer_aliases
+                # ]
 
             # update the pair and return
             # answer_aliases = [SciSpacyFilter(text_key=alias) for alias in answer_aliases]
