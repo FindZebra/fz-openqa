@@ -40,15 +40,15 @@ def find_one(
 ) -> bool:
     """check if one of the queries is in the input text"""
     assert isinstance(text, str)
-    queries = set(queries)
     if len(queries) == 0:
         return False
     if len(text) == 0:
         return False
 
     if sort_by is not None:
+        print("sorting")
         queries = sorted(queries, key=sort_by)
-
+    print("Final aliases: ", queries)
     # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
     # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
@@ -288,9 +288,7 @@ class ScispaCyMatch(RelevanceClassifier):
 
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-        print("Final aliases")
-        print(answer_aliases)
-        return find_one(doc_text, answer_aliases, sort_by=len)
+        return find_one(doc_text, answer_aliases, sort_by=None)
 
     def keep_entity(ent: dict) -> bool:
             """
@@ -308,18 +306,18 @@ class ScispaCyMatch(RelevanceClassifier):
         return ','.join([synonym for synonym in pair.answer.get("answer.synonyms", [])])
 
     def filter_synonyms(self, synonyms) -> Iterable[str]:
-        print(synonyms.ents)
+        # print(synonyms.ents)
         for synonym in synonyms.ents:
             # get the list of linked synonyms
             print(synonym)
             linked_synonyms = self.get_linked_entities(synonym)
             linked_synonyms1, linked_synonyms2, linked_synonyms3 = tee(linked_synonyms,3)
             print(list(linked_synonyms1))
-            # filter irrelevant entities based on TUIs
+            #filter irrelevant entities based on TUIs
             for ele in linked_synonyms3:
                 if any(ele['tui'] not in DISCARD_TUIs for ele in linked_synonyms3):
                     print(ele)
-            filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui']), linked_synonyms2)
+            filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui'] if len(ent['tui']) >= 1), linked_synonyms2)
 
             for linked_entity in filtered_synonyms:
                 yield linked_entity['entity']
@@ -344,19 +342,13 @@ class ScispaCyMatch(RelevanceClassifier):
 
         # join the aliases
         for pair, answer_doc, synonym_doc in zip_longest(pairs3, answer_docs, synonym_docs):
-            # the dict method get allows you to provide a default value if the key is missing
-            print("Original synonyms:")
-            print(set(pair.answer.get("answer.synonyms", [])))
             answer_synonyms = set(self.filter_synonyms(synonym_doc))
-            answer_synonyms1, answer_synonyms2 = tee(answer_synonyms,2)
-            print("Filtered synonyms: ")
-            print(list(answer_synonyms2))
-            answer_aliases = set.union({str(answer_doc)}, answer_synonyms1)
+            answer_aliases = set(answer_synonyms)
             for ent in answer_doc.ents:
                 e_aliases = set(self.extract_aliases(ent))
-                print("extracted aliases: ", e_aliases)
-                print("answer aliases: ", answer_aliases)
                 answer_aliases = set.union(answer_aliases, e_aliases)
+                
+            answer_aliases = list([str(answer_doc)] + sorted(answer_aliases, key=len))
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
