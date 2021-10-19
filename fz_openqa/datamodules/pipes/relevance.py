@@ -13,7 +13,6 @@ import dill
 import numpy as np
 import spacy
 import torch
-from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy import Language
@@ -25,7 +24,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
-
 
 @dataclass
 class Pair:
@@ -59,7 +57,6 @@ def find_one(
             text,
         )
     )
-
 
 class RelevanceClassifier(Pipe):
     def __init__(
@@ -134,64 +131,19 @@ class RelevanceClassifier(Pipe):
         assert all(bs == len(x) for x in batch.values())
         return bs
 
-
-class MetaMapMatch(RelevanceClassifier):
-    def __init__(self, model_name: Optional[str] = "en_core_sci_lg", **kwargs):
-        super().__init__(**kwargs)
-
-        self.model_name = model_name
-        self.model = spacy.load(
-            self.model_name,
-            disable=[
-                "tok2vec",
-                "tagger",
-                "parser",
-                "attribute_ruler",
-                "lemmatizer",
-            ],
-        )
-        self.model.add_pipe(
-            "scispacy_linker",
-            config={
-                "linker_name": "umls",
-                "max_entities_per_mention": 3,
-                "threshold": 0.95,
-            },
-        )
-        self.linker = self.model.get_pipe("scispacy_linker")
-
-    def classify(self, pair: Pair) -> bool:
-        doc_text = pair.document["document.text"]
-        answer_index = pair.answer["answer.target"]
-        answer_aliases = [pair.answer["answer.text"][answer_index]]
-        answer_cui = pair.answer["answer.cui"][0]
-        answer_synonyms = pair.answer["answer.synonyms"]
-
-        e_aliases = [
-            alias.lower()
-            for alias in self.linker.kb.cui_to_entity[answer_cui][2]
-        ]
-
-        answer_aliases = answer_aliases + answer_synonyms + e_aliases
-
-        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
-        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
-        # re.IGNORECASE: Perform case-insensitive matching
-        return find_one(doc_text, answer_aliases, sort_by=len)
-
-
-class ScispaCyMatch(RelevanceClassifier):
+class AliasBasedMatch(RelevanceClassifier):
     model: Optional[Language] = None
-    linker: Optional[Callable[[Doc], Doc]] = None
+    linker: Optional[Callable] = None
 
     def __init__(
         self,
+        filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         lazy_setup: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
+        self.filter_acronyms = filter_acronyms
         self.model_name = model_name
         if not lazy_setup:
             self._setup_models()
@@ -255,23 +207,17 @@ class ScispaCyMatch(RelevanceClassifier):
         )
         return model
 
+    def classify(self, pair: Pair) -> bool:
+        """
+        Classifying retrieved documents as either positive or negative
+        """
+        doc_text = pair.document["document.text"]
+        answer_aliases = pair.answer["answer.aliases"]
 
-    def extract_aliases(self, entity) -> Iterable[str]:
-        # get the list of linked entity
-        linked_entities = self.get_linked_entities(entity)
-
-        # filter irrelevant entities based on TUIs
-        # def keep_entity(ent: dict) -> bool:
-        #     """
-        #     keep entities that are not in the DISCARD_TUIs list.
-        #     """
-        #     return any(tui not in DISCARD_TUIs for tui in ent['tui'])
-        filtered_entities = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui']), linked_entities)
-
-        for linked_entity in filtered_entities:
-            for alias in linked_entity['aliases']:
-                if not self.detect_acronym(alias):
-                    yield alias.lower()
+        # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
+        # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+        # re.IGNORECASE: Perform case-insensitive matching
+        return find_one(doc_text, answer_aliases, sort_by=None)
 
     def get_linked_entities(self, entity: Entity) -> Iterable[dict]:
         for cui in entity._.kb_ents:
@@ -282,18 +228,6 @@ class ScispaCyMatch(RelevanceClassifier):
                 "tui" : self.linker.kb.cui_to_entity[cui_str].types, 
                 "aliases" : self.linker.kb.cui_to_entity[cui_str].aliases}
             yield out
-
-    def classify(self, pair: Pair) -> bool:
-
-        doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer["answer.aliases"]
-        return find_one(doc_text, answer_aliases, sort_by=None)
-
-    def keep_entity(ent: dict) -> bool:
-            """
-            keep entities that are not in the DISCARD_TUIs list.
-            """
-            return any(tui not in DISCARD_TUIs for tui in ent['tui'])
 
     @staticmethod
     def _answer_text(pair: Pair) -> str:
@@ -313,22 +247,78 @@ class ScispaCyMatch(RelevanceClassifier):
         return re.match(regex_pattern, alias)
 
     def filter_synonyms(self, synonyms) -> Iterable[str]:
-        # print(synonyms.ents)
         for synonym in synonyms.ents:
-            # get the list of linked synonyms
-            # print(synonym)
             linked_synonyms = self.get_linked_entities(synonym)
-            # linked_synonyms1, linked_synonyms2, linked_synonyms3 = tee(linked_synonyms,3)
-            # print(list(linked_synonyms1))
+
             #filter irrelevant entities based on TUIs
-            # for ele in linked_synonyms3:
-            #     if any(ele['tui'] not in DISCARD_TUIs for ele in linked_synonyms3):
-            #         print(ele)
             filtered_synonyms = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui'] if len(ent['tui']) >= 1), linked_synonyms)
 
-            for linked_entity in filtered_synonyms:
-                if not self.detect_acronym(linked_entity['entity']):
-                    yield linked_entity['entity'].lower()
+            if self.filter_acronyms:
+                for linked_entity in filtered_synonyms:
+                    if not self.detect_acronym(linked_entity['entity']):
+                        yield linked_entity['entity'].lower() 
+            else:
+                for linked_entity in filtered_synonyms:
+                    yield linked_entity['entity'].lower() 
+                 
+
+class MetaMapMatch(AliasBasedMatch):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+    def extract_aliases(self, cui) -> Iterable[str]:
+        for alias in self.linker.kb.cui_to_entity[cui][2]:
+            yield alias.lower()
+
+    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+        """Generate the field `pair.answer["aliases"]`"""
+        # An iterator can only be consumed once, generate two of them
+        # casting as a list would also work
+        pairs_1, pairs_2 = tee(pairs, 2)
+
+        # extract the answer text from each Pair
+        answer_texts = map(self._answer_text, pairs_1)
+
+        # extract the answer text from each Pair
+        synonym_texts = map(self._synonym_text, pairs_1)
+
+        # batch processing of texts
+        synonym_docs = self.model.pipe(synonym_texts)
+
+        # join the aliases
+        for pair, answer, synonym_doc in zip_longest(pairs_2, answer_texts,synonym_docs):
+            answer_cuis = pair.answer.get("answer.cui", None)
+            answer_aliases = set(self.filter_synonyms(synonym_doc))
+            if len(answer_cuis)>0:
+                e_aliases = set(self.extract_aliases(answer_cuis[0]))
+                answer_aliases = set.union(answer_aliases, e_aliases)
+
+            answer_aliases = list([str(answer)] + sorted(answer_aliases, key=len))
+            # update the pair and return
+            pair.answer["answer.aliases"] = answer_aliases
+            yield pair
+
+
+class ScispaCyMatch(AliasBasedMatch):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def extract_aliases(self, entity) -> Iterable[str]:
+        # get the list of linked entity
+        linked_entities = self.get_linked_entities(entity)
+
+        # filter irrelevant entities based on TUIs
+        filtered_entities = filter(lambda ent: any(tui not in DISCARD_TUIs for tui in ent['tui']), linked_entities)
+
+        if self.filter_acronyms:
+            for linked_entity in filtered_entities:
+                for alias in linked_entity['aliases']:
+                    if not self.detect_acronym(alias):
+                        yield alias.lower()
+        else:
+            for linked_entity in filtered_entities:
+                for alias in linked_entity['aliases']:
+                    yield alias.lower()
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
@@ -361,7 +351,6 @@ class ScispaCyMatch(RelevanceClassifier):
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
-
 
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
