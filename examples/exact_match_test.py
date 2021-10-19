@@ -3,7 +3,7 @@ from copy import copy
 import rich
 from rich.status import Status
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes.relevance import ExactMatch, ScispaCyMatch
+from fz_openqa.datamodules.pipes.relevance import ExactMatch, MetaMapMatch, ScispaCyMatch
 from fz_openqa.utils.pretty import pprint_batch, get_separator
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
@@ -51,7 +51,7 @@ batch = Collate(keys=None)(exs)
 pprint_batch(batch)
 
 with Status("Loading classifiers.."):
-    classifiers = [ScispaCyMatch()]
+    classifiers = [ExactMatch(),ScispaCyMatch(),MetaMapMatch()]
 output = {c:c(copy(batch)) for c in classifiers}
 
 for i, eg in enumerate(exs):
