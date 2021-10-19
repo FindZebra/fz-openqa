@@ -80,7 +80,7 @@ class MedQaDataModule(BaseDataModule):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 10, 10]
+    subset_size = [100, 20, 20]
 
     # number of options
     n_options = 4
@@ -101,7 +101,7 @@ class MedQaDataModule(BaseDataModule):
         n_documents: Optional[int] = None,
         max_pos_docs: Optional[int] = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
-        compile: bool = True,
+        compile_in_setup: bool = True,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
@@ -111,7 +111,7 @@ class MedQaDataModule(BaseDataModule):
         self.corpus = corpus
 
         # document retrieval
-        self.compile = compile
+        self.compile_in_setup = compile_in_setup
         if n_documents is not None:
             assert n_retrieved_documents > 0
             assert n_documents <= n_retrieved_documents
@@ -155,7 +155,9 @@ class MedQaDataModule(BaseDataModule):
         self.collate_pipe = self.get_collate_pipe()
 
         # compile
-        if self.compile:
+        if self.compile_in_setup:
+            # todo: move this in a callback, so the model can be used
+            self.build_index()
             self.compile_dataset(num_proc=self.num_proc)
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
@@ -248,7 +250,14 @@ class MedQaDataModule(BaseDataModule):
 
         # collate simple attributes
         simple_attr_pipe = Sequential(
-            Collate(keys=["idx", "answer.target", "answer.n_options"]),
+            Collate(
+                keys=[
+                    "idx",
+                    "question.idx",
+                    "answer.target",
+                    "answer.n_options",
+                ]
+            ),
             ApplyToAll(torch.tensor),
             id="simple-attrs",
         )
@@ -440,11 +449,16 @@ class MedQaDataModule(BaseDataModule):
         self,
         filter_unmatched: bool = True,
         num_proc: int = 1,
-        batch_size: int = 100,
+        batch_size: Optional[int] = 100,
     ):
-        """Process the whole dataset with `collate_fn` and store
-        into `self.compiled_dataset`"""
+        """
+        Process the whole dataset with `collate_fn` and store
+        into `self.compiled_dataset`
 
+        NB: SystemExit: 15: the error seems to be due to processing empty datasets.
+        Try setting a smaller batch size if this happens
+        """
+        # define the compile operation
         pipe = Sequential(
             DeCollate(),
             self.collate_pipe,
@@ -460,7 +474,6 @@ class MedQaDataModule(BaseDataModule):
             batch_size=batch_size,
             desc="Compiling dataset",
         )
-
         self.compiled_dataset = mapper(self.dataset)
 
         # cast tensor values
@@ -468,19 +481,14 @@ class MedQaDataModule(BaseDataModule):
 
         if filter_unmatched:
             # filter out questions that are not match to any  positive document
-            self.compiled_dataset = self.filter_unmatched_questions(
-                self.compiled_dataset
+            fn = partial(
+                filter_questions_by_pos_docs, max_pos_docs=self.max_pos_docs
             )
+            self.compiled_dataset = self.compiled_dataset.filter(fn)
 
         # print the difference in length for each split
         if self.verbose:
             print_size_difference(self.dataset, self.compiled_dataset)
-
-    def filter_unmatched_questions(self, dataset: DatasetDict):
-        fn = partial(
-            filter_questions_by_pos_docs, max_pos_docs=self.max_pos_docs
-        )
-        return dataset.filter(fn)
 
     def cast_compiled_dataset(self):
         pt_cols = self.pt_attributes + self.corpus.pt_attributes

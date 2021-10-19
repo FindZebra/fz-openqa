@@ -45,16 +45,12 @@ class SearchCorpus(Pipe):
         return self.as_fingerprintable().__repr__()
 
     def dill_inspect(self) -> Dict[str, Any]:
-        try:
-            return {
-                "__all__": dill.pickles(self),
-                "index": self.index.dill_inspect(),
-                "dataset": dill.pickles(self.dataset),
-                "collate_pipe": dill.pickles(self.collate_pipe),
-            }
-        except Exception as ex:
-            rich.print(f"in Search.dill_inspect: index={self.index}")
-            raise ex
+        return {
+            "__all__": dill.pickles(self),
+            "index": self.index.dill_inspect(),
+            "dataset": dill.pickles(self.dataset),
+            "collate_pipe": dill.pickles(self.collate_pipe),
+        }
 
     def fingerprint(self) -> Dict[str, Any]:
         return {

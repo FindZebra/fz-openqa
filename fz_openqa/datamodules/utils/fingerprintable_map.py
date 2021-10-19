@@ -37,16 +37,12 @@ class FingerprintableMap:
         fingerprints = self._gen_fingerprints(dataset, safe_pipe, {})
 
         # process dataset
-        dataset = DatasetDict(
-            {
-                key: dset.map(
-                    self.pipe,
-                    new_fingerprint=fingerprints.get(key, None),
-                    **self.map_kwargs,
-                )
-                for key, dset in dataset.items()
-            }
-        )
+        for key, dset in dataset.items():
+            dataset[key] = dset.map(
+                self.pipe,
+                new_fingerprint=fingerprints.get(key, None),
+                **self.map_kwargs,
+            )
 
         if {"__all__"} == set(dataset.keys()):
             dataset = dataset.pop("__all__")
