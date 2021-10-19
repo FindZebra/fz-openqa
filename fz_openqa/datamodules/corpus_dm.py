@@ -34,7 +34,6 @@ from .pipes import Pipe
 from .pipes import ReplaceInKeys
 from .pipes import SearchCorpus
 from .pipes import Sequential
-from .pipes import TextFormatter
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
 from .utils.transformations import add_spec_token
@@ -60,8 +59,8 @@ class CorpusDataModule(BaseDataModule):
     """
 
     dset_script_path_or_id = (
-        file_corpus.__file__  # HuggingFace dataset id or local path to script
-    )
+        file_corpus.__file__
+    )  # HuggingFace dataset id or local path to script
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function

@@ -23,7 +23,7 @@ jobs:
       - name: flake8 Lint
         uses: py-actions/flake8@v1
         with:
-          ignore: "W503,F401,E203"
+          ignore: "W503,F401,E203,E402"
           # exclude: "filename"
           max-line-length: "100"
           path: "fz_openqa/"

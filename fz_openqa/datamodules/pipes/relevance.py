@@ -14,7 +14,6 @@ from typing import Tuple
 import dill
 import numpy as np
 import spacy
-import torch
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
@@ -24,7 +23,6 @@ from spacy.tokens import Doc
 from ..utils.filter_keys import KeyWithPrefix
 from .nesting import nested_list
 from .static import DISCARD_TUIs
-from fz_openqa.datamodules.pipes import Nest
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 

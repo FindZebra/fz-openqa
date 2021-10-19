@@ -19,7 +19,7 @@ class TokenizerPipe(Pipe):
         drop_columns: bool = True,
         fields: Union[str, List[str]],
         max_length: Optional[int],
-        **kwargs
+        **kwargs,
     ):
         self.tokenizer = tokenizer
         self.drop_columns = drop_columns
