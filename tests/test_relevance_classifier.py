@@ -123,6 +123,7 @@ class TestRelevanceClassifier(TestCase):
         # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
         self.assertFalse(output['document.is_positive'][8])
         # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
+        # todo: where is b9 ? :)
 
 class TestFindOne(TestCase):
     """Test the function find one"""
