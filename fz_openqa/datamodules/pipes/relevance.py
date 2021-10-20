@@ -43,7 +43,7 @@ def find_one(
 
     if sort_by is not None:
         queries = sorted(queries, key=sort_by)
-        
+
     # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
     # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
@@ -265,33 +265,47 @@ class MetaMapMatch(AliasBasedMatch):
         super().__init__(**kwargs)
         
     def extract_aliases(self, cui) -> Iterable[str]:
-        for alias in self.linker.kb.cui_to_entity[cui][2]:
-            yield alias.lower()
+
+        #filter irrelevant entities based on TUIs
+        tuis = self.linker.kb.cui_to_entity[cui][3]
+        if any(tui not in DISCARD_TUIs for tui in tuis if len(tuis) >= 1):
+            if self.filter_acronyms:
+                for alias in self.linker.kb.cui_to_entity[cui][2]:
+                    if not self.detect_acronym(alias):
+                        yield alias.lower()
+
+            else:
+                for alias in self.linker.kb.cui_to_entity[cui][2]:
+                    yield alias.lower()
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         # An iterator can only be consumed once, generate two of them
         # casting as a list would also work
-        pairs_1, pairs_2 = tee(pairs, 2)
+        pairs_1, pairs_2, pairs_3 = tee(pairs, 3)
 
         # extract the answer text from each Pair
         answer_texts = map(self._answer_text, pairs_1)
 
         # extract the answer text from each Pair
-        synonym_texts = map(self._synonym_text, pairs_1)
+        synonym_texts = map(self._synonym_text, pairs_2)
 
         # batch processing of texts
         synonym_docs = self.model.pipe(synonym_texts)
 
         # join the aliases
-        for pair, answer, synonym_doc in zip_longest(pairs_2, answer_texts,synonym_docs):
-            answer_cuis = pair.answer.get("answer.cui", None)
-            answer_aliases = set(self.filter_synonyms(synonym_doc))
+        for pair, answer, synonym_doc in zip_longest(pairs_3, answer_texts,synonym_docs):
+            answer_cuis = pair.answer.get("answer.cui", [])
+            answer_aliases = self.filter_synonyms(synonym_doc)
             if len(answer_cuis)>0:
+                print("CUI: ", answer_cuis)
+                answer_aliases = set(self.filter_synonyms(synonym_doc))
                 e_aliases = set(self.extract_aliases(answer_cuis[0]))
                 answer_aliases = set.union(answer_aliases, e_aliases)
+                print("Extracted aliases: ",e_aliases)
 
             answer_aliases = list([str(answer)] + sorted(answer_aliases, key=len))
+            print("Answer aliases: ", answer_aliases)
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
