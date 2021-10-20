@@ -114,7 +114,10 @@ class SelectDocsEg(Pipe):
                 raise NotImplementedError
 
                 # re-index and return
-        return {k: reindex(v, index) for k, v in batch.items()}
+        return {
+            "__doc_selected__": True,
+            **{k: reindex(v, index) for k, v in batch.items()},
+        }
 
 
 def select_values(

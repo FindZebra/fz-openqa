@@ -38,7 +38,6 @@ corpus = MedQaCorpusDataModule(
     verbose=False,
     num_proc=4,
     use_subset=False,
-    compile_in_setup=False,
 )
 
 # load the QA dataset
@@ -59,6 +58,7 @@ dm = MedQaDataModule(
     n_documents=None,
     # simple exact match
     relevance_classifier=ExactMatch(interpretable=True),
+    compile_in_setup=False,
 )
 
 # prepare both the QA dataset and the corpus

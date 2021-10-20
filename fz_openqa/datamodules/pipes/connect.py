@@ -1,8 +1,10 @@
+from collections import OrderedDict
 from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import rich
@@ -60,9 +62,7 @@ class Sequential(Pipe):
 
     def as_fingerprintable(self) -> Any:
         pipes = [p.as_fingerprintable() for p in self.pipes]
-        # pipes = [p for p in pipes if isinstance(p, Pipe)]
-        new_cls = type(self)(*pipes, id=self.id)
-        return new_cls
+        return Sequential(*pipes, id=self.id)
 
 
 class Parallel(Sequential):
@@ -81,8 +81,12 @@ class Parallel(Sequential):
 
         return output
 
+    def as_fingerprintable(self) -> Any:
+        pipes = [p.as_fingerprintable() for p in self.pipes]
+        return Parallel(*pipes, id=self.id)
 
-class Update(Pipe):
+
+class UpdateWith(Pipe):
     def __init__(self, pipe: Pipe):
         self.pipe = pipe
 
@@ -138,3 +142,54 @@ class Gate(Pipe):
 
     def fingerprint(self) -> Any:
         return safe_fingerprint(self.pipe)
+
+
+class BlockSequential(Pipe):
+    """A sequence of Pipes organized into blocks"""
+
+    def __init__(
+        self, blocks: List[Tuple[str, Pipe]], id: Optional[str] = None
+    ):
+        self.blocks: OrderedDict[str, Pipe] = OrderedDict(blocks)
+        self.id = id
+
+    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+        """Call the pipes sequentially."""
+        for block in self.blocks.values():
+            batch = block(batch, **kwargs)
+
+        return batch
+
+    def todict(self) -> Dict:
+        """return a dictionary representation of this pipe."""
+        d = super().todict()
+        d["blocks"] = {k: safe_todict(p) for k, p in self.blocks.items()}
+        return d
+
+    @staticmethod
+    def get_pipe_id(p: Pipe):
+        cls = str(type(p).__name__)
+        if not isinstance(p, Pipe) or p.id is None:
+            return cls
+        else:
+            return f"{cls}({p.id})"
+
+    def dill_inspect(
+        self, reduce: bool = False
+    ) -> Union[Dict[str, Any], bool]:
+        diagnostic = {k: p.dill_inspect() for k, p in self.blocks.items()}
+        if reduce:
+            return reduce_dict_values(diagnostic)
+        else:
+            return diagnostic
+
+    def fingerprint(self) -> Dict[str, Any]:
+        return {k: safe_fingerprint(p) for k, p in self.blocks.items()}
+
+    def as_fingerprintable(self) -> Any:
+        blocks = [(k, p.as_fingerprintable()) for k, p in self.blocks.items()]
+        return BlockSequential(blocks, id=self.id)
+
+    def __iter__(self):
+        for k, b in self.blocks.items():
+            yield (k, b)

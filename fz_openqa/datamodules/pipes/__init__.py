@@ -15,10 +15,11 @@ from .collate import ApplyToEachExample
 from .collate import Collate
 from .collate import DeCollate
 from .collate import FirstEg
+from .connect import BlockSequential
 from .connect import Gate
 from .connect import Parallel
 from .connect import Sequential
-from .connect import Update
+from .connect import UpdateWith
 from .documents import SelectDocs
 from .filtering import FilterExamples
 from .nesting import Flatten
