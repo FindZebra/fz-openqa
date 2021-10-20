@@ -389,25 +389,6 @@ class ScispaCyMatch(AliasBasedMatch):
         # todo: why is this different?
         return any(tui not in discard_list for tui in ent.tuis)
 
-    def extract_aliases(self, entity) -> Iterable[str]:
-        # todo: This mostly repeats the code form MetaMapMatch.extract_aliases,
-        #  we need to unify that
-        # get the list of linked entity
-        linked_entities = self.get_linked_entities(entity)
-
-        # filter irrelevant entities based on TUIs
-        _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-        filtered_entities = filter(_filter, linked_entities)
-
-        for linked_entity in filtered_entities:
-            for alias in linked_entity.aliases:
-                if not self.filter_acronyms:
-                    yield alias.lower()
-                elif self.detect_acronym(alias):
-                    pass
-                else:
-                    yield alias.lower()
-
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         pairs = list(pairs)
