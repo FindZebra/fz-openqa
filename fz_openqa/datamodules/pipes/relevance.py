@@ -327,8 +327,10 @@ class AliasBasedMatch(RelevanceClassifier):
                     pass
                 else:
                     yield linked_entity.entity.lower()
-    
-    def extract_aliases(self, linked_entities : Iterable[LinkedEntity]) -> Iterable[str]:
+
+    def extract_aliases(
+        self, linked_entities: Iterable[LinkedEntity]
+    ) -> Iterable[str]:
         # get the TUIs of linked entities to filter irrelevant ones
         # filter irrelevant entities based on TUIs
         _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
