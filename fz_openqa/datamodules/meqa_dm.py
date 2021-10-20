@@ -236,10 +236,10 @@ class MedQaDataModule(BaseDataModule):
         # get the raw text questions, extract and collate
         raw_text_pipe = Collate(keys=[
             "answer.text",
-            "question.text", 
-            "question.metamap" 
+            "question.text",  
             "answer.cui", 
-            "answer.synonyms"])
+            "answer.synonyms",
+            "question.metamap"])
 
         # collate simple attributes
         simple_attr_pipe = Sequential(
