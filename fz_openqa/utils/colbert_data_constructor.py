@@ -1,3 +1,13 @@
+"""
+Generate FZxMedQA Dataset
+
+This script will generate the FZxMedQADataset using dataset files
+with questions linked to FindZebra Corpus (using CUIs)
+A running instance of ElasticSearch 7.13 must be running on localhost:9200
+
+Run 'docker compose up' with the supplied docker-compose.yml file to start
+two containers (ElasticSearch and Kibana, both ver  7.13)
+"""
 import argparse
 import json
 import os
@@ -10,15 +20,6 @@ from .es_functions import es_create_index
 from .es_functions import es_ingest
 from .es_functions import es_remove_index
 from .es_functions import es_search
-
-"""
-Generate FZxMedQA Dataset
-
-This script will generate the FZxMedQADataset using dataset files with questions linked to FindZebra Corpus (using CUIs)
-A running instance of ElasticSearch 7.13 must be running on localhost:9200
-
-Run 'docker compose up' with the supplied docker-compose.yml file to start two containers (ElasticSearch and Kibana, both ver  7.13)
-"""
 
 parser = argparse.ArgumentParser(description="Generate FZxMedQA Dataset")
 parser.add_argument(

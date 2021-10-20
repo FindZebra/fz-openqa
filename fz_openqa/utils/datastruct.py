@@ -7,7 +7,7 @@ from typing import Union
 import torch
 from torch import Tensor
 
-Batch = Dict[str, Union[Number, Tensor, List[str]]]
+Batch = Dict[str, Union[Number, Tensor, List]]
 
 
 def infer_device_from_batch(batch: Batch):

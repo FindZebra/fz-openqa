@@ -10,18 +10,21 @@ from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Sequence
+from typing import Tuple
 
 import dill
 import numpy as np
 import spacy
 import torch
 from pydantic import BaseModel
+from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 
 from ..utils.filter_keys import KeyWithPrefix
+from .nesting import nested_list
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -54,8 +57,14 @@ def find_one(
     if sort_by is not None:
         queries = sorted(queries, key=sort_by)
 
-    # re.search: Scan through string looking for a location where the regular expression pattern produces a match, and return a corresponding MatchObject instance. Return None if no position in the string matches the pattern; note that this is different from finding a zero-length match at some point in the string.
-    # re.escape: Return string with all non-alphanumerics backslashed; this is useful if you want to match an arbitrary literal string that may have regular expression metacharacters in it.
+    # re.search: Scan through string looking for a location where
+    # the regular expression pattern produces a match, and return a
+    # corresponding MatchObject instance. Return None if no position
+    # in the string matches the pattern; note that this is different
+    # from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed;
+    # this is useful if you want to match an arbitrary literal string
+    # that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
     return bool(
         re.search(
@@ -74,12 +83,20 @@ class RelevanceClassifier(Pipe):
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
         output_key: str = "document.is_positive",
+        interpretable: bool = False,
+        interpretation_key: str = "document.match_on",
     ):
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
+        self.interpretable = interpretable
+        self.interpretation_key = interpretation_key
 
     def classify(self, pair: Pair) -> bool:
+        """Classify each pair."""
+        raise NotImplementedError
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
         """Classify each pair."""
         raise NotImplementedError
 
@@ -109,13 +126,17 @@ class RelevanceClassifier(Pipe):
         pairs = self.preprocess(pairs)
 
         # apply self.classify element-wise (to each pair)
-        results = list(map(self.classify, pairs))
+        if self.interpretable:
+            all_results = zip(*map(self.classify_and_interpret, pairs))
+            results, interpretations = map(list, all_results)
+            batch[self.interpretation_key] = nested_list(
+                interpretations, stride=n_documents
+            )
+        else:
+            results = list(map(self.classify, pairs))
 
         # reshape as [batch_size, n_documents] and cast as Tensor
-        results = torch.tensor(results).view(batch_size, n_documents)
-
-        # return results
-        batch[self.output_key] = results
+        batch[self.output_key] = nested_list(results, stride=n_documents)
         return batch
 
     def _get_data_pairs(
@@ -146,11 +167,20 @@ class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
     def classify(self, pair: Pair) -> bool:
-        doc_text = pair.document["document.text"]
+        doc_text = pair.document["document.text"].lower()
         answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index]
+        answer_text = pair.answer["answer.text"][answer_index].lower()
 
-        return bool(answer_text.lower() in doc_text.lower())
+        return answer_text in doc_text
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+        doc_text = pair.document["document.text"].lower()
+        answer_index = pair.answer["answer.target"]
+        answer_text = pair.answer["answer.text"][answer_index].lower()
+
+        match = answer_text in doc_text
+        values = [answer_text] if match else []
+        return (match, values)
 
 
 class AliasBasedMatch(RelevanceClassifier):
@@ -243,6 +273,15 @@ class AliasBasedMatch(RelevanceClassifier):
             tuis = self.linker.kb.cui_to_entity[cui_str].types
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+        doc_text = pair.document["document.text"]
+        answer_aliases = pair.answer["answer.aliases"]
+
+        doc_text = doc_text.lower()
+        matches = [a for a in answer_aliases if a.lower() in doc_text]
+
+        return (len(matches) > 0, matches)
 
     @staticmethod
     def _extract_answer_text(pair: Pair) -> str:
@@ -353,7 +392,8 @@ class ScispaCyMatch(AliasBasedMatch):
         return any(tui not in discard_list for tui in ent.tuis)
 
     def extract_aliases(self, entity) -> Iterable[str]:
-        # todo: This mostly repeats the code form MetaMapMatch.extract_aliases, we need to unify that
+        # todo: This mostly repeats the code form MetaMapMatch.extract_aliases,
+        #  we need to unify that
         # get the list of linked entity
         linked_entities = self.get_linked_entities(entity)
 

@@ -30,6 +30,7 @@ from .pipes import Nested
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import RelevanceClassifier
+from .pipes import Rename
 from .pipes import ReplaceInKeys
 from .pipes import SearchCorpus
 from .pipes import SelectDocs
@@ -98,7 +99,7 @@ class MedQaDataModule(BaseDataModule):
         corpus: Optional[BaseDataModule] = None,
         n_retrieved_documents: int = 0,
         n_documents: Optional[int] = None,
-        max_pos_docs: int = 1,
+        max_pos_docs: Optional[int] = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
         **kwargs,
     ):
@@ -188,6 +189,7 @@ class MedQaDataModule(BaseDataModule):
         answer_text_pipes = Sequential(
             FilterKeys(KeyIn(["answer.text"])),
             ReplaceInKeys("answer.", ""),
+            self.text_formatter.copy(text_key="text"),
             ApplyToAll(flatten_nested, element_wise=False),
             Apply(
                 {"text": partial(add_spec_token, ANS_TOKEN)}, element_wise=True
@@ -212,6 +214,7 @@ class MedQaDataModule(BaseDataModule):
         question_pipes = Sequential(
             FilterKeys(KeyIn(["question.text"])),
             ReplaceInKeys("question.", ""),
+            self.text_formatter.copy(text_key="text"),
             Apply(
                 {"text": partial(add_spec_token, QUERY_TOKEN)},
                 element_wise=True,
@@ -277,26 +280,33 @@ class MedQaDataModule(BaseDataModule):
         condition = Reduce(
             Static(self.n_retrieved_documents > 0),
             Not(HasKeyWithPrefix("document.")),
+            reduce_op=all,
         )
-        search_docs_pipe = Update(
-            Gate(
-                condition,
-                Sequential(
-                    SearchCorpus(self.corpus, k=self.n_retrieved_documents),
-                    self.postprocessing,
+        # todo: do not initialize SearchCorpus when no corpus is available
+        search_docs_pipe = Gate(
+            condition,
+            Sequential(
+                Update(
+                    Sequential(
+                        SearchCorpus(
+                            self.corpus, k=self.n_retrieved_documents
+                        ),
+                        Rename({"idx": "document.global_idx"}),
+                    )
                 ),
-            )
+                self.postprocessing,
+            ),
         )
 
         return Sequential(
             Parallel(
                 # A. pipe to collate documents if already stored (compiled dataset)
                 self.get_documents_collate_pipe(),
-                # B. this one colalte the question and answer fields
+                # B. this one collate the question and answer fields
                 qa_collate_pipe,
             ),
             # C. Query the corpus for documents, only if A. did not return anything
-            search_docs_pipe,
+            Update(search_docs_pipe),
             id="collate-fn",
         )
 
@@ -307,7 +317,9 @@ class MedQaDataModule(BaseDataModule):
         which is the case when compiling datasets.
         """
         # get the raw text
-        raw_text_pipe = FilterKeys(KeyIn(["document.text"]))
+        raw_text_pipe = FilterKeys(
+            KeyIn(["document.text", "document.match_on"])
+        )
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
@@ -341,6 +353,7 @@ class MedQaDataModule(BaseDataModule):
                     "document.idx",
                     "document.passage_idx",
                     "document.retrieval_score",
+                    "document.match_on",
                     "document.is_positive",
                     "document.positive_count",
                     "document.input_ids",

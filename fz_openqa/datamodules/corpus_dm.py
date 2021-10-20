@@ -34,7 +34,6 @@ from .pipes import Pipe
 from .pipes import ReplaceInKeys
 from .pipes import SearchCorpus
 from .pipes import Sequential
-from .pipes import TextCleaner
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
 from .utils.transformations import add_spec_token
@@ -60,8 +59,8 @@ class CorpusDataModule(BaseDataModule):
     """
 
     dset_script_path_or_id = (
-        file_corpus.__file__  # HuggingFace dataset id or local path to script
-    )
+        file_corpus.__file__
+    )  # HuggingFace dataset id or local path to script
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
@@ -122,15 +121,17 @@ class CorpusDataModule(BaseDataModule):
             if self.input_dir is not None
             else None
         )
-        dataset = load_dataset(
+        return self._load_dataset(
             self.dset_script_path_or_id,
             cache_dir=self.data_dir,
             data_files=input_files,
         )
 
+    @staticmethod
+    def _load_dataset(script, **kwargs):
+        dataset = load_dataset(script, **kwargs)
         if isinstance(dataset, DatasetDict):
             dataset = concatenate_datasets(list(dataset.values()))
-
         return dataset
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
@@ -141,7 +142,7 @@ class CorpusDataModule(BaseDataModule):
 
         dataset = dataset.map(
             Sequential(
-                TextCleaner(text_key="text"),
+                self.text_formatter.copy(text_key="text"),
                 self.get_tokenizer_pipe(),
                 self.get_generate_passages_pipe(),
             ),
@@ -317,3 +318,19 @@ class MedQaCorpusDataModule(CorpusDataModule):
 
 class FzCorpusDataModule(CorpusDataModule):
     dset_script_path_or_id = fz_corpus.__file__
+
+
+class FZxMedQaCorpusDataModule(CorpusDataModule):
+    dset_script_path_or_id: List = [
+        fz_corpus.__file__,
+        meqa_en_corpus.__file__,
+    ]
+
+    def load_base_dataset(self) -> DatasetDict:
+        assert self.input_dir is None
+        kwargs = {"cache_dir": self.data_dir}
+        dsets = [
+            self._load_dataset(s, **kwargs)
+            for s in self.dset_script_path_or_id
+        ]
+        return concatenate_datasets(dsets)

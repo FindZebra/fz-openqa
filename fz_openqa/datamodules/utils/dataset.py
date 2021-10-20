@@ -1,4 +1,5 @@
 from typing import List
+from typing import Optional
 
 import rich
 from datasets import Dataset
@@ -45,6 +46,7 @@ def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
     print(get_separator())
 
 
-def filter_questions_by_pos_docs(row, *, max_pos_docs: int):
+def filter_questions_by_pos_docs(row, *, max_pos_docs: Optional[int]):
+    max_pos_docs = max_pos_docs or 1e20
     n = sum(row["document.is_positive"])
     return n > 0 and n <= max_pos_docs
