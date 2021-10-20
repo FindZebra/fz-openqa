@@ -382,13 +382,6 @@ class ScispaCyMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _check_entity_tuis(
-        ent: LinkedEntity, *, discard_list: List[str]
-    ) -> bool:
-        # todo: why is this different?
-        return any(tui not in discard_list for tui in ent.tuis)
-
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         pairs = list(pairs)
