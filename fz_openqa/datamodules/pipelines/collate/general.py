@@ -8,11 +8,15 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import ApplyToAll
 from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Nest
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import UpdateWith
+from fz_openqa.datamodules.utils.filter_keys import KeyIn
 
 
 class CollateAsTensor(Sequential):

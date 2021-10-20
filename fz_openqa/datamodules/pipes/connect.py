@@ -97,7 +97,7 @@ class UpdateWith(Pipe):
 
         return batch
 
-    def dill_inspect(self) -> bool:
+    def dill_inspect(self, reduce: bool = False) -> bool:
         return self.pipe.dill_inspect()
 
 
@@ -137,7 +137,7 @@ class Gate(Pipe):
         d["pipe"] = safe_todict(self.pipe)
         return d
 
-    def dill_inspect(self) -> Any:
+    def dill_inspect(self, reduce: bool = False) -> Any:
         return self.pipe.dill_inspect()
 
     def fingerprint(self) -> Any:

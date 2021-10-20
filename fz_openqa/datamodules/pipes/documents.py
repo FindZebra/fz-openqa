@@ -12,6 +12,9 @@ from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
 
 
+ARE_DOCS_SELECTED_KEY = "__doc_selected__"
+
+
 class SelectDocs(Nested):
     def __init__(
         self,
@@ -115,7 +118,7 @@ class SelectDocsEg(Pipe):
 
                 # re-index and return
         return {
-            "__doc_selected__": True,
+            ARE_DOCS_SELECTED_KEY: True,
             **{k: reindex(v, index) for k, v in batch.items()},
         }
 

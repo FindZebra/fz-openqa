@@ -17,9 +17,12 @@ class FingerprintableMap:
     an object that is deterministically fingerprintbale in itself.
     """
 
-    def __init__(self, pipe: Pipe, batched=True, **map_wkargs):
+    def __init__(
+        self, pipe: Pipe, batched=True, _id: str = None, **map_kwargs
+    ):
+        self._id = _id
         self.pipe = pipe
-        self.map_kwargs = {"batched": batched, **map_wkargs}
+        self.map_kwargs = {"batched": batched, **map_kwargs}
 
     def __call__(self, dataset: HgDataset) -> HgDataset:
         """Apply the `pipe` to the `dataset` using deterministic fingerprints."""
@@ -54,7 +57,8 @@ class FingerprintableMap:
         if not pipe.dill_inspect(reduce=True):
             rich.print(pipe.dill_inspect())
             raise TypeError(
-                "Couldn't pickle pipe. Code would fail if `num_proc`>1"
+                "Couldn't pickle pipe. Code would fail if `num_proc`>1. "
+                f"Make sure the pipe {pipe} can be pickled."
             )
 
     def _gen_fingerprints(

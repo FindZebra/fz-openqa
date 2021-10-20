@@ -4,6 +4,7 @@ from .base import ApplyToAll
 from .base import CopyBatch
 from .base import DropKeys
 from .base import FilterKeys
+from .base import GetKey
 from .base import Identity
 from .base import Lambda
 from .base import Pipe
@@ -22,6 +23,7 @@ from .connect import Sequential
 from .connect import UpdateWith
 from .documents import SelectDocs
 from .filtering import FilterExamples
+from .nesting import AsFlatten
 from .nesting import Flatten
 from .nesting import Nest
 from .nesting import Nested

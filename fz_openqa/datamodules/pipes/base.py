@@ -25,6 +25,9 @@ class Pipe:
 
     id: Optional[str] = None
 
+    def __init__(self, *, id: Optional[str] = None):
+        self.id = id or self.id
+
     @staticmethod
     def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
         """Extract example `idx` from a batch, potentially filter the keys"""
@@ -90,7 +93,8 @@ class Lambda(Pipe):
     Apply a lambda function to the batch.
     """
 
-    def __init__(self, op: Callable):
+    def __init__(self, op: Callable, **kwargs):
+        super().__init__(**kwargs)
         self.op = op
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -98,12 +102,23 @@ class Lambda(Pipe):
         return self.op(batch)
 
 
+class GetKey(Pipe):
+    def __init__(self, key: str, **kwargs):
+        super().__init__(**kwargs)
+        self.key = key
+
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        """The call of the pipeline process"""
+        return {self.key: batch[self.key]}
+
+
 class FilterKeys(Pipe):
     """
     Filter the keys in the batch.
     """
 
-    def __init__(self, condition: Callable):
+    def __init__(self, condition: Callable, **kwargs):
+        super().__init__(**kwargs)
         self.condition = condition
 
     def __call__(
@@ -121,7 +136,8 @@ class DropKeys(Pipe):
     Filter the keys in the batch.
     """
 
-    def __init__(self, keys: List[str]):
+    def __init__(self, keys: List[str], **kwargs):
+        super().__init__(**kwargs)
         self.keys = keys
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -137,6 +153,7 @@ class AddPrefix(Pipe):
     """
 
     def __init__(self, prefix: str, **kwargs):
+        super().__init__(**kwargs)
         self.prefix = prefix
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -150,6 +167,7 @@ class ReplaceInKeys(Pipe):
     """
 
     def __init__(self, a: str, b: str, **kwargs):
+        super().__init__(**kwargs)
         self.a = a
         self.b = b
 
@@ -164,6 +182,7 @@ class Rename(Pipe):
     """
 
     def __init__(self, keys: Dict[str, str], **kwargs):
+        super().__init__(**kwargs)
         self.keys = keys
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -182,7 +201,10 @@ class Apply(Pipe):
     The argument `element_wise` allows to process each value in the batch element wise.
     """
 
-    def __init__(self, ops: Dict[str, Callable], element_wise: bool = False):
+    def __init__(
+        self, ops: Dict[str, Callable], element_wise: bool = False, **kwargs
+    ):
+        super().__init__(**kwargs)
         self.ops = ops
         self.element_wise = element_wise
 
@@ -205,7 +227,8 @@ class ApplyToAll(Pipe):
     The argument `element_wise` allows to process each value in the batch element wise.
     """
 
-    def __init__(self, op: Callable, element_wise: bool = False):
+    def __init__(self, op: Callable, element_wise: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.op = op
         self.element_wise = element_wise
 

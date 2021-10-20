@@ -3,11 +3,13 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import ApplyToAll
+from fz_openqa.datamodules.pipes import AsFlatten
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import FirstEg
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Gate
+from fz_openqa.datamodules.pipes import GetKey
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Nest
 from fz_openqa.datamodules.pipes import Parallel
@@ -24,9 +26,7 @@ class MaybeCollateDocuments(Gate):
     which is the case when compiling datasets.
     """
 
-    def __init__(
-        self, n_documents: int, tokenizer: PreTrainedTokenizerFast, **kwargs
-    ):
+    def __init__(self, tokenizer: PreTrainedTokenizerFast, **kwargs):
 
         # get the raw text
         raw_text_pipe = FilterKeys(
@@ -73,9 +73,7 @@ class MaybeCollateDocuments(Gate):
                     "document.text",
                 ]
             ),
-            Flatten(),
-            Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe),
-            Nest(stride=n_documents),
+            AsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
         )
 
         condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))

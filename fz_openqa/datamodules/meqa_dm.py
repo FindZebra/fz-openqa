@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from functools import partial
 from typing import Callable
 from typing import Optional
@@ -139,11 +140,11 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # define the collate operator
-        self.collate_pipe = self.get_collate_pipe()
+        self.collate_pipe: BlockSequential = self.get_collate_pipe()
 
         # compile
         if self.compile_in_setup:
-            # todo: move this in a callback, so the model can be used
+            # todo: move this in a callback, so a model can be used
             self.build_index()
             self.compile_dataset(num_proc=self.num_proc)
 
@@ -172,9 +173,10 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # cast to tensors
-        dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=True
-        )
+        # todo: check if we can remove this one totally
+        # dataset.set_format(
+        #     type="torch", columns=self.pt_attributes, output_all_columns=True
+        # )
         return dataset
 
     def get_answer_tokenizer_pipe(self):
@@ -203,35 +205,25 @@ class MedQaDataModule(BaseDataModule):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
-        # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(keys=["answer.text", "question.text"])
+        # collate questions and couments
+        base_qa_collate_pipe = self.get_qa_collate_pipe()
 
-        # collate simple attributes
-        simple_attr_pipe = CollateAsTensor(
-            keys=["idx", "question.idx", "answer.target", "answer.n_options"]
-        )
-
-        # collate the questions attributes (question.input_ids, question.idx, ...)
-        question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
-
-        # collate answer options
-        answer_pipe = CollateTokens(
-            "answer.", tokenizer=self.tokenizer, stride=self.n_options
-        )
-
-        # the full pipe to collate question and answer fields
-        base_qa_collate_pipe = Parallel(
-            raw_text_pipe,
-            simple_attr_pipe,
-            question_pipe,
-            answer_pipe,
-            id="base-qa-collate",
-        )
-
-        # get a pipe to search document only if `n_retrieved_documements>0` and documents are not
-        # already stored
+        # get a pipe to search document only if `n_retrieved_documents>0`
+        # and documents are not already stored
         search_docs_pipe = MaybeSearchDocuments(
             self.n_retrieved_documents, corpus=self.corpus
+        )
+
+        # merge Q&A + documents (collate if available, else search)
+        collate_qad = Sequential(
+            Parallel(
+                # A. pipe to collate documents if already stored (compiled dataset)
+                MaybeCollateDocuments(self.tokenizer),
+                # B. this one collate the question and answer fields
+                base_qa_collate_pipe,
+            ),
+            # C. Query the corpus for documents, only if A. did not return any document
+            UpdateWith(search_docs_pipe),
         )
 
         # get the post processing blocks (RelevanceClassifier + doc selection)
@@ -241,24 +233,36 @@ class MedQaDataModule(BaseDataModule):
 
         return BlockSequential(
             [
-                (
-                    "collate Q,A and potentially documents if any",
-                    Parallel(
-                        # A. pipe to collate documents if already stored (compiled dataset)
-                        MaybeCollateDocuments(
-                            self.n_documents, self.tokenizer
-                        ),
-                        # B. this one collate the question and answer fields
-                        base_qa_collate_pipe,
-                    ),
-                ),
-                # C. Query the corpus for documents, only if A. did not return any document
-                ("Search the Index", UpdateWith(search_docs_pipe)),
-                # D. Unpack the preprocessing blocks
+                # A, B, C
+                ("Collate Q&A + Search documents", collate_qad),
+                # D: Classify documents +  F: select documents
                 *postprocessing,
             ],
             id="collate-pipeline",
         )
+
+    def get_qa_collate_pipe(self):
+        # get the raw text questions, extract and collate
+        raw_text_pipe = Collate(keys=["answer.text", "question.text"])
+        # collate simple attributes
+        simple_attr_pipe = CollateAsTensor(
+            keys=["idx", "question.idx", "answer.target", "answer.n_options"]
+        )
+        # collate the questions attributes (question.input_ids, question.idx, ...)
+        question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
+        # collate answer options
+        answer_pipe = CollateTokens(
+            "answer.", tokenizer=self.tokenizer, stride=self.n_options
+        )
+        # the full pipe to collate question and answer fields
+        base_qa_collate_pipe = Parallel(
+            raw_text_pipe,
+            simple_attr_pipe,
+            question_pipe,
+            answer_pipe,
+            id="base-qa-collate",
+        )
+        return base_qa_collate_pipe
 
     def compile_dataset(
         self,
@@ -273,25 +277,37 @@ class MedQaDataModule(BaseDataModule):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
-        # define the compile operation
-        pipe = Sequential(
+
+        # unpack the Q&A collate pipe and the postprocessing
+        qa_collate, *post = self.collate_pipe.blocks.items()
+
+        # wrap p1 to avoid casting issues and avoid storing padding
+        wrapped_p1 = Sequential(
             DeCollate(),
-            self.collate_pipe,
+            qa_collate[1],
             Itemize(),
             CleanupPadTokens(self.tokenizer),
         )
 
-        # run dataset.map() with extra steps to allow safe caching and multiprocessing
-        def m(k, p):
+        # store
+        blocks = OrderedDict([(qa_collate[0], wrapped_p1), *post])
+
+        # create a map operator on the fly for a given key and pipe
+        def m(desc, block):
+            # run dataset.map() with extra steps to allow safe caching and multiprocessing
             return FingerprintableMap(
-                p,
+                block,
                 batched=True,
                 num_proc=num_proc,
                 batch_size=batch_size,
-                desc=f"Compiling: {k}",
+                desc=f"Compiling: {desc}",
             )
 
-        self.compiled_dataset = m("full", pipe)(self.dataset)
+        dset = self.dataset
+        for k, block in blocks.items():
+            # block = Sequential(block, PrintBatch(f"out: {k}"))
+            dset = m(k, block)(dset)
+        self.compiled_dataset = dset
 
         # cast tensor values
         self.cast_compiled_dataset()
