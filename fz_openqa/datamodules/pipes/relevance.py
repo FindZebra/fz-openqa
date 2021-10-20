@@ -288,30 +288,26 @@ class AliasBasedMatch(RelevanceClassifier):
                     pass
                 else:
                     yield linked_entity.entity.lower()
+    
+    def extract_aliases(self, linked_entities : Iterable[LinkedEntity]) -> Iterable[str]:
+        # get the TUIs of linked entities to filter irrelevant ones
+        # filter irrelevant entities based on TUIs
+        _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
+        filtered_entities = filter(_filter, linked_entities)
+
+        for linked_entity in filtered_entities:
+            for alias in linked_entity.aliases:
+                if not self.filter_acronyms:
+                    yield alias.lower()
+                elif self.detect_acronym(alias):
+                    pass
+                else:
+                    yield alias.lower()
 
 
 class MetaMapMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-    def extract_aliases(self, cui) -> Iterable[str]:
-
-        # filter irrelevant entities based on TUIs
-        # todo: don't index with [3], find the underlying attribute.
-        #  Use `Go to symbol` to see what object is returned by cui_to_entity.
-        linked_entities = self.linker.kb.cui_to_entity[cui][3]
-        check_tuis = partial(
-            self._check_entity_tuis, discard_list=DISCARD_TUIs
-        )
-        if check_tuis(linked_entities):
-            if self.filter_acronyms:
-                for alias in self.linker.kb.cui_to_entity[cui][2]:
-                    if not self.detect_acronym(alias):
-                        yield alias.lower()
-
-            else:
-                for alias in self.linker.kb.cui_to_entity[cui][2]:
-                    yield alias.lower()
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
@@ -332,8 +328,10 @@ class MetaMapMatch(AliasBasedMatch):
             filtered_synonyms = self.extract_and_filters_entities(synonym_doc)
             answer_aliases = set(filtered_synonyms)
             if len(answer_cuis) > 0:
-                e_aliases = set(self.extract_aliases(answer_cuis[0]))
-                answer_aliases = set.union(answer_aliases, e_aliases)
+                for cui in answer_cuis:
+                    linked_entities = self.linker.kb.cui_to_entity[cui]
+                    e_aliases = set(self.extract_aliases(linked_entities))
+                    answer_aliases = set.union(answer_aliases, e_aliases)
 
             answer_aliases = [str(answer)] + sorted(answer_aliases, key=len)
             # update the pair and return
@@ -344,31 +342,6 @@ class MetaMapMatch(AliasBasedMatch):
 class ScispaCyMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-    @staticmethod
-    def _check_entity_tuis(
-        ent: LinkedEntity, *, discard_list: List[str]
-    ) -> bool:
-        # todo: why is this different?
-        return any(tui not in discard_list for tui in ent.tuis)
-
-    def extract_aliases(self, entity) -> Iterable[str]:
-        # todo: This mostly repeats the code form MetaMapMatch.extract_aliases, we need to unify that
-        # get the list of linked entity
-        linked_entities = self.get_linked_entities(entity)
-
-        # filter irrelevant entities based on TUIs
-        _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-        filtered_entities = filter(_filter, linked_entities)
-
-        for linked_entity in filtered_entities:
-            for alias in linked_entity.aliases:
-                if not self.filter_acronyms:
-                    yield alias.lower()
-                elif self.detect_acronym(alias):
-                    pass
-                else:
-                    yield alias.lower()
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
@@ -394,7 +367,8 @@ class ScispaCyMatch(AliasBasedMatch):
             )
             answer_aliases = set(answer_synonyms)
             for ent in answer_doc.ents:
-                e_aliases = set(self.extract_aliases(ent))
+                linked_entities = self.get_linked_entities(ent)
+                e_aliases = set(self.extract_aliases(linked_entities))
                 answer_aliases = set.union(answer_aliases, e_aliases)
 
             answer_aliases = [str(answer_doc)] + sorted(
