@@ -64,7 +64,8 @@ def padless_cat(
     master_key: str = "input_ids",
     aux_pad_tokens: Optional[Dict[str, Any]] = None,
 ) -> TorchBatch:
-    """Concatenate the input tensors across the dimension 1 such that there is no padding between a and b."""
+    """Concatenate the input tensors across the dimension 1 such that there
+    is no padding between a and b."""
     if aux_pad_tokens is None:
         aux_pad_tokens = {}
     assert a.keys() == b.keys()

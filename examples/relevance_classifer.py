@@ -34,7 +34,11 @@ b2 = {
     "question.text": "Which of the following factors gives the elastin molecule the ability to stretch and recoil?",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Cross-links between lysine residues"],
-    "answer.synonyms": ["Lysine", "Cross link", "Lysine measurement"],
+    "answer.synonyms": [
+        "Lysine",
+        "Cross link",
+        "Lysine measurement",
+    ],
     "document.text": [
         "which are responsible for the elastic properties of the molecule; and alanineand lysine-rich \u03b1-helical segments, which are cross-linked to adjacent molecules by covalent attachment of lysine residues. Each segment is encoded by a separate exon. There is still uncertainty concerning the conformation of elastin molecules in elastic fibers and how the structure of these fibers accounts for their rubberlike properties. However, it seems that parts of the elastin polypeptide chain, like the polymer chains in ordinary rubber, adopt a loose \u201crandom coil\u201d conformation, and it is the random coil nature of the component molecules cross-linked into the elastic fiber network that allows the network to stretch and recoil like a rubber band (Figure 19\u201345).\n\nElastin is the dominant extracellular matrix protein in arteries, comprising 50% of the dry weight of the largest artery\u2014the aorta (see Figure 19\u2013, Deoxypyridinium"  # noqa: E501
     ],
@@ -81,7 +85,6 @@ b5 = {
     "answer.text": [
         "Tell the attending that he cannot fail to disclose this mistake"
     ],
-    "answer.cui": [],
     "answer.synonyms": [
         "error",
         "failed",
@@ -156,19 +159,26 @@ b9 = {
     "answer.text": [
         "Tell the attending that he cannot fail to disclose this mistake"
     ],
-    "answer.synonyms": [],
+    "answer.synonyms": [],  # noqa: E501
     "document.text": [
         "professional norms of medicine (the Hippocratic oath, respect to patients and colleagues, ethical conduct, personal accountability, empathy, and altruism) are modeled in every personal encounter. It is imperative that all resident and attending surgeons under-stand that the medical students are observing them closely. When resident and attending surgeons model professional behavior, the hidden curriculum becomes a useful tool for professional devel-opment.147-150 This consistent modeling of professional behavior is one necessary component of leadership.During their clinical years, medical students experience both an exponential growth in knowledge and a measurable decline in empathy towards their patients. Initially, medical stu-dents are filled with excitement and wonder during their first patient encounters. The rapid pace of clinical work, acquisition of knowledge, and intense experiences create stress for the stu-dent, both positively and negatively. Scrubbing into the operat-ing room, witn"  # noqa: E501
     ],
-}
+}  # noqa: E501
+
 
 exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9]
-batch = Collate(keys=None)(exs)
-pprint_batch(batch)
+batch = Collate()(exs)
+pprint_batch(batch, header="Input batch")
 
 with Status("Loading classifiers.."):
-    classifiers = [ExactMatch(), MetaMapMatch(), ScispaCyMatch()]
-output = {c: c(copy(batch)) for c in classifiers}
+    classifiers = [
+        ExactMatch(interpretable=True),
+        MetaMapMatch(interpretable=True, lazy_setup=False),
+        ScispaCyMatch(interpretable=True, lazy_setup=False),
+    ]
+
+with Status("Processing examples.."):
+    output = {c: c(copy(batch)) for c in classifiers}
 
 for i, eg in enumerate(exs):
     print(get_separator())
@@ -176,6 +186,10 @@ for i, eg in enumerate(exs):
     rich.print(f"[red]Answer: {eg['answer.text'][eg['answer.target']]}")
     rich.print(f"[white]Document: {eg['document.text'][0]}")
     for c, b in output.items():
+        _match_on = (
+            b["document.match_on"][i][0] if "document.match_on" in b else None
+        )
         rich.print(
-            f"> {type(c).__name__}: is_positive={b['document.is_positive'][i, 0]}"
+            f"> {type(c).__name__}: is_positive={b['document.is_positive'][i][0]}, "
+            f"match_on={_match_on}"
         )

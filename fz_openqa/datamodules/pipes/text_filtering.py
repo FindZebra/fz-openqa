@@ -28,13 +28,15 @@ class StopWordsFilter(TextFilter):
 
     def filter_one(self, text: str) -> str:
         return " ".join(
-            [word for word in text.split() if word not in STOP_WORDS]
+            [word for word in text.split() if word.lower() not in STOP_WORDS]
         )
 
 
 class SciSpacyFilter(TextFilter):
     """
-    Build a Pipe to return a tuple of displacy image of named or unnamed word entities and a set of unique entities recognized based on scispacy model in use
+    Build a Pipe to return a tuple of displacy image of named or
+    unnamed word entities and a set of unique entities recognized
+    based on scispacy model in use
     Args:
         model: A pretrained model from spaCy or scispaCy
         document: text data to be analysed

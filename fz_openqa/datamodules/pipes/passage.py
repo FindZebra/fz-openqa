@@ -80,8 +80,9 @@ class GeneratePassages(Pipe):
         args: Dict[str, Dict[str, Any]],
     ) -> Tuple[List[int], Batch]:
         """
-        This functions generate the passages for each attribute in `keys`, the `arg` dictionary
-        must contain an entry for all `keys`. The first pass is used to store the document/example indexes
+        This functions generate the passages for each attribute in `keys`,
+         the `arg` dictionary must contain an entry for all `keys`.
+         The first pass is used to store the document/example indexes
         and compute the `passage_mask`.
 
         The passage mask is used for segmentation, and is optional for this project.
@@ -153,7 +154,8 @@ def gen_passages(
     pad_token: Optional[Any] = None,
     return_mask: bool = True,
 ) -> Iterable[Union[List[int], Tuple[List[int], List[Any]]]]:
-    """Generate overlapping windows with the corresponding masking such that each token appears only in one window."""
+    """Generate overlapping windows with the corresponding
+    masking such that each token appears only in one window."""
 
     if start_tokens is not None:
         eff_size = size - len(start_tokens)
