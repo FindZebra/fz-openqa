@@ -4,7 +4,6 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Nested
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
@@ -49,10 +48,7 @@ class PostprocessPipe(BlockSequential):
                 reduce_op=all,
             )
             classify_and_sort = Gate(
-                activate_doc_proc,
-                Sequential(
-                    relevance_classifier, sorter, PrintBatch("C+S out")
-                ),
+                activate_doc_proc, Sequential(relevance_classifier, sorter)
             )
 
             # select `n_documents` where count(is_positive) <= max_pos_docs
