@@ -18,11 +18,12 @@ from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
 from .pipelines.collate import MaybeSearchDocuments
 from .pipelines.preprocessing import FormatAndTokenize
-from .pipes import BlockSequential, PrintBatch
+from .pipes import BlockSequential
 from .pipes import Collate
 from .pipes import DeCollate
 from .pipes import Itemize
 from .pipes import Parallel
+from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
 from .pipes import Sequential
 from .pipes import UpdateWith
@@ -307,7 +308,7 @@ class MedQaDataModule(BaseDataModule):
         dset = self.dataset
         run_time_block = {}
         for k, block in blocks.items():
-            #block = Sequential(block, PrintBatch(f"out: {k}"))
+            # block = Sequential(block, PrintBatch(f"out: {k}"))
             t0 = time()
             dset = m(k, block)(dset)
             run_time_block[k] = time() - t0

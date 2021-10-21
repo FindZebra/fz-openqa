@@ -140,7 +140,9 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-run_time_block = dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=10)
+run_time_block = dm.compile_dataset(
+    filter_unmatched=True, num_proc=4, batch_size=10
+)
 
 rich.print("[green]>> index is compiled.")
 
