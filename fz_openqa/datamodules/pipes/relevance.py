@@ -46,7 +46,7 @@ class Pair:
 
 def find_one(
     text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
-) -> bool:
+):
     """check if one of the queries is in the input text"""
     assert isinstance(text, str)
     if len(queries) == 0:
@@ -66,14 +66,12 @@ def find_one(
     # this is useful if you want to match an arbitrary literal string
     # that may have regular expression metacharacters in it.
     # re.IGNORECASE: Perform case-insensitive matching
-    return bool(
-        re.search(
-            re.compile(
-                "|".join(re.escape(x) for x in queries),
-                re.IGNORECASE,
-            ),
-            text,
-        )
+    return re.findall(
+        re.compile(
+            "|".join(re.escape(x) for x in queries),
+            re.IGNORECASE,
+        ),
+        text,
     )
 
 
@@ -259,13 +257,17 @@ class AliasBasedMatch(RelevanceClassifier):
         )
         return model
 
-    def classify(self, pair: Pair) -> bool:
+    def classify(self, pair: Pair) -> Tuple[bool, List[str]]:
         """
         Classifying retrieved documents as either positive or negative
         """
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-        return find_one(doc_text, answer_aliases, sort_by=None)
+
+        doc_text = doc_text.lower()
+        matches = [a for a in answer_aliases if a.lower() in doc_text]
+
+        return (len(matches) > 0, matches)
 
     def get_linked_entities(self, entity: Entity) -> Iterable[LinkedEntity]:
         for cui in entity._.kb_ents:
