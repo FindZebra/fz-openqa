@@ -32,7 +32,7 @@ parser.add_argument(
     "--cls",
     type=str,
     nargs="?",
-    default="exactmatch",
+    default="exact",
     help="classifier applied to label documents from the corpus; (exact, scispacy or metamap)",
 )
 parser.add_argument(
@@ -46,7 +46,7 @@ parser.add_argument(
     "--topn",
     type=int,
     nargs="?",
-    default=100,
+    default=10,
     help="top n documents returned from ElasticSearch by a given query input",
 )
 parser.add_argument(
