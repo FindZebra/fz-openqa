@@ -306,9 +306,7 @@ class AliasBasedMatch(RelevanceClassifier):
     def _check_entity_tuis(
         ent: LinkedEntity, *, discard_list: List[str]
     ) -> bool:
-        return any(
-            tui not in discard_list for tui in ent.tuis if len(ent.tuis) >= 1
-        )
+        return any(tui not in discard_list for tui in ent.tuis)
 
     def extract_and_filters_entities(self, doc: Doc) -> Iterable[str]:
         for entity in doc.ents:
@@ -395,8 +393,6 @@ class ScispaCyMatch(AliasBasedMatch):
 
         # batch processing of texts
         docs = list(self.model.pipe(chain(answer_texts, synonym_texts)))
-
-        # batch processing of texts
         answer_docs, synonym_docs = docs[:n], docs[n:]
 
         # join the aliases
