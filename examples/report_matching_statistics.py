@@ -17,10 +17,10 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+from fz_openqa.utils import run_elasticsearch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
-from fz_openqa.utils import run_elasticsearch
 
 datasets.set_caching_enabled(True)
 setup_safe_env()
