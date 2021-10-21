@@ -13,7 +13,7 @@ from torchmetrics.classification import Accuracy
 
 from .base import Evaluator
 from .metrics import SplitMetrics
-from .utils import check_first_doc_positive
+from .utils import check_only_first_doc_positive
 from .utils import expand_and_flatten
 from .utils import flatten_first_dims
 from fz_openqa.utils.datastruct import Batch

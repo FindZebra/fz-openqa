@@ -18,7 +18,7 @@ from fz_openqa.modeling.models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )
 from fz_openqa.modeling.models.qa_retriever import QaRetriever
-from fz_openqa.modeling.pl_module import Module
+from fz_openqa.modeling.pl_module import PLModule
 from fz_openqa.utils.datastruct import add_prefix
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import contains_prefix
@@ -26,7 +26,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.functional import only_trainable
 
 
-class MultipleChoiceQA(Module):
+class MultipleChoiceQA(PLModule):
     """
     An end-to-end multiple choice openQA model with:
     * a dense retriever

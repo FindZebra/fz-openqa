@@ -1,8 +1,5 @@
-from typing import Optional
-
 from torch import nn
 from torch import Tensor
-from torch.nn import functional as F
 from transformers import BertPreTrainedModel
 
 

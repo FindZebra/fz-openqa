@@ -14,10 +14,10 @@ from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.pl_module import Module
+from fz_openqa.modeling.pl_module import PLModule
 
 
-class MultipleChoiceQAReader(Module):
+class MultipleChoiceQAReader(PLModule):
     """
     A multiple-choice reader model.
     """

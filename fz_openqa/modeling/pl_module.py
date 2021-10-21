@@ -1,5 +1,4 @@
 from typing import Any
-from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
@@ -19,7 +18,7 @@ from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 
 
-class Module(LightningModule):
+class PLModule(LightningModule):
     """
     This class implements the basics of evaluation, logging and inference using
     pytorch lightning mechanics.
@@ -65,8 +64,8 @@ class Module(LightningModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        backbone: Union[Backbone, DictConfig],
-        evaluator: Optional[Union[DictConfig, Evaluator]],
+        backbone: DictConfig,
+        evaluator: DictConfig,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -76,19 +75,21 @@ class Module(LightningModule):
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters(ignore=["evaluator", "tokenizer", "bert"])
+        self.save_hyperparameters(
+            ignore=["tokenizer", "evaluator", "bert", "backbone"]
+        )
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
 
         # instantiate the pretrained language model
-        self.bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
+        bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
         # instantiate the backbone model
-        self.backbone = maybe_instantiate(backbone, bert=bert)
+        self.backbone: Backbone = maybe_instantiate(backbone, bert=bert)
 
         # evaluator: compute the loss and take care of computing and logging the metrics
         self.evaluator: Optional[Evaluator] = maybe_instantiate(
-            evaluator, backbone=backbone
+            evaluator, backbone=self.backbone
         )
 
     def instantiate_bert(
@@ -126,7 +127,7 @@ class Module(LightningModule):
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
         """
-        return self.evaluator.step(batch, split=split)
+        return self.evaluator.step(batch, **kwargs)
 
     def _step_end(
         self, pre_output: Batch, *, split: Split, log_data=True
@@ -213,7 +214,7 @@ class Module(LightningModule):
         batch: Batch,
         batch_idx: int,
         dataloader_idx: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> Batch:
         return self._step(batch, batch_idx, dataloader_idx, split=Split.TRAIN)
 
     def validation_step(
@@ -231,7 +232,7 @@ class Module(LightningModule):
         batch: Batch,
         batch_idx: int,
         dataloader_idx: Optional[int] = None,
-    ):
+    ) -> Batch:
         return self._step(
             batch, batch_idx, dataloader_idx, split=Split.VALIDATION
         )

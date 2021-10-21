@@ -89,4 +89,7 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                 d["answer.cui"] = d.pop("CUIs")
                 d["answer.synonyms"] = d.pop("synonyms")
                 d["question.text"] = d.pop("question")
+
+                # todo: remove after gdrive update
+                d.pop("question_filt", None)
                 yield i, d

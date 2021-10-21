@@ -75,10 +75,13 @@ class Evaluator(nn.Module):
             batch, required_feature_names
         )
 
-    def forward(self, batch, **kwargs):
+    def forward(self, batch: Batch, **kwargs):
         """Compute the forward pass of the model, does not require targets,
         it can be used for inference."""
         self._check_features(batch, self._required_feature_names)
+        return self._forward(batch, **kwargs)
+
+    def _forward(self, batch: Batch, **kwargs):
         return self.backbone(
             batch["input_ids"],
             attention_mask=batch["attention_mask"],
@@ -90,12 +93,10 @@ class Evaluator(nn.Module):
         Evaluate the model (step + step end) given a batch of data
         with targets
         """
-        output = self.step(batch, None, **kwargs)
-        return self.step_end(output, None, update_metrics=False)
+        step_output = self.step(batch, None, **kwargs)
+        return self.step_end(step_output, None, update_metrics=False)
 
-    def step(
-        self, batch: Batch, split: Optional[Split] = None, **kwargs: Any
-    ) -> Batch:
+    def step(self, batch: Batch, **kwargs: Any) -> Batch:
         """Compute the forward pass of the model and return output
         Return a dictionary output with at least the key 'loss' and the data
         necessary to compute the metrics, unless the loss is explicitly
@@ -110,11 +111,9 @@ class Evaluator(nn.Module):
         Implement `_step` for each sub-class.
         """
         self._check_features(batch, self._required_eval_feature_names)
-        return self._step(batch, split, **kwargs)
+        return self._step(batch, **kwargs)
 
-    def _step(
-        self, batch: Batch, split: Optional[Split] = None, **kwargs: Any
-    ) -> Batch:
+    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         raise NotImplementedError
 
         # example
@@ -167,10 +166,10 @@ class Evaluator(nn.Module):
             k: v for k, v in output.items() if not re.match(FEATURE_PATTERN, k)
         }
 
-    def _reduce_step_output(self, output: Batch) -> Batch:
-        raise NotImplementedError
-        # example
-        output["loss"] = output["loss"].mean()
+    def _reduce_step_output(self, step_output: Batch) -> Batch:
+        """Compute values based on the tensors gathered form each value"""
+        step_output["loss"] = step_output["loss"].mean()
+        return step_output
 
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
@@ -197,10 +196,5 @@ class Evaluator(nn.Module):
         Potentially raise an error.
         """
         assert isinstance(
-            batch,
-            (
-                dict,
-                collections.OrderedDict,
-                collections.UserDict,
-            ),
+            batch, (dict, collections.OrderedDict, collections.UserDict)
         )

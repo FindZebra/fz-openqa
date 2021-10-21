@@ -13,11 +13,11 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.pl_module import Module
+from fz_openqa.modeling.pl_module import PLModule
 from fz_openqa.utils.functional import maybe_instantiate
 
 
-class QaRetriever(Module):
+class QaRetriever(PLModule):
     """
     A Dense retriever model.
     """

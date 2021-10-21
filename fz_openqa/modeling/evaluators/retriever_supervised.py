@@ -1,4 +1,5 @@
 from typing import Any
+from typing import Optional
 
 import torch
 from datasets import Split
@@ -6,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from torchmetrics.classification import Accuracy
 
-from .utils import check_first_doc_positive
+from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
 from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.evaluators.metrics import SafeMetricCollection
@@ -15,22 +16,15 @@ from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
-class InformationRetrievalGoldSupervised(Evaluator):
-    """
-    Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
-    in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
-
-        L =  sum_p log p(a_p | q, e, A) 1(p = a)
-
-    where a is the index of the true answer.
-    """
-
-    _required_eval_feature_names = [
-        "question.idx",
+class RetrieverSupervised(Evaluator):
+    _required_feature_names = [
         "question.input_ids",
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
+    ]
+
+    _required_eval_feature_names = [
         "document.is_positive",
     ]
 
@@ -57,9 +51,33 @@ class InformationRetrievalGoldSupervised(Evaluator):
 
         self.metrics = SplitMetrics(init_metric)
 
-    def step(
-        self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
-    ) -> Batch:
+    def _forward(self, batch: Batch, reshape: bool = True, **kwargs) -> Batch:
+
+        batch_size, n_documents, *_ = batch["document.input_ids"].shape
+        # flatten documents as [batch_size x n_documents]
+        batch = flatten_first_dims(
+            batch,
+            n_dims=2,
+            keys=["document.input_ids", "document.attention_mask"],
+        )
+
+        # shape: [bs, h]
+        hq = self.backbone(
+            batch["question.input_ids"],
+            attention_mask=batch["question.attention_mask"],
+        )
+        # shape: # [bs * n_docs, h]
+        hd = self.backbone(
+            batch["document.input_ids"],
+            attention_mask=batch["document.attention_mask"],
+        )
+
+        if reshape:
+            hd = hd.view(batch_size, n_documents, *hq.shape[1:])
+
+        return {"_hq_": hq, "_hd_": hd}
+
+    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         """
         Compute the forward pass for the question and the documents.
 
@@ -69,49 +87,26 @@ class InformationRetrievalGoldSupervised(Evaluator):
         'document.input_ids': [batch_size, n_docs, L_q]
         """
         # check features, check that the first document of each question is positive
-        # and flatten the documents
-        self.check_batch_type(batch)
-        self.check_feature_names(batch)
-        check_first_doc_positive(batch)
-        # flatten documents inputs
-        doc_batch = flatten_first_dims(
-            batch,
-            n_dims=2,
-            keys=["document.input_ids", "document.attention_mask"],
-        )
+        check_only_first_doc_positive(batch)
+        return self._forward(batch, reshape=False, **kwargs)
 
-        hq = model(
-            batch=batch,
-            model_key="question",
-        )  # [bs, h]
-        he = model(
-            batch=doc_batch,
-            model_key="document",
-        )  # [bs * n_docs, h]
-
-        return {
-            "hq": hq,
-            "he": he,
-        }
-
-    def step_end(self, output: Batch, split: Split) -> Any:
+    def _reduce_step_output(self, output: Batch) -> Batch:
         """
         gather h_q and h_e from all devices to the device 0
         and compute the similarity matrix between the questions and all the documents.
         This results in a matrix of shape [batch_size, batch_size * n_docs].
         """
-
         # compute the scoring matrix
-        hq, he = (output.pop(k) for k in ["hq", "he"])
-        score_matrix = self.similarity(hq, he)  # [bs x bs*n_docs]
+        hq, hd = (output.pop(k) for k in ["_hq_", "_hd_"])
+        score_matrix = self.similarity(hq, hd)  # [bs x bs*n_docs]
 
         # compute targets
         # assuming the target document is the first of each group
         # the targets are:
-        # * 0*n_dods for the first `n_docs` items
-        # * 1*n_dods for the following `n_docs` items
+        # * 0*n_docs for the first `n_docs` items
+        # * 1*n_docs for the following `n_docs` items
         # * ...
-        n_docs = he.shape[0] // hq.shape[0]
+        n_docs = hd.shape[0] // hq.shape[0]
         targets = n_docs * (
             torch.arange(start=0, end=len(score_matrix))
             .long()
@@ -122,11 +117,7 @@ class InformationRetrievalGoldSupervised(Evaluator):
         loss = F.cross_entropy(score_matrix, targets, reduction="mean")
         output["loss"] = loss.mean()
         output["n_options"] = score_matrix.shape[1]  # store the batch size
-        output["logits"] = score_matrix
-        output["targets"] = targets
+        output["_logits_"] = score_matrix
+        output["_targets_"] = targets
 
-        # update the metrics and return
-        self.update_metrics(output, split)
-        output.pop("logits")
-        output.pop("targets")
         return output

@@ -18,7 +18,7 @@ class BertLinearHeadCls(Backbone):
         output_size: Optional[int],
         normalize: bool = False
     ):
-        super(BertLinearHeadCls, self).__init__(bert=bert)
+        super().__init__(bert=bert)
         self.bert = bert
         self.normalize = normalize
         if output_size is not None:
