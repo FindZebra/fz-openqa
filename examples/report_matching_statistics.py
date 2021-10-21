@@ -20,6 +20,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
+from fz_openqa.utils import run_elasticsearch
 
 datasets.set_caching_enabled(True)
 setup_safe_env()
@@ -28,35 +29,35 @@ parser = argparse.ArgumentParser(
     description="Generate reporting statistics on relevance classifiers"
 )
 parser.add_argument(
-    "classifier",
+    "--cls",
     type=str,
     nargs="?",
     default="exactmatch",
-    help="classifier applied to label documents extracted from the corpus; exactmatch, scispacy or metamap",
+    help="classifier applied to label documents extracted from the corpus; (exact, scispacy or metamap)",
 )
 parser.add_argument(
-    "corpus",
+    "--corpus",
     type=str,
     nargs="?",
     default="FZ",
-    help="corpus applied to generate documents from",
+    help="corpus applied to generate documents from; (FZ, MedQA, FZxMedQA)",
 )
 parser.add_argument(
-    "topn",
+    "--topn",
     type=int,
     nargs="?",
     default=100,
     help="top n documents returned from ElasticSearch by a given query input",
 )
 parser.add_argument(
-    "filter_mode",
+    "--filter",
     type=str,
     nargs="?",
     default=None,
     help="what filtering mode applied to the documents",
 )
 parser.add_argument(
-    "subset",
+    "--subset",
     type=bool,
     nargs="?",
     default=True,
@@ -68,20 +69,20 @@ tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"
 )
 
-if args.classifier == "scispacy":
+if args.cls == "scispacy":
     cls = ScispaCyMatch()
-elif args.classifier == "metamap":
+elif args.cls == "metamap":
     cls = MetaMapMatch()
-elif args.classifier == "exactmatch":
+elif args.cls == "exact":
     cls = ExactMatch()
 else:
     NotImplementedError
 
 if args.corpus == "FZ":
     corpus_module = FzCorpusDataModule
-elif args.classifier == "MedQA":
+elif args.corpus == "MedQA":
     corpus_module = MedQaCorpusDataModule
-elif args.classifier == "FZxMedQA":
+elif args.corpus == "FZxMedQA":
     corpus_module = FZxMedQaCorpusDataModule
 else:
     NotImplementedError
@@ -94,7 +95,7 @@ corpus = corpus_module(
         text_key="document.text",
         query_key="question.text",
         num_proc=4,
-        filter_mode=args.filter_mode,
+        filter_mode=args.filter,
     ),
     verbose=False,
     num_proc=4,
