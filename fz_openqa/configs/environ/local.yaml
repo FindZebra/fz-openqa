@@ -14,8 +14,8 @@ datamodule:
   window_stride: 100
   train_batch_size: 10
   eval_batch_size: 20
-  num_proc: 1
-  num_workers: 0
+  num_proc: 2
+  num_workers: 2
 
 logger: null
 callbacks: null

@@ -1,6 +1,7 @@
 import warnings
 from copy import copy
 from typing import List
+from typing import Optional
 
 import numpy as np
 import rich
@@ -11,12 +12,15 @@ from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
 
 
+ARE_DOCS_SELECTED_KEY = "__doc_selected__"
+
+
 class SelectDocs(Nested):
     def __init__(
         self,
         *,
         total: int,
-        max_pos_docs: int = 1,
+        max_pos_docs: Optional[int] = 1,
         pos_select_mode: str = "sample",
         neg_select_mode: str = "first",
         strict: bool = False,
@@ -24,7 +28,7 @@ class SelectDocs(Nested):
     ):
         pipe = SelectDocsEg(
             total=total,
-            max_pos_docs=max_pos_docs,
+            max_pos_docs=max_pos_docs or total,
             pos_select_mode=pos_select_mode,
             neg_select_mode=neg_select_mode,
             strict=strict,
@@ -113,7 +117,10 @@ class SelectDocsEg(Pipe):
                 raise NotImplementedError
 
                 # re-index and return
-        return {k: reindex(v, index) for k, v in batch.items()}
+        return {
+            ARE_DOCS_SELECTED_KEY: True,
+            **{k: reindex(v, index) for k, v in batch.items()},
+        }
 
 
 def select_values(

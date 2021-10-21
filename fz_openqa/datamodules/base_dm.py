@@ -9,8 +9,6 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
-from hydra.utils import instantiate
-from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
@@ -18,6 +16,8 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HgDataset
@@ -52,8 +52,8 @@ class BaseDataModule(LightningDataModule):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = "ptb_text_only"
 
-    # text fields from the raw datasets that should be tokenized and concatenated
-    text_fields = ["sentence"]
+    # text field from the raw datasets that should be tokenized
+    text_field = "sentence"
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
@@ -83,6 +83,7 @@ class BaseDataModule(LightningDataModule):
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = True,
+        text_formatter: Optional[TextFormatter] = TextFormatter(),
         **kwargs,
     ):
         super().__init__()
@@ -98,6 +99,7 @@ class BaseDataModule(LightningDataModule):
         self.verbose = verbose
 
         # tokenizer and dataset
+        self.text_formatter = text_formatter
         self.max_length = max_length
         self.tokenizer = tokenizer
 
@@ -138,13 +140,16 @@ class BaseDataModule(LightningDataModule):
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
-        pipe = TokenizerPipe(
-            self.tokenizer,
-            max_length=self.max_length,
-            fields=self.text_fields,
-            return_token_type_ids=False,
-            add_special_tokens=False,
-            return_offsets_mapping=False,
+        pipe = Sequential(
+            self.text_formatter.copy(text_key=self.text_field),
+            TokenizerPipe(
+                self.tokenizer,
+                max_length=self.max_length,
+                fields=self.text_field,
+                return_token_type_ids=False,
+                add_special_tokens=False,
+                return_offsets_mapping=False,
+            ),
         )
 
         dataset = dataset.map(
@@ -152,7 +157,7 @@ class BaseDataModule(LightningDataModule):
             batched=True,
             num_proc=self.num_proc,
             desc="Tokenizing",
-            remove_columns=self.text_fields,
+            remove_columns=self.text_field,
         )
         dataset.set_format(type="torch", columns=self.pt_attributes)
         return dataset

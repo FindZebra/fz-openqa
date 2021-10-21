@@ -7,15 +7,18 @@ from fz_openqa.utils.pretty import get_separator
 datasets.set_caching_enabled(False)
 
 tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path='bert-base-cased')
+    pretrained_model_name_or_path="bert-base-cased"
+)
 
 # load the corpus object
-corpus = FZxMedQaCorpusDataModule(tokenizer=tokenizer,
-                                  index=None,
-                                  verbose=False,
-                                  num_proc=4,
-                                  use_subset=False,
-                                  train_batch_size=10)
+corpus = FZxMedQaCorpusDataModule(
+    tokenizer=tokenizer,
+    index=None,
+    verbose=False,
+    num_proc=4,
+    use_subset=False,
+    train_batch_size=10,
+)
 
 # full: 1 020 817
 # MedQA: 230 180

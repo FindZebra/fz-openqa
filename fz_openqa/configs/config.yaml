@@ -25,8 +25,8 @@ base:
 
 
 # version info (useful for filtering runs on wandb)
-exp_version: 7
-code_version: "0.0.2"
+exp_version: 10
+code_version: "0.1.0"
 
 
 

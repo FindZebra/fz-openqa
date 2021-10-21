@@ -16,6 +16,8 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from transformers import PreTrainedTokenizerFast
 
 import fz_openqa
+from fz_openqa.datamodules import MedQaDataModule
+from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.train_utils import setup_safe_env
 
@@ -60,23 +62,22 @@ def train(config: DictConfig) -> Optional[float]:
     log.info(
         f"Instantiating corpus <{config.corpus._target_ if has_corpus else 'none'}>"
     )
-    corpus: LightningDataModule = (
+    corpus: CorpusDataModule = (
         instantiate(config.corpus, tokenizer=tokenizer) if has_corpus else None
     )
 
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: LightningDataModule = instantiate(
+    datamodule: MedQaDataModule = instantiate(
         config.datamodule,
         tokenizer=tokenizer,
         corpus=corpus,
-        _recursive_=False,
     )
 
     # Init Lightning model
     log.info(f"Instantiating model <{config.model._target_}>")
     model: LightningModule = instantiate(
-        config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=False
+        config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=True
     )
 
     # Init Lightning callbacks

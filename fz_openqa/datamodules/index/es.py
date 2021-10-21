@@ -12,13 +12,14 @@ from rich.status import Status
 from .base import Index
 from .base import SearchResult
 from fz_openqa.datamodules.pipes import Batchify
+from fz_openqa.datamodules.pipes import CopyBatch
 from fz_openqa.datamodules.pipes import DeBatchify
 from fz_openqa.datamodules.pipes import MetaMapFilter
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SciSpacyFilter
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import StopWordsFilter
-from fz_openqa.datamodules.pipes import TextCleaner
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.es_functions import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
@@ -30,6 +31,7 @@ class ElasticSearchIndex(Index):
 
     def __init__(
         self,
+        *,
         index_key: str,
         text_key: str,
         query_key: str,
@@ -37,6 +39,7 @@ class ElasticSearchIndex(Index):
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearchEngine] = None,
+        text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -47,12 +50,16 @@ class ElasticSearchIndex(Index):
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
 
+        # text cleaning
+        if isinstance(text_cleaner, TextFormatter):
+            text_cleaner = text_cleaner.copy(text_key=self.text_key)
+        self.text_cleaner = text_cleaner
+
         # pipe used to potentially filter the input text
         if filter_mode is not None:
             filter_pipe_cls = {
                 "scispacy": SciSpacyFilter,
                 "metamap": MetaMapFilter,
-                # @vlievin: fyi has to be included in the datamodule
                 "stopwords": StopWordsFilter,
             }[filter_mode]
             filter_pipe = filter_pipe_cls(text_key=self.text_key, query_key=self.query_key)
@@ -61,16 +68,9 @@ class ElasticSearchIndex(Index):
 
         # text cleaning and filtering
         self.preprocesing_pipe = Sequential(
-            # @idariis: added this line for debugging
-            # PrintBatch(header="filtering input"),
+            CopyBatch(),
             filter_pipe,
-            TextCleaner(
-                text_key=self.text_key,
-                lowercase=True,
-                aggressive_cleaning=True,
-            )
-            # @filter_pipe_cls: added this line for debugging
-            # PrintBatch(header="filtering output"),
+            text_cleaner,
         )
 
     def dill_inspect(self) -> Dict[str, Any]:
@@ -109,6 +109,7 @@ class ElasticSearchIndex(Index):
                         document_txt=dataset[self.text_key],
                     )
                 except Exception as ex:
+                    # todo: catch a more precise exception
                     self.engine.es_remove_index(self.index_name)
                     raise ex
 

@@ -3,18 +3,19 @@ repos:
     rev: 20.8b1
     hooks:
       - id: black
-        files: fz_openqa/
+        files:  '(fz_openqa/|test/|examples/)'
 
   - repo: https://gitlab.com/pycqa/flake8
     rev: 3.8.4
     hooks:
       - id: flake8
-        files: fz_openqa/
+        files: '(fz_openqa/|test/|examples/)'
 
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1
     hooks:
+      - id: check-merge-conflict
       - id: trailing-whitespace
         exclude: ^.github/
       - id: end-of-file-fixer
@@ -27,4 +28,4 @@ repos:
     rev: v2.5.0
     hooks:
       - id: reorder-python-imports
-        files: fz_openqa/
+        files: '(fz_openqa/|test/|examples/)'

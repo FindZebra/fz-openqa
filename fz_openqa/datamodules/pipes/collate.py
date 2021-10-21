@@ -20,7 +20,7 @@ class Collate(Pipe):
 
     def __init__(
         self,
-        keys: Optional[Union[str, List[str], Callable]],
+        keys: Optional[Union[str, List[str], Callable]] = None,
         key_op: Optional[Callable] = None,
     ):
         self.keys = keys

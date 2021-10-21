@@ -20,10 +20,13 @@ class BaseEvaluator(nn.Module):
         2. computes and track the metrics (accuracy, F1, ...) using `SplitMetrics`
 
     !! Important !!
-    Metrics needs to be updated in the call of `_step_end` in the LightningModule in order to avoid errors with dp.
-    Therefore all the update steps need to be implemented in `update_metrics`, which is subsequently called in
+    Metrics needs to be updated in the call of `_step_end` in the
+    LightningModule in order to avoid errors with dp.
+    Therefore all the update steps need to be implemented in `update_metrics`,
+    which is subsequently called in
     BaseModel._step_end() on device 0.
-    See https://torchmetrics.readthedocs.io/en/stable/pages/overview.html#metrics-in-dataparallel-dp-mode
+    See https://torchmetrics.readthedocs.io/en/stable/pages/
+        overview.html#metrics-in-dataparallel-dp-mode
     """
 
     # named of the required features
@@ -51,13 +54,14 @@ class BaseEvaluator(nn.Module):
     ) -> Batch:
         """Compute the forward pass of the model and return output
         Return a dictionary output with at least the key 'loss' and the data
-        necessary to compute the metrics, unless the loss is explicitly computed in the
-        `post_forward` method.
+        necessary to compute the metrics, unless the loss is explicitly
+        computed in the `post_forward` method.
 
-        This step will be computed in the `*_step()` method of the ligthning module:
-         the data is processed separately on each device.
+        This step will be computed in the `*_step()` method of the
+        ligthning module: the data is processed separately on each device.
 
-        The torchmetric `Metric.update()` method should not be called here. See `post_forward` instead.
+        The torchmetric `Metric.update()` method should not be called here.
+        See `post_forward` instead.
         """
         raise NotImplementedError
 
@@ -119,7 +123,7 @@ class BaseEvaluator(nn.Module):
         for f in self._required_eval_feature_names:
             assert (
                 f in batch.keys()
-            ), f"The feature {f} is required for evaluation."
+            ), f"The feature {f} is required for evaluation. Found {list(batch.keys())}"
 
     def check_batch_type(self, batch: Batch) -> None:
         """

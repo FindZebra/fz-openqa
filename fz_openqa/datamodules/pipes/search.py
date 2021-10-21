@@ -5,6 +5,7 @@ from typing import Optional
 from typing import Union
 
 import dill
+import rich
 import torch
 
 from . import Collate
@@ -26,16 +27,17 @@ class SearchCorpus(Pipe):
         k: Optional[int] = None,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
         simple_collate: bool = False,
-        update_query: bool = True,
     ):
+        assert corpus is not None, "corpus must be set."
         self.index = corpus._index
         self.dataset = corpus.dataset
-        assert (
-            self.dataset is not None
-        ), "Corpus.dataset is None, you probably need to `run corpus.setup()` before initializing this pipe"
+        msg = (
+            "Corpus.dataset is None, you probably need to "
+            "`run corpus.setup()` before initializing this pipe"
+        )
+        assert self.dataset is not None, msg
         self.collate_pipe = corpus.collate_pipe
         self.k = k
-        self.update_query = update_query
         self.simple_collate = simple_collate
         self.model = model
 
@@ -53,9 +55,9 @@ class SearchCorpus(Pipe):
     def fingerprint(self) -> Dict[str, Any]:
         return {
             "__all__": self._fingerprint(self),
-            "index": self._fingerprint(self),
-            "dataset": self._fingerprint(self),
-            "collate_pipe": self._fingerprint(self),
+            "index": self._fingerprint(self.index),
+            "dataset": self._fingerprint(self.dataset),
+            "collate_pipe": self._fingerprint(self.collate_pipe),
         }
 
     def as_fingerprintable(self) -> Optional:
@@ -64,7 +66,6 @@ class SearchCorpus(Pipe):
             "k": self.k,
             "dataset": self.dataset._fingerprint,
             "es_index": self.index.index_name,
-            # todo 'preprocesing_pipe': self.index.preprocesing_pipe,
         }
 
     def __call__(
@@ -95,18 +96,10 @@ class SearchCorpus(Pipe):
             for idx, score in zip(flat_indexes, flat_scores)
         ]
         if simple_collate:
-            flat_docs_batch = Collate(keys=None)(retrieved_docs)
+            flat_docs_batch = Collate()(retrieved_docs)
         else:
             flat_docs_batch = self.collate_pipe(retrieved_docs)
 
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        output = Nest(stride=k)(flat_docs_batch)
-
-        if self.update_query:
-            output = Rename({"idx": "document.global_idx"})(output)
-            query.update(output)
-            return query
-
-        else:
-            return output
+        return Nest(stride=k)(flat_docs_batch)

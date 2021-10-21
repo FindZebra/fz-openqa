@@ -45,7 +45,10 @@ def pprint_batch(batch: Batch, header=None):
         elif isinstance(v, list):
             if isinstance(v[0], str):
                 lens = [len(vv) for vv in v]
-                u += f"\n   - {k}: {len(v)} items with {min(lens)} to {max(lens)} characters <list<text>>"
+                u += (
+                    f"\n   - {k}: {len(v)} items with {min(lens)} "
+                    f"to {max(lens)} characters <list<text>>"
+                )
             elif isinstance(v[0], list):
                 dtype = type(v[0][0]).__name__ if len(v[0]) else "<empty>"
                 lengths = list(set([len(vv) for vv in v]))
