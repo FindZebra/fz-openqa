@@ -123,7 +123,7 @@ class BaseEvaluator(nn.Module):
         for f in self._required_eval_feature_names:
             assert (
                 f in batch.keys()
-            ), f"The feature {f} is required for evaluation."
+            ), f"The feature {f} is required for evaluation. Found {list(batch.keys())}"
 
     def check_batch_type(self, batch: Batch) -> None:
         """

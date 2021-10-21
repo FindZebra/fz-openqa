@@ -13,7 +13,7 @@ pytorch-lightning = {version="^1.4", allow-prereleases = true}
 torchmetrics = {version="^0.5", allow-prereleases = true}
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"
-datasets = {git="https://github.com/vlievin/datasets.git", branch="inconsistent-caching-map-multiprocessing"}
+datasets = {git="https://github.com/vlievin/datasets.git", branch="quick-and-dirty-fix"}
 hydra-core = {version="^1.1", allow-prereleases = true}
 hydra-colorlog = {version="^1.0.1", allow-prereleases = true}
 faiss-cpu = { version = "^1.7.1", allow-prereleases = true }

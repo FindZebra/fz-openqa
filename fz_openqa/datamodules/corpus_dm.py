@@ -21,17 +21,16 @@ from .datasets import file_corpus
 from .datasets import fz_corpus
 from .datasets import meqa_en_corpus
 from .index.base import Index
-from .pipes import AddPrefix
+from .pipelines.collate import CollateAsTensor
+from .pipelines.collate import CollateTokens
 from .pipes import Apply
-from .pipes import ApplyToAll
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
 from .pipes import Identity
-from .pipes import Lambda
 from .pipes import Parallel
 from .pipes import Pipe
-from .pipes import ReplaceInKeys
+from .pipes import PrintBatch
 from .pipes import SearchCorpus
 from .pipes import Sequential
 from .pipes import TokenizerPipe
@@ -190,12 +189,10 @@ class CorpusDataModule(BaseDataModule):
         """Build a pipe to tokenize raw documents, a shortcut with the Pipe
         Parallel is added to return the original attributes as well."""
 
+        add_spec_token_fn = partial(add_spec_token, DOC_TOKEN)
         tokenizer_pipe = Sequential(
             FilterKeys(lambda key: "text" in key),
-            Apply(
-                {"text": partial(add_spec_token, DOC_TOKEN)},
-                element_wise=True,
-            )
+            Apply({"text": add_spec_token_fn}, element_wise=True)
             if self.add_encoding_tokens
             else None,
             TokenizerPipe(
@@ -253,25 +250,17 @@ class CorpusDataModule(BaseDataModule):
         raw_text_pipe = Collate(keys=["document.text"])
 
         # collate simple attributes
-        simple_attr_pipe = Sequential(
-            Collate(
-                keys=[
-                    "idx",
-                    "document.idx",
-                    "document.passage_idx",
-                    "document.retrieval_score",
-                ]
-            ),
-            ApplyToAll(op=lambda x: torch.tensor(x)),
+        simple_attr_pipe = CollateAsTensor(
+            keys=[
+                "idx",
+                "document.idx",
+                "document.passage_idx",
+                "document.retrieval_score",
+            ]
         )
 
         # collate the questions attributes (question.input_ids, question.idx, ...)
-        document_pipe = Sequential(
-            Collate(keys=["document.input_ids", "document.attention_mask"]),
-            ReplaceInKeys("document.", ""),
-            Lambda(self.tokenizer.pad),
-            AddPrefix("document."),
-        )
+        document_pipe = CollateTokens("document.", tokenizer=self.tokenizer)
 
         return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
 

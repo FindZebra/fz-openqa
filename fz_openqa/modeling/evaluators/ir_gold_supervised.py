@@ -31,7 +31,6 @@ class InformationRetrievalGoldSupervised(BaseEvaluator):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "document.rank",
         "document.is_positive",
     ]
 

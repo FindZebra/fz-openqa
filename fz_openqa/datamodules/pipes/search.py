@@ -5,6 +5,7 @@ from typing import Optional
 from typing import Union
 
 import dill
+import rich
 import torch
 
 from . import Collate
@@ -27,9 +28,7 @@ class SearchCorpus(Pipe):
         model: Optional[Union[Callable, torch.nn.Module]] = None,
         simple_collate: bool = False,
     ):
-        if corpus is None:
-            return
-
+        assert corpus is not None, "corpus must be set."
         self.index = corpus._index
         self.dataset = corpus.dataset
         msg = (
@@ -56,9 +55,9 @@ class SearchCorpus(Pipe):
     def fingerprint(self) -> Dict[str, Any]:
         return {
             "__all__": self._fingerprint(self),
-            "index": self._fingerprint(self),
-            "dataset": self._fingerprint(self),
-            "collate_pipe": self._fingerprint(self),
+            "index": self._fingerprint(self.index),
+            "dataset": self._fingerprint(self.dataset),
+            "collate_pipe": self._fingerprint(self.collate_pipe),
         }
 
     def as_fingerprintable(self) -> Optional:

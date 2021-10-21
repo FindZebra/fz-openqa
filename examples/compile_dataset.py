@@ -37,7 +37,7 @@ corpus = MedQaCorpusDataModule(
     ),
     verbose=False,
     num_proc=4,
-    use_subset=False,
+    use_subset=True,
 )
 
 # load the QA dataset
@@ -51,17 +51,18 @@ dm = MedQaDataModule(
     verbose=True,
     corpus=corpus,
     # retrieve 100 documents for each question
-    n_retrieved_documents=100,
+    n_retrieved_documents=1000,
     # keep only one positive doc
-    max_pos_docs=10,
+    max_pos_docs=1,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=None,
+    n_documents=100,
     # simple exact match
     relevance_classifier=ExactMatch(interpretable=True),
+    compile_in_setup=False,
 )
 
 # prepare both the QA dataset and the corpus
-dm.subset_size = [100, 50, 50]
+dm.subset_size = [100, 100, 100]
 dm.prepare_data()
 dm.setup()
 
@@ -80,7 +81,7 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=10)
+dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=100)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")
