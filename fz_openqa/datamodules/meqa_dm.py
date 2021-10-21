@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from functools import partial
+from time import time
 from typing import Callable
 from typing import Optional
 from typing import Union
@@ -17,7 +18,7 @@ from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
 from .pipelines.collate import MaybeSearchDocuments
 from .pipelines.preprocessing import FormatAndTokenize
-from .pipes import BlockSequential
+from .pipes import BlockSequential, PrintBatch
 from .pipes import Collate
 from .pipes import DeCollate
 from .pipes import Itemize
@@ -304,9 +305,12 @@ class MedQaDataModule(BaseDataModule):
             )
 
         dset = self.dataset
+        run_time_block = {}
         for k, block in blocks.items():
-            # block = Sequential(block, PrintBatch(f"out: {k}"))
+            #block = Sequential(block, PrintBatch(f"out: {k}"))
+            t0 = time()
             dset = m(k, block)(dset)
+            run_time_block[k] = time() - t0
         self.compiled_dataset = dset
 
         # cast tensor values
@@ -322,6 +326,8 @@ class MedQaDataModule(BaseDataModule):
         # print the difference in length for each split
         if self.verbose:
             print_size_difference(self.dataset, self.compiled_dataset)
+
+        return run_time_block
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)

@@ -17,7 +17,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils import run_elasticsearch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -60,7 +59,7 @@ parser.add_argument(
     "--subset",
     type=bool,
     nargs="?",
-    default=True,
+    default=False,
     help="Run with a subset of corpus and question True or False",
 )
 args = parser.parse_args()
@@ -114,11 +113,12 @@ dm = MedQaDataModule(
     # retrieve 100 documents for each question
     n_retrieved_documents=args.topn,
     # keep only one positive doc
-    max_pos_docs=1,
+    max_pos_docs=None,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=10,
+    n_documents=None,
     # simple exact match
     relevance_classifier=cls,
+    compile_in_setup=False,
 )
 
 # prepare both the QA dataset and the corpus
@@ -140,21 +140,18 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-t0 = time()
+run_time_block = dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=10)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=10)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 
-
 batch = next(iter(dm.train_dataloader()))
 pprint_batch(batch, "compiled batch")
 
-run_time = time() - t0
-
-rich.print(f"[red] Runtime: {run_time} seconds")
+for k, x in run_time_block.items():
+    rich.print(f"[red] Runtime for {k} : {x} seconds")
 
 for idx in range(3):
     print(get_separator("-"))
