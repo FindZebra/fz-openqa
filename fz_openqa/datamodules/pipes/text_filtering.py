@@ -1,5 +1,6 @@
 from typing import Optional
 
+import rich
 import spacy
 from spacy.tokens import Doc
 
@@ -7,7 +8,7 @@ from .base import Pipe
 from .static import STOP_WORDS
 from fz_openqa.utils.datastruct import Batch
 
-import rich
+
 class TextFilter(Pipe):
     def __init__(self, *, text_key: str, query_key):
         self.text_key = text_key
@@ -85,6 +86,7 @@ class MetaMapFilter(TextFilter):
         MetaMapList: A list of recognised entities inferred from the question query
         Question: query to be replaced by MetaMapList
     """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -98,4 +100,6 @@ class MetaMapFilter(TextFilter):
         print("Printing keys...")
         rich.print(f"[green]{batch.keys()}")
         query_key = query_key or self.query_key
-        batch[query_key] = [self._join_ents(lst) for lst in batch['question.metamap']]
+        batch[query_key] = [
+            self._join_ents(lst) for lst in batch["question.metamap"]
+        ]

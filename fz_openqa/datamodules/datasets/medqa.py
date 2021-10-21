@@ -92,5 +92,5 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                 d["answer.cui"] = d.pop("CUIs")
                 d["answer.synonyms"] = d.pop("synonyms")
                 d["question.text"] = d.pop("question")
-                d["question.metamap"] = d.pop("question_filt") #TODO -> str
+                d["question.metamap"] = d.pop("question_filt")  # TODO -> str
                 yield i, d

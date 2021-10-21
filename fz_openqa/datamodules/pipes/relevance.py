@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
+from itertools import tee
 from itertools import zip_longest
 from typing import Any
 from typing import Callable
@@ -28,7 +29,6 @@ from .nesting import nested_list
 from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
-from itertools import tee
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
@@ -188,6 +188,7 @@ class ExactMatch(RelevanceClassifier):
         # An iterator can only be consumed once, generate two of them
         # casting as a list would also work
         pairs_1, pairs_2 = tee(pairs, 2)
+
 
 class AliasBasedMatch(RelevanceClassifier):
     model: Optional[Language] = None
