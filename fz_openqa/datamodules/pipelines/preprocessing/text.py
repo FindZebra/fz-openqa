@@ -36,6 +36,10 @@ class FormatAndTokenize(Sequential):
         max_length: Optional[int],
         spec_tokens: List,
         stride: Optional[int],
+        return_token_type_ids: bool = False,
+        add_special_tokens: bool = False,
+        return_offsets_mapping: bool = False,
+        field: str = "text",
     ):
 
         if add_encoding_tokens:
@@ -55,10 +59,10 @@ class FormatAndTokenize(Sequential):
             TokenizerPipe(
                 tokenizer,
                 max_length=max_length,
-                fields="text",
-                return_token_type_ids=False,
-                add_special_tokens=False,
-                return_offsets_mapping=False,
+                fields=field,
+                return_token_type_ids=return_token_type_ids,
+                add_special_tokens=add_special_tokens,
+                return_offsets_mapping=return_offsets_mapping,
             ),
             ApplyToAll(partial(nested_list, stride=stride))
             if stride

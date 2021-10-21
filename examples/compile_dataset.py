@@ -37,7 +37,7 @@ corpus = MedQaCorpusDataModule(
     ),
     verbose=False,
     num_proc=4,
-    use_subset=False,
+    use_subset=True,
 )
 
 # load the QA dataset

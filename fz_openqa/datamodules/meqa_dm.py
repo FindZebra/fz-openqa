@@ -279,18 +279,18 @@ class MedQaDataModule(BaseDataModule):
         """
 
         # unpack the Q&A collate pipe and the postprocessing
-        qa_collate, *post = self.collate_pipe.blocks.items()
+        (qa_desc, qa_collate), *post = self.collate_pipe.blocks.items()
 
         # wrap p1 to avoid casting issues and avoid storing padding
-        wrapped_p1 = Sequential(
+        wrapped_qa_collate = Sequential(
             DeCollate(),
-            qa_collate[1],
+            qa_collate,
             Itemize(),
             CleanupPadTokens(self.tokenizer),
         )
 
         # store
-        blocks = OrderedDict([(qa_collate[0], wrapped_p1), *post])
+        blocks = OrderedDict([(qa_desc, wrapped_qa_collate), *post])
 
         # create a map operator on the fly for a given key and pipe
         def m(desc, block):
