@@ -183,11 +183,11 @@ class ExactMatch(RelevanceClassifier):
         values = [answer_text] if match else []
         return (match, values)
 
-    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
-        """Generate the field `pair.answer["aliases"]`"""
-        # An iterator can only be consumed once, generate two of them
-        # casting as a list would also work
-        pairs_1, pairs_2 = tee(pairs, 2)
+    # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+    #     """Generate the field `pair.answer["aliases"]`"""
+    #     # An iterator can only be consumed once, generate two of them
+    #     # casting as a list would also work
+    #     pairs_1, pairs_2 = tee(pairs, 2)
 
 
 class AliasBasedMatch(RelevanceClassifier):
