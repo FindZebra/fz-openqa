@@ -81,7 +81,8 @@ class SciSpacyFilter(TextFilter):
 
 class MetaMapFilter(TextFilter):
     """
-    Build a Pipe to return a string of unique entities recognized based on offline processed MetaMap heuristic
+    Build a Pipe to return a string of unique entities recognized
+    based on offline processed MetaMap heuristic
     Args:
         MetaMapList: A list of recognised entities inferred from the question query
         Question: query to be replaced by MetaMapList
