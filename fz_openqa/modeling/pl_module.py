@@ -11,14 +11,15 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
+from fz_openqa.modeling.backbone import Backbone
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 
 
-class BaseModel(LightningModule):
+class Module(LightningModule):
     """
     This class implements the basics of evaluation, logging and inference using
     pytorch lightning mechanics.
@@ -26,15 +27,15 @@ class BaseModel(LightningModule):
     ## Main components
     This class contains 2 main components:
     * self.bert: the pretrained masked language model
-    * self.evaluator: the object that compute the loss and
-      the evaluation metrics
+    * self.backbone: wraps the bert model is a specific head
+    * self.evaluator: handles computing the loss using the backbone and evaluate the metrics
 
     ## Pipeline
     The main data processing flow can be described as follows:
 
         1.     batch = next(iter(dataloader))          (device=k)
                             |
-            [   _step(batch): evaluator.forward   ]    (processing on device k)
+            [   _step(batch): evaluator.step   ]    (processing on device k)
                             v
         2.             pre_output                      (device=k)
                             |
@@ -42,7 +43,7 @@ class BaseModel(LightningModule):
                             v
         3.              pre_output                     (device=0)
                             |
-    [ _step_end(pre_output): evaluator.forward_end + log_data ]
+    [ _step_end(pre_output): evaluator.step_end + log_data ]
                             v
         4.              output                         (device=0)
 
@@ -58,16 +59,14 @@ class BaseModel(LightningModule):
     _required_feature_names = []
     # metrics that will be display in the progress bar
     _prog_bar_metrics = []
-    # model-prefix for logging
-    # all metrics are of the form "split/_model_log_prefix/metric_name"
-    _model_log_prefix = ""
 
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Optional[Union[DictConfig, BaseEvaluator]],
+        backbone: Union[Backbone, DictConfig],
+        evaluator: Optional[Union[DictConfig, Evaluator]],
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -78,12 +77,19 @@ class BaseModel(LightningModule):
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
         self.save_hyperparameters(ignore=["evaluator", "tokenizer", "bert"])
+        assert self.hparams["lr"] == lr
+        assert self.hparams["weight_decay"] == weight_decay
 
         # instantiate the pretrained language model
         self.bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
 
+        # instantiate the backbone model
+        self.backbone = maybe_instantiate(backbone, bert=bert)
+
         # evaluator: compute the loss and take care of computing and logging the metrics
-        self.evaluator: Optional[BaseEvaluator] = maybe_instantiate(evaluator)
+        self.evaluator: Optional[Evaluator] = maybe_instantiate(
+            evaluator, backbone=backbone
+        )
 
     def instantiate_bert(
         self,
@@ -91,6 +97,7 @@ class BaseModel(LightningModule):
         bert: Union[BertPreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
         cache_dir: Optional[str] = None,
+        **kwargs,
     ) -> BertPreTrainedModel:
         """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
 
@@ -98,7 +105,7 @@ class BaseModel(LightningModule):
         self.pad_token_id = tokenizer.pad_token_id
 
         bert: BertPreTrainedModel = maybe_instantiate(
-            bert, cache_dir=cache_dir
+            bert, cache_dir=cache_dir, **kwargs
         )
         # extend BERT embeddings for the added special tokens
         # TODO: CRITICAL: check this does not affect the model
@@ -118,15 +125,8 @@ class BaseModel(LightningModule):
         """
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
-
-        if the input batch as the attribute `_mode_` set to true, use
-        the `predict_step` instead.
         """
-        if batch.pop("_mode_", None) == "indexing":
-            return self.predict_step(batch, batch_idx, dataloader_idx)
-
-        pre_output = self.evaluator(self.forward, batch, split=split)
-        return pre_output
+        return self.evaluator.step(batch, split=split)
 
     def _step_end(
         self, pre_output: Batch, *, split: Split, log_data=True
@@ -138,7 +138,7 @@ class BaseModel(LightningModule):
 
         !! This step is performed on device 0 !!
         """
-        output = self.evaluator.forward_end(pre_output, split)
+        output = self.evaluator.step_end(pre_output, split)
 
         if log_data:
             # potentially log the loss and
@@ -171,11 +171,11 @@ class BaseModel(LightningModule):
     ):
         """
         Log all data from the input Batch. Only tensors with one elements are logged.
-        Each key is formatted as: `prefix/_model_log_prefix/key` where prefix is usually
+        Each key is formatted as: `prefix/key` where prefix is usually
         the split id.
         """
         for k, v in data.items():
-            key = f"{prefix}{self._model_log_prefix}{k}"
+            key = f"{prefix}{k}"
             if is_loggable(v):
                 self.log(
                     key,
@@ -190,7 +190,8 @@ class BaseModel(LightningModule):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
         See examples here:
-            https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#configure-optimizers
+            https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html
+            #configure-optimizers
         """
         return AdamW(
             params=only_trainable(self.parameters()),

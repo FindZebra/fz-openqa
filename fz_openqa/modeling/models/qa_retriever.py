@@ -11,13 +11,13 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.modeling.pl_module import Module
 from fz_openqa.utils.functional import maybe_instantiate
 
 
-class QaRetriever(BaseModel):
+class QaRetriever(Module):
     """
     A Dense retriever model.
     """
@@ -40,7 +40,7 @@ class QaRetriever(BaseModel):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[BaseEvaluator, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
         corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         hidden_size: int = 256,
         dropout: float = 0,

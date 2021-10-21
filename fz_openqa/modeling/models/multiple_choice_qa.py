@@ -13,12 +13,12 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
-from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )
 from fz_openqa.modeling.models.qa_retriever import QaRetriever
+from fz_openqa.modeling.pl_module import Module
 from fz_openqa.utils.datastruct import add_prefix
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import contains_prefix
@@ -26,7 +26,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.functional import only_trainable
 
 
-class MultipleChoiceQA(BaseModel):
+class MultipleChoiceQA(Module):
     """
     An end-to-end multiple choice openQA model with:
     * a dense retriever
@@ -57,7 +57,7 @@ class MultipleChoiceQA(BaseModel):
         bert: Union[BertPreTrainedModel, DictConfig],
         reader: Union[DictConfig, MultipleChoiceQAReader],
         retriever: Union[DictConfig, QaRetriever],
-        evaluator: Union[BaseEvaluator, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
         corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         end_to_end_evaluation: bool = False,
         **kwargs,
@@ -200,7 +200,7 @@ class MultipleChoiceQA(BaseModel):
         return retriever_output
 
     def _step_end_end2end(self, output, split: Split, **kwargs):
-        end2end_output = self.evaluator.forward_end(output, split)
+        end2end_output = self.evaluator.step_end(output, split)
         end2end_output = add_prefix(end2end_output, "end2end/")
         return end2end_output
 

@@ -8,14 +8,14 @@ from torchmetrics.classification import Accuracy
 
 from .utils import check_first_doc_positive
 from .utils import flatten_first_dims
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.evaluators.metrics import SafeMetricCollection
 from fz_openqa.modeling.evaluators.metrics import SplitMetrics
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
-class InformationRetrievalGoldSupervised(BaseEvaluator):
+class InformationRetrievalGoldSupervised(Evaluator):
     """
     Evaluates the Reader model `p(a_i | q, e, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]). The loss is defined as:
@@ -57,7 +57,7 @@ class InformationRetrievalGoldSupervised(BaseEvaluator):
 
         self.metrics = SplitMetrics(init_metric)
 
-    def forward(
+    def step(
         self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
     ) -> Batch:
         """
@@ -94,7 +94,7 @@ class InformationRetrievalGoldSupervised(BaseEvaluator):
             "he": he,
         }
 
-    def forward_end(self, output: Batch, split: Split) -> Any:
+    def step_end(self, output: Batch, split: Split) -> Any:
         """
         gather h_q and h_e from all devices to the device 0
         and compute the similarity matrix between the questions and all the documents.

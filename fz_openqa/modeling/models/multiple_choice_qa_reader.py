@@ -3,7 +3,6 @@ from typing import Dict
 from typing import Tuple
 from typing import Union
 
-import rich
 import torch
 from omegaconf import DictConfig
 from torch import nn
@@ -11,15 +10,14 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
+from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.models.base import BaseModel
-from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.modeling.pl_module import Module
 
 
-class MultipleChoiceQAReader(BaseModel):
+class MultipleChoiceQAReader(Module):
     """
     A multiple-choice reader model.
     """
@@ -47,7 +45,7 @@ class MultipleChoiceQAReader(BaseModel):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[BaseEvaluator, DictConfig],
+        evaluator: Union[Evaluator, DictConfig],
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,

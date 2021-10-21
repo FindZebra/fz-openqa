@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from .base import BaseEvaluator
+from .base import Evaluator
 from .metrics import SplitMetrics
 from .utils import check_first_doc_positive
 from .utils import expand_and_flatten
@@ -21,7 +21,7 @@ from fz_openqa.utils.datastruct import pprint_batch
 from fz_openqa.utils.functional import batch_reduce
 
 
-class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
+class MultipleChoiceQaMaximumLikelihood(Evaluator):
     """
     Evaluates the Reader model `p(a_i | q, d_1,...d_m, A)` using maximum likelihood estimation
     in a multiple choice QA context (A = [a_1,...a_P]) and using a supervised selection model.
@@ -63,7 +63,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
         self.relevance_metrics = SplitMetrics(init_relevance_metric)
 
-    def forward(
+    def step(
         self, model: nn.Module, batch: Batch, split: str, **kwargs: Any
     ) -> Dict[str, Tensor]:
         self.check_batch_type(batch)
@@ -133,7 +133,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         # keep one loss term per batch element: shape [batch_size, ]
         return batch_reduce(loss, torch.mean)
 
-    def forward_end(self, output: Batch, split: Split) -> Any:
+    def step_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
 

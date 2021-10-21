@@ -214,30 +214,32 @@ HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
 
 ### Module design
 
-All modules should inherit from `BaseModel`, which in turn inherits from `pl.LightningModule`.
-Each module features one `BaseEvaluator` which role is to compute the loss and the metrics.
+# todo: update this section
+
+All modules should inherit from `Module`, which in turn inherits from `pl.LightningModule`.
+Each Module features one `Evaluator` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
 <summary>Data flow within the <b>BaseModels</b> (multi-GPUs)</summary>
 
-The main computation should be implemented in the `_step()` and `_step_end()` methods of the `BaseModel`.
+The main computation should be implemented in the `_step()` and `_step_end()` methods of the `Module`.
 The `_step()` method runs independently on each device whereas the `_step_end()` method runs on
 a single device: this is where the final aggregated loss should be implemented (see the diagram below).
 The metrics must be implemented in the `_step_end` method in order to avoid errors with mutli-GPU training.
 
-![Lightning module data flow](.assets/lighning_steps.png)
+![Lightning Module data flow](.assets/lighning_steps.png)
 
 </details>
 
 <details>
-<summary><b>BaseEvaluator</b></summary>
+<summary><b>Evaluator</b></summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
-This method is called in the `module._step()` method
+This method is called in the `Module._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
-`BaseEvaluator.foward()` method from each device.
+`Evaluator.foward()` method from each device.
 </details>
 
 <details>
@@ -251,7 +253,7 @@ This class can be instantiated using pretrained components or the components can
 The `_step` and `_step_end` both rely on the methods of the retriever and components (each with their distinct evaluators).
 However, a third evaluator class (`EndToEndMultipleChoiceQaMaximumLikelihood`) is added to evaluate the end-to-end reader accuracy.
 
-During evaluation, data from each component is managed separately (so each module send and receive its own data between `_step` and `_step_end`).
+During evaluation, data from each component is managed separately (so each Module send and receive its own data between `_step` and `_step_end`).
 We do so by prefixing the output data of the reader, the retriever and of the end-to-end evaluator
 using the keys [`retriever/`, `reader/`, `end2end/`].
 </details>
