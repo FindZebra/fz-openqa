@@ -47,10 +47,25 @@ class Evaluator(nn.Module):
         "labels",
     ]
 
-    def __init__(self, *, backbone: Backbone, prefix: str = ""):
+    # prefix for the logged metrics
+    task_id: Optional[str] = None
+
+    # metrics to display
+    pbar_metrics = ["train/loss", "train/Accuracy", "validation/Accuracy"]
+
+    def __init__(
+        self,
+        *,
+        backbone: Backbone,
+        pad_token_id: int,
+        max_length: int,
+        prefix: str = "",
+    ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
         self.backbone = backbone
+        self.pad_token_id = pad_token_id
+        self.max_length = max_length
         self.init_metrics(prefix=prefix)
 
     def init_metrics(self, prefix: str):
@@ -118,7 +133,7 @@ class Evaluator(nn.Module):
 
         # example
         logits = self.forward(batch, **kwargs)
-        nll = torch.nn.functional.cross_entropy(
+        nll = torch.nn.functional.batched_cross_entropy(
             logits, batch["labels"], reduce="none"
         )
 

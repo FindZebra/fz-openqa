@@ -2,8 +2,6 @@ from typing import Any
 from typing import Optional
 
 import torch
-from datasets import Split
-from torch import nn
 from torch.nn import functional as F
 from torchmetrics.classification import Accuracy
 
@@ -26,6 +24,16 @@ class RetrieverSupervised(Evaluator):
 
     _required_eval_feature_names = [
         "document.is_positive",
+    ]
+
+    # prefix for the logged metrics
+    task_id: Optional[str] = "retrieval"
+
+    # metrics to display in the progress bar
+    pbar_metrics = [
+        "train/retrieval/Accuracy",
+        "validation/retrieval/Accuracy",
+        "validation/retrieval/top10_Accuracy",
     ]
 
     def __init__(self, similarity: Similarity, **kwargs):
@@ -52,7 +60,6 @@ class RetrieverSupervised(Evaluator):
         self.metrics = SplitMetrics(init_metric)
 
     def _forward(self, batch: Batch, reshape: bool = True, **kwargs) -> Batch:
-
         batch_size, n_documents, *_ = batch["document.input_ids"].shape
         # flatten documents as [batch_size x n_documents]
         batch = flatten_first_dims(

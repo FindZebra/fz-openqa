@@ -33,7 +33,10 @@ class QaRetriever(PLModule):
         "validation/retriever/top10_Accuracy",
     ]
     # prefix for the logged metrics
-    _model_log_prefix = "retriever/"
+    model_logging_prefix = "retriever/"
+
+    # metrics to display
+    pbar_metrics = ["train/loss", "train/Accuracy", "validation/Accuracy"]
 
     def __init__(
         self,

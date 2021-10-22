@@ -1,12 +1,14 @@
 defaults:
-  - evaluator: multiple_choice_qa_mle.yaml
+  - evaluator: retriever_supervised.yaml
+  - backbone: bert_linear_head_cls.yaml
   - bert: bio_bert.yaml
 
-_target_: fz_openqa.modeling.models.multiple_choice_qa_reader.MultipleChoiceQAReader
+_target_: fz_openqa.modeling.PLModule
 
-hidden_size: 32
 bert_id: ${model.bert.pretrained_model_name_or_path}
+hidden_size: 32
 cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 1e-4
 dropout: 0
+max_length: 512

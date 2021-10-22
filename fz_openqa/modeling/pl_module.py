@@ -54,11 +54,6 @@ class PLModule(LightningModule):
     The metrics are computed for the whole epoch in `_epoch_end`.
     """
 
-    # features required for inference
-    _required_feature_names = []
-    # metrics that will be display in the progress bar
-    _prog_bar_metrics = []
-
     def __init__(
         self,
         *,
@@ -68,6 +63,7 @@ class PLModule(LightningModule):
         evaluator: DictConfig,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
+        max_length: int = 512,
         **kwargs,
     ):
         super().__init__()
@@ -89,7 +85,10 @@ class PLModule(LightningModule):
 
         # evaluator: compute the loss and take care of computing and logging the metrics
         self.evaluator: Optional[Evaluator] = maybe_instantiate(
-            evaluator, backbone=self.backbone
+            evaluator,
+            backbone=self.backbone,
+            pad_token_id=self.pad_token_id,
+            max_length=max_length,
         )
 
     def instantiate_bert(
@@ -144,7 +143,7 @@ class PLModule(LightningModule):
         if log_data:
             # potentially log the loss and
             # other metrics that are computed on each step
-            self.log_data(output, prefix=f"{split}/")
+            self.log_data(output, prefix=str(split))
 
         return output
 
@@ -158,14 +157,14 @@ class PLModule(LightningModule):
         assert self.evaluator is not None
         metrics = self.evaluator.compute_metrics(split=split)
         if log_data:
-            self.log_data(metrics, prefix=f"{split}/")
+            self.log_data(metrics, prefix=str(split))
         self.evaluator.reset_metrics(split=split)
         return metrics
 
     def log_data(
         self,
         data: Batch,
-        prefix: str = "",
+        prefix: Optional[str] = None,
         on_step=False,
         on_epoch=True,
         sync_dist=True,
@@ -176,14 +175,16 @@ class PLModule(LightningModule):
         the split id.
         """
         for k, v in data.items():
-            key = f"{prefix}{k}"
+            key = "/".join(
+                u for u in (prefix, self.evaluator.task_id, k) if u is not None
+            )
             if is_loggable(v):
                 self.log(
                     key,
                     v,
                     on_step=on_step,
                     on_epoch=on_epoch,
-                    prog_bar=key in self._prog_bar_metrics,
+                    prog_bar=key in self.evaluator.pbar_metrics,
                     sync_dist=sync_dist,
                 )
 

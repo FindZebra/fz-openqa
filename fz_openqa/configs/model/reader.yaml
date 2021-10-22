@@ -1,5 +1,5 @@
 defaults:
-  - evaluator: retriever_supervised.yaml
+  - evaluator: reader_multiple_choice.yaml
   - backbone: bert_linear_head_cls.yaml
   - bert: bio_bert.yaml
 
@@ -11,3 +11,4 @@ cache_dir: ${cache_dir}
 lr: 2e-5
 weight_decay: 1e-4
 dropout: 0
+max_length: 512

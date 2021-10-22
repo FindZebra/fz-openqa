@@ -55,7 +55,7 @@ dm = MedQaDataModule(
     # keep only one positive doc
     max_pos_docs=1,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=100,
+    n_documents=10,
     # simple exact match
     relevance_classifier=ExactMatch(interpretable=True),
     compile_in_setup=False,
@@ -81,7 +81,9 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=100)
+dm.compile_dataset(
+    filter_unmatched=True, num_proc=2, batch_size=100, verbose=True
+)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")

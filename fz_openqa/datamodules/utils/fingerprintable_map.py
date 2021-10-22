@@ -18,11 +18,17 @@ class FingerprintableMap:
     """
 
     def __init__(
-        self, pipe: Pipe, batched=True, _id: str = None, **map_kwargs
+        self,
+        pipe: Pipe,
+        batched=True,
+        _id: str = None,
+        verbose: bool = False,
+        **map_kwargs,
     ):
         self._id = _id
         self.pipe = pipe
         self.map_kwargs = {"batched": batched, **map_kwargs}
+        self.verbose = verbose
 
     def __call__(self, dataset: HgDataset) -> HgDataset:
         """Apply the `pipe` to the `dataset` using deterministic fingerprints."""
@@ -41,6 +47,11 @@ class FingerprintableMap:
 
         # process dataset
         for key, dset in dataset.items():
+            if self.verbose:
+                rich.print(
+                    f"[magenta]Starting: {self.map_kwargs.get('desc', 'pipe')}: "
+                    f"[/magenta]split={key}, fingerprint={fingerprints.get(key, None)}"
+                )
             dataset[key] = dset.map(
                 self.pipe,
                 new_fingerprint=fingerprints.get(key, None),
