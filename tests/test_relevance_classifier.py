@@ -7,7 +7,7 @@ import torch
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
                                                    Pair, ScispaCyMatch,
-                                                   find_one)
+                                                   find_one, find_all)
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
       "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"], 'answer.synonyms': [],
@@ -151,7 +151,7 @@ class TestFindOne(TestCase):
     def setUp(self) -> None:
         self.ops = [None, len, lambda x: -len(x)]
 
-    def test_hello_world(self):
+    def test_simple_match(self):
         """test that matching with simple queries and documents"""
         for op in self.ops:
             for doc, queries in [
@@ -196,5 +196,55 @@ class TestFindOne(TestCase):
             for doc, queries in [("", ["hello", "world"])]:
                 self.assertFalse(find_one(doc, queries, sort_by=op))
 
-    # def test_metamap_match(self):
-    #    self.assertTrue(self.output.get(self.classifiers[2])['document.is_positive'][3])
+
+class TestFindAll(TestCase):
+    """Test the function find one"""
+
+    def test_hello_world(self):
+        """test that matching with simple queries and documents"""
+        for doc, queries, expected in [
+            ("hello world", ["hello"], ["hello"]),
+            ("hello world", ["hello", "world"], ["hello", "world"]),
+            ("hello world", ["world"], ["world"]),
+            ("hello world", ["ll"], ["ll"]),
+        ]:
+            self.assertEqual(find_all(doc, queries, lower_case_queries=True), expected)
+
+    def test_str_case(self):
+        """test that matching with simple queries and documents,
+        with upper and lowercase inputs."""
+        for doc, queries, expected in [
+            ("hello world", ["Hello"], ["hello"]),
+            ("hello world", ["HELLO"], ["hello"]),
+            ("hello WOrLd", ["world"], ["WOrLd"]),
+            ("heLLo world", ["ll"], ["LL"]),
+        ]:
+            self.assertEqual(find_all(doc, queries, lower_case_queries=True), expected)
+
+    def test_negatives(self):
+        """test that find_one returns False where queries are not in the doc."""
+        for doc, queries in [
+            ("hello world", ["paris"]),
+            ("hello world", ["paris", "amsterdam"]),
+            ("hello world", ["helllo"]),
+        ]:
+            self.assertFalse(len(find_all(doc, queries, lower_case_queries=True)) > 0)
+
+    def test_multiple_matches(self):
+        """test that find_one returns False where queries are not in the doc."""
+        for doc, queries, expected in [
+            ("hello hello world", ["hello", "world"], ["hello", "hello", "world"]),
+            ("hello world", ["world", "World", "woRld"], ["world"]),
+            ("hello worlld", ["ll", "wolrd"], ["ll", "ll"]),
+        ]:
+            self.assertEqual(find_all(doc, queries, lower_case_queries=True), expected)
+
+    def test_empty_query(self):
+        """test the output for empty queries"""
+        for doc, queries in [("hello world", [])]:
+            self.assertFalse(len(find_all(doc, queries, lower_case_queries=True)) > 0)
+
+    def test_empty_doc(self):
+        """test the output for empty docs"""
+        for doc, queries in [("", ["hello", "world"])]:
+            self.assertFalse(len(find_all(doc, queries, lower_case_queries=True)) > 0)
