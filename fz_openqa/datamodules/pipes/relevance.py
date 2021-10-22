@@ -296,11 +296,7 @@ class AliasBasedMatch(RelevanceClassifier):
         """
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-
-        doc_text = doc_text.lower()
-        matches = [a for a in answer_aliases if a.lower() in doc_text]
-
-        return (len(matches) > 0, matches)
+        return find_one(doc_text, answer_aliases, sort_by=None)
 
     def get_linked_entities(self, entity: Entity) -> Iterable[LinkedEntity]:
         for cui in entity._.kb_ents:
@@ -314,7 +310,7 @@ class AliasBasedMatch(RelevanceClassifier):
         answer_aliases = pair.answer["answer.aliases"]
 
         doc_text = doc_text.lower()
-        matches = [a for a in answer_aliases if a.lower() in doc_text]
+        matches = find_all(text=doc_text, queries=answer_aliases)
 
         return (len(matches) > 0, matches)
 

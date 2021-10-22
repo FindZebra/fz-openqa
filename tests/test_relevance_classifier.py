@@ -108,6 +108,10 @@ class TestRelevanceClassifier(TestCase):
     def test_scispacy_match(self):
         classifier = ScispaCyMatch(interpretable=True)
         output = classifier(copy(self.batch))
+        # todo: add a list of 3 documents for the classifier to choose from. AssertEqual(output(document) = det første dokument i eksemplet) -> kun for b0, b2, b3, b4
+
+        # todo: document.match_on should only be a list and not a list of lists
+
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertTrue(output['document.is_positive'][0][0])
         # (b1) {answer.text : "Thromboembolism" }. Should fail because "Thromboembolism" is not contained in the document
