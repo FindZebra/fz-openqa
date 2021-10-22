@@ -62,6 +62,13 @@ parser.add_argument(
     default=False,
     help="Run with a subset of corpus and question True or False",
 )
+parser.add_argument(
+    "--filename",
+    type=str,
+    nargs="?",
+    default="compiled-dataset",
+    help="pre-fix to define filename",
+)
 args = parser.parse_args()
 
 tokenizer = init_pretrained_tokenizer(
@@ -185,7 +192,7 @@ for idx in range(3):
 
 # dump data
 for split, dset in dm.compiled_dataset.items():
-    with open(f"compiled-dataset-{split}.jsonl", mode="w") as fp:
+    with open(f"{args.filename}-{split}.jsonl", mode="w") as fp:
         for i, row in enumerate(dset):
             row["split"] = str(split)
             row["__index__"] = str(i)
