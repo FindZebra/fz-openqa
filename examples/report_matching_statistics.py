@@ -33,7 +33,7 @@ parser.add_argument(
     type=str,
     nargs="?",
     default="exactmatch",
-    help="classifier applied to label documents extracted from the corpus; (exact, scispacy or metamap)",
+    help="classifier applied to label documents from the corpus; (exact, scispacy or metamap)",
 )
 parser.add_argument(
     "--corpus",
@@ -127,7 +127,7 @@ dm.setup()
 
 print(get_separator())
 dm.build_index()
-rich.print(f"[green]>> index is built.")
+rich.print("[green]>> index is built.")
 print(get_separator())
 
 # Compile the dataset
@@ -143,9 +143,9 @@ print(get_separator())
 t0 = time()
 
 dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=10)
-rich.print(f"[green]>> index is compiled.")
+rich.print("[green]>> index is compiled.")
 
-rich.print(f"=== Compiled Dataset ===")
+rich.print("=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 
 
@@ -163,12 +163,14 @@ for idx in range(3):
         f"Example #{idx}: \n"
         f" * answer=[magenta]{eg['answer.text'][eg['answer.target']]}[/magenta]\n"
         f" * question=[cyan]{eg['question.text']}[/cyan]\n"
-        f" * documents: n_positive={sum(eg['document.is_positive'])}, n_negative={sum(eg['document.is_positive'] == 0)}"
+        f" * documents: n_positive={sum(eg['document.is_positive'])}, "
+        f"n_negative={sum(eg['document.is_positive'] == 0)}"
     )
     for j in range(min(len(eg["document.text"]), 3)):
         print(get_separator("."))
         rich.print(
-            f" |-* document #{j}, score={eg['document.retrieval_score'][j]:.2f}, , is_positive={eg['document.is_positive'][j]}"
+            f" |-* document #{j}, score={eg['document.retrieval_score'][j]:.2f}, ,"
+            f" is_positive={eg['document.is_positive'][j]}"
         )
         txt = eg["document.text"][j].replace("\n", "")
         rich.print(f"[white]{txt}")
