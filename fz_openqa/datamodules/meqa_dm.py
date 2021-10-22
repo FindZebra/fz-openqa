@@ -243,7 +243,15 @@ class MedQaDataModule(BaseDataModule):
 
     def get_qa_collate_pipe(self):
         # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(keys=["answer.text", "question.text", "answer.synonyms", "answer.cui", "question.metamap"])
+        raw_text_pipe = Collate(
+            keys=[
+                "answer.text",
+                "question.text",
+                "answer.synonyms",
+                "answer.cui",
+                "question.metamap",
+            ]
+        )
         # collate simple attributes
         simple_attr_pipe = CollateAsTensor(
             keys=["idx", "question.idx", "answer.target", "answer.n_options"]
