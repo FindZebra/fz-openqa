@@ -99,6 +99,7 @@ corpus = corpus_module(
     verbose=False,
     num_proc=4,
     use_subset=args.subset,
+    cache_dir="/scratch/s154097/cache",
 )
 
 # load the QA dataset
@@ -119,6 +120,7 @@ dm = MedQaDataModule(
     # simple exact match
     relevance_classifier=cls,
     compile_in_setup=False,
+    cache_dir="/scratch/s154097/cache",
 )
 
 # prepare both the QA dataset and the corpus
