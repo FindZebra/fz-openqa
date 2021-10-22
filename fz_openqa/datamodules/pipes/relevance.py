@@ -79,13 +79,13 @@ def find_one(
 
 def find_all(
     text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
-) -> Sequence[str]:
+) -> List:
     """check if one of the queries is in the input text"""
     assert isinstance(text, str)
     if len(queries) == 0:
-        return False
+        return []
     if len(text) == 0:
-        return False
+        return []
 
     if sort_by is not None:
         queries = sorted(queries, key=sort_by)
@@ -305,14 +305,14 @@ class AliasBasedMatch(RelevanceClassifier):
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
 
         doc_text = doc_text.lower()
-        matches = find_all(text=doc_text, queries=answer_aliases)
+        matches = find_all(text=doc_text, queries=answer_aliases, sort_by=None)
 
-        return (len(matches) > 0, matches)
+        return (len(matches), matches)
 
     @staticmethod
     def _extract_answer_text(pair: Pair) -> str:
