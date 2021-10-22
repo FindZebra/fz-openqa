@@ -59,7 +59,7 @@ class SelectDocsOneEg(Pipe):
         self.strict = strict
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        is_positive = batch["document.match_score"] > 0
+        is_positive = [x > 0 for x in batch["document.match_score"]]
         assert len(is_positive) >= self.total
 
         # get the positive indexes
