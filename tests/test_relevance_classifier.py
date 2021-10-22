@@ -60,88 +60,88 @@ class TestRelevanceClassifier(TestCase):
         classifier = ExactMatch(interpretable=True)
         output = classifier(copy(self.batch))
         # {answer.text : "Post polio syndrome (PPS)" }. Should fail because only "Post polio syndrome" is written in the document
-        self.assertFalse(output['document.is_positive'][0][0])
+        self.assertFalse(output['document.match_score'][0][0])
         # {answer.text : "Thromboembolism" }. Should fail because Thromboembolism is not written in the document.
-        self.assertFalse(output['document.is_positive'][1][0])
+        self.assertFalse(output['document.match_score'][1][0])
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed because synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertFalse(output['document.is_positive'][2][0])
+        self.assertFalse(output['document.match_score'][2][0])
         # (b3) {answer.text : "Gallbladder cancer" }. Should fail because the "Gallbladder cancer" is not written in the document, though, the document is clearly about "Gallbladder cancer"
-        self.assertFalse(output['document.is_positive'][1][0])
+        self.assertFalse(output['document.match_score'][1][0])
         # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.is_positive'][4][0])
+        self.assertTrue(output['document.match_score'][4][0])
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][5][0])
+        self.assertFalse(output['document.match_score'][5][0])
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][6][0])
+        self.assertFalse(output['document.match_score'][6][0])
         # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][7][0])
+        self.assertFalse(output['document.match_score'][7][0])
         # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.is_positive'][8][0])
+        self.assertFalse(output['document.match_score'][8][0])
         # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][9][0])
+        self.assertFalse(output['document.match_score'][9][0])
 
     def test_metamap_match(self):
         classifier = MetaMapMatch()
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertFalse(output['document.is_positive'][0][0])
+        self.assertFalse(output['document.match_score'][0][0])
         # (b1) {answer.text : "Thromboembolism" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertFalse(output['document.is_positive'][1][0])
+        self.assertFalse(output['document.match_score'][1][0])
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed, though no CUI tag is associated, however, synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertTrue(output['document.is_positive'][2][0])
-        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.is_positive'][2])
-        self.assertTrue(output['document.is_positive'][3][0])
+        self.assertTrue(output['document.match_score'][2][0])
+        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.match_score'][2])
+        self.assertTrue(output['document.match_score'][3][0])
         # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.is_positive'][4][0])
+        self.assertTrue(output['document.match_score'][4][0])
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][5][0])
+        self.assertFalse(output['document.match_score'][5][0])
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][6][0])
+        self.assertFalse(output['document.match_score'][6][0])
         # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.is_positive'][7][0])
+        self.assertFalse(output['document.match_score'][7][0])
         # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.is_positive'][8][0])
+        self.assertFalse(output['document.match_score'][8][0])
         # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.is_positive'][9][0])
+        self.assertFalse(output['document.match_score'][9][0])
 
 
     def test_scispacy_match(self):
         classifier = ScispaCyMatch(interpretable=True)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed because we extract aliases e.g. "Post polio syndrome", which is written in the document
-        self.assertTrue(output['document.is_positive'][0][0])
+        self.assertTrue(output['document.match_score'][0][0])
         # (b0) there is 1 match aliases so we test that there is a match above 0
         self.assertGreater(len(output['document.match_on'][0][0]), 0)
         # (b0) testing that the document text where the match is found is equal to the expected one
         self.assertEqual(output['document.text'][0][0], b0["document.text"][0])
         # (b1) {answer.text : "Thromboembolism" }. Should fail because "Thromboembolism" is not contained in the document
-        self.assertFalse(output['document.is_positive'][1][0])
+        self.assertFalse(output['document.match_score'][1][0])
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should fail because "Lysine-rich" is written in the document, but ofc ExactMatch fails to recognise
-        self.assertTrue(output['document.is_positive'][2][0])
+        self.assertTrue(output['document.match_score'][2][0])
         # (b2) there is 2 matches aliases so we test that there is a match above 1
         self.assertGreater(len(output['document.match_on'][2][0]), 1)
         # (b2) testing that the document text where the match is found is equal to the expected one
         self.assertEqual(output['document.text'][2][0], b2["document.text"][0])
-        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.is_positive'][2])
-        self.assertTrue(output['document.is_positive'][3][0])
+        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.match_score'][2])
+        self.assertTrue(output['document.match_score'][3][0])
         # (b3) there is 4 matches aliases so we test that there is a match above 3
         self.assertGreater(len(output['document.match_on'][3][0]), 3)
         # (b3) testing that the document text where the match is found is equal to the expected one
         self.assertEqual(output['document.text'][3][0], b3["document.text"][0])
         # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.is_positive'][4][0])
+        self.assertTrue(output['document.match_score'][4][0])
         # (b4) there is 4 matches aliases so we test that there is a match above 3
         self.assertGreater(len(output['document.match_on'][4][0]), 3)
         # (b4) testing that the document text where the match is found is equal to the expected one
         self.assertEqual(output['document.text'][4][0], b4["document.text"][0])
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][5][0])
+        self.assertFalse(output['document.match_score'][5][0])
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.is_positive'][6][0])
+        self.assertFalse(output['document.match_score'][6][0])
         # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.is_positive'][7][0])
+        self.assertFalse(output['document.match_score'][7][0])
         # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.is_positive'][8][0])
+        self.assertFalse(output['document.match_score'][8][0])
         # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
         # todo: where is b9 ? :)
 

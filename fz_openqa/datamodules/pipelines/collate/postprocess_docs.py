@@ -27,16 +27,16 @@ class PostprocessPipe(BlockSequential):
         max_select_pos_docs: Optional[int],
         **kwargs
     ):
-        """Get the pipe that classify documents as `is_positive`,
+        """Get the pipe that classify documents as `match_score`,
         sort them and select `n_documents` among the `n_retrieved_docs`"""
         if relevance_classifier is None:
             super().__init__([("identity", Identity())])
         else:
-            # sort the documents based on score and `is_positive`
+            # sort the documents based on score and `match_score`
             sorter = Nested(
                 Sequential(
                     Sort(key="document.retrieval_score"),
-                    Sort(key="document.is_positive"),
+                    Sort(key="document.match_score"),
                 ),
                 filter=KeyWithPrefix("document."),
             )
@@ -45,7 +45,7 @@ class PostprocessPipe(BlockSequential):
             activate_doc_proc = Reduce(
                 Static(n_retrieved_documents > 0),
                 HasKeyWithPrefix("document."),
-                Not(HasKeyWithPrefix("document.is_positive")),
+                Not(HasKeyWithPrefix("document.match_score")),
                 reduce_op=all,
             )
             classify_and_sort = Gate(
@@ -55,7 +55,7 @@ class PostprocessPipe(BlockSequential):
                 ),
             )
 
-            # select `n_documents` where count(is_positive) <= max_pos_docs
+            # select `n_documents` where count(match_score) <= max_pos_docs
             # this is only ran if the docs have not been previously selected
             selector = SelectDocs(
                 total=n_select_documents,
@@ -63,7 +63,7 @@ class PostprocessPipe(BlockSequential):
                 strict=False,
             )
             activate_selector = Reduce(
-                HasKeyWithPrefix("document.is_positive"),
+                HasKeyWithPrefix("document.match_score"),
                 Not(HasKeyWithPrefix(ARE_DOCS_SELECTED_KEY)),
                 reduce_op=all,
             )

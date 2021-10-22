@@ -41,7 +41,7 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "document.is_positive",
+        "document.match_score",
         "answer.input_ids",
         "answer.attention_mask",
     ]
@@ -74,9 +74,9 @@ class MultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         bs, n_docs = batch["document.input_ids"].shape[:2]
 
         # check that only one document is positive and infer the selection targets
-        pos_count = (batch["document.is_positive"] > 0).long().sum(1)
+        pos_count = (batch["document.match_score"] > 0).long().sum(1)
         assert (1 - (pos_count == 1).long()).sum() == 0
-        relevance_targets = batch["document.is_positive"].long().argmax(-1)
+        relevance_targets = batch["document.match_score"].long().argmax(-1)
 
         # flatten documents of shape [bs, n_docs, T] to [bs*n_docs, T]
         batch.update(

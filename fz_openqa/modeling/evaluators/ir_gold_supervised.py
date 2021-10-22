@@ -31,7 +31,7 @@ class InformationRetrievalGoldSupervised(BaseEvaluator):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "document.is_positive",
+        "document.match_score",
     ]
 
     def __init__(self, similarity: Similarity, **kwargs):

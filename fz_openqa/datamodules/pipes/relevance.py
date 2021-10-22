@@ -113,7 +113,7 @@ class RelevanceClassifier(Pipe):
         self,
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
-        output_key: str = "document.is_positive",
+        output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
     ):
