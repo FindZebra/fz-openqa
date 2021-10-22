@@ -85,12 +85,6 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         with open(filepath, "r") as f:
             for i, d in enumerate(json.load(f)["data"]):
-                # transform list of metamap filtered question to string
-                d["question.metamap"] = " ".join(
-                    ent for ent in d["question_filt"]
-                )
-                d.pop("question_filt")
-
                 # adjust values
                 d["question.idx"] = d.pop("question_id")
                 d["answer.target"] = d.pop("answer_idx")
@@ -98,4 +92,5 @@ class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
                 d["answer.cui"] = d.pop("CUIs")
                 d["answer.synonyms"] = d.pop("synonyms")
                 d["question.text"] = d.pop("question")
+                d["question.metamap"] = d.pop("question_filt")
                 yield i, d

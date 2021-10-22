@@ -142,6 +142,11 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
+# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
+# >  - train: 2883 (28.33%)
+# >  - validation: 424 (33.33%)
+# >  - test: 374 (29.38%)
+
 run_time_block = dm.compile_dataset(
     filter_unmatched=True, num_proc=4, batch_size=10
 )
