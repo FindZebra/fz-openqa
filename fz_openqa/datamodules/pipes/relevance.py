@@ -308,9 +308,7 @@ class AliasBasedMatch(RelevanceClassifier):
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
 
-        doc_text = doc_text.lower()
         matches = find_all(text=doc_text, queries=answer_aliases)
-
         return (len(matches), matches)
 
     @staticmethod
