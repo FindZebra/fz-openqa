@@ -16,6 +16,8 @@ ARE_DOCS_SELECTED_KEY = "__doc_selected__"
 
 
 class SelectDocs(Nested):
+    "Select `total` documents with `max_pos_docs` positive documents (i.e. document.match_score>0)"
+
     def __init__(
         self,
         *,
@@ -26,25 +28,27 @@ class SelectDocs(Nested):
         strict: bool = False,
         prefix="document.",
     ):
-        pipe = SelectDocsEg(
+        pipe = SelectDocsOneEg(
             total=total,
             max_pos_docs=max_pos_docs or total,
             pos_select_mode=pos_select_mode,
             neg_select_mode=neg_select_mode,
             strict=strict,
         )
-        super(SelectDocs, self).__init__(
-            pipe=pipe, filter=lambda key: str(key).startswith(prefix)
-        )
+
+        def _filter(key):
+            return str(key).startswith(prefix)
+
+        super(SelectDocs, self).__init__(pipe=pipe, filter=_filter)
 
 
-class SelectDocsEg(Pipe):
+class SelectDocsOneEg(Pipe):
     def __init__(
         self,
         *,
         total: int,
         max_pos_docs: int = 1,
-        pos_select_mode: str = "sample",
+        pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
     ):
@@ -55,11 +59,11 @@ class SelectDocsEg(Pipe):
         self.strict = strict
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        match_score = batch["document.match_score"]
-        assert len(match_score) >= self.total
+        is_positive = batch["document.match_score"] > 0
+        assert len(is_positive) >= self.total
 
         # get the positive indexes
-        positive_idx = [i for i, x in enumerate(match_score) if x]
+        positive_idx = [i for i, x in enumerate(is_positive) if x]
         selected_positive_idx = select_values(
             positive_idx,
             k=min(self.max_pos_docs, len(positive_idx)),
@@ -67,7 +71,7 @@ class SelectDocsEg(Pipe):
         )
 
         # get the negative indexes
-        negative_idx = [i for i, x in enumerate(match_score) if not x]
+        negative_idx = [i for i, x in enumerate(is_positive) if not x]
         selected_negative_idx = select_values(
             negative_idx,
             k=self.total - len(selected_positive_idx),
