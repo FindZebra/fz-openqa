@@ -106,7 +106,7 @@ class TestRelevanceClassifier(TestCase):
 
 
     def test_scispacy_match(self):
-        classifier = ScispaCyMatch()
+        classifier = ScispaCyMatch(interpretable=True)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertTrue(output['document.is_positive'][0][0])
@@ -118,6 +118,7 @@ class TestRelevanceClassifier(TestCase):
         self.assertTrue(output['document.is_positive'][3][0])
         # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
         self.assertTrue(output['document.is_positive'][4][0])
+        self.assertGreater(len(output['document.match_on'][4][0]), 1)
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
         self.assertFalse(output['document.is_positive'][5][0])
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from

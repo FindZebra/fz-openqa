@@ -46,7 +46,40 @@ class Pair:
 
 def find_one(
     text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
-):
+) -> bool:
+    """check if one of the queries is in the input text"""
+    assert isinstance(text, str)
+    if len(queries) == 0:
+        return False
+    if len(text) == 0:
+        return False
+
+    if sort_by is not None:
+        queries = sorted(queries, key=sort_by)
+
+    # re.search: Scan through string looking for a location where
+    # the regular expression pattern produces a match, and return a
+    # corresponding MatchObject instance. Return None if no position
+    # in the string matches the pattern; note that this is different
+    # from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed;
+    # this is useful if you want to match an arbitrary literal string
+    # that may have regular expression metacharacters in it.
+    # re.IGNORECASE: Perform case-insensitive matching
+    return bool(
+        re.search(
+            re.compile(
+                "|".join(re.escape(x) for x in queries),
+                re.IGNORECASE,
+            ),
+            text,
+        )
+    )
+
+
+def find_all(
+    text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None
+) -> Sequence[str]:
     """check if one of the queries is in the input text"""
     assert isinstance(text, str)
     if len(queries) == 0:
