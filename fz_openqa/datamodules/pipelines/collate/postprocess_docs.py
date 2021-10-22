@@ -50,9 +50,7 @@ class PostprocessPipe(BlockSequential):
             )
             classify_and_sort = Gate(
                 activate_doc_proc,
-                Sequential(
-                    relevance_classifier, sorter
-                ),
+                Sequential(relevance_classifier, sorter),
             )
 
             # select `n_documents` where count(is_positive) <= max_pos_docs
