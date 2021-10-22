@@ -51,7 +51,7 @@ class PostprocessPipe(BlockSequential):
             classify_and_sort = Gate(
                 activate_doc_proc,
                 Sequential(
-                    relevance_classifier, sorter, PrintBatch("C+S out")
+                    relevance_classifier, sorter
                 ),
             )
 
