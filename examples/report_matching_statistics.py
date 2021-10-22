@@ -148,7 +148,7 @@ print(get_separator())
 # >  - test: 374 (29.38%)
 
 run_time_block = dm.compile_dataset(
-    filter_unmatched=True, num_proc=4, batch_size=10
+    filter_unmatched=True, num_proc=3, batch_size=10
 )
 
 rich.print("[green]>> index is compiled.")
