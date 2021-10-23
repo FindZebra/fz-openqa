@@ -3,24 +3,29 @@ import re
 from typing import Any
 from typing import List
 from typing import Optional
+from typing import Union
 
 import torch
 from datasets import Split
+from omegaconf import DictConfig
 from torch import nn
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
+from transformers import BertPreTrainedModel
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.backbone import Backbone
-from fz_openqa.modeling.evaluators.metrics import SplitMetrics
+from fz_openqa.modeling.models.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
+from fz_openqa.utils.functional import maybe_instantiate
 
 FEATURE_PATTERN = re.compile("^_{1}[a-zA-Z0-9]+_{1}$")
 
 
-class Evaluator(nn.Module):
+class Model(nn.Module):
     """
-    The Evaluator:
+    A model:
         1. computes the loss
         2. computes and track the metrics (accuracy, F1, ...) using `SplitMetrics`
 
@@ -33,6 +38,9 @@ class Evaluator(nn.Module):
     See https://torchmetrics.readthedocs.io/en/stable/pages/
         overview.html#metrics-in-dataparallel-dp-mode
     """
+
+    _vocabulary_size: int
+    _pad_token_id: int
 
     # name of the features required for a forward pass
     _required_feature_names = [
@@ -56,19 +64,38 @@ class Evaluator(nn.Module):
     def __init__(
         self,
         *,
-        backbone: Backbone,
-        pad_token_id: int,
-        max_length: int,
+        bert: Union[DictConfig, BertPreTrainedModel],
+        tokenizer: PreTrainedTokenizerFast,
+        backbone: Union[DictConfig, Backbone],
         prefix: str = "",
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
-        self.backbone = backbone
-        self.pad_token_id = pad_token_id
-        self.max_length = max_length
-        self.init_metrics(prefix=prefix)
+        bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
+        self.backbone = maybe_instantiate(backbone, bert=bert)
+        self._init_metrics(prefix=prefix)
 
-    def init_metrics(self, prefix: str):
+    def _instantiate_bert(
+        self,
+        *,
+        bert: Union[BertPreTrainedModel, DictConfig],
+        tokenizer: PreTrainedTokenizerFast,
+        **kwargs,
+    ) -> BertPreTrainedModel:
+        """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
+
+        self._vocabulary_size = len(tokenizer.get_vocab())
+        self._pad_token_id = tokenizer.pad_token_id
+
+        bert: BertPreTrainedModel = maybe_instantiate(bert, **kwargs)
+
+        # extend BERT embeddings for the added special tokens
+        # TODO: CRITICAL: check this does not affect the model
+        #  this might explain the drop of performances
+        bert.resize_token_embeddings(len(tokenizer))
+        return bert
+
+    def _init_metrics(self, prefix: str):
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 
         def init_metric():

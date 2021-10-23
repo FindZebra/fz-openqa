@@ -10,10 +10,10 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.evaluators.base import Evaluator
 from fz_openqa.modeling.functional import _padless_cat
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.layers.heads import cls_head
+from fz_openqa.modeling.models.base import Model
 from fz_openqa.modeling.pl_module import PLModule
 
 
@@ -45,7 +45,7 @@ class MultipleChoiceQAReader(PLModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[Evaluator, DictConfig],
+        evaluator: Union[Model, DictConfig],
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,

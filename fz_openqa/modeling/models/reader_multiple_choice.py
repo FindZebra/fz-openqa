@@ -13,7 +13,7 @@ from torchmetrics.classification import Accuracy
 
 from ..functional import flatten
 from ..functional import padless_cat
-from .base import Evaluator
+from .base import Model
 from .metrics import SplitMetrics
 from .utils import check_only_first_doc_positive
 from .utils import expand_and_flatten
@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
 
-class ReaderMultipleChoice(Evaluator):
+class ReaderMultipleChoice(Model):
     # name of the features required for a forward pass
     _required_feature_names = [
         "answer.target",
@@ -52,7 +52,7 @@ class ReaderMultipleChoice(Evaluator):
         "validation/reading/relevance-Accuracy",
     ]
 
-    def init_metrics(self, prefix: str = ""):
+    def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
         fir both the answering model and the selection model"""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
@@ -207,7 +207,7 @@ class ReaderMultipleChoice(Evaluator):
                 for key in fields
             ],
             master_key="input_ids",
-            pad_token=self.pad_token_id,
+            pad_token=self._pad_token_id,
             aux_pad_tokens={"attention_mask": 0},
         )
         if len(padded_batch["input_ids"]) > self.max_length:

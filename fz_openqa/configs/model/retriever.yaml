@@ -1,5 +1,5 @@
 defaults:
-  - evaluator: retriever_supervised.yaml
+  - model: retriever_supervised.yaml
   - backbone: bert_linear_head_cls.yaml
   - bert: bio_bert.yaml
 

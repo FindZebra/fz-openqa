@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from fz_openqa.modeling.evaluators.base import Evaluator
+from fz_openqa.modeling.models.base import Model
 
 
 class TestEvaluator(TestCase):
@@ -11,5 +11,5 @@ class TestEvaluator(TestCase):
                 '__flag__': None,
                 '_miss': None,
                 'miss_': None}
-        filtered_data = Evaluator._filter_features_from_output(data)
+        filtered_data = Model._filter_features_from_output(data)
         self.assertEqual(set(filtered_data), set(data.keys()) - {'_feature_'})

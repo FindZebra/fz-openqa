@@ -13,11 +13,11 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.base import Evaluator
-from fz_openqa.modeling.models.multiple_choice_qa_reader import (
+from fz_openqa.modeling.__saved_models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )
-from fz_openqa.modeling.models.qa_retriever import QaRetriever
+from fz_openqa.modeling.__saved_models.qa_retriever import QaRetriever
+from fz_openqa.modeling.models.base import Model
 from fz_openqa.modeling.pl_module import PLModule
 from fz_openqa.utils.datastruct import add_prefix
 from fz_openqa.utils.datastruct import Batch
@@ -57,7 +57,7 @@ class MultipleChoiceQA(PLModule):
         bert: Union[BertPreTrainedModel, DictConfig],
         reader: Union[DictConfig, MultipleChoiceQAReader],
         retriever: Union[DictConfig, QaRetriever],
-        evaluator: Union[Evaluator, DictConfig],
+        evaluator: Union[Model, DictConfig],
         corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         end_to_end_evaluation: bool = False,
         **kwargs,
@@ -104,8 +104,8 @@ class MultipleChoiceQA(PLModule):
 
         # end-to-end step: retrieve document and use the reader
         if split != Split.TRAIN and self.end_to_end_evaluation:
-            assert self.evaluator is not None
-            output.update(**self.evaluator(self, batch, split=split))
+            assert self.model is not None
+            output.update(**self.model(self, batch, split=split))
 
         return output
 
@@ -200,7 +200,7 @@ class MultipleChoiceQA(PLModule):
         return retriever_output
 
     def _step_end_end2end(self, output, split: Split, **kwargs):
-        end2end_output = self.evaluator.step_end(output, split)
+        end2end_output = self.model.step_end(output, split)
         end2end_output = add_prefix(end2end_output, "end2end/")
         return end2end_output
 
@@ -213,9 +213,9 @@ class MultipleChoiceQA(PLModule):
         if log_data:
             self.log_data(retriever_data, prefix=f"{split}/retriever/")
 
-        if self.evaluator is not None:
-            end2end_data = self.evaluator.compute_metrics(split=split)
-            self.evaluator.reset_metrics(split=split)
+        if self.model is not None:
+            end2end_data = self.model.compute_metrics(split=split)
+            self.model.reset_metrics(split=split)
             if log_data:
                 self.log_data(end2end_data, prefix=f"{split}/end2end/")
 

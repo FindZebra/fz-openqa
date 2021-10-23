@@ -10,8 +10,7 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.backbone import Backbone
-from fz_openqa.modeling.evaluators.base import Evaluator
+from fz_openqa.modeling.models.base import Model
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
@@ -59,11 +58,9 @@ class PLModule(LightningModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        backbone: DictConfig,
-        evaluator: DictConfig,
+        model: DictConfig,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
-        max_length: int = 512,
         **kwargs,
     ):
         super().__init__()
@@ -71,47 +68,14 @@ class PLModule(LightningModule):
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters(
-            ignore=["tokenizer", "evaluator", "bert", "backbone"]
-        )
+        self.save_hyperparameters(ignore=["tokenizer", "model", "bert"])
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
 
-        # instantiate the pretrained language model
-        bert = self.instantiate_bert(bert=bert, tokenizer=tokenizer)
-
-        # instantiate the backbone model
-        self.backbone: Backbone = maybe_instantiate(backbone, bert=bert)
-
-        # evaluator: compute the loss and take care of computing and logging the metrics
-        self.evaluator: Optional[Evaluator] = maybe_instantiate(
-            evaluator,
-            backbone=self.backbone,
-            pad_token_id=self.pad_token_id,
-            max_length=max_length,
+        # instantiate the model
+        self.model: Optional[Model] = maybe_instantiate(
+            model, bert=bert, tokenizer=tokenizer, _recursive_=False
         )
-
-    def instantiate_bert(
-        self,
-        *,
-        bert: Union[BertPreTrainedModel, DictConfig],
-        tokenizer: PreTrainedTokenizerFast,
-        cache_dir: Optional[str] = None,
-        **kwargs,
-    ) -> BertPreTrainedModel:
-        """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
-
-        self.vocabulary_size = len(tokenizer.get_vocab())
-        self.pad_token_id = tokenizer.pad_token_id
-
-        bert: BertPreTrainedModel = maybe_instantiate(
-            bert, cache_dir=cache_dir, **kwargs
-        )
-        # extend BERT embeddings for the added special tokens
-        # TODO: CRITICAL: check this does not affect the model
-        #  this might explain the drop of performances
-        bert.resize_token_embeddings(len(tokenizer))
-        return bert
 
     def _step(
         self,
@@ -126,7 +90,7 @@ class PLModule(LightningModule):
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
         """
-        return self.evaluator.step(batch, **kwargs)
+        return self.model.step(batch, **kwargs)
 
     def _step_end(
         self, pre_output: Batch, *, split: Split, log_data=True
@@ -138,7 +102,7 @@ class PLModule(LightningModule):
 
         !! This step is performed on device 0 !!
         """
-        output = self.evaluator.step_end(pre_output, split)
+        output = self.model.step_end(pre_output, split)
 
         if log_data:
             # potentially log the loss and
@@ -154,11 +118,11 @@ class PLModule(LightningModule):
         1. Compute the metrics for the whole epoch using `evaluator.compute_metrics`
         2. Log the metrics for the whole epoch
         """
-        assert self.evaluator is not None
-        metrics = self.evaluator.compute_metrics(split=split)
+        assert self.model is not None
+        metrics = self.model.compute_metrics(split=split)
         if log_data:
             self.log_data(metrics, prefix=str(split))
-        self.evaluator.reset_metrics(split=split)
+        self.model.reset_metrics(split=split)
         return metrics
 
     def log_data(
@@ -176,7 +140,7 @@ class PLModule(LightningModule):
         """
         for k, v in data.items():
             key = "/".join(
-                u for u in (prefix, self.evaluator.task_id, k) if u is not None
+                u for u in (prefix, self.model.task_id, k) if u is not None
             )
             if is_loggable(v):
                 self.log(
@@ -184,7 +148,7 @@ class PLModule(LightningModule):
                     v,
                     on_step=on_step,
                     on_epoch=on_epoch,
-                    prog_bar=key in self.evaluator.pbar_metrics,
+                    prog_bar=key in self.model.pbar_metrics,
                     sync_dist=sync_dist,
                 )
 

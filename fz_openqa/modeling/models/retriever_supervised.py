@@ -7,14 +7,14 @@ from torchmetrics.classification import Accuracy
 
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
-from fz_openqa.modeling.evaluators.base import Evaluator
-from fz_openqa.modeling.evaluators.metrics import SafeMetricCollection
-from fz_openqa.modeling.evaluators.metrics import SplitMetrics
+from fz_openqa.modeling.models.base import Model
+from fz_openqa.modeling.models.metrics import SafeMetricCollection
+from fz_openqa.modeling.models.metrics import SplitMetrics
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
-class RetrieverSupervised(Evaluator):
+class RetrieverSupervised(Model):
     _required_feature_names = [
         "question.input_ids",
         "question.attention_mask",
@@ -40,7 +40,7 @@ class RetrieverSupervised(Evaluator):
         super().__init__(**kwargs)
         self.similarity = similarity
 
-    def init_metrics(self, prefix: str):
+    def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
 

@@ -217,7 +217,7 @@ HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
 # todo: update this section
 
 All modules should inherit from `PLModule`, which in turn inherits from `pl.LightningModule`.
-Each PLModule features one `Evaluator` which role is to compute the loss and the metrics.
+Each PLModule features one `Model` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
@@ -233,13 +233,13 @@ The metrics must be implemented in the `_step_end` method in order to avoid erro
 </details>
 
 <details>
-<summary><b>Evaluator</b></summary>
+<summary><b>Model</b></summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
 This method is called in the `PLModule._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
-`Evaluator.foward()` method from each device.
+`Model.foward()` method from each device.
 </details>
 
 <details>

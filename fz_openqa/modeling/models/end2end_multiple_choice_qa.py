@@ -13,7 +13,7 @@ from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
 from ...datamodules.pipes.nesting import nested_list
-from .base import Evaluator
+from .base import Model
 from .metrics import SplitMetrics
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.utils.datastruct import add_prefix
@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.datastruct import infer_device_from_batch
 
 
-class EndToEndMultipleChoiceQaMaximumLikelihood(Evaluator):
+class EndToEndMultipleChoiceQaMaximumLikelihood(Model):
     """
     End-to-end evaluation of an OpenQA model (retriever+reader) based on the reader accuracy.
         * Retrieve k documents from the corpus using the retriever model
@@ -42,7 +42,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Evaluator):
         super().__init__(**kwargs)
         self.n_documents = n_documents
 
-    def init_metrics(self, prefix: str = ""):
+    def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
         fir both the answering model and the selection model"""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
