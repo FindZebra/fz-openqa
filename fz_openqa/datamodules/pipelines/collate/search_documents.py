@@ -20,8 +20,5 @@ class MaybeSearchDocuments(Gate):
         )
         super(MaybeSearchDocuments, self).__init__(
             activate_doc_search,
-            Sequential(
-                SearchCorpus(corpus, k=n_documents),
-                RenameKeys({"idx": "document.global_idx"}),
-            ),
+            Sequential(SearchCorpus(corpus, k=n_documents)),
         )

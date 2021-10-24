@@ -15,7 +15,7 @@ from .corpus_dm import CorpusDataModule
 from .datasets import fz_x_medqa
 from .meqa_dm import MedQaDataModule
 from .pipes import Parallel
-from .utils.transformations import set_example_idx
+from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 
 PT_SIMPLE_ATTRIBUTES = [
