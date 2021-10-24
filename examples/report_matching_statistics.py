@@ -17,7 +17,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils import run_elasticsearch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -32,7 +31,7 @@ parser.add_argument(
     "--cls",
     type=str,
     nargs="?",
-    default="exactmatch",
+    default="exact",
     help="classifier applied to label documents from the corpus; (exact, scispacy or metamap)",
 )
 parser.add_argument(
@@ -46,7 +45,7 @@ parser.add_argument(
     "--topn",
     type=int,
     nargs="?",
-    default=100,
+    default=10,
     help="top n documents returned from ElasticSearch by a given query input",
 )
 parser.add_argument(
@@ -60,8 +59,15 @@ parser.add_argument(
     "--subset",
     type=bool,
     nargs="?",
-    default=True,
+    default=False,
     help="Run with a subset of corpus and question True or False",
+)
+parser.add_argument(
+    "--filename",
+    type=str,
+    nargs="?",
+    default="compiled-dataset",
+    help="pre-fix to define filename",
 )
 args = parser.parse_args()
 
@@ -100,6 +106,7 @@ corpus = corpus_module(
     verbose=False,
     num_proc=4,
     use_subset=args.subset,
+    cache_dir="/scratch/s154097/cache",
 )
 
 # load the QA dataset
@@ -114,11 +121,13 @@ dm = MedQaDataModule(
     # retrieve 100 documents for each question
     n_retrieved_documents=args.topn,
     # keep only one positive doc
-    max_pos_docs=1,
+    max_pos_docs=None,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=10,
+    n_documents=None,
     # simple exact match
     relevance_classifier=cls,
+    compile_in_setup=False,
+    cache_dir="/scratch/s154097/cache",
 )
 
 # prepare both the QA dataset and the corpus
@@ -139,22 +148,29 @@ print(get_separator())
 # >  - train: 7605 (74.72%)
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
+# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
+# >  - train: 2883 (28.33%)
+# >  - validation: 424 (33.33%)
+# >  - test: 374 (29.38%)
+# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
+# >  - train: 3503 (34.42%)
+# >  - validation: 473 (37.19%)
+# >  - test: 445 (34.96%)
 
-t0 = time()
+run_time_block = dm.compile_dataset(
+    filter_unmatched=True, num_proc=3, batch_size=10
+)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=10)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")
 rich.print(dm.compiled_dataset)
 
-
 batch = next(iter(dm.train_dataloader()))
 pprint_batch(batch, "compiled batch")
 
-run_time = time() - t0
-
-rich.print(f"[red] Runtime: {run_time} seconds")
+for k, x in run_time_block.items():
+    rich.print(f"[red] Runtime for {k} : {x} seconds")
 
 for idx in range(3):
     print(get_separator("-"))
@@ -163,14 +179,15 @@ for idx in range(3):
         f"Example #{idx}: \n"
         f" * answer=[magenta]{eg['answer.text'][eg['answer.target']]}[/magenta]\n"
         f" * question=[cyan]{eg['question.text']}[/cyan]\n"
-        f" * documents: n_positive={sum(eg['document.is_positive'])}, "
-        f"n_negative={sum(eg['document.is_positive'] == 0)}"
+        f" * documents: n_pos={sum(eg['document.is_positive'])}, "
+        f"n_neg={sum(eg['document.is_positive'] == 0)}"
     )
     for j in range(min(len(eg["document.text"]), 3)):
         print(get_separator("."))
         rich.print(
-            f" |-* document #{j}, score={eg['document.retrieval_score'][j]:.2f}, ,"
-            f" is_positive={eg['document.is_positive'][j]}"
+            f" |-* doc #{j}, "
+            f"score={eg['document.retrieval_score'][j]:.2f}, , "
+            f"is_positive={eg['document.is_positive'][j]}"
         )
         txt = eg["document.text"][j].replace("\n", "")
         rich.print(f"[white]{txt}")
@@ -178,7 +195,7 @@ for idx in range(3):
 
 # dump data
 for split, dset in dm.compiled_dataset.items():
-    with open(f"compiled-dataset-{split}.jsonl", mode="w") as fp:
+    with open(f"{args.filename}-{split}.jsonl", mode="w") as fp:
         for i, row in enumerate(dset):
             row["split"] = str(split)
             row["__index__"] = str(i)
