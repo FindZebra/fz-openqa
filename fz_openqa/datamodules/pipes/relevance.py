@@ -24,8 +24,8 @@ from spacy.tokens import Doc
 
 from ..utils.filter_keys import KeyWithPrefix
 from .nesting import nested_list
-from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -122,6 +122,12 @@ class RelevanceClassifier(Pipe):
         self.document_prefix = document_prefix
         self.interpretable = interpretable
         self.interpretation_key = interpretation_key
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        input_keys += [self.output_key]
+        if self.interpretable:
+            input_keys += [self.interpretation_key]
+        return input_keys
 
     def classify(self, pair: Pair) -> int:
         """Classify each pair."""

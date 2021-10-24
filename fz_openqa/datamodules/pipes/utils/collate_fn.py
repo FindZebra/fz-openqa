@@ -69,11 +69,13 @@ def extract_and_collate_attributes_as_list(
     The target attributes are removed from the original examples
     """
 
-    text_keys = [
-        k
-        for k in examples[0].keys()
-        if f".{attribute}" in k and f"{key}." in k
-    ]
+    def _cond(k):
+        out = str(k).endswith(f".{attribute}")
+        if key is not None:
+            out = out and str(k).startswith(f"{key}.")
+        return out
+
+    text_keys = [k for k in examples[0].keys() if _cond(k)]
 
     text_outputs = defaultdict(list)
     for ex in examples:

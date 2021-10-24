@@ -1,5 +1,5 @@
 from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import Rename
+from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
@@ -22,6 +22,6 @@ class MaybeSearchDocuments(Gate):
             activate_doc_search,
             Sequential(
                 SearchCorpus(corpus, k=n_documents),
-                Rename({"idx": "document.global_idx"}),
+                RenameKeys({"idx": "document.global_idx"}),
             ),
         )

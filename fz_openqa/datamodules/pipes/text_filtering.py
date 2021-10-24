@@ -4,7 +4,7 @@ import spacy
 from spacy.tokens import Doc
 
 from .base import Pipe
-from .static import STOP_WORDS
+from fz_openqa.datamodules.pipes.utils.static import STOP_WORDS
 from fz_openqa.utils.datastruct import Batch
 
 

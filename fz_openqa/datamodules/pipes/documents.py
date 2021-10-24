@@ -58,6 +58,9 @@ class SelectDocsOneEg(Pipe):
         self.neg_select_mode = neg_select_mode
         self.strict = strict
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return input_keys + [ARE_DOCS_SELECTED_KEY]
+
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         is_positive = [x > 0 for x in batch["document.match_score"]]
         assert len(is_positive) >= self.total

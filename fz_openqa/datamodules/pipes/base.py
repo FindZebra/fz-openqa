@@ -13,20 +13,28 @@ from datasets.fingerprint import Hasher
 from fz_openqa.utils.datastruct import Batch
 
 
+def _filter_null_id(data: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in data.items() if not (k == "id" and v is None)}
+
+
 def always_true(*args, **kwargs):
     return True
 
 
-class Pipe:
+class Pipe(object):
     """
     A pipe is a small unit of computation that ingests,
     modify and returns a batch of data.
     """
 
     id: Optional[str] = None
+    requires_keys: Optional[List[str]] = None
 
     def __init__(self, *, id: Optional[str] = None):
         self.id = id or self.id
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return input_keys
 
     @staticmethod
     def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
@@ -57,11 +65,11 @@ class Pipe:
 
     def todict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the object"""
-        d = {"__type__": type(self).__name__}
-        if self.id is not None:
-            d["__id__"] = self.id
+        data = {"__type__": type(self).__name__, **vars(self)}
+        return _filter_null_id(data)
 
-        return d
+    def __repr__(self) -> str:
+        return type(self).__name__
 
     @staticmethod
     def _fingerprint(x):
@@ -93,13 +101,19 @@ class Lambda(Pipe):
     Apply a lambda function to the batch.
     """
 
-    def __init__(self, op: Callable, **kwargs):
+    def __init__(
+        self, op: Callable, output_keys: Optional[List[str]] = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.op = op
+        self._output_keys = output_keys
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         return self.op(batch)
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return self._output_keys or super().output_keys(input_keys)
 
 
 class GetKey(Pipe):
@@ -110,6 +124,9 @@ class GetKey(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         return {self.key: batch[self.key]}
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [self.key]
 
 
 class FilterKeys(Pipe):
@@ -130,6 +147,9 @@ class FilterKeys(Pipe):
     def filter(self, batch):
         return {k: v for k, v in batch.items() if self.condition(k)}
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [k for k in input_keys if self.condition(k)]
+
 
 class DropKeys(Pipe):
     """
@@ -146,6 +166,11 @@ class DropKeys(Pipe):
             batch.pop(key)
         return batch
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        for key in self.keys:
+            input_keys.remove(key)
+        return input_keys
+
 
 class AddPrefix(Pipe):
     """
@@ -159,6 +184,9 @@ class AddPrefix(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         return {f"{self.prefix}{k}": v for k, v in batch.items()}
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [f"{self.prefix}{k}" for k in input_keys]
 
 
 class ReplaceInKeys(Pipe):
@@ -175,8 +203,11 @@ class ReplaceInKeys(Pipe):
         """The call of the pipeline process"""
         return {k.replace(self.a, self.b): v for k, v in batch.items()}
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [k.replace(self.a, self.b) for k in input_keys]
 
-class Rename(Pipe):
+
+class RenameKeys(Pipe):
     """
     Rename a set of keys
     """
@@ -192,6 +223,9 @@ class Rename(Pipe):
             batch[new_key] = value
 
         return batch
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [self.keys.get(k, k) for k in input_keys]
 
 
 class Apply(Pipe):

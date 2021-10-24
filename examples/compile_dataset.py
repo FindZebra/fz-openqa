@@ -81,7 +81,7 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=100)
+dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=10)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")
