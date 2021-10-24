@@ -41,7 +41,7 @@ class MaybeCollateDocuments(Gate):
                         "document.idx",
                         "document.passage_idx",
                         "document.retrieval_score",
-                        "document.is_positive",
+                        "document.match_score",
                     ]
                 )
             ),
@@ -66,7 +66,7 @@ class MaybeCollateDocuments(Gate):
                     "document.passage_idx",
                     "document.retrieval_score",
                     "document.match_on",
-                    "document.is_positive",
+                    "document.match_score",
                     "document.positive_count",
                     "document.input_ids",
                     "document.attention_mask",

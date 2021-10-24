@@ -11,6 +11,7 @@ from rich.status import Status
 
 from .base import Index
 from .base import SearchResult
+from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import Batchify
 from fz_openqa.datamodules.pipes import CopyBatch
 from fz_openqa.datamodules.pipes import DeBatchify
@@ -21,7 +22,6 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.es_functions import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
 
 

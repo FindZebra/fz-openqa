@@ -78,7 +78,7 @@ for batch in track(
     description="Iterating through the dataset..",
 ):
 
-    at_least_one_positive = batch["document.is_positive"].sum(1) > 0
+    at_least_one_positive = (batch["document.match_score"] > 0).sum(1) > 0
     count += (at_least_one_positive > 0).float().sum()
     total += at_least_one_positive.shape[0]
     n_batches += 1
@@ -101,7 +101,7 @@ for k in range(3):
     for m in range(3):
         rich.print(
             f" - rank={m}: score={batch['document.retrieval_score'][k][m]:.2f}, "
-            f"is_positive={batch['document.is_positive'][k][m]}"
+            f"match_score={batch['document.match_score'][k][m]}"
         )
         print(batch["document.text"][k][m].strip().replace("\n", ""))
 

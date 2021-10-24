@@ -5,13 +5,11 @@ from typing import Optional
 from typing import Union
 
 import dill
-import rich
 import torch
 
 from . import Collate
 from . import Nest
 from .base import Pipe
-from .base import Rename
 from fz_openqa.utils.datastruct import Batch
 
 

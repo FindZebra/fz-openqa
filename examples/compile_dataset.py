@@ -81,7 +81,7 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=100)
+dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=10)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")
@@ -97,8 +97,8 @@ for idx in range(3):
         f"Example #{idx}: \n"
         f" * answer=[magenta]{eg['answer.text'][eg['answer.target']]}[/magenta]\n"
         f" * question=[cyan]{eg['question.text']}[/cyan]\n"
-        f" * documents: n_positive={sum(eg['document.is_positive'])}, "
-        f"n_negative={sum(eg['document.is_positive'] == 0)}"
+        f" * documents: n_positive={sum(eg['document.match_score']>0)}, "
+        f"n_negative={sum(eg['document.match_score'] == 0)}"
     )
     for j in range(min(len(eg["document.text"]), 3)):
         print(get_separator("."))
@@ -106,7 +106,7 @@ for idx in range(3):
         match_on = match_on[j] if match_on is not None else None
         rich.print(
             f" |-* document #{j}, score={eg['document.retrieval_score'][j]:.2f}, "
-            f"is_positive={eg['document.is_positive'][j]}, match_on={match_on}"
+            f"match_score={eg['document.match_score'][j]}, match_on={match_on}"
         )
         txt = eg["document.text"][j].replace("\n", "")
         rich.print(f"[white]{txt}")

@@ -1,6 +1,8 @@
 from typing import Any
 from typing import Callable
+from typing import List
 from typing import Optional
+from typing import Union
 
 import numpy as np
 from torch import Tensor
@@ -10,7 +12,7 @@ from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
-def reindex(x: Any, index: np.ndarray) -> Any:
+def reindex(x: Any, index: Union[np.ndarray, List[int]]) -> Any:
     if isinstance(x, (Tensor, np.ndarray)):
         x = x[index]
         return x

@@ -177,5 +177,5 @@ for i, eg in enumerate(exs):
     rich.print(f"[white]Document: {eg['document.text'][0]}")
     for c, b in output.items():
         rich.print(
-            f"> {type(c).__name__}: is_positive={b['document.is_positive'][i, 0]}"
+            f"> {type(c).__name__}: match_score={b['document.match_score'][i, 0]}"
         )
