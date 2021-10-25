@@ -102,7 +102,7 @@ def encode_data(data, tokenizer):
         **{
             k: v
             for k, v in data.items()
-            if k in ["answer.target", "rank", "idx", "is_positive"]
+            if k in ["answer.target", "rank", "idx", "match_score"]
         }
     )
     [batch.pop(k) for k in list(batch.keys()) if ".text" in k]

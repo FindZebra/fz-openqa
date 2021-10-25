@@ -1,3 +1,4 @@
+import json
 from collections import OrderedDict
 from typing import Any
 from typing import Callable
@@ -6,8 +7,6 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
-
-import rich
 
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.utils import reduce_dict_values
@@ -64,6 +63,15 @@ class Sequential(Pipe):
         pipes = [p.as_fingerprintable() for p in self.pipes]
         return Sequential(*pipes, id=self.id)
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        for p in self.pipes:
+            input_keys = p.output_keys(input_keys)
+        return input_keys
+
+    def __repr__(self):
+        data = self.todict()
+        return json.dumps(data, indent=4)
+
 
 class Parallel(Sequential):
     """Execute pipes in parallel and merge."""
@@ -85,9 +93,20 @@ class Parallel(Sequential):
         pipes = [p.as_fingerprintable() for p in self.pipes]
         return Parallel(*pipes, id=self.id)
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        output_keys = []
+        for p in self.pipes:
+            p_keys = p.output_keys(input_keys)
+            assert all(
+                k not in output_keys for k in p_keys
+            ), "There is a conflict between pipes."
+            output_keys += p_keys
+        return output_keys
+
 
 class UpdateWith(Pipe):
-    def __init__(self, pipe: Pipe):
+    def __init__(self, pipe: Pipe, **kwargs):
+        super(UpdateWith, self).__init__(**kwargs)
         self.pipe = pipe
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
@@ -99,6 +118,14 @@ class UpdateWith(Pipe):
 
     def dill_inspect(self, reduce: bool = False) -> bool:
         return self.pipe.dill_inspect()
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return self.pipe.output_keys(input_keys)
+
+    def __repr__(self):
+        data = self.todict()
+        data["pipe"] = self.pipe.todict()
+        return json.dumps(data, indent=4)
 
 
 class Gate(Pipe):
@@ -114,6 +141,12 @@ class Gate(Pipe):
 
     def as_fingerprintable(self) -> Pipe:
         return Gate(self.condition, self.pipe.as_fingerprintable())
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        if self.condition({k: None for k in input_keys}):
+            return self.pipe.output_keys(input_keys)
+        else:
+            return []
 
     @property
     def id(self):
@@ -142,6 +175,12 @@ class Gate(Pipe):
 
     def fingerprint(self) -> Any:
         return safe_fingerprint(self.pipe)
+
+    def __repr__(self):
+        data = self.todict()
+        data["condition"] = str(data["condition"])
+        data["pipe"] = self.pipe.todict()
+        return json.dumps(data, indent=4)
 
 
 class BlockSequential(Pipe):
@@ -193,3 +232,12 @@ class BlockSequential(Pipe):
     def __iter__(self):
         for k, b in self.blocks.items():
             yield (k, b)
+
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        for _, p in self.blocks.items():
+            input_keys = p.output_keys(input_keys)
+        return input_keys
+
+    def __repr__(self):
+        data = self.todict()
+        return json.dumps(data, indent=4)

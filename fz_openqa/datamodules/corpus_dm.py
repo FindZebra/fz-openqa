@@ -36,7 +36,7 @@ from .pipes import Sequential
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
 from .utils.transformations import add_spec_token
-from .utils.transformations import set_example_idx
+from .utils.transformations import set_row_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -156,7 +156,7 @@ class CorpusDataModule(BaseDataModule):
 
         # add index column
         dataset = dataset.map(
-            set_example_idx,
+            partial(set_row_idx, key="document.row_idx"),
             batched=False,
             num_proc=self.num_proc,
             with_indices=True,

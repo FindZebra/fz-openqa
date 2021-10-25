@@ -15,14 +15,14 @@ from .corpus_dm import CorpusDataModule
 from .datasets import fz_x_medqa
 from .meqa_dm import MedQaDataModule
 from .pipes import Parallel
-from .utils.transformations import set_example_idx
+from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 
 PT_SIMPLE_ATTRIBUTES = [
     "answer.target",
     "answer.n_options",
     "document.rank",
-    "document.is_positive",
+    "document.match_score",
     "question.idx",
     "idx",
 ]
@@ -87,7 +87,7 @@ class FZxMedQADataModule(MedQaDataModule):
         "document.idx",
         "document.input_ids",
         "document.attention_mask",
-        "document.is_positive",
+        "document.match_score",
     ]
 
     def __init__(self, *, filter_gold: bool = False, **kwargs):
@@ -112,7 +112,7 @@ class FZxMedQADataModule(MedQaDataModule):
         """Apply filtering operations"""
         if self.filter_gold:
             dataset = dataset.filter(
-                lambda x: x["document.rank"] == 0 and x["document.is_positive"]
+                lambda x: x["document.rank"] == 0 and x["document.match_score"]
             )
 
         return dataset

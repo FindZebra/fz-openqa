@@ -30,6 +30,15 @@ class TokenizerPipe(Pipe):
             **kwargs,
         }
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        if self.drop_columns:
+            input_keys = []
+
+        input_keys += ["input_ids", "attention_mask"]
+        if self.args.get("return_offsets_mapping", False):
+            input_keys += ["offset_mapping"]
+        return input_keys
+
     def __call__(self, batch: TorchBatch, **kwargs) -> TorchBatch:
         tokenizer_input = {field: batch[field] for field in self.fields}
 

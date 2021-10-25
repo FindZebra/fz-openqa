@@ -11,7 +11,9 @@ from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule  # noqa: E402
 from fz_openqa.tokenizers.pretrained import (
     init_pretrained_tokenizer,
 )  # noqa: E402
-from fz_openqa.utils.es_functions import ElasticSearchEngine  # noqa: E402
+from fz_openqa.datamodules.index.utils.es_engine import (
+    ElasticSearchEngine,
+)  # noqa: E402
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"

@@ -8,7 +8,7 @@ from .base import GetKey
 from .base import Identity
 from .base import Lambda
 from .base import Pipe
-from .base import Rename
+from .base import RenameKeys
 from .base import ReplaceInKeys
 from .batchify import Batchify
 from .batchify import DeBatchify

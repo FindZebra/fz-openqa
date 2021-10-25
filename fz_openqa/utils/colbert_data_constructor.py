@@ -16,10 +16,10 @@ import re
 import gdown
 from tqdm import tqdm
 
-from .es_functions import es_create_index
-from .es_functions import es_ingest
-from .es_functions import es_remove_index
-from .es_functions import es_search
+from fz_openqa.datamodules.index.utils.es_engine import es_create_index
+from fz_openqa.datamodules.index.utils.es_engine import es_ingest
+from fz_openqa.datamodules.index.utils.es_engine import es_remove_index
+from fz_openqa.datamodules.index.utils.es_engine import es_search
 
 parser = argparse.ArgumentParser(description="Generate FZxMedQA Dataset")
 parser.add_argument(
