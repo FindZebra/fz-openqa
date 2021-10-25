@@ -6,6 +6,7 @@ from typing import Type
 from typing import Union
 
 import numpy as np
+import rich
 import torch
 from torch import Tensor
 
@@ -13,6 +14,7 @@ from fz_openqa.datamodules.pipes.base import always_true
 from fz_openqa.datamodules.pipes.base import ApplyToAll
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 STRIDE_SYMBOL = "__stride__"
 

@@ -22,7 +22,7 @@ def add_spec_token(
     return f"{special_token}{text}"
 
 
-def set_example_idx(
+def set_row_idx(
     example: Dict[str, Any], idx: int, key: str = "idx"
 ) -> Dict[str, Any]:
     example[key] = idx

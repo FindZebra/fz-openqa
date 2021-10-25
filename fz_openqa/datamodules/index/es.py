@@ -32,9 +32,9 @@ class ElasticSearchIndex(Index):
     def __init__(
         self,
         *,
-        index_key: str,
-        text_key: str,
-        query_key: str,
+        index_key: str = "document.row_idx",
+        text_key: str = "document.text",
+        query_key: str = "question.text",
         batch_size: int = 32,
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
