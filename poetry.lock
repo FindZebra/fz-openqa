@@ -219,7 +219,7 @@ colorama = {version = "*", markers = "platform_system == \"Windows\""}
 [[package]]
 name = "colorlog"
 version = "6.5.0"
-description = "Add colours to the output of Python's logging PLModule."
+description = "Add colours to the output of Python's logging Container."
 category = "main"
 optional = false
 python-versions = ">=3.6"
@@ -999,7 +999,7 @@ test = ["pytest", "pytest-coverage", "mock", "typer-cli"]
 [[package]]
 name = "platformdirs"
 version = "2.4.0"
-description = "A small Python PLModule for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
+description = "A small Python Container for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 category = "main"
 optional = false
 python-versions = ">=3.6"
@@ -1186,7 +1186,7 @@ python-versions = ">=3.5"
 [[package]]
 name = "pyparsing"
 version = "2.4.7"
-description = "Python parsing PLModule"
+description = "Python parsing Container"
 category = "main"
 optional = false
 python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
@@ -1210,7 +1210,7 @@ python-versions = ">=3"
 [[package]]
 name = "pysocks"
 version = "1.7.1"
-description = "A Python SOCKS client PLModule. See https://github.com/Anorov/PySocks for more information."
+description = "A Python SOCKS client Container. See https://github.com/Anorov/PySocks for more information."
 category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
@@ -1241,7 +1241,7 @@ testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "requests", "xm
 [[package]]
 name = "python-dateutil"
 version = "2.8.2"
-description = "Extensions to the standard Python datetime PLModule"
+description = "Extensions to the standard Python datetime Container"
 category = "main"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
@@ -1355,7 +1355,7 @@ hiredis = ["hiredis (>=0.1.3)"]
 [[package]]
 name = "regex"
 version = "2021.10.8"
-description = "Alternative regular expression PLModule, to replace re."
+description = "Alternative regular expression Container, to replace re."
 category = "main"
 optional = false
 python-versions = "*"
@@ -1625,7 +1625,7 @@ catalogue = ">=2.0.1,<2.1.0"
 [[package]]
 name = "subprocess32"
 version = "3.5.4"
-description = "A backport of the subprocess PLModule from Python 3 for use on 2.x."
+description = "A backport of the subprocess Container from Python 3 for use on 2.x."
 category = "main"
 optional = false
 python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*, <4"

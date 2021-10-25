@@ -1,0 +1,4 @@
+_target_: fz_openqa.modeling.modules.RetrieverSupervised
+
+defaults:
+  - similarity: dot_product.yaml

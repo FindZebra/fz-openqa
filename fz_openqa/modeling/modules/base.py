@@ -15,7 +15,7 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.backbone import Backbone
-from fz_openqa.modeling.models.metrics import SplitMetrics
+from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
@@ -23,7 +23,7 @@ from fz_openqa.utils.functional import maybe_instantiate
 FEATURE_PATTERN = re.compile("^_{1}[a-zA-Z0-9]+_{1}$")
 
 
-class Model(nn.Module):
+class Module(nn.Module):
     """
     A model:
         1. computes the loss
@@ -113,9 +113,9 @@ class Model(nn.Module):
         )
 
     def _check_features(self, batch, required_feature_names: List[str]):
-        assert all(f in batch for f in required_feature_names), self._fmt_ex(
-            batch, required_feature_names
-        )
+        assert all(
+            f in batch for f in required_feature_names
+        ), self._format_exception(batch, required_feature_names)
 
     def forward(self, batch: Batch, **kwargs):
         """Compute the forward pass of the model, does not require targets,

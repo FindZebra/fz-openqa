@@ -1,4 +1,0 @@
-_target_: fz_openqa.modeling.evaluators.retriever_supervised.RetrieverSupervised
-
-defaults:
-  - similarity: dot_product.yaml

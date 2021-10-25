@@ -7,14 +7,14 @@ from torchmetrics.classification import Accuracy
 
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
-from fz_openqa.modeling.models.base import Model
-from fz_openqa.modeling.models.metrics import SafeMetricCollection
-from fz_openqa.modeling.models.metrics import SplitMetrics
+from fz_openqa.modeling.modules.base import Module
+from fz_openqa.modeling.modules.metrics import SafeMetricCollection
+from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
-class RetrieverSupervised(Model):
+class RetrieverSupervised(Module):
     _required_feature_names = [
         "question.input_ids",
         "question.attention_mask",

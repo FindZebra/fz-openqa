@@ -13,7 +13,7 @@ from torchmetrics.classification import Accuracy
 
 from ..functional import flatten
 from ..functional import padless_cat
-from .base import Model
+from .base import Module
 from .metrics import SplitMetrics
 from .utils import check_only_first_doc_positive
 from .utils import expand_and_flatten
@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
 
-class ReaderMultipleChoice(Model):
+class ReaderMultipleChoice(Module):
     # name of the features required for a forward pass
     _required_feature_names = [
         "answer.target",

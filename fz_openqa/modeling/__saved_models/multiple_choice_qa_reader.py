@@ -13,11 +13,10 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.modeling.functional import _padless_cat
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.models.base import Model
-from fz_openqa.modeling.pl_module import PLModule
+from fz_openqa.modeling.model import Module
 
 
-class MultipleChoiceQAReader(PLModule):
+class MultipleChoiceQAReader(Module):
     """
     A multiple-choice reader model.
     """
@@ -45,7 +44,7 @@ class MultipleChoiceQAReader(PLModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[Model, DictConfig],
+        evaluator: Union[Module, DictConfig],
         hidden_size: int = 256,
         dropout: float = 0,
         **kwargs,

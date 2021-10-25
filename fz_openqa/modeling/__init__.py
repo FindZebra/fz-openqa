@@ -1,1 +1,1 @@
-from .pl_module import PLModule
+from .model import Module

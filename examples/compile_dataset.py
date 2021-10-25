@@ -55,7 +55,7 @@ dm = MedQaDataModule(
     train_batch_size=100,
     num_proc=4,
     num_workers=4,
-    use_subset=False,
+    use_subset=True,
     verbose=True,
     corpus=corpus,
     # retrieve 100 documents for each question
@@ -65,10 +65,10 @@ dm = MedQaDataModule(
     # keep only 10 docs (1 pos + 9 neg)
     n_documents=10,
     # simple exact match
-    relevance_classifier=ScispaCyMatch(
-        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
-    ),
-    # relevance_classifier=ExactMatch(interpretable=True),
+    # relevance_classifier=ScispaCyMatch(
+    #     interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
+    # ),
+    relevance_classifier=ExactMatch(interpretable=True),
     compile_in_setup=False,
 )
 
@@ -92,7 +92,7 @@ print(get_separator())
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
 
-dm.compile_dataset(filter_unmatched=True, num_proc=4, batch_size=100)
+dm.compile_dataset(filter_unmatched=True, num_proc=2, batch_size=10)
 rich.print("[green]>> index is compiled.")
 
 rich.print("=== Compiled Dataset ===")

@@ -13,7 +13,7 @@ from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
 from ...datamodules.pipes.nesting import nested_list
-from .base import Model
+from .base import Module
 from .metrics import SplitMetrics
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.utils.datastruct import add_prefix
@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.datastruct import infer_device_from_batch
 
 
-class EndToEndMultipleChoiceQaMaximumLikelihood(Model):
+class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
     """
     End-to-end evaluation of an OpenQA model (retriever+reader) based on the reader accuracy.
         * Retrieve k documents from the corpus using the retriever model

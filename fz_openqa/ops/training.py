@@ -74,8 +74,8 @@ def train(config: DictConfig) -> Optional[float]:
         corpus=corpus,
     )
 
-    # Init Lightning model
-    log.info(f"Instantiating model <{config.model._target_}>")
+    # Init Lightning Module
+    log.info(f"Instantiating Module <{config.model._target_}>")
     model: LightningModule = instantiate(
         config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=False
     )
@@ -115,11 +115,11 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
 
-    # Train the model
+    # Train the Module
     log.info("Starting training..")
     trainer.fit(model=model, datamodule=datamodule)
 
-    # Evaluate model on test set after training
+    # Evaluate Module on test set after training
     if not config.trainer.get("fast_dev_run"):
         log.info("Starting testing..")
         trainer.test()

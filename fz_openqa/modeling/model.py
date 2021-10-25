@@ -10,17 +10,17 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.models.base import Model
+from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 
 
-class PLModule(LightningModule):
+class Model(LightningModule):
     """
     This class implements the basics of evaluation, logging and inference using
-    pytorch lightning mechanics.
+    pytorch lightning mechanics. It contains a model: `nn.Module`.
 
     ## Main components
     This class contains 2 main components:
@@ -58,7 +58,8 @@ class PLModule(LightningModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        model: DictConfig,
+        backbone: DictConfig,
+        module: DictConfig,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -73,8 +74,12 @@ class PLModule(LightningModule):
         assert self.hparams["weight_decay"] == weight_decay
 
         # instantiate the model
-        self.model: Optional[Model] = maybe_instantiate(
-            model, bert=bert, tokenizer=tokenizer, _recursive_=False
+        self.module: Optional[Module] = maybe_instantiate(
+            module,
+            bert=bert,
+            backbone=backbone,
+            tokenizer=tokenizer,
+            _recursive_=False,
         )
 
     def _step(
@@ -90,7 +95,7 @@ class PLModule(LightningModule):
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
         """
-        return self.model.step(batch, **kwargs)
+        return self.module.step(batch, **kwargs)
 
     def _step_end(
         self, pre_output: Batch, *, split: Split, log_data=True
@@ -102,7 +107,7 @@ class PLModule(LightningModule):
 
         !! This step is performed on device 0 !!
         """
-        output = self.model.step_end(pre_output, split)
+        output = self.module.step_end(pre_output, split)
 
         if log_data:
             # potentially log the loss and
@@ -118,11 +123,11 @@ class PLModule(LightningModule):
         1. Compute the metrics for the whole epoch using `evaluator.compute_metrics`
         2. Log the metrics for the whole epoch
         """
-        assert self.model is not None
-        metrics = self.model.compute_metrics(split=split)
+        assert self.module is not None
+        metrics = self.module.compute_metrics(split=split)
         if log_data:
             self.log_data(metrics, prefix=str(split))
-        self.model.reset_metrics(split=split)
+        self.module.reset_metrics(split=split)
         return metrics
 
     def log_data(
@@ -140,7 +145,7 @@ class PLModule(LightningModule):
         """
         for k, v in data.items():
             key = "/".join(
-                u for u in (prefix, self.model.task_id, k) if u is not None
+                u for u in (prefix, self.module.task_id, k) if u is not None
             )
             if is_loggable(v):
                 self.log(
@@ -148,7 +153,7 @@ class PLModule(LightningModule):
                     v,
                     on_step=on_step,
                     on_epoch=on_epoch,
-                    prog_bar=key in self.model.pbar_metrics,
+                    prog_bar=key in self.module.pbar_metrics,
                     sync_dist=sync_dist,
                 )
 
