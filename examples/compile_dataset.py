@@ -63,7 +63,7 @@ dm = MedQaDataModule(
     # keep only one positive doc
     max_pos_docs=10,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=10,
+    n_documents=100,
     # simple exact match
     # relevance_classifier=ScispaCyMatch(
     #     interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}

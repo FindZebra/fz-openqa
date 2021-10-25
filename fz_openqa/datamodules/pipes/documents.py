@@ -23,7 +23,7 @@ class SelectDocs(Nested):
         *,
         total: int,
         max_pos_docs: Optional[int] = 1,
-        pos_select_mode: str = "sample",
+        pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = False,
         prefix="document.",

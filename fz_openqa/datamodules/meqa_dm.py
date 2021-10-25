@@ -68,7 +68,7 @@ class MedQaDataModule(BaseDataModule):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 20, 20]
+    subset_size = [100, 50, 50]
 
     # number of options
     n_options = 4
@@ -228,6 +228,8 @@ class MedQaDataModule(BaseDataModule):
         select_documents = SelectDocs(
             total=n_documents,
             max_pos_docs=self.max_pos_docs,
+            pos_select_mode="first",
+            neg_select_mode="first",
             strict=False,
         )
 
@@ -324,7 +326,6 @@ class MedQaDataModule(BaseDataModule):
                         relevance_classifier=self.relevance_classifier,
                     ),
                 ),
-                # todo: check sorting /!\
                 ("Sort documents", SortDocuments()),
             ]
         )
