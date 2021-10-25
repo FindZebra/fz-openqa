@@ -81,7 +81,7 @@ class TestRelevanceClassifier(TestCase):
         self.assertFalse(output['document.match_score'][9][0])
 
     def test_metamap_match(self):
-        classifier = MetaMapMatch()
+        classifier = MetaMapMatch(model_name="en_core_sci_sm")
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
         self.assertFalse(output['document.match_score'][0][0])
@@ -106,7 +106,7 @@ class TestRelevanceClassifier(TestCase):
 
 
     def test_scispacy_match(self):
-        classifier = ScispaCyMatch(interpretable=True)
+        classifier = ScispaCyMatch(interpretable=True, model_name="en_core_sci_sm")
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertTrue(output['document.match_score'][0][0])

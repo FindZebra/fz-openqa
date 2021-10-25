@@ -1,0 +1,61 @@
+name: Unit tests
+
+on: [ push, pull_request ]
+
+jobs:
+
+  flake8-lint:
+    runs-on: ubuntu-18.04
+    name: Testing
+    steps:
+      - uses: actions/checkout@v2
+      - name: local-fix
+        run: |
+          # Hack to get setup-python to work on act
+          # (see https://github.com/nektos/act/issues/251)
+          if [ ! -f "/etc/lsb-release" ] ; then
+          echo "DISTRIB_RELEASE=18.04" > /etc/lsb-release
+          fi
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.8"
+
+      #----------------------------------------------
+      #  -----  install & configure poetry  -----
+      #----------------------------------------------
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      #----------------------------------------------
+      #       load cached venv if cache exists
+      #----------------------------------------------
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v2
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+      #----------------------------------------------
+      # install dependencies if cache does not exist
+      #----------------------------------------------
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+      #----------------------------------------------
+      # install your root project, if required
+      #----------------------------------------------
+      - name: Install library
+        run: poetry install --no-interaction
+      #----------------------------------------------
+      #              run test suite
+      #----------------------------------------------
+      - name: Run tests
+        run: |
+          rm -rf cache/
+          source .venv/bin/activate
+          python -m unittest discover
