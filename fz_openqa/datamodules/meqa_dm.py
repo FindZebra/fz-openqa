@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 from typing import Callable
 from typing import Optional
@@ -45,6 +46,8 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
+
+logger = logging.getLogger(__name__)
 
 
 class MedQaDataModule(BaseDataModule):
@@ -340,13 +343,8 @@ class MedQaDataModule(BaseDataModule):
         dset = self.dataset
         for k, block in pipe.blocks.items():
             # block = Sequential(PrintBatch(f"in: {k}"), block, PrintBatch(f"out: {k}"))
-            rich.print(f"[magenta] PROCESSING: {k}")
+            logger.info(f"Processing: {k}")
             dset = m(k, block)(dset)
-            rich.print(
-                f">>>> output: "
-                f"has_attr={'document.text' in dset['train'].column_names}, "
-                f"keys={dset['train'].column_names}"
-            )
         self.compiled_dataset = dset
 
         # cast tensor values

@@ -1,12 +1,15 @@
 import json
+import logging
 
 import datasets
 import rich
 import torch
+from rich.logging import RichHandler
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
+from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes import TextFormatter
@@ -14,6 +17,11 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
+
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
 
 datasets.set_caching_enabled(True)
 setup_safe_env()
@@ -58,13 +66,14 @@ dm = MedQaDataModule(
     n_documents=100,
     # simple exact match
     relevance_classifier=ScispaCyMatch(
-        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 4}
+        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
     ),
+    # relevance_classifier=ExactMatch(interpretable=True),
     compile_in_setup=False,
 )
 
 # prepare both the QA dataset and the corpus
-dm.subset_size = [100, 10, 10]
+dm.subset_size = [500, 100, 100]
 dm.prepare_data()
 dm.setup()
 

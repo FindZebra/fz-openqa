@@ -234,7 +234,7 @@ class AliasBasedMatch(RelevanceClassifier):
         super().__init__(**kwargs)
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
-        self.spacy_kwargs = spacy_kwargs or {"batch_size": 100, "n_process": 2}
+        self.spacy_kwargs = spacy_kwargs or {"batch_size": 100, "n_process": 1}
         if not lazy_setup:
             self._setup_models()
 
