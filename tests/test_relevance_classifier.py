@@ -45,105 +45,80 @@ b8 = {'question.text': "a year old man with transitional cell carcinoma of the b
       'answer.target': 0, 'answer.text': ['Ketotifen eye drops'], 'answer.synonyms': ['DNA Crosslinking'],
       "document.text": ["n eukaryotes requires condensation of chromatin.C. in prokaryotes is accomplished by a single DNA polymerase.D. is initiated at random sites in the genome.E. produces a polymer of deoxyribonucleoside monophosphates linked by 5′→3′-phosphodiester bonds. . What is the difference between DNA proofreading and repair?Case 6: Dark Urine and Yellow ScleraePatient Presentation: JF is a 13-year-old boy who presents with fatigue and yellow sclerae.Focused History: JF began treatment ~4 days ago with a sulfonamide antibiotic and a urinary analgesic for a urinary tract infection. He had been told that his urine would change color (become reddish) with the analgesic, but he reports that it has gotten darker (more brownish) over the", "", ""]}
 
-b9 = {'question.text': "a junior orthopaedic surgery resident is completing a carpal tunnel repair with the department chairman as the attending physician during the case the resident inadvertently cuts a flexor tendon the tendon is repaired without complication the attending tells the resident that the patient will do fine and there is no need to report this minor complication that will not harm the patient as he does not want to make the patient worry unnecessarily he tells the resident to leave this complication out of the operative report which of the following is the correct next action for the resident to take",
-      'answer.target': 0, 'answer.text': ['Tell the attending that he cannot fail to disclose this mistake'], 'answer.synonyms': [],
-      "document.text": ["professional norms of medicine (the Hippocratic oath, respect to patients and colleagues, ethical conduct, personal accountability, empathy, and altruism) are modeled in every personal encounter. It is imperative that all resident and attending surgeons under-stand that the medical students are observing them closely. When resident and attending surgeons model professional behavior, the hidden curriculum becomes a useful tool for professional devel-opment.147-150 This consistent modeling of professional behavior is one necessary component of leadership.During their clinical years, medical students experience both an exponential growth in knowledge and a measurable decline in empathy towards their patients. Initially, medical stu-dents are filled with excitement and wonder during their first patient encounters. The rapid pace of clinical work, acquisition of knowledge, and intense experiences create stress for the stu-dent, both positively and negatively. Scrubbing into the operat-ing room, witn", "", ""]}
-
 class TestRelevanceClassifier(TestCase):
     """test the RelevanceClassifier"""
 
     def setUp(self) -> None:
-        exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9]
+        exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8]
         self.batch = Collate(keys=None)(exs)
 
     def test_exact_match(self):
         classifier = ExactMatch(interpretable=True)
         output = classifier(copy(self.batch))
-        # {answer.text : "Post polio syndrome (PPS)" }. Should fail because only "Post polio syndrome" is written in the document
-        self.assertFalse(output['document.match_score'][0][0])
-        # {answer.text : "Thromboembolism" }. Should fail because Thromboembolism is not written in the document.
-        self.assertFalse(output['document.match_score'][1][0])
-        # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed because synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertFalse(output['document.match_score'][2][0])
-        # (b3) {answer.text : "Gallbladder cancer" }. Should fail because the "Gallbladder cancer" is not written in the document, though, the document is clearly about "Gallbladder cancer"
-        self.assertFalse(output['document.match_score'][1][0])
-        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.match_score'][4][0])
-        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][5][0])
-        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][6][0])
-        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][7][0])
-        # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.match_score'][8][0])
-        # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][9][0])
+        # {answer.text : "Post polio syndrome (PPS)" }. Only "Post polio syndrome" is written in the document so 0 matches are found
+        self.assertEqual(output['document.match_score'][0][0], 0)
+        # {answer.text : "Thromboembolism" }. "Thromboembolism" is not written in the document so 0 matches should be found.
+        self.assertEqual(output['document.match_score'][1][0], 0)
+        # (b2) {answer.text : "Cross-links between lysine residues" }. Synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string but as ExactMatch doesn't use synonyms 0 matches should be found.
+        self.assertEqual(output['document.match_score'][2][0], 0)
+        # (b3) {answer.text : "Gallbladder cancer" }. The "Gallbladder cancer" is not written in the document, though, the document is clearly about "Gallbladder cancer" so should find 0 matches
+        self.assertEqual(output['document.match_score'][3][0], 0)
+        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed on 3 matches, because ExactMatch matches the answer.text to the document
+        self.assertEqual(output['document.match_score'][4][0], 3)
+        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
+        self.assertEqual(output['document.match_score'][5][0], 0)
+        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
+        self.assertEqual(output['document.match_score'][6][0], 0)
+        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
+        self.assertEqual(output['document.match_score'][7][0], 0)
+        # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should find 0 matches
+        self.assertEqual(output['document.match_score'][8][0], 0)
 
     def test_metamap_match(self):
         classifier = MetaMapMatch()
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertFalse(output['document.match_score'][0][0])
+        self.assertEqual(output['document.match_score'][0][0], 0)
         # (b1) {answer.text : "Thromboembolism" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertFalse(output['document.match_score'][1][0])
+        self.assertEqual(output['document.match_score'][1][0], 0)
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed, though no CUI tag is associated, however, synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertTrue(output['document.match_score'][2][0])
-        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.match_score'][2])
-        self.assertTrue(output['document.match_score'][3][0])
-        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.match_score'][4][0])
-        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][5][0])
-        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][6][0])
-        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.match_score'][7][0])
-        # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.match_score'][8][0])
-        # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.match_score'][9][0])
-
+        self.assertEqual(output['document.match_score'][2][0], 2)
+        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to find 4 matches, e.g. match "Carcinoma of the gallbladder" to the document
+        self.assertEqual(output['document.match_score'][3][0], 4)
+        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch finds 4 matches to the answer.text to the document
+        self.assertEqual(output['document.match_score'][4][0], 4)
+        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
+        self.assertEqual(output['document.match_score'][5][0], 0)
+        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
+        self.assertEqual(output['document.match_score'][6][0], 0)
+        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. It's not possible to match the extracted meaning (aliases) to the document so should succeed on 0 matches
+        self.assertEqual(output['document.match_score'][7][0], 0)
+        # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should succeed on 0 matches
+        self.assertEqual(output['document.match_score'][8][0], 0)
 
     def test_scispacy_match(self):
         classifier = ScispaCyMatch(interpretable=True)
         output = classifier(copy(self.batch))
-        # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed because we extract aliases e.g. "Post polio syndrome", which is written in the document
-        self.assertTrue(output['document.match_score'][0][0])
-        # (b0) there is 1 match aliases so we test that there is a match above 0
-        self.assertGreater(len(output['document.match_on'][0][0]), 0)
+        # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed with 1 macth because we extract aliases e.g. "Post polio syndrome", which is written in the document
+        self.assertEqual(output['document.match_score'][0][0], 1)
         # (b0) testing that the document text where the match is found is equal to the expected one
         self.assertEqual(output['document.text'][0][0], b0["document.text"][0])
-        # (b1) {answer.text : "Thromboembolism" }. Should fail because "Thromboembolism" is not contained in the document
-        self.assertFalse(output['document.match_score'][1][0])
-        # (b2) {answer.text : "Cross-links between lysine residues" }. Should fail because "Lysine-rich" is written in the document, but ofc ExactMatch fails to recognise
-        self.assertTrue(output['document.match_score'][2][0])
-        # (b2) there is 2 matches aliases so we test that there is a match above 1
-        self.assertGreater(len(output['document.match_on'][2][0]), 1)
-        # (b2) testing that the document text where the match is found is equal to the expected one
-        self.assertEqual(output['document.text'][2][0], b2["document.text"][0])
-        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to match "Carcinoma of the gallbladder" to the document    self.assertFalse(output['document.match_score'][2])
-        self.assertTrue(output['document.match_score'][3][0])
-        # (b3) there is 4 matches aliases so we test that there is a match above 3
-        self.assertGreater(len(output['document.match_on'][3][0]), 3)
-        # (b3) testing that the document text where the match is found is equal to the expected one
-        self.assertEqual(output['document.text'][3][0], b3["document.text"][0])
-        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch matches the answer.text to the document
-        self.assertTrue(output['document.match_score'][4][0])
-        # (b4) there is 4 matches aliases so we test that there is a match above 3
-        self.assertGreater(len(output['document.match_on'][4][0]), 3)
-        # (b4) testing that the document text where the match is found is equal to the expected one
-        self.assertEqual(output['document.text'][4][0], b4["document.text"][0])
-        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][5][0])
-        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. Should fail, because the answer.text is too difficult to match to any passage of the corpus and extract meaning from
-        self.assertFalse(output['document.match_score'][6][0])
-        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        self.assertFalse(output['document.match_score'][7][0])
-        # (b8) {answer.text : "Ketotifen eye drops" }. Should fail, because the document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice
-        self.assertFalse(output['document.match_score'][8][0])
-        # (b9) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. Should fail, because it's not possible to match the extracted meaning (aliases) to the document
-        # todo: where is b9 ? :)
+        # (b1) {answer.text : "Thromboembolism" }. "Thromboembolism" is not contained in the document so there are 0 matches
+        self.assertEqual(output['document.match_score'][1][0], 0)
+        # (b2) {answer.text : "Cross-links between lysine residues" }. Should find 2 matches because "lysine" and "Lysine-rich" is written in the document
+        self.assertEqual(output['document.match_score'][2][0], 2)
+        # (b3) {answer.text : "Gallbladder cancer" }. The extract of aliases succeed to find 4 matches, e.g. the match "Carcinoma of the gallbladder" to the document
+        self.assertEqual(output['document.match_score'][3][0], 4)
+        # (b4) {answer.text : "Psoriatic arthritis" }. ExactMatch matches the answer.text to the document so should succeed on 4 matches
+        self.assertEqual(output['document.match_score'][4][0], 4)
+        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
+        self.assertEqual(output['document.match_score'][5][0], 0)
+        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
+        self.assertEqual(output['document.match_score'][6][0], 0)
+        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. It's not possible to match the extracted meaning (aliases) to the document, so should succeed on 0 matches
+        self.assertEqual(output['document.match_score'][7][0], 0)
+        # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should find 0 matches
+        self.assertEqual(output['document.match_score'][8][0], 0)
 
 class TestFindOne(TestCase):
     """Test the function find one"""
