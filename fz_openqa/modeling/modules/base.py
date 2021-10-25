@@ -135,8 +135,10 @@ class Module(nn.Module):
         Evaluate the model (step + step end) given a batch of data
         with targets
         """
-        step_output = self.step(batch, None, **kwargs)
-        return self.step_end(step_output, None, update_metrics=False)
+        step_output = self.step(batch, **kwargs)
+        return self.step_end(
+            step_output, None, update_metrics=False, filter_features=False
+        )
 
     def step(self, batch: Batch, **kwargs: Any) -> Batch:
         """Compute the forward pass of the model and return output
@@ -176,6 +178,7 @@ class Module(nn.Module):
         output: Batch,
         split: Optional[Split],
         update_metrics: bool = True,
+        filter_features: bool = True,
     ) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
@@ -199,7 +202,9 @@ class Module(nn.Module):
             self.update_metrics(output, split)
 
         # filter internal
-        return self._filter_features_from_output(output)
+        if filter_features:
+            output = self._filter_features_from_output(output)
+        return output
 
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:

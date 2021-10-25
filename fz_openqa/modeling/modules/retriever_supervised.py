@@ -1,15 +1,19 @@
 from typing import Any
 from typing import Optional
+from typing import Union
 
 import torch
+from omegaconf import DictConfig
 from torch.nn import functional as F
 from torchmetrics.classification import Accuracy
 
+from ...utils import maybe_instantiate
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.modules.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.metrics import SplitMetrics
+from fz_openqa.modeling.similarities import DotProduct
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
@@ -23,7 +27,7 @@ class RetrieverSupervised(Module):
     ]
 
     _required_eval_feature_names = [
-        "document.is_positive",
+        "document.match_score",
     ]
 
     # prefix for the logged metrics
@@ -36,9 +40,13 @@ class RetrieverSupervised(Module):
         "validation/retrieval/top10_Accuracy",
     ]
 
-    def __init__(self, similarity: Similarity, **kwargs):
+    def __init__(
+        self,
+        similarity: Union[DictConfig, Similarity] = DotProduct(),
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        self.similarity = similarity
+        self.similarity = maybe_instantiate(similarity)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -59,8 +67,9 @@ class RetrieverSupervised(Module):
 
         self.metrics = SplitMetrics(init_metric)
 
-    def _forward(self, batch: Batch, reshape: bool = True, **kwargs) -> Batch:
-        batch_size, n_documents, *_ = batch["document.input_ids"].shape
+    def _forward(
+        self, batch: Batch, _compute_similarity: bool = True, **kwargs
+    ) -> Batch:
         # flatten documents as [batch_size x n_documents]
         batch = flatten_first_dims(
             batch,
@@ -79,10 +88,12 @@ class RetrieverSupervised(Module):
             attention_mask=batch["document.attention_mask"],
         )
 
-        if reshape:
-            hd = hd.view(batch_size, n_documents, *hq.shape[1:])
+        output = {"_hq_": hq, "_hd_": hd}
 
-        return {"_hq_": hq, "_hd_": hd}
+        if _compute_similarity:
+            output["score"] = self.similarity(hq, hd)
+
+        return output
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         """
@@ -95,7 +106,7 @@ class RetrieverSupervised(Module):
         """
         # check features, check that the first document of each question is positive
         check_only_first_doc_positive(batch)
-        return self._forward(batch, reshape=False, **kwargs)
+        return self._forward(batch, _compute_similarity=False, **kwargs)
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
@@ -106,25 +117,28 @@ class RetrieverSupervised(Module):
         # compute the scoring matrix
         hq, hd = (output.pop(k) for k in ["_hq_", "_hd_"])
         score_matrix = self.similarity(hq, hd)  # [bs x bs*n_docs]
-
-        # compute targets
-        # assuming the target document is the first of each group
-        # the targets are:
-        # * 0*n_docs for the first `n_docs` items
-        # * 1*n_docs for the following `n_docs` items
-        # * ...
-        n_docs = hd.shape[0] // hq.shape[0]
-        targets = n_docs * (
-            torch.arange(start=0, end=len(score_matrix))
-            .long()
-            .to(score_matrix.device)
+        targets = self._generate_targets(
+            len(score_matrix),
+            n_docs=hd.shape[0] // hq.shape[0],
+            device=hd.device,
         )
 
         # compute the loss an prepare the output
         loss = F.cross_entropy(score_matrix, targets, reduction="mean")
         output["loss"] = loss.mean()
-        output["n_options"] = score_matrix.shape[1]  # store the batch size
+        output["n_options"] = score_matrix.shape[1]
         output["_logits_"] = score_matrix
         output["_targets_"] = targets
 
         return output
+
+    def _generate_targets(
+        self, batch_size, *, n_docs: int, device: torch.device
+    ):
+        """Generate targets. Assuming the target document is the first
+        of each group, the targets are:
+          * 0*n_docs for the first `n_docs` items
+          * 1*n_docs for the following `n_docs` items
+          * ..."""
+        one_to_bs = torch.arange(start=0, end=batch_size, device=device).long()
+        return n_docs * one_to_bs

@@ -5,10 +5,14 @@ import torch
 from fz_openqa.utils.datastruct import Batch
 
 
-def check_only_first_doc_positive(batch):
-    assert torch.all(batch["document.is_positive"][:, 0] == 1)
-    if batch["document.is_positive"].shape[1] > 1:
-        assert torch.all(batch["document.is_positive"][:, 1:] == 0)
+def check_only_first_doc_positive(batch, *, match_key="document.match_score"):
+    assert torch.all(
+        batch[match_key][:, 0] > 0
+    ), "Not all documents with index 0 are positive."
+    if batch[match_key].shape[1] > 1:
+        assert torch.all(
+            batch[match_key][:, 1:] == 0
+        ), "Not all documents with index >0 are negative."
 
 
 def expand_and_flatten(batch: Batch, n_docs, *, keys: List[str]) -> Batch:
