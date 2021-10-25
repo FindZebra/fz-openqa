@@ -251,9 +251,9 @@ class MedQaDataModule(BaseDataModule):
                 # A, B: collate QA fields
                 ("Collate Q&A + document indexes", collate_qad),
                 # C: select documents
-                ("Select documents", select_documents),
+                # ("Select documents", select_documents),
                 # D: Fetch all document fields
-                ("Fetch document data", fetch_documents),
+                # ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
         )
