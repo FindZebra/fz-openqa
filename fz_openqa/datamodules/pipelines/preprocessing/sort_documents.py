@@ -11,9 +11,9 @@ class SortDocuments(Sequential):
         super().__init__(
             FilterKeys(KeyWithPrefix("document.")),
             Nested(
-                Sequential(
-                    Sort(key="document.retrieval_score", reversed=True),
-                    Sort(key="document.match_score", reversed=True),
+                Sort(
+                    keys=["document.match_score", "document.retrieval_score"],
+                    reversed=True,
                 )
             ),
             id="sort-documents",

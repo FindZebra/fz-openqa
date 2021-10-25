@@ -33,9 +33,8 @@ class PostprocessPipe(BlockSequential):
         else:
             # sort the documents based on score and `match_score`
             sorter = Nested(
-                Sequential(
-                    Sort(key="document.retrieval_score"),
-                    Sort(key="document.match_score"),
+                Sort(
+                    keys=["document.match_score", "document.retrieval_score"]
                 ),
                 filter=KeyWithPrefix("document."),
             )
