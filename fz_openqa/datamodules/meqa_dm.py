@@ -226,25 +226,25 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # C. select documents
-        n_documents = self.n_documents or self.n_retrieved_documents
-        select_documents = SelectDocs(
-            total=n_documents,
-            max_pos_docs=self.max_pos_docs,
-            strict=False,
-        )
+        # n_documents = self.n_documents or self.n_retrieved_documents
+        # select_documents = SelectDocs(
+        #    total=n_documents,
+        #    max_pos_docs=self.max_pos_docs,
+        #    strict=False,
+        # )
 
         # D. fetch documents attributes (input_ids)
-        fetch_documents = UpdateWith(
-            Sequential(
-                FilterKeys(lambda key: key in ["document.row_idx"]),
-                AsFlatten(
-                    FeatchDocuments(
-                        dataset=self.corpus.dataset,
-                        collate_pipe=self.corpus.collate_pipe,
-                    )
-                ),
-            )
-        )
+        # fetch_documents = UpdateWith(
+        #    Sequential(
+        #        FilterKeys(lambda key: key in ["document.row_idx"]),
+        #        AsFlatten(
+        #            FeatchDocuments(
+        #                dataset=self.corpus.dataset,
+        #                collate_pipe=self.corpus.collate_pipe,
+        #            )
+        #        ),
+        #    )
+        # )
 
         return BlockSequential(
             [
@@ -347,7 +347,7 @@ class MedQaDataModule(BaseDataModule):
             # block = Sequential(PrintBatch(f"in: {k}"), block, PrintBatch(f"out: {k}"))
             logger.info(f"Processing: {k}")
             dset = m(k, block)(dset)
-            run_time_block[k] = time() - t0
+            # run_time_block[k] = time() - t0
         self.compiled_dataset = dset
 
         # cast tensor values
@@ -364,7 +364,7 @@ class MedQaDataModule(BaseDataModule):
         if self.verbose:
             print_size_difference(self.dataset, self.compiled_dataset)
 
-        return run_time_block
+        # return run_time_block
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)
