@@ -16,7 +16,6 @@ from typing import Tuple
 import dill
 import numpy as np
 import spacy
-import torch
 from pydantic import BaseModel
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
@@ -26,8 +25,8 @@ from spacy.tokens import Doc
 
 from ..utils.filter_keys import KeyWithPrefix
 from .nesting import nested_list
-from .static import DISCARD_TUIs
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -78,12 +77,44 @@ def find_one(
     )
 
 
+def find_all(
+    text: str, queries: Sequence[Any], lower_case_queries: bool = True
+) -> List:
+    """Find all matching queries in the document.
+    There are one returned item per match in the document."""
+    assert isinstance(text, str)
+    if len(queries) == 0:
+        return []
+    if len(text) == 0:
+        return []
+
+    if lower_case_queries:
+        queries = {q.lower() for q in queries}
+
+    # re.search: Scan through string looking for a location where
+    # the regular expression pattern produces a match, and return a
+    # corresponding MatchObject instance. Return None if no position
+    # in the string matches the pattern; note that this is different
+    # from finding a zero-length match at some point in the string.
+    # re.escape: Return string with all non-alphanumerics backslashed;
+    # this is useful if you want to match an arbitrary literal string
+    # that may have regular expression metacharacters in it.
+    # re.IGNORECASE: Perform case-insensitive matching
+    return re.findall(
+        re.compile(
+            "|".join(re.escape(x) for x in queries),
+            re.IGNORECASE,
+        ),
+        text,
+    )
+
+
 class RelevanceClassifier(Pipe):
     def __init__(
         self,
         answer_prefix: str = "answer.",
         document_prefix: str = "document.",
-        output_key: str = "document.is_positive",
+        output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
     ):
@@ -93,11 +124,17 @@ class RelevanceClassifier(Pipe):
         self.interpretable = interpretable
         self.interpretation_key = interpretation_key
 
-    def classify(self, pair: Pair) -> bool:
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        input_keys += [self.output_key]
+        if self.interpretable:
+            input_keys += [self.interpretation_key]
+        return input_keys
+
+    def classify(self, pair: Pair) -> int:
         """Classify each pair."""
         raise NotImplementedError
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
         """Classify each pair."""
         raise NotImplementedError
 
@@ -167,21 +204,20 @@ class RelevanceClassifier(Pipe):
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
-    def classify(self, pair: Pair) -> bool:
-        doc_text = pair.document["document.text"].lower()
+    def classify(self, pair: Pair) -> int:
+        doc_text = pair.document["document.text"]
         answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index].lower()
+        answer_text = pair.answer["answer.text"][answer_index]
 
-        return answer_text in doc_text
+        return len(find_all(doc_text, [answer_text]))
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
-        doc_text = pair.document["document.text"].lower()
+    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
+        doc_text = pair.document["document.text"]
         answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index].lower()
+        answer_text = pair.answer["answer.text"][answer_index]
 
-        match = answer_text in doc_text
-        values = [answer_text] if match else []
-        return (match, values)
+        matches = find_all(doc_text, [answer_text])
+        return (len(matches), matches)
 
     # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
     #     """Generate the field `pair.answer["aliases"]`"""
@@ -199,11 +235,13 @@ class AliasBasedMatch(RelevanceClassifier):
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         lazy_setup: bool = True,
+        spacy_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
+        self.spacy_kwargs = spacy_kwargs or {"batch_size": 100, "n_process": 1}
         if not lazy_setup:
             self._setup_models()
 
@@ -266,13 +304,13 @@ class AliasBasedMatch(RelevanceClassifier):
         )
         return model
 
-    def classify(self, pair: Pair) -> bool:
+    def classify(self, pair: Pair) -> int:
         """
         Classifying retrieved documents as either positive or negative
         """
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
-        return find_one(doc_text, answer_aliases, sort_by=None)
+        return len(find_all(doc_text, answer_aliases))
 
     def get_linked_entities(self, entity: Entity) -> Iterable[LinkedEntity]:
         for cui in entity._.kb_ents:
@@ -281,14 +319,12 @@ class AliasBasedMatch(RelevanceClassifier):
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[bool, List[str]]:
+    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
 
-        doc_text = doc_text.lower()
-        matches = [a for a in answer_aliases if a.lower() in doc_text]
-
-        return (len(matches) > 0, matches)
+        matches = find_all(text=doc_text, queries=answer_aliases)
+        return (len(matches), matches)
 
     @staticmethod
     def _extract_answer_text(pair: Pair) -> str:
@@ -364,7 +400,9 @@ class MetaMapMatch(AliasBasedMatch):
         synonym_texts = map(self._extract_synonym_text, pairs)
 
         # batch processing of texts
-        synonym_docs: List[Doc] = self.model.pipe(synonym_texts)
+        synonym_docs: List[Doc] = self.model.pipe(
+            synonym_texts, **self.spacy_kwargs
+        )
 
         # join the aliases
         for pair, answer, synonym_doc in zip_longest(
@@ -399,7 +437,11 @@ class ScispaCyMatch(AliasBasedMatch):
         synonym_texts = map(self._extract_synonym_text, pairs)
 
         # batch processing of texts
-        docs = list(self.model.pipe(chain(answer_texts, synonym_texts)))
+        docs = list(
+            self.model.pipe(
+                chain(answer_texts, synonym_texts), **self.spacy_kwargs
+            )
+        )
         answer_docs, synonym_docs = docs[:n], docs[n:]
 
         # join the aliases

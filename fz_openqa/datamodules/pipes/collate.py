@@ -58,6 +58,9 @@ class Collate(Pipe):
             keys = set.intersection(keys, _keys)
         return keys
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return self.keys or input_keys
+
 
 class DeCollate(Pipe):
     def __call__(self, batch: Batch) -> List[Dict[str, Any]]:

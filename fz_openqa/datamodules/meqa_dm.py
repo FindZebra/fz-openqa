@@ -1,4 +1,4 @@
-from collections import OrderedDict
+import logging
 from functools import partial
 from time import time
 from typing import Callable
@@ -16,23 +16,26 @@ from .corpus_dm import CorpusDataModule
 from .datasets import medqa
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
-from .pipelines.collate import MaybeSearchDocuments
+from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
+from .pipelines.preprocessing import SearchDocuments
+from .pipelines.preprocessing import SortDocuments
+from .pipes import AsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
-from .pipes import DeCollate
-from .pipes import Itemize
+from .pipes import FilterKeys
 from .pipes import Parallel
 from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
+from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import UpdateWith
-from .pipes.tokenizer import CleanupPadTokens
+from .pipes.search import FeatchDocuments
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
 from .utils.fingerprintable_map import FingerprintableMap
-from .utils.transformations import set_example_idx
+from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (
     MaybeCollateDocuments,
@@ -45,6 +48,8 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
+
+logger = logging.getLogger(__name__)
 
 
 class MedQaDataModule(BaseDataModule):
@@ -167,7 +172,7 @@ class MedQaDataModule(BaseDataModule):
 
         # add an index column
         dataset = dataset.map(
-            set_example_idx,
+            partial(set_row_idx, key="question.row_idx"),
             batched=False,
             num_proc=self.num_proc,
             with_indices=True,
@@ -210,12 +215,6 @@ class MedQaDataModule(BaseDataModule):
         # collate questions and couments
         base_qa_collate_pipe = self.get_qa_collate_pipe()
 
-        # get a pipe to search document only if `n_retrieved_documents>0`
-        # and documents are not already stored
-        search_docs_pipe = MaybeSearchDocuments(
-            self.n_retrieved_documents, corpus=self.corpus
-        )
-
         # merge Q&A + documents (collate if available, else search)
         collate_qad = Sequential(
             Parallel(
@@ -224,21 +223,37 @@ class MedQaDataModule(BaseDataModule):
                 # B. this one collate the question and answer fields
                 base_qa_collate_pipe,
             ),
-            # C. Query the corpus for documents, only if A. did not return any document
-            UpdateWith(search_docs_pipe),
         )
 
-        # get the post processing blocks (RelevanceClassifier + doc selection)
-        postprocessing = (
-            (k, UpdateWith(b)) for k, b in self.postprocessing.blocks.items()
+        # C. select documents
+        n_documents = self.n_documents or self.n_retrieved_documents
+        select_documents = SelectDocs(
+            total=n_documents,
+            max_pos_docs=self.max_pos_docs,
+            strict=False,
+        )
+
+        # D. fetch documents attributes (input_ids)
+        fetch_documents = UpdateWith(
+            Sequential(
+                FilterKeys(lambda key: key in ["document.row_idx"]),
+                AsFlatten(
+                    FeatchDocuments(
+                        dataset=self.corpus.dataset,
+                        collate_pipe=self.corpus.collate_pipe,
+                    )
+                ),
+            )
         )
 
         return BlockSequential(
             [
-                # A, B, C
-                ("Collate Q&A + Search documents", collate_qad),
-                # D: Classify documents +  F: select documents
-                *postprocessing,
+                # A, B: collate QA fields
+                ("Collate Q&A + document indexes", collate_qad),
+                # C: select documents
+                ("Select documents", select_documents),
+                # D: Fetch all document fields
+                ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
         )
@@ -256,7 +271,12 @@ class MedQaDataModule(BaseDataModule):
         )
         # collate simple attributes
         simple_attr_pipe = CollateAsTensor(
-            keys=["idx", "question.idx", "answer.target", "answer.n_options"]
+            keys=[
+                "question.row_idx",
+                "question.idx",
+                "answer.target",
+                "answer.n_options",
+            ]
         )
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
@@ -288,21 +308,30 @@ class MedQaDataModule(BaseDataModule):
         deleting the the dataset, see issue #114.
         """
 
-        # unpack the Q&A collate pipe and the postprocessing
-        (qa_desc, qa_collate), *post = self.collate_pipe.blocks.items()
-
-        # wrap p1 to avoid casting issues and avoid storing padding
-        wrapped_qa_collate = Sequential(
-            DeCollate(),
-            qa_collate,
-            Itemize(),
-            CleanupPadTokens(self.tokenizer),
+        # Search the document and classify them
+        pipe = BlockSequential(
+            [
+                (
+                    "Search documents",
+                    SearchDocuments(
+                        corpus=self.corpus,
+                        n_documents=self.n_retrieved_documents,
+                    ),
+                ),
+                (
+                    "Classify documents",
+                    ClassifyDocuments(
+                        dataset=self.corpus.dataset,
+                        relevance_classifier=self.relevance_classifier,
+                    ),
+                ),
+                # todo: check sorting /!\
+                ("Sort documents", SortDocuments()),
+            ]
         )
 
-        # store
-        blocks = OrderedDict([(qa_desc, wrapped_qa_collate), *post])
-
         # create a map operator on the fly for a given key and pipe
+
         def m(desc, block):
             # run dataset.map() with extra steps to allow safe caching and multiprocessing
             return FingerprintableMap(
@@ -314,10 +343,9 @@ class MedQaDataModule(BaseDataModule):
             )
 
         dset = self.dataset
-        run_time_block = {}
-        for k, block in blocks.items():
-            # block = Sequential(block, PrintBatch(f"out: {k}"))
-            t0 = time()
+        for k, block in pipe.blocks.items():
+            # block = Sequential(PrintBatch(f"in: {k}"), block, PrintBatch(f"out: {k}"))
+            logger.info(f"Processing: {k}")
             dset = m(k, block)(dset)
             run_time_block[k] = time() - t0
         self.compiled_dataset = dset

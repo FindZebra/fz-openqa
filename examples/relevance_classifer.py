@@ -190,6 +190,6 @@ for i, eg in enumerate(exs):
             b["document.match_on"][i][0] if "document.match_on" in b else None
         )
         rich.print(
-            f"> {type(c).__name__}: is_positive={b['document.is_positive'][i][0]}, "
+            f"> {type(c).__name__}: match_score={b['document.match_score'][i][0]}, "
             f"match_on={_match_on}"
         )

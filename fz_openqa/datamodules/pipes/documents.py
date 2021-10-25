@@ -16,6 +16,8 @@ ARE_DOCS_SELECTED_KEY = "__doc_selected__"
 
 
 class SelectDocs(Nested):
+    "Select `total` documents with `max_pos_docs` positive documents (i.e. document.match_score>0)"
+
     def __init__(
         self,
         *,
@@ -26,25 +28,27 @@ class SelectDocs(Nested):
         strict: bool = False,
         prefix="document.",
     ):
-        pipe = SelectDocsEg(
+        pipe = SelectDocsOneEg(
             total=total,
             max_pos_docs=max_pos_docs or total,
             pos_select_mode=pos_select_mode,
             neg_select_mode=neg_select_mode,
             strict=strict,
         )
-        super(SelectDocs, self).__init__(
-            pipe=pipe, filter=lambda key: str(key).startswith(prefix)
-        )
+
+        def _filter(key):
+            return str(key).startswith(prefix)
+
+        super(SelectDocs, self).__init__(pipe=pipe, filter=_filter)
 
 
-class SelectDocsEg(Pipe):
+class SelectDocsOneEg(Pipe):
     def __init__(
         self,
         *,
         total: int,
         max_pos_docs: int = 1,
-        pos_select_mode: str = "sample",
+        pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
     ):
@@ -54,8 +58,11 @@ class SelectDocsEg(Pipe):
         self.neg_select_mode = neg_select_mode
         self.strict = strict
 
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return input_keys + [ARE_DOCS_SELECTED_KEY]
+
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        is_positive = batch["document.is_positive"]
+        is_positive = [x > 0 for x in batch["document.match_score"]]
         assert len(is_positive) >= self.total
 
         # get the positive indexes
