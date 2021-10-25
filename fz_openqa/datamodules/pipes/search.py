@@ -134,6 +134,7 @@ class FeatchDocuments(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         # todo: check dataset fingerprint
 
+        # get the `dataset` indexes
         indexes = (int(idx) for idx in batch[self.index_key])
 
         if self.keys is not None and len(self.keys) == 1:

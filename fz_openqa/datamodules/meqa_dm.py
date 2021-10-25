@@ -14,24 +14,23 @@ from .corpus_dm import CorpusDataModule
 from .datasets import medqa
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
+from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
+from .pipelines.preprocessing import SearchDocuments
+from .pipelines.preprocessing import SortDocuments
 from .pipes import AsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
-from .pipes import CopyBatch
 from .pipes import FilterKeys
 from .pipes import Parallel
-from .pipes import PrintBatch
 from .pipes import RelevanceClassifier
 from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import UpdateWith
 from .pipes.search import FeatchDocuments
-from .pipes.search import SearchCorpus
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
-from .utils.filter_keys import KeyIn
 from .utils.fingerprintable_map import FingerprintableMap
 from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
@@ -168,7 +167,7 @@ class MedQaDataModule(BaseDataModule):
 
         # add an index column
         dataset = dataset.map(
-            set_row_idx,
+            partial(set_row_idx, key="question.row_idx"),
             batched=False,
             num_proc=self.num_proc,
             with_indices=True,
@@ -267,7 +266,12 @@ class MedQaDataModule(BaseDataModule):
         )
         # collate simple attributes
         simple_attr_pipe = CollateAsTensor(
-            keys=["idx", "question.idx", "answer.target", "answer.n_options"]
+            keys=[
+                "question.row_idx",
+                "question.idx",
+                "answer.target",
+                "answer.n_options",
+            ]
         )
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
@@ -304,64 +308,20 @@ class MedQaDataModule(BaseDataModule):
             [
                 (
                     "Search documents",
-                    Sequential(
-                        SearchCorpus(
-                            self.corpus, k=self.n_retrieved_documents
-                        ),
-                        FilterKeys(
-                            KeyIn(
-                                [
-                                    "document.row_idx",
-                                    "document.retrieval_score",
-                                ]
-                            )
-                        ),
+                    SearchDocuments(
+                        corpus=self.corpus,
+                        n_documents=self.n_retrieved_documents,
                     ),
                 ),
                 (
                     "Classify documents",
-                    Sequential(
-                        FilterKeys(
-                            KeyIn(
-                                [
-                                    "document.row_idx",
-                                    "question.text",
-                                    "answer.text",
-                                    "answer.target",
-                                ]
-                            )
-                        ),
-                        # todo: find out why "document.text" passes through
-                        CopyBatch(),
-                        UpdateWith(
-                            Sequential(
-                                FilterKeys(KeyIn(["document.row_idx"])),
-                                AsFlatten(
-                                    FeatchDocuments(
-                                        dataset=self.corpus.dataset,
-                                        keys=["document.text"],
-                                    )
-                                ),
-                            )
-                        ),
-                        FilterKeys(
-                            KeyIn(
-                                [
-                                    "document.text",
-                                    "document.question.text",
-                                    "answer.text",
-                                    "answer.target",
-                                ]
-                            )
-                        ),
-                        self.relevance_classifier,
-                        FilterKeys(
-                            KeyIn(
-                                ["document.match_on", "document.match_score"]
-                            )
-                        ),
+                    ClassifyDocuments(
+                        dataset=self.corpus.dataset,
+                        relevance_classifier=self.relevance_classifier,
                     ),
                 ),
+                # todo: check sorting /!\
+                ("Sort documents", SortDocuments()),
             ]
         )
 
@@ -381,13 +341,11 @@ class MedQaDataModule(BaseDataModule):
         for k, block in pipe.blocks.items():
             # block = Sequential(PrintBatch(f"in: {k}"), block, PrintBatch(f"out: {k}"))
             rich.print(f"[magenta] PROCESSING: {k}")
-            rich.print(
-                f">>>> input: has_attr={'document.text' in dset['train'].column_names}"
-            )
-            # rich.print(dset["train"].column_names)
             dset = m(k, block)(dset)
             rich.print(
-                f">>>> output: has_attr={'document.text' in dset['train'].column_names}"
+                f">>>> output: "
+                f"has_attr={'document.text' in dset['train'].column_names}, "
+                f"keys={dset['train'].column_names}"
             )
         self.compiled_dataset = dset
 

@@ -228,11 +228,13 @@ class AliasBasedMatch(RelevanceClassifier):
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         lazy_setup: bool = True,
+        spacy_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
+        self.spacy_kwargs = spacy_kwargs or {"batch_size": 100, "n_process": 2}
         if not lazy_setup:
             self._setup_models()
 
@@ -391,7 +393,9 @@ class MetaMapMatch(AliasBasedMatch):
         synonym_texts = map(self._extract_synonym_text, pairs)
 
         # batch processing of texts
-        synonym_docs: List[Doc] = self.model.pipe(synonym_texts)
+        synonym_docs: List[Doc] = self.model.pipe(
+            synonym_texts, **self.spacy_kwargs
+        )
 
         # join the aliases
         for pair, answer, synonym_doc in zip_longest(
@@ -426,7 +430,11 @@ class ScispaCyMatch(AliasBasedMatch):
         synonym_texts = map(self._extract_synonym_text, pairs)
 
         # batch processing of texts
-        docs = list(self.model.pipe(chain(answer_texts, synonym_texts)))
+        docs = list(
+            self.model.pipe(
+                chain(answer_texts, synonym_texts), **self.spacy_kwargs
+            )
+        )
         answer_docs, synonym_docs = docs[:n], docs[n:]
 
         # join the aliases
