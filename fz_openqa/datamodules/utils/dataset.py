@@ -48,5 +48,5 @@ def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
 
 def filter_questions_by_pos_docs(row, *, max_pos_docs: Optional[int]):
     max_pos_docs = max_pos_docs or 1e20
-    n = sum(row["document.match_score"])
+    n = sum(row["document.match_score"] > 0)
     return n > 0 and n <= max_pos_docs
