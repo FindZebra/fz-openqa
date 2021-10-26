@@ -1,12 +1,12 @@
 defaults:
-  - evaluator: ir_gold_supervised.yaml
+  - module: ???
+  - backbone: bert_linear_head_cls.yaml
   - bert: bio_bert.yaml
 
-_target_: fz_openqa.modeling.models.qa_retriever.QaRetriever
+_target_: fz_openqa.modeling.Model
 
 bert_id: ${model.bert.pretrained_model_name_or_path}
-hidden_size: 32
 cache_dir: ${cache_dir}
+hidden_size: 128
 lr: 2e-5
 weight_decay: 1e-4
-dropout: 0

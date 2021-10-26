@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -57,7 +58,7 @@ def is_valid_seq_attr(x: BatchValue, ref: BatchValue):
     return all(check_single(xx, xref) for xx, xref in zip(x, ref))
 
 
-def padless_cat(
+def _padless_cat(
     a: TorchBatch,
     b: TorchBatch,
     pad_token: Any,
@@ -105,6 +106,26 @@ def padless_cat(
             )
             assert all(xa == xb for xa, xb in zip(a[key], b[key])), err_msg
             output[key] = a[key]
+
+    return output
+
+
+def padless_cat(
+    batches: List[TorchBatch],
+    *,
+    pad_token: Any,
+    master_key: str = "input_ids",
+    aux_pad_tokens: Optional[Dict[str, Any]] = None,
+) -> TorchBatch:
+    output, batches = batches[0], batches[1:]
+    for b in batches:
+        output = _padless_cat(
+            output,
+            b,
+            pad_token=pad_token,
+            master_key=master_key,
+            aux_pad_tokens=aux_pad_tokens,
+        )
 
     return output
 

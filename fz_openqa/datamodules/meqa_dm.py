@@ -68,7 +68,7 @@ class MedQaDataModule(BaseDataModule):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 20, 20]
+    subset_size = [100, 50, 50]
 
     # number of options
     n_options = 4
@@ -151,7 +151,7 @@ class MedQaDataModule(BaseDataModule):
         if self.compile_in_setup:
             # todo: move this in a callback, so a model can be used
             self.build_index()
-            self.compile_dataset(num_proc=self.num_proc)
+            self.compile_dataset(num_proc=self.num_proc, verbose=self.verbose)
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -228,6 +228,8 @@ class MedQaDataModule(BaseDataModule):
         select_documents = SelectDocs(
             total=n_documents,
             max_pos_docs=self.max_pos_docs,
+            pos_select_mode="first",
+            neg_select_mode="first",
             strict=False,
         )
 
@@ -296,7 +298,8 @@ class MedQaDataModule(BaseDataModule):
         self,
         filter_unmatched: bool = True,
         num_proc: int = 1,
-        batch_size: Optional[int] = 100,
+        batch_size: Optional[int] = 10,
+        verbose: bool = False,
     ):
         """
         Process the whole dataset with `collate_fn` and store
@@ -323,7 +326,6 @@ class MedQaDataModule(BaseDataModule):
                         relevance_classifier=self.relevance_classifier,
                     ),
                 ),
-                # todo: check sorting /!\
                 ("Sort documents", SortDocuments()),
             ]
         )
@@ -338,6 +340,7 @@ class MedQaDataModule(BaseDataModule):
                 num_proc=num_proc,
                 batch_size=batch_size,
                 desc=f"Compiling: {desc}",
+                verbose=verbose,
             )
 
         dset = self.dataset
@@ -358,7 +361,7 @@ class MedQaDataModule(BaseDataModule):
             self.compiled_dataset = self.compiled_dataset.filter(fn)
 
         # print the difference in length for each split
-        if self.verbose:
+        if verbose:
             print_size_difference(self.dataset, self.compiled_dataset)
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):

@@ -19,13 +19,7 @@ def is_loggable(x: Any):
 
 
 def maybe_instantiate(conf_or_obj: Union[Any, DictConfig], **kwargs):
-    if isinstance(
-        conf_or_obj,
-        (
-            DictConfig,
-            dict,
-        ),
-    ):
+    if isinstance(conf_or_obj, (DictConfig, dict)):
         return instantiate(conf_or_obj, **kwargs)
 
     return conf_or_obj

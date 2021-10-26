@@ -6,7 +6,7 @@ FindZebra aims at improving the diagnosis of rare disease using information retr
 
 The FindZebra corpus contains 30,658 individual disease descriptions. FindZebra's diagnosis tool consists of retrieving the right disease description (evidence) based on a patient description (query). Therefore FindZebra essentially aims at solving a retrieval problem, which can be framed as Open Domain QA (OpenQA).
 
-The [MedQA](https://arxiv.org/pdf/2009.13081.pdf) dataset, which is now mapped to the FZ corpus will be exploited in this project. The MedQA authors introduced a simple basline model using a BM25 retriever and a bidirectional GRU reader model.
+The [MedQA](https://arxiv.org/pdf/2009.13081.pdf) dataset, which is now mapped to the FZ corpus will be exploited in this project. The MedQA authors introduced a simple basline Module using a BM25 retriever and a bidirectional GRU reader Module.
 
 In this project, we will 1. attempt to improve upon the baseline on MedQA and 2. improve FindZebra retrieval using OpenQA.
 
@@ -37,7 +37,7 @@ In this project, we will 1. attempt to improve upon the baseline on MedQA and 2.
 
 Reading comprehension (i.e. SQUAD dataset) aims at answering a question $\mathbf{q}$ based on a *known* evidence document $\mathbf{d}$.
 
-BERT-based models [`BERT`, `RoBERTa`, `ALBERT`] hold the [top of the leaderboard](https://paperswithcode.com/sota/question-answering-on-squad20). A linear layer (*head*) is added on top of the BERT model to extract features that will used to build the *reader* $p_\theta(a | q, d)$.
+BERT-based models [`BERT`, `RoBERTa`, `ALBERT`] hold the [top of the leaderboard](https://paperswithcode.com/sota/question-answering-on-squad20). A linear layer (*head*) is added on top of the BERT Module to extract features that will used to build the *reader* $p_\theta(a | q, d)$.
 
 #### Implementing the *reader* $p_\theta(\mathbf{a} | \mathbf{q}, \mathbf{d})$
 
@@ -66,7 +66,7 @@ $$p_\theta(a | \mathbf{q}, \mathbf{d}, \mathbf{A} ) := \frac{e^{f_\theta(\mathbf
 
 ### Information Retrieval
 
-In Open Domain Question Answering, a large corpus of documents is available, and an information retrieval (IR) system is used to noisily retrieve a set of evidence given the question. The reading comprehension model thereafter answers the question based on the noisy evidence documents. All IR models rely on a function $\mathrm{Sim}: \mathcal{X}, \mathcal{X} \rightarrow \mathcal{R}$ that to score the documents $\mathbf{d}$ given the query $\mathbf{q}$. Using the $S$, we can formally define the *retriever* as
+In Open Domain Question Answering, a large corpus of documents is available, and an information retrieval (IR) system is used to noisily retrieve a set of evidence given the question. The reading comprehension Module thereafter answers the question based on the noisy evidence documents. All IR models rely on a function $\mathrm{Sim}: \mathcal{X}, \mathcal{X} \rightarrow \mathcal{R}$ that to score the documents $\mathbf{d}$ given the query $\mathbf{q}$. Using the $S$, we can formally define the *retriever* as
 
 $$p_\phi(\mathbf{d} | \mathbf{q}) :=  \frac{e^{\mathrm{Sim}(\mathbf{q}, \mathbf{d})}}{\sum_{\mathbf{d'} \in \mathcal{C}} e^{\mathrm{Sim}(\mathbf{q}, \mathbf{d'})}}$$
 
@@ -112,7 +112,7 @@ where the similarity metric $d$ can be choosen as the dot-product, the cosine si
 
 Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive.
 
-ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
+ColBERT introduces a *late interaction* Module based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
 
 $$ \rm{MaxSim}(q, p):=\sum_{i \in\left[\left|\mathbf{h^q}\right|\right]} \max _{j \in\left[\left|\mathbf{h^{d}}\right|\right]} d(\mathbf{h^q}_{i}, \mathbf{h^d}_{j})$$
 
@@ -127,7 +127,7 @@ where the similarity metric $d$ can be choosen as the dot-product, the cosine si
 
 > todo
 
-##### [REALM: Retrieval-Augmented Language Model Pre-Training](https://arxiv.org/abs/2002.08909)
+##### [REALM: Retrieval-Augmented Language Module Pre-Training](https://arxiv.org/abs/2002.08909)
 
 > todo
 
@@ -188,7 +188,7 @@ Download data [here](https://drive.google.com/drive/folders/1tS-O1Q7mkGHahg675Hi
 
 In the MedQA paper, the authors introduced a baseline based on BM25 for the IR step and RoBERTa for the reading comprehension step.
 
-We aim at improving the existing along three axes: 1. using ColBERT for the IR step, 2. using the FZxMedQA (triplets) to aid the optimization of the IR model, 3. using BERT/ColBERT for the *reding* step
+We aim at improving the existing along three axes: 1. using ColBERT for the IR step, 2. using the FZxMedQA (triplets) to aid the optimization of the IR Module, 3. using BERT/ColBERT for the *reding* step
 
 ### A. Reader $p_\theta(\mathbf{a} | \mathbf{q}, \mathbf{d})$
 
@@ -196,36 +196,36 @@ By contrast with SQUAD, MedQA involves a multiple-choice question with P=4 candi
 
 $$p_\theta(\mathbf{a_i} | \mathbf{q}, \mathbf{d}, \mathbf{A} ) := \frac{\exp(f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ))}{\sum_p \exp(f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ))}$$
 
-However, we remain free to choose our own implementation for $f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} )$. BERT (a simpler BiGRU model can be substitued for development)  can be used to compute the contextualized reresentations $\mathbf{h^d} := \rm{BERT}(\mathbf{d})$ and $\mathbf{h^{qa_i}} := \rm{BERT}(\mathbf{qa_i})$. We are free to choose an interaction model as:
+However, we remain free to choose our own implementation for $f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} )$. BERT (a simpler BiGRU Module can be substitued for development)  can be used to compute the contextualized reresentations $\mathbf{h^d} := \rm{BERT}(\mathbf{d})$ and $\mathbf{h^{qa_i}} := \rm{BERT}(\mathbf{qa_i})$. We are free to choose an interaction Module as:
 
 \begin{align}
-\text{a. document level model:}\qquad f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ) & := d(\mathbf{h^{qa_i}_\rm{CLS}}, \mathbf{h^d_\rm{CLS}}) \\
-\text{b. token level model       :}\qquad f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ) & := \rm{MaxSim}(\mathbf{h_{qa_i}}, \mathbf{h_d})
+\text{a. document level Module:}\qquad f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ) & := d(\mathbf{h^{qa_i}_\rm{CLS}}, \mathbf{h^d_\rm{CLS}}) \\
+\text{b. token level Module       :}\qquad f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} ) & := \rm{MaxSim}(\mathbf{h_{qa_i}}, \mathbf{h_d})
 \end{align}
 
 At the token-level, the `MaxSim` can alternatively be replaced by a dense version (attention) since the *reader* is not constrained by scalability.
 
 ### B. Retriever  $p_\phi(\mathbf{d} | \mathbf{q})$
 
-The Information Retrieval model consists of a language representation model (BERT backbone) and an interaction model (e.g. `MIPS`, `MaxSim`).
+The Information Retrieval Module consists of a language representation Module (BERT backbone) and an interaction Module (e.g. `MIPS`, `MaxSim`).
 
 #### Backbone
 
- Following the current literature, we implement the IR model using a masked language model (BERT) as a backbone.
-Ideally, we would prefer to use a lighter model such as a medical [distilBERT](https://arxiv.org/abs/1909.10351).
+ Following the current literature, we implement the IR Module using a masked language Module (BERT) as a backbone.
+Ideally, we would prefer to use a lighter Module such as a medical [distilBERT](https://arxiv.org/abs/1909.10351).
 
-#### Interaction model
+#### Interaction Module
 To guarantee computation tractability, we will choose to implement the ColBERT retriever, for which  the `MaxSim` operator wil be implemented using [Faiss](https://github.com/facebookresearch/faiss).
 
 #### Optimization
 
-Optimizing the IR model is challenging due to the size of the corpus and the backbone model.
+Optimizing the IR Module is challenging due to the size of the corpus and the backbone Module.
 
 **a. Supervised using FZxMedQA** When the evidence document is known, supervised learning can be leveraged for optimizing the retriever. In the case of a <u>single evidence document</u>, we use the same approach as described in DPR, so the evidence likelihood can be expressed using:
 
 $$p_\phi(d | q) = \frac{\rm{Sim}(d, q)}{\sum_{d' \in \mathcal{C}} \rm{MaxSim}(d', q) } \approx \frac{\rm{Sim}(d, q)}{\sum_{d' \in \rm{batch}} \rm{Sim}(d', q) }$$
 
-**b. Unsupervised** In the original MedQA dataset, the gold evidence document is unknown. Therefore, we need to rely on unsupervised methods, and handle documents as a latent variable (ORQA, REALM). In that scenario, the answering model is:
+**b. Unsupervised** In the original MedQA dataset, the gold evidence document is unknown. Therefore, we need to rely on unsupervised methods, and handle documents as a latent variable (ORQA, REALM). In that scenario, the answering Module is:
 
 $$p(a|q,\mathcal{C}) = \sum_{d\in \mathcal{C}}\ p_\theta(a|q, d)\ \  p_\phi(d|q)$$
 
@@ -246,13 +246,13 @@ In any case, this most likely requires to sample multiple evidence documents for
 
 ### [Milestone #2 - basic retriever/reader implementation](https://github.com/vlievin/fz-openqa/milestone/2)
 
-- [x] Implement the basic `reader` model and train using the gold document
-- [x] Implement the basic `retriever` model and train using the supervised objective
+- [x] Implement the basic `reader` Module and train using the gold document
+- [x] Implement the basic `retriever` Module and train using the supervised objective
 - [ ] Implement the full datset ranking using the trained retriever and `faiss`
 
 ### [Milestone #3 - supervised OpenQA](https://github.com/vlievin/fz-openqa/milestone/3)
 
-- [x] Implement the OpenQA model (`reader+retriever`) and train using the gold document (`reader`) and supervised objective (`retriever`)
+- [x] Implement the OpenQA Module (`reader+retriever`) and train using the gold document (`reader`) and supervised objective (`retriever`)
 - [x] Implement the Corpus dataset using `datasets`
 - [ ] Perform end-to-end evaluation (top-k accuracy)
 - [ ] Analyze and report results on the FZxMedQA dataset
@@ -266,7 +266,7 @@ In any case, this most likely requires to sample multiple evidence documents for
 
 ### [Milestone #5 - Semi-Supervised OpenQA](https://github.com/vlievin/fz-openqa/milestone/5)
 
-- [ ] Train the model without FZxMedQA supervision
+- [ ] Train the Module without FZxMedQA supervision
 
 
 ## 5. Ideas / Future Work
@@ -284,7 +284,7 @@ where $p_\theta(d | q)$ shares most parameters with $q_\phi(d | a, q)$. Importan
 
 ### 3. use [SciSpacy](https://allenai.github.io/scispacy/) to label the MedQA corpus
 
-SciSpacy provides a NER model for TUIs.
+SciSpacy provides a NER Module for TUIs.
 
 ### 4. Score full documents
 
@@ -297,7 +297,7 @@ SciSpacy provides a NER model for TUIs.
 
 > todo: read it
 
-### 7. Explicit the model for scoring all passages within a document
+### 7. Explicit the Module for scoring all passages within a document
 
 > todo: case where there are multiple evidence passages $f(\rm{doc}) = \rm{max}_{p \in \rm{doc}} f(p)$
 
@@ -322,7 +322,7 @@ $$d^{L2}(x,y) := \|y - x\|_{2} := \sqrt{ \sum\limits_{|y|} y_i^2 - x_i^2 }$$
 
 ### MedQA
 
-The reader model $f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} )$ is implemented as:
+The reader Module $f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} )$ is implemented as:
 
 \begin{align}
 f_\theta(\mathbf{a_i}, \mathbf{q}, \mathbf{d} )  := W_{1}\left(\tanh \left(W_{2} \mathbf{h}\right)\right) \in \mathbb{R}^{1} \\
@@ -336,7 +336,7 @@ where $h_\theta(\cdot) \in \mathcal{X}$ is output of a bidirectional GRU.
 
 Whereas DPR relies on document-level representations ($\mathbf{h_\rm{CLS}} \in \mathcal{R}^d$), current research shows that exploiting *local interactions* is more effective. Local interactions involve comparing the query and the documents using token-level representations ($\mathbf{h} \in \mathcal{R}^{T \times m}, m \leq d$). However, token-level metrics are often computationally prohibitive.
 
-ColBERT introduces a *late interaction* model based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
+ColBERT introduces a *late interaction* Module based on the `MaxSim` operator that allows to scalably compare documents and query based on local document representations. The `MaxSim` operator is defined as
 
 $$ \rm{MaxSim}(q, p):=\sum_{i \in\left[\left|\mathbf{h^q}\right|\right]} \max _{j \in\left[\left|\mathbf{h^{e}}\right|\right]} d(\mathbf{h^q}_{i}, \mathbf{h^e}_{j})$$
 
@@ -427,7 +427,7 @@ top_k_docs = arg_topk(MaxSim(query_tokens, K_docs))
 
 * TF-IDF retriever
 * BM25 retriever
-* Reader model (as implemented in MedQA)
+* Reader Module (as implemented in MedQA)
 
 #### c. Implementation
 

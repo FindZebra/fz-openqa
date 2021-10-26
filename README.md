@@ -212,32 +212,34 @@ HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
 
 ## Documentation
 
-### Module design
+### Container design
 
-All modules should inherit from `BaseModel`, which in turn inherits from `pl.LightningModule`.
-Each module features one `BaseEvaluator` which role is to compute the loss and the metrics.
+# todo: update this section
+
+All modules should inherit from `Container`, which in turn inherits from `pl.LightningModule`.
+Each Container features one `Module` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
 <summary>Data flow within the <b>BaseModels</b> (multi-GPUs)</summary>
 
-The main computation should be implemented in the `_step()` and `_step_end()` methods of the `BaseModel`.
+The main computation should be implemented in the `_step()` and `_step_end()` methods of the `Container`.
 The `_step()` method runs independently on each device whereas the `_step_end()` method runs on
 a single device: this is where the final aggregated loss should be implemented (see the diagram below).
 The metrics must be implemented in the `_step_end` method in order to avoid errors with mutli-GPU training.
 
-![Lightning module data flow](.assets/lighning_steps.png)
+![Lightning Container data flow](.assets/lighning_steps.png)
 
 </details>
 
 <details>
-<summary><b>BaseEvaluator</b></summary>
+<summary><b>Module</b></summary>
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
-1. The `forward` method that calls the model and compute logits or potentially a pre-loss term.
-This method is called in the `module._step()` method
+1. The `forward` method that calls the Module and compute logits or potentially a pre-loss term.
+This method is called in the `Container._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
-`BaseEvaluator.foward()` method from each device.
+`Module.foward()` method from each device.
 </details>
 
 <details>
@@ -251,7 +253,7 @@ This class can be instantiated using pretrained components or the components can
 The `_step` and `_step_end` both rely on the methods of the retriever and components (each with their distinct evaluators).
 However, a third evaluator class (`EndToEndMultipleChoiceQaMaximumLikelihood`) is added to evaluate the end-to-end reader accuracy.
 
-During evaluation, data from each component is managed separately (so each module send and receive its own data between `_step` and `_step_end`).
+During evaluation, data from each component is managed separately (so each Container send and receive its own data between `_step` and `_step_end`).
 We do so by prefixing the output data of the reader, the retriever and of the end-to-end evaluator
 using the keys [`retriever/`, `reader/`, `end2end/`].
 </details>
@@ -289,7 +291,7 @@ using a dot such as `document` + `input_ids` -> `document.input_ids`.
 
 
 A batch of data is of the following structure.
-Documents are not necessarily given as they might be sampled dynamically within the model.
+Documents are not necessarily given as they might be sampled dynamically within the Module.
 
 * question:
   * text: list of `batch_size` strings
@@ -314,7 +316,7 @@ Documents are not necessarily given as they might be sampled dynamically within 
 Generating the positive and hard negative passages for each question will be performed following these 3 steps:
 
 1. a passage extractor (options: fixed length, paragraphs, ...)
-2. a retriever model (options: sparse or dense)
+2. a retriever Module (options: sparse or dense)
 3. a selection strategy (options: exact match, meta-map, similarity score, ...)
 
 Each step can be configured with different options,
@@ -330,14 +332,14 @@ The whole pipeline is pictured bellow:
 
 <details>
 <summary>Feed the answer choices to the retriever</summary>
-At the moment the current model does not use the answer choices for retrieval. Concatenate the answer choices with the query.
+At the moment the current Module does not use the answer choices for retrieval. Concatenate the answer choices with the query.
 </details>
 
 <details>
-<summary>Late-interaction reader model</summary>
-At the moment, the reader model requires concatenating the query with the document,
+<summary>Late-interaction reader Module</summary>
+At the moment, the reader Module requires concatenating the query with the document,
 which requires processing the query and document two times (1 time for IR, one time for reading comprehension).
-A late interaction model for the reader component would allow processing each input one time with the BERT model.
+A late interaction Module for the reader component would allow processing each input one time with the BERT Module.
 </details>
 
 <details>
@@ -393,8 +395,8 @@ export PATH="$ES_HOME/bin:$PATH"
 
  1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)
   * Dense retriever
-  * Relevance model (reader)
-  * End-to-end evaluation (sample 100 passages with the retriever, score with the relevance model, and sample the answer)
+  * Relevance Module (reader)
+  * End-to-end evaluation (sample 100 passages with the retriever, score with the relevance Module, and sample the answer)
  2. [RocketQA](https://arxiv.org/pdf/2010.08191.pdf)
   * Batch-negative and hard negatives
   * Cross-batch negatives: compute the retriever loss across devices
