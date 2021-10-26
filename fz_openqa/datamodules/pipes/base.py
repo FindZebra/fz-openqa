@@ -278,5 +278,12 @@ class ApplyToAll(Pipe):
 
 
 class CopyBatch(Pipe):
+    def __init__(self, *, deep: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.deep = deep
+
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        return copy(batch)
+        if self.deep:
+            return deepcopy(batch)
+        else:
+            return copy(batch)
