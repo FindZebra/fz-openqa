@@ -1,6 +1,6 @@
 _target_: fz_openqa.datamodules.index.ElasticSearchIndex
 
-index_key: "row_idx"
+index_key: "document.row_idx"
 text_key: "document.text"
 query_key: "question.text"
 num_proc: ${corpus.num_proc}
