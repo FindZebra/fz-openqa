@@ -189,6 +189,7 @@ class BlockSequential(Pipe):
     def __init__(
         self, blocks: List[Tuple[str, Pipe]], id: Optional[str] = None
     ):
+        blocks = [(k, b) for k, b in blocks if b is not None]
         self.blocks: OrderedDict[str, Pipe] = OrderedDict(blocks)
         self.id = id
 

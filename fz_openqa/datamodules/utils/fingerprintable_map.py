@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 from typing import Optional
 
@@ -8,6 +9,8 @@ from datasets.fingerprint import update_fingerprint
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HgDataset
+
+logger = logging.getLogger(__name__)
 
 
 class FingerprintableMap:
@@ -48,9 +51,9 @@ class FingerprintableMap:
         # process dataset
         for key, dset in dataset.items():
             if self.verbose:
-                rich.print(
-                    f"[magenta]Starting: {self.map_kwargs.get('desc', 'pipe')}: "
-                    f"[/magenta]split={key}, fingerprint={fingerprints.get(key, None)}"
+                logger.info(
+                    f"Starting: {self.map_kwargs.get('desc', 'pipe')}: "
+                    f"split={key}, fingerprint={fingerprints.get(key, None)}"
                 )
             dataset[key] = dset.map(
                 self.pipe,

@@ -10,6 +10,7 @@ from .base import Lambda
 from .base import Pipe
 from .base import RenameKeys
 from .base import ReplaceInKeys
+from .batchify import AsBatch
 from .batchify import Batchify
 from .batchify import DeBatchify
 from .collate import ApplyToEachExample
