@@ -2,8 +2,10 @@ import cProfile
 import logging
 import pstats
 from time import time
+from timeit import Timer
 
 import datasets
+import numpy as np
 import rich
 from rich.logging import RichHandler
 
@@ -18,7 +20,10 @@ from fz_openqa.utils.train_utils import setup_safe_env
 
 FORMAT = "%(message)s"
 logging.basicConfig(
-    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+    level=logging.CRITICAL,
+    format=FORMAT,
+    datefmt="[%X]",
+    handlers=[RichHandler()],
 )
 
 datasets.set_caching_enabled(True)
@@ -50,9 +55,9 @@ corpus = MedQaCorpusDataModule(
 dm = MedQaDataModule(
     tokenizer=tokenizer,
     text_formatter=text_formatter,
-    train_batch_size=16,
+    train_batch_size=10,
     num_proc=4,
-    num_workers=4,
+    num_workers=5,
     use_subset=True,
     verbose=True,
     corpus=corpus,
@@ -82,19 +87,15 @@ class GetBatch:
 
 get_batch = GetBatch(dm.train_dataloader())
 
-
-def repeat_fun(times=1):
-    return [get_batch() for _ in range(times)]
-
-
-repeats = 10
 profiler = cProfile.Profile()
 profiler.enable()
-t0 = time()
-repeat_fun(repeats)
-duration = time() - t0
+times = Timer(get_batch).repeat(20, 1)
 profiler.disable()
 stats = pstats.Stats(profiler).sort_stats("time")
 stats.print_stats(20)
 print(get_separator())
-rich.print(f">> duration={duration / repeats:.3f}s/batch")
+rich.print(
+    f">> duration={np.mean(times):.3f}s/batch (std={np.std(times):.3f}s)"
+)
+# fetch docs in collate: >> duration=0.142s/batch (std=0.293s)
+# fetch docs in __getitem__: >> duration=1.351s/batch (std=2.645s)make

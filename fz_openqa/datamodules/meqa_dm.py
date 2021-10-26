@@ -8,6 +8,7 @@ import dill  # type: ignore
 import rich
 from datasets import Dataset
 from datasets import Split
+from torch.utils.data import Dataset as TorchDataset
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
@@ -19,6 +20,7 @@ from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
 from .pipelines.preprocessing import SearchDocuments
 from .pipelines.preprocessing import SortDocuments
+from .pipes import AsBatch
 from .pipes import AsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
@@ -224,7 +226,7 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # D. fetch documents attributes (input_ids)
-        fetch_documents = self.get_fetch_documents_pipe(self.corpus)
+        fetch_documents = None  # self.get_fetch_documents_pipe(self.corpus)
 
         return BlockSequential(
             [
@@ -409,10 +411,27 @@ class MedQaDataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"
             )
 
-    def get_dataset(self, split: Union[str, Split]) -> Dataset:
+    def get_dataset(
+        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+    ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
 
         or the dataset itself if there is no split."""
 
+        class FetchDocuments(TorchDataset):
+            def __init__(self, dataset: Dataset, fetch_document_pipe: Pipe):
+                self.dataset = dataset
+                self.pipe = UpdateWith(AsBatch(fetch_document_pipe))
+
+            def __len__(self):
+                return len(self.dataset)
+
+            def __getitem__(self, item):
+                x = self.dataset[item]
+                return self.pipe(x)
+
         # retrieve the dataset split
-        return super().get_dataset(split, self.dataset)
+        dataset = super().get_dataset(split, dataset or self.dataset)
+        return FetchDocuments(
+            dataset, self.get_fetch_documents_pipe(self.corpus)
+        )
