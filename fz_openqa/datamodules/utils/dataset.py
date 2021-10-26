@@ -1,3 +1,4 @@
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -34,9 +35,11 @@ def take_subset(dataset: HgDataset, subset_size: List[int]) -> HgDataset:
         raise NotImplementedError
 
 
-def print_size_difference(old_dataset: DatasetDict, new_dataset: DatasetDict):
+def print_size_difference(
+    original_size: Dict[str, int], new_dataset: DatasetDict
+):
     # store the previous split sizes
-    prev_lengths = {k: len(v) for k, v in old_dataset.items()}
+    prev_lengths = {k: v for k, v in original_size.items()}
     new_lengths = {k: len(v) for k, v in new_dataset.items()}
     print(get_separator())
     rich.print("> New dataset size:")

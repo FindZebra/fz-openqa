@@ -15,7 +15,7 @@ max_length: 512
 use_subset: False
 verbose: ${verbose}
 
-compile_in_setup: True
+map_corpus_in_setup: True
 n_retrieved_documents: 1000
 n_documents: 10
 max_pos_docs: 1
