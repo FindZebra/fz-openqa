@@ -226,7 +226,7 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # D. fetch documents attributes (input_ids)
-        fetch_documents = None  # self.get_fetch_documents_pipe(self.corpus)
+        fetch_documents = self.get_fetch_documents_pipe(self.corpus)
 
         return BlockSequential(
             [
@@ -415,23 +415,7 @@ class MedQaDataModule(BaseDataModule):
         self, split: Union[str, Split], dataset: Optional[HgDataset] = None
     ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
-
         or the dataset itself if there is no split."""
 
-        class FetchDocuments(TorchDataset):
-            def __init__(self, dataset: Dataset, fetch_document_pipe: Pipe):
-                self.dataset = dataset
-                self.pipe = UpdateWith(AsBatch(fetch_document_pipe))
-
-            def __len__(self):
-                return len(self.dataset)
-
-            def __getitem__(self, item):
-                x = self.dataset[item]
-                return self.pipe(x)
-
         # retrieve the dataset split
-        dataset = super().get_dataset(split, dataset or self.dataset)
-        return FetchDocuments(
-            dataset, self.get_fetch_documents_pipe(self.corpus)
-        )
+        return super().get_dataset(split, dataset or self.dataset)
