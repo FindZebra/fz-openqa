@@ -38,6 +38,7 @@ class RetrieverSupervised(Module):
         "train/retrieval/Accuracy",
         "validation/retrieval/Accuracy",
         "validation/retrieval/top10_Accuracy",
+        "validation/retrieval/n_options",
     ]
 
     def __init__(
