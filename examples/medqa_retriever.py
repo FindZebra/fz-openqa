@@ -1,10 +1,9 @@
 from typing import Optional
 
 import datasets
-import numpy as np
 import rich
+import numpy as np
 from rich.progress import track
-from tqdm import tqdm
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
@@ -16,9 +15,8 @@ from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import UpdateWith
+from fz_openqa.datamodules.pipes.concat_answer_options import ConcatQuestionAnswerOption
 from fz_openqa.datamodules.pipes.nesting import AsFlatten
-from fz_openqa.datamodules.pipes.nesting import infer_stride
-from fz_openqa.datamodules.utils.filter_keys import KeyWithPrefix
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -37,13 +35,13 @@ corpus = MedQaCorpusDataModule(
     index=ElasticSearchIndex(
         index_key="document.row_idx",
         text_key="document.text",
-        query_key="question.text",
+        query_key="question.metamap",
         num_proc=4,
         filter_mode=None,
     ),
     verbose=False,
     num_proc=4,
-    use_subset=True,
+    use_subset=False,
 )
 
 # load the QA dataset
@@ -52,7 +50,7 @@ dm = MedQaDataModule(
     train_batch_size=100,
     num_proc=4,
     num_workers=4,
-    use_subset=True,
+    use_subset=False,
     verbose=True,
     corpus=corpus,
     relevance_classifier=ExactMatch(),
@@ -68,50 +66,21 @@ dm.build_index()
 rich.print("[green]>> index is built.")
 print(get_separator())
 
-
-def concat_question_answer_options(
-    batch: Batch, query_key: Optional[str] = "question.text"
-):
-    pass
-
-
-class ConcatQuestionAnswerOption(Pipe):
-    """Concat question text with answer text"""
-
-    def __init__(
-        self,
-        *,
-        question_key: str = "question.text",
-        answer_key: str = "answer.text",
-        **kwargs,
-    ):
-        super(ConcatQuestionAnswerOption, self).__init__(**kwargs)
-        self.question_key = question_key
-        self.answer_key = answer_key
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        questions = batch[self.question_key]  # [bs,]
-        answers = batch[self.answer_key]  # [bs, n_options]
-
-        def _concat(q: str, a: str):
-            return f"{a}, {q}"
-
-        batch[self.question_key] = [
-            [_concat(q, a) for a in a_options]
-            for q, a_options in zip(questions, answers)
-        ]
-
-        return batch
-
-
 concat_pipe = ConcatQuestionAnswerOption()
-select_fields = FilterKeys(lambda key: key == "question.text")
+select_fields = FilterKeys(lambda key: key == "question.metamap")
 search_index = SearchCorpus(corpus=corpus, k=5)
 flatten_and_search = AsFlatten(search_index)
 
 pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
 printer = PrintBatch()
 
+
+def randargmax(retrieval_scores: np.array) -> np.array:
+    """a random tie-breaking argmax"""
+    return np.random.choice(np.flatnonzero(retrieval_scores == retrieval_scores.max()))
+
+total = (len(dm.dataset['train'])+len(dm.dataset['validation'])+len(dm.dataset['test']))
+num_corrects = 0
 for batch in track(
     dm.train_dataloader(), description="Iterating through the dataset..."
 ):
@@ -119,12 +88,32 @@ for batch in track(
     # 1 do a pipe to concat question + answer option
     batch = pipe(batch)
 
-    printer(batch)
+    predictions = [
+        np.argmax(np.sum(question, axis=1)
+                  ) for question in batch['document.retrieval_score']
+    ]
+
+    #predictions =[
+    #    randargmax(np.sum(question, axis=1)
+    #              ) for question in batch['document.retrieval_score']
+    #]
+    #print(preds)
+    #print(predictions)
+    num_corrects += np.count_nonzero(
+        predictions - batch['answer.target'].numpy() == 0
+    )
     exit()
+print(
+   "accuracy is: {} / {} = {:.1f}%".format(
+       num_corrects, total, num_corrects * 100.0 / total
+   )
+)
 
+# Accuracy metrics
+# Query : "question.text" , Argmax : "No randomness"
+# >> accuracy is: 2836 / 12723 = 22.3%
+# Query : "question.metamap" , Argmax : "No randomness"
+# >> accuracy is: 3157 / 12723 = 24.8%
+# # Query : "question.metamap" , Argmax : "Random when tie-break"
+# # >> accuracy is: 3157 / 12723 = 24.8%
 
-# print(
-#    "accuracy is: {} / {} = {:.1f}%".format(
-#        num_corrects, len(answers), num_corrects * 100.0 / len(answers)
-#    )
-# )
