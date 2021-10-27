@@ -160,6 +160,8 @@ class FeatchDocuments(Pipe):
         # get the `dataset` indexes
         indexes = (int(idx) for idx in batch[self.index_key])
 
+        # todo: do not return the whole column
+        # find a memory efficient way to do that
         if self.keys is not None and len(self.keys) == 1:
             key = self.keys[0]
             # fetch documents

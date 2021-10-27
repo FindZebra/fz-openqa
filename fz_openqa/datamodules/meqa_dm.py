@@ -364,7 +364,7 @@ class MedQaDataModule(BaseDataModule):
                 n_documents=self.n_documents,
                 max_pos_docs=self.max_pos_docs,
             )
-            self.dataset = self.dataset.filter(fn)
+            self.dataset = self.dataset.filter(fn, num_proc=num_proc)
 
         # print the difference in length for each split
         if verbose:

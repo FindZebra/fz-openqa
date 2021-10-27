@@ -72,7 +72,7 @@ class TestRetrieverSupervised(TestCase):
         output = self.model.forward(self.batch)
         self.assertEqual(output['score'].shape,
                          [self.batch_size, self.batch_size * self.n_documents])
-        self.assertEqual([x.item() for x in output['score'].argmax(-1)],
+        self.assertEqual([x.detach().item() for x in output['score'].argmax(-1)],
                          [0, self.batch_size])
 
     def test__reduce_step_output(self):

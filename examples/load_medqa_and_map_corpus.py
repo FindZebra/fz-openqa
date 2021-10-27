@@ -56,7 +56,7 @@ def run():
         train_batch_size=100,
         num_proc=4,
         num_workers=4,
-        use_subset=True,
+        use_subset=False,
         verbose=True,
         corpus=corpus,
         # retrieve 100 documents for each question
@@ -119,7 +119,7 @@ def run():
                 for k, v in row.items():
                     if isinstance(v, torch.Tensor):
                         if v.numel() == 1:
-                            row[k] = v.item()
+                            row[k] = v.detach().item()
                         else:
                             row[k] = str(v)
 
