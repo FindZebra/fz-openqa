@@ -23,7 +23,7 @@ from .datasets import meqa_en_corpus
 from .index.base import Index
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
-from .pipes import Apply
+from .pipes import Apply, Gate
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
