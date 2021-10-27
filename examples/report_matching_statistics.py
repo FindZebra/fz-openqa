@@ -148,14 +148,18 @@ print(get_separator())
 # >  - train: 7605 (74.72%)
 # >  - validation: 967 (76.02%)
 # >  - test: 954 (74.94%)
-# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
-# >  - train: 2883 (28.33%)
-# >  - validation: 424 (33.33%)
-# >  - test: 374 (29.38%)
-# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
-# >  - train: 3503 (34.42%)
-# >  - validation: 473 (37.19%)
-# >  - test: 445 (34.96%)
+# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~4.6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2296 (22.56%)
+# >  - validation: 338 (26.57%)
+# >  - test: 306 (24.04%)
+# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~3.6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2702 (26.55%)
+# >  - validation: 354 (27.83%)
+# >  - test: 371 (29.14%)
+# ExactMatch: FZxMedQA dataset, num_proc=4, 1000 docs, bs=10: ~6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2487 (24.44%)
+# >  - validation: 349 (27.44%)
+# >  - test: 334 (26.24%)
 
 run_time_block = dm.compile_dataset(
     filter_unmatched=True, num_proc=3, batch_size=10
