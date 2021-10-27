@@ -77,10 +77,9 @@ tokenizer = init_pretrained_tokenizer(
 text_formatter = TextFormatter(lowercase=True)
 
 if args.cls == "scispacy":
-    cls = ScispaCyMatch(interpretable=True, spacy_kwargs={
-        "batch_size": 100,
-        "n_process": 1
-    })
+    cls = ScispaCyMatch(
+        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
+    )
 elif args.cls == "metamap":
     cls = MetaMapMatch(interpretable=True)
 elif args.cls == "exact":
