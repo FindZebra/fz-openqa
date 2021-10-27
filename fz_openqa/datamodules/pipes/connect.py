@@ -59,10 +59,6 @@ class Sequential(Pipe):
     def fingerprint(self) -> Dict[str, Any]:
         return {self.get_pipe_id(p): safe_fingerprint(p) for p in self.pipes}
 
-    def as_fingerprintable(self) -> Any:
-        pipes = [p.as_fingerprintable() for p in self.pipes]
-        return Sequential(*pipes, id=self.id)
-
     def output_keys(self, input_keys: List[str]) -> List[str]:
         for p in self.pipes:
             input_keys = p.output_keys(input_keys)
@@ -89,10 +85,6 @@ class Parallel(Sequential):
 
         return output
 
-    def as_fingerprintable(self) -> Any:
-        pipes = [p.as_fingerprintable() for p in self.pipes]
-        return Parallel(*pipes, id=self.id)
-
     def output_keys(self, input_keys: List[str]) -> List[str]:
         output_keys = []
         for p in self.pipes:
@@ -113,7 +105,8 @@ class UpdateWith(Pipe):
         """Call the pipes sequentially."""
 
         batch.update(self.pipe(batch, **kwargs))
-
+        # output = self.pipe(batch, **kwargs)
+        # output.update(**{k: v for k, v in batch.items() if k not in output})
         return batch
 
     def dill_inspect(self, reduce: bool = False) -> bool:
@@ -138,9 +131,6 @@ class Gate(Pipe):
     ):
         self.condition = condition
         self.pipe = pipe
-
-    def as_fingerprintable(self) -> Pipe:
-        return Gate(self.condition, self.pipe.as_fingerprintable())
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         if self.condition({k: None for k in input_keys}):
@@ -225,10 +215,6 @@ class BlockSequential(Pipe):
 
     def fingerprint(self) -> Dict[str, Any]:
         return {k: safe_fingerprint(p) for k, p in self.blocks.items()}
-
-    def as_fingerprintable(self) -> Any:
-        blocks = [(k, p.as_fingerprintable()) for k, p in self.blocks.items()]
-        return BlockSequential(blocks, id=self.id)
 
     def __iter__(self):
         for k, b in self.blocks.items():

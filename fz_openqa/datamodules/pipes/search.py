@@ -1,5 +1,5 @@
 from copy import deepcopy
-from functools import partial
+from dataclasses import dataclass
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -8,7 +8,6 @@ from typing import Optional
 from typing import Union
 
 import dill
-import rich
 import torch
 from datasets import Dataset
 
@@ -18,12 +17,49 @@ from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
+@dataclass
+class SearchResult:
+    score: List[List[float]]
+    index: List[List[int]]
+
+
+class FakeIndex:
+    """A small class to test Search corpus without using a proper index"""
+
+    index_name = "<name>"
+
+    def search(self, *, query: Batch, k: int, **kwargs) -> SearchResult:
+        values = query["question.text"]
+        return SearchResult(
+            index=[[0 for _ in range(k)] for _ in values],
+            score=[[1.0 for _ in range(k)] for _ in values],
+        )
+
+    def dill_inspect(self) -> bool:
+        """check if the module can be pickled."""
+        return dill.pickles(self)
+
+
+class FakeDataset:
+    """A small class to test Search corpus without using a proper index"""
+
+    def __init__(self):
+        self.data = {"document.text": "<text>", "document.row_idx": 0}
+
+    def __getitem__(self, idx):
+        """check if the module can be pickled."""
+        if isinstance(idx, str):
+            return [deepcopy(self.data)]
+        else:
+            return deepcopy(self.data)
+
+
 class SearchCorpus(Pipe):
     """Search a Corpus object given a query"""
 
     def __init__(
         self,
-        corpus,
+        corpus_index,
         *,
         k: Optional[int] = None,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
@@ -32,42 +68,29 @@ class SearchCorpus(Pipe):
         **kwargs,
     ):
         super(SearchCorpus, self).__init__(**kwargs)
-        assert corpus is not None, "corpus must be set."
-        self.index = corpus._index
-        self.dataset = corpus.dataset
-        msg = (
-            "Corpus.dataset is None, you probably need to "
-            "`run corpus.setup()` before initializing this pipe"
-        )
-        assert self.dataset is not None, msg
+        self.index = corpus_index
         self.index_output_key = index_output_key
         self.score_output_key = score_output_key
         self.k = k
         self.model = model
 
     def __repr__(self):
-        return self.as_fingerprintable().__repr__()
+        return {
+            "__type__": type(self),
+            "k": self.k,
+            "es_index": self.index.index_name,
+        }.__repr__()
 
-    def dill_inspect(self) -> Dict[str, Any]:
+    def dill_inspect(self, **kwargs) -> Dict[str, Any]:
         return {
             "__all__": dill.pickles(self),
             "index": self.index.dill_inspect(),
-            "dataset": dill.pickles(self.dataset),
         }
 
     def fingerprint(self) -> Dict[str, Any]:
         return {
             "__all__": self._fingerprint(self),
             "index": self._fingerprint(self.index),
-            "dataset": self._fingerprint(self.dataset),
-        }
-
-    def as_fingerprintable(self) -> Optional:
-        return {
-            "__type__": type(self),
-            "k": self.k,
-            "dataset": self.dataset._fingerprint,
-            "es_index": self.index.index_name,
         }
 
     def __call__(
@@ -79,7 +102,6 @@ class SearchCorpus(Pipe):
         simple_collate: Optional[bool] = None,
         **kwargs,
     ):
-
         # update args
         k = k or self.k
         model = model or self.model

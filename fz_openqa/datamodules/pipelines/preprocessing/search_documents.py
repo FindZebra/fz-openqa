@@ -6,9 +6,9 @@ from fz_openqa.datamodules.utils.filter_keys import KeyIn
 
 
 class SearchDocuments(Sequential):
-    def __init__(self, *, corpus: CorpusDataModule, n_documents: int):
+    def __init__(self, *, corpus_index, n_documents: int):
         super().__init__(
-            SearchCorpus(corpus, k=n_documents),
+            SearchCorpus(corpus_index=corpus_index, k=n_documents),
             FilterKeys(
                 KeyIn(["document.row_idx", "document.retrieval_score"])
             ),
