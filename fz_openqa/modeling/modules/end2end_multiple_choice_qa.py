@@ -81,7 +81,9 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
 
         # retriever k documents from the corpus given the query
         retrieved_batch, effective_n_docs = self.retrieve_documents(
-            model.retriever.corpus, query_encoding, n_docs=self.n_documents
+            model.retriever.corpus_dataset,
+            query_encoding,
+            n_docs=self.n_documents,
         )
 
         reader_data = []
