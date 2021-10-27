@@ -8,7 +8,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import Callback
-from pytorch_lightning import LightningDataModule
 from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
@@ -39,7 +38,6 @@ def train(config: DictConfig) -> Optional[float]:
         Optional[float]: Metric score for hyperparameter optimization.
     """
     setup_safe_env()
-
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 

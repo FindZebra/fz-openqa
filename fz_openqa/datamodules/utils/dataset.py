@@ -49,7 +49,21 @@ def print_size_difference(
     print(get_separator())
 
 
-def filter_questions_by_pos_docs(row, *, max_pos_docs: Optional[int]):
-    max_pos_docs = max_pos_docs or 1e20
-    n = sum([int(s > 0) for s in row["document.match_score"]])
-    return n > 0 and n <= max_pos_docs
+def filter_questions_by_pos_docs(
+    row, *, n_documents: int, max_pos_docs: Optional[int]
+):
+    """
+    This function checks if a given row can should be filtered out.
+    It will be filtered out if
+        1. There are no positive document.
+        2. There are not enough negative documents to
+           select `n_documents` with at max. `max_pos_docs` positive docs.
+    """
+    total = len(row["document.match_score"])
+    n_positive = sum([int(s > 0) for s in row["document.match_score"]])
+    if max_pos_docs is None:
+        return n_positive > 0
+
+    n_negatives = total - n_positive
+    n_candidates = min(n_positive, max_pos_docs) + n_negatives
+    return n_positive > 0 and n_candidates >= n_documents

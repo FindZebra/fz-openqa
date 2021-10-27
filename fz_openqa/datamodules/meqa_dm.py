@@ -30,11 +30,11 @@ from .pipes import RelevanceClassifier
 from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import UpdateWith
+from .pipes.base import check_pickle_capability
 from .pipes.search import FeatchDocuments
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
-from .utils.fingerprintable_map import FingerprintableMap
 from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (
@@ -143,6 +143,7 @@ class MedQaDataModule(BaseDataModule):
         # map the questions with documents from the corpus
         if self.n_retrieved_documents > 0 and not self._is_mapped:
             assert self.corpus is not None, "A corpus must be set and set up."
+            self.dataset.reset_format()
             self.build_index()
             self.map_corpus(
                 num_proc=self.num_proc,
@@ -150,8 +151,9 @@ class MedQaDataModule(BaseDataModule):
                 batch_size=self.map_corpus_batch_size,
             )
 
-            # cast features as tensors
-            self.cast_dataset_as_tensors(self.dataset)
+        # cast features as tensors
+        self.dataset.reset_format()
+        self.cast_dataset_as_tensors(self.dataset)
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -327,7 +329,7 @@ class MedQaDataModule(BaseDataModule):
                 (
                     "Search documents",
                     SearchDocuments(
-                        corpus=self.corpus,
+                        corpus_index=self.corpus._index,
                         n_documents=self.n_retrieved_documents,
                     ),
                 ),
@@ -342,29 +344,25 @@ class MedQaDataModule(BaseDataModule):
             ]
         )
 
-        def get_cached_pipe(desc, block):
-            """"run dataset.map() with extra steps to allow safe caching and multiprocessing"""
-            return FingerprintableMap(
-                block,
-                batched=True,
-                num_proc=num_proc,
-                batch_size=batch_size,
-                desc=f"[Corpus mapping] {desc}",
-                verbose=verbose,
-            )
-
         # process the dataset with each block
         original_size = {k: len(dset) for k, dset in self.dataset.items()}
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
-            pipe_k = get_cached_pipe(k, block)
-            self.dataset = pipe_k(self.dataset)
-            logger.info(f"End: {k}")
+            check_pickle_capability(block)
+            self.dataset = self.dataset.map(
+                block,
+                batched=True,
+                num_proc=num_proc,
+                batch_size=batch_size,
+                desc=f"[Corpus mapping] {k}",
+            )
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
             fn = partial(
-                filter_questions_by_pos_docs, max_pos_docs=self.max_pos_docs
+                filter_questions_by_pos_docs,
+                n_documents=self.n_documents,
+                max_pos_docs=self.max_pos_docs,
             )
             self.dataset = self.dataset.filter(fn)
 

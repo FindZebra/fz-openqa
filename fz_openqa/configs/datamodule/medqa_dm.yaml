@@ -1,5 +1,6 @@
 defaults:
   - relevance_classifier: exact_match
+  - text_formatter: simple_lowercase
 
 _target_: fz_openqa.datamodules.meqa_dm.MedQaDataModule
 
