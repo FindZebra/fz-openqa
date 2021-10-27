@@ -1,8 +1,8 @@
 from typing import Optional
 
 import datasets
-import rich
 import numpy as np
+import rich
 from rich.progress import track
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
@@ -15,7 +15,9 @@ from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import UpdateWith
-from fz_openqa.datamodules.pipes.concat_answer_options import ConcatQuestionAnswerOption
+from fz_openqa.datamodules.pipes.concat_answer_options import (
+    ConcatQuestionAnswerOption,
+)
 from fz_openqa.datamodules.pipes.nesting import AsFlatten
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.datastruct import Batch
@@ -77,9 +79,16 @@ printer = PrintBatch()
 
 def randargmax(retrieval_scores: np.array) -> np.array:
     """a random tie-breaking argmax"""
-    return np.random.choice(np.flatnonzero(retrieval_scores == retrieval_scores.max()))
+    return np.random.choice(
+        np.flatnonzero(retrieval_scores == retrieval_scores.max())
+    )
 
-total = (len(dm.dataset['train'])+len(dm.dataset['validation'])+len(dm.dataset['test']))
+
+total = (
+    len(dm.dataset["train"])
+    + len(dm.dataset["validation"])
+    + len(dm.dataset["test"])
+)
 num_corrects = 0
 for batch in track(
     dm.train_dataloader(), description="Iterating through the dataset..."
@@ -89,24 +98,24 @@ for batch in track(
     batch = pipe(batch)
 
     predictions = [
-        np.argmax(np.sum(question, axis=1)
-                  ) for question in batch['document.retrieval_score']
+        np.argmax(np.sum(question, axis=1))
+        for question in batch["document.retrieval_score"]
     ]
 
-    #predictions =[
+    # predictions =[
     #    randargmax(np.sum(question, axis=1)
     #              ) for question in batch['document.retrieval_score']
-    #]
-    #print(preds)
-    #print(predictions)
+    # ]
+    # print(preds)
+    # print(predictions)
     num_corrects += np.count_nonzero(
-        predictions - batch['answer.target'].numpy() == 0
+        predictions - batch["answer.target"].numpy() == 0
     )
     exit()
 print(
-   "accuracy is: {} / {} = {:.1f}%".format(
-       num_corrects, total, num_corrects * 100.0 / total
-   )
+    "accuracy is: {} / {} = {:.1f}%".format(
+        num_corrects, total, num_corrects * 100.0 / total
+    )
 )
 
 # Accuracy metrics
@@ -116,4 +125,3 @@ print(
 # >> accuracy is: 3157 / 12723 = 24.8%
 # # Query : "question.metamap" , Argmax : "Random when tie-break"
 # # >> accuracy is: 3157 / 12723 = 24.8%
-
