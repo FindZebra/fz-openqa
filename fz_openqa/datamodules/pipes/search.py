@@ -1,3 +1,4 @@
+from copy import deepcopy
 from functools import partial
 from typing import Any
 from typing import Callable
@@ -105,20 +106,20 @@ class FeatchDocuments(Pipe):
     def __init__(
         self,
         *,
-        dataset: Dataset,
+        corpus_dataset: Dataset,
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = Collate(),
         index_key: str = "document.row_idx",
         **kwargs,
     ):
         super(FeatchDocuments, self).__init__(**kwargs)
-        self.dataset = dataset
+        self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe
         self.index_key = index_key
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        features = self.dataset.column_names
+        features = self.corpus_dataset.column_names
         return list(
             self._filter_row(
                 {c: None for c in features}, keys=self.keys
@@ -140,11 +141,11 @@ class FeatchDocuments(Pipe):
         if self.keys is not None and len(self.keys) == 1:
             key = self.keys[0]
             # fetch documents
-            retrieved_docs = map(self.dataset[key].__getitem__, indexes)
+            retrieved_docs = map(self.corpus_dataset[key].__getitem__, indexes)
             retrieved_docs = [{key: x} for x in retrieved_docs]
         else:
             # fetch documents
-            retrieved_docs = map(self.dataset.__getitem__, indexes)
+            retrieved_docs = map(self.corpus_dataset.__getitem__, indexes)
             # filter keys
             retrieved_docs = list(
                 self._filter_row(x, keys=self.keys) for x in retrieved_docs

@@ -20,7 +20,6 @@ from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
 from .pipelines.preprocessing import SearchDocuments
 from .pipelines.preprocessing import SortDocuments
-from .pipes import AsBatch
 from .pipes import AsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
@@ -265,7 +264,7 @@ class MedQaDataModule(BaseDataModule):
             FilterKeys(lambda key: key in ["document.row_idx"]),
             AsFlatten(
                 FeatchDocuments(
-                    dataset=corpus.dataset,
+                    corpus_dataset=corpus.dataset,
                     collate_pipe=corpus.collate_pipe,
                 )
             ),
@@ -335,7 +334,7 @@ class MedQaDataModule(BaseDataModule):
                 (
                     "Classify documents",
                     ClassifyDocuments(
-                        dataset=self.corpus.dataset,
+                        corpus_dataset=self.corpus.dataset,
                         relevance_classifier=self.relevance_classifier,
                     ),
                 ),
@@ -350,7 +349,7 @@ class MedQaDataModule(BaseDataModule):
                 batched=True,
                 num_proc=num_proc,
                 batch_size=batch_size,
-                desc=f"Map questions: {desc}",
+                desc=f"[Corpus mapping] {desc}",
                 verbose=verbose,
             )
 
@@ -360,6 +359,7 @@ class MedQaDataModule(BaseDataModule):
             logger.info(f"Processing: {k}")
             pipe_k = get_cached_pipe(k, block)
             self.dataset = pipe_k(self.dataset)
+            logger.info(f"End: {k}")
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
