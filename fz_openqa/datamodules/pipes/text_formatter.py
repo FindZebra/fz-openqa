@@ -49,8 +49,7 @@ class TextFormatter(Pipe):
             text = re.sub(" +", " ", text)
 
         if self.medqa_cleaning:
-            text = re.sub(r'([^a-zA-Z0-9\.])', " ", text).strip()
-
+            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
 
         if self.remove_ref:
             text = re.sub(r"\u2003", " ", text)

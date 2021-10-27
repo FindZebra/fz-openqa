@@ -23,10 +23,11 @@ from .datasets import meqa_en_corpus
 from .index.base import Index
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
-from .pipes import Apply, Gate
+from .pipes import Apply
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
+from .pipes import Gate
 from .pipes import Identity
 from .pipes import Parallel
 from .pipes import Pipe
@@ -142,9 +143,9 @@ class CorpusDataModule(BaseDataModule):
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
-                #maybe split to sentences
+                # maybe split to sentences
                 self.get_tokenizer_pipe(),
-                Gate(ARG, self.get_generate_passages_pipe()),
+                Gate("ARG", self.get_generate_passages_pipe()),
             ),
             batched=True,
             num_proc=self.num_proc,
