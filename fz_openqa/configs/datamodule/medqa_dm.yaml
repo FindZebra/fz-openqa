@@ -3,19 +3,24 @@ defaults:
 
 _target_: fz_openqa.datamodules.meqa_dm.MedQaDataModule
 
+# Datamodule config
 add_encoding_tokens: True
-cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 train_batch_size: 64
 eval_batch_size: 128
+max_length: 512
+use_subset: False
+
+# meta
+cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
+verbose: ${verbose}
 num_workers: 4
 num_proc: 4
 pin_memory: True
 persistent_workers: False
-max_length: 512
-use_subset: False
-verbose: ${verbose}
 
+# corpus mapping arguments
 map_corpus_in_setup: True
+map_corpus_batch_size: 100
 n_retrieved_documents: 1000
 n_documents: 10
 max_pos_docs: 1
