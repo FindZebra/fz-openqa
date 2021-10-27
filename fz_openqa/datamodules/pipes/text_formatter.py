@@ -19,6 +19,7 @@ class TextFormatter(Pipe):
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
+        medqa_cleaning: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -27,6 +28,7 @@ class TextFormatter(Pipe):
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
+        self.medqa_cleaning = medqa_cleaning
 
     def clean(self, text: str) -> str:
 
@@ -45,6 +47,9 @@ class TextFormatter(Pipe):
             text = text.strip().replace(r"\t", " ").replace("\t", " ")
             text = re.sub(r"[^a-zA-Z ]+", " ", text)
             text = re.sub(" +", " ", text)
+
+        if self.med_cleaning:
+            raise NotImplementedError
 
         if self.remove_ref:
             text = re.sub(r"\u2003", " ", text)
