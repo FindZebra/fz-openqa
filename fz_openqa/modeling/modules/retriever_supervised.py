@@ -41,6 +41,9 @@ class RetrieverSupervised(Module):
         "validation/retrieval/n_options",
     ]
 
+    # require heads
+    _required_heads = ["question", "document"]
+
     def __init__(
         self,
         similarity: Union[DictConfig, Similarity] = DotProduct(),
@@ -79,15 +82,9 @@ class RetrieverSupervised(Module):
         )
 
         # shape: [bs, h]
-        hq = self.backbone(
-            batch["question.input_ids"],
-            attention_mask=batch["question.attention_mask"],
-        )
+        hq = self._backbone(batch, prefix="question", head="question")
         # shape: # [bs * n_docs, h]
-        hd = self.backbone(
-            batch["document.input_ids"],
-            attention_mask=batch["document.attention_mask"],
-        )
+        hd = self._backbone(batch, prefix="document", head="document")
 
         output = {"_hq_": hq, "_hd_": hd}
 

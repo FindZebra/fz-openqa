@@ -1,16 +1,14 @@
 from typing import Optional
 
+import torch.nn.functional as F
 from torch import nn
 from torch import Tensor
-from torch.nn import functional as F
 from transformers import BertPreTrainedModel
 
-from fz_openqa.modeling.backbone import Backbone
+from fz_openqa.modeling.heads.base import Head
 
 
-class BertLinearHeadCls(Backbone):
-    """A bert model with a linear layer to project the representation at the CLS token."""
-
+class ClsHead(Head):
     def __init__(
         self,
         *,
@@ -18,20 +16,15 @@ class BertLinearHeadCls(Backbone):
         output_size: Optional[int],
         normalize: bool = False
     ):
-        super().__init__(bert=bert)
-        self.bert = bert
+        super(ClsHead, self).__init__(bert=bert, output_size=output_size)
+
         self.normalize = normalize
         if output_size is not None:
             self.head = nn.Linear(bert.config.hidden_size, output_size)
         else:
             self.head = None
 
-    def forward(
-        self, input_ids: Tensor, *, attention_mask: Tensor, **kwargs
-    ) -> Tensor:
-        last_hidden_state = self.bert(
-            input_ids, attention_mask
-        ).last_hidden_state
+    def forward(self, last_hidden_state: Tensor, **kwargs) -> Tensor:
         cls_repr = last_hidden_state[:, 0]  # CLS token
 
         if self.head is not None:

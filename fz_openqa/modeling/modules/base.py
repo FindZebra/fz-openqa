@@ -1,26 +1,43 @@
 import collections
 import re
+import warnings
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 import torch
 from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
+from torch import Tensor
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.backbone import Backbone
+from fz_openqa.modeling.heads import ClsHead
+from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
 FEATURE_PATTERN = re.compile("^_{1}[a-zA-Z0-9]+_{1}$")
+
+
+def init_default_heads():
+    return DictConfig(
+        {
+            "default": {
+                "_target_": ClsHead,
+                "input_size": None,
+                "output_size": 64,
+            }
+        }
+    )
 
 
 class Module(nn.Module):
@@ -61,19 +78,78 @@ class Module(nn.Module):
     # metrics to display
     pbar_metrics = ["train/loss", "train/Accuracy", "validation/Accuracy"]
 
+    # maximum input size
+    max_length = 512  # todo: infer
+
+    # require heads
+    _required_heads = ["default"]
+
     def __init__(
         self,
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: PreTrainedTokenizerFast,
-        backbone: Union[DictConfig, Backbone],
+        heads: Union[DictConfig, Dict[str, Head]],
         prefix: str = "",
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
-        bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
-        self.backbone = maybe_instantiate(backbone, bert=bert)
+        self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
+        self.heads = nn.ModuleDict(
+            {
+                k: maybe_instantiate(cls, bert=self.bert)
+                for k, cls in heads.items()
+            }
+        )
         self._init_metrics(prefix=prefix)
+
+        # check that required heads are initialized
+        msg = f"{self._required_heads} heads must be provided. Found {list(self.heads.keys())}"
+        assert set(self._required_heads).issubset(set(self.heads.keys())), msg
+
+    def _backbone(
+        self,
+        batch: Batch,
+        prefix: Optional[str] = None,
+        heads: Optional[List[str]] = None,
+        head: Optional[str] = None,
+        **kwargs,
+    ) -> Union[Tensor, Dict[str, Tensor]]:
+
+        # select the keys with prefix
+        if prefix is not None:
+            batch = self._select(prefix, batch)
+
+        if batch["input_ids"].shape[1] > self.max_length:
+            warnings.warn(
+                f"In model {type(self).__name__}, "
+                f"truncating input_ids with "
+                f"length={batch['input_ids'].shape[1]} > max_length={self.max_length}"
+            )
+
+        # BERT forward pass
+        bert_output = self.bert(
+            batch["input_ids"][:, : self.max_length],
+            batch["attention_mask"][:, : self.max_length],
+            **kwargs,
+        )
+        last_hidden_state = bert_output.last_hidden_state
+
+        # process the last hidden state with the heads
+        if head is not None:
+            return self.heads[head](last_hidden_state)
+        else:
+            heads = heads or self.heads.keys()
+            return {k: self.heads[k](last_hidden_state) for k in heads}
+
+    @staticmethod
+    def _select(prefix: str, batch: Batch) -> Batch:
+        prefix = f"{prefix}."
+        return {
+            k.replace(prefix, ""): v
+            for k, v in batch.items()
+            if str(k).startswith(prefix)
+        }
 
     def _instantiate_bert(
         self,

@@ -1,1 +1,2 @@
+from .reader_multiple_choice import ReaderMultipleChoice
 from .retriever_supervised import RetrieverSupervised
