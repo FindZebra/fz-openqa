@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import warnings
 from typing import List
+from typing import Optional
 
 import rich
 from elasticsearch import Elasticsearch
@@ -42,7 +43,9 @@ class ElasticSearchEngine:
 
         return self._instance
 
-    def es_create_index(self, index_name: str) -> bool:
+    def es_create_index(
+        self, index_name: str, insert_body: Optional[bool] = False
+    ) -> bool:
         """
         Create ElasticSearch Index
         """
@@ -50,9 +53,31 @@ class ElasticSearchEngine:
         #  The index is generated given the dataset fingerprint, and should be unique.
 
         try:
-            # self.es.indices.delete(index=index_name, ignore=[400, 404])
-            _ = self.instance.indices.create(index=index_name)
-            created = True
+            if insert_body:
+                body = {
+                    "settings": {
+                        "analysis": {
+                            "analyzer": {
+                                "my_analyzer": {
+                                    "tokenizer": "standard",
+                                    "filter": ["snow"],
+                                }
+                            },
+                            "filter": {
+                                "snow": {
+                                    "type": "snowball",
+                                    "language": "English",
+                                }
+                            },
+                        }
+                    }
+                }
+                _ = self.instance.indices.create(index=index_name, body=body)
+                created = True
+            else:
+                # self.es.indices.delete(index=index_name, ignore=[400, 404])
+                _ = self.instance.indices.create(index=index_name)
+                created = True
 
         # todo: handle specific exceptions
         except RequestError as err:

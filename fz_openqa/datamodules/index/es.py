@@ -40,6 +40,7 @@ class ElasticSearchIndex(Index):
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearchEngine] = None,
         text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
+        snowball_stemming: Optional[bool] = False,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -49,6 +50,7 @@ class ElasticSearchIndex(Index):
         self.batch_size = batch_size
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
+        self.snowball_stemming = snowball_stemming
 
         # text cleaning
         if isinstance(text_cleaner, TextFormatter):
@@ -96,8 +98,15 @@ class ElasticSearchIndex(Index):
         dataset = self.preprocess_text(dataset)
 
         # init the index
-        self.index_name = dataset._fingerprint
-        is_new_index = self.engine.es_create_index(self.index_name)
+        self.index_name = (
+            dataset._fingerprint
+        )  # f"{dataset._fingerprint}-preproc={preproc_type}"
+        if self.snowball_stemming:
+            is_new_index = self.engine.es_create_index(
+                self.index_name, insert_body=True
+            )
+        else:
+            is_new_index = self.engine.es_create_index(self.index_name)
 
         # build the index
         if is_new_index:

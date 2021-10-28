@@ -1,4 +1,5 @@
 import re
+from typing import Any
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -19,7 +20,8 @@ class TextFormatter(Pipe):
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
-        medqa_cleaning: bool = False,
+        remove_symbols: bool = False,
+        # snowball_stemmer: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -28,7 +30,8 @@ class TextFormatter(Pipe):
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
-        self.medqa_cleaning = medqa_cleaning
+        self.remove_symbols = remove_symbols
+        # self.snowball_stemmer = snowball_stemmer
 
     def clean(self, text: str) -> str:
 
@@ -37,6 +40,9 @@ class TextFormatter(Pipe):
 
         if self.remove_linebreaks:
             text = re.sub(r"[\n]", "", text)
+
+        if self.remove_symbols:
+            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
 
         if self.aggressive_cleaning:
             # quick and dirty fix (trying to solve issue #80), doesn't fix it
@@ -47,9 +53,6 @@ class TextFormatter(Pipe):
             text = text.strip().replace(r"\t", " ").replace("\t", " ")
             text = re.sub(r"[^a-zA-Z ]+", " ", text)
             text = re.sub(" +", " ", text)
-
-        if self.medqa_cleaning:
-            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
 
         if self.remove_ref:
             text = re.sub(r"\u2003", " ", text)

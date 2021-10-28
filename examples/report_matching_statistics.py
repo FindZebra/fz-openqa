@@ -164,11 +164,18 @@ print(get_separator())
 # >  - train: 2702 (26.55%)
 # >  - validation: 354 (27.83%)
 # >  - test: 371 (29.14%)
-
+# MetaMapMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~30s/batch
+# >  - train: 2487 (24.44%)
+# >  - validation: 349 (27.44%)
+# >  - test: 334 (26.24%)
 # MetaMapMatch: full dataset, filter Stopwords, num_proc=4, 1000 docs, bs=10: ~30s/batch
 # >  - train: 2698 (26.51%)
 # >  - validation: 370 (29.09%)
 # >  - test: 364 (28.59%)
+# ScispaCyMatch: FZ dataset,  1000 docs, bs=10: ~1800s/batch
+# >  - train: 3182 (31.26%)
+# >  - validation: 413 (32.47%)
+# >  - test: 403 (31.66%)
 
 run_time_block = dm.compile_dataset(
     filter_unmatched=True, num_proc=3, batch_size=10

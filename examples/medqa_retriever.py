@@ -1,3 +1,4 @@
+from pprint import pprint
 from typing import Optional
 
 import datasets
@@ -14,6 +15,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.concat_answer_options import (
     ConcatQuestionAnswerOption,
@@ -34,12 +36,15 @@ tokenizer = init_pretrained_tokenizer(
 # load the corpus object
 corpus = MedQaCorpusDataModule(
     tokenizer=tokenizer,
+    to_sentences=True,
     index=ElasticSearchIndex(
         index_key="document.row_idx",
         text_key="document.text",
         query_key="question.metamap",
         num_proc=4,
         filter_mode=None,
+        text_cleaner=TextFormatter(remove_symbols=True),
+        snowball_stemming=False,
     ),
     verbose=False,
     num_proc=4,
@@ -70,7 +75,7 @@ print(get_separator())
 
 concat_pipe = ConcatQuestionAnswerOption()
 select_fields = FilterKeys(lambda key: key == "question.metamap")
-search_index = SearchCorpus(corpus=corpus, k=5)
+search_index = SearchCorpus(corpus=corpus, k=10)
 flatten_and_search = AsFlatten(search_index)
 
 pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
@@ -93,10 +98,13 @@ num_corrects = 0
 for batch in track(
     dm.train_dataloader(), description="Iterating through the dataset..."
 ):
+    # pprint(batch)
 
     # 1 do a pipe to concat question + answer option
     batch = pipe(batch)
-
+    # print(len(batch["document.retrieval_score"]))
+    # print(len(batch["answer.target"]))
+    # print(get_separator())
     predictions = [
         np.argmax(np.sum(question, axis=1))
         for question in batch["document.retrieval_score"]
@@ -106,12 +114,15 @@ for batch in track(
     #    randargmax(np.sum(question, axis=1)
     #              ) for question in batch['document.retrieval_score']
     # ]
-    # print(preds)
+
     # print(predictions)
+    # print(batch["answer.target"])
+    # print(get_separator())
+
     num_corrects += np.count_nonzero(
         predictions - batch["answer.target"].numpy() == 0
     )
-    exit()
+
 print(
     "accuracy is: {} / {} = {:.1f}%".format(
         num_corrects, total, num_corrects * 100.0 / total

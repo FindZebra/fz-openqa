@@ -148,8 +148,6 @@ class CorpusDataModule(BaseDataModule):
         if self.to_sentences:
             to_passages = False
 
-        print("To sentences: ", self.to_sentences)
-        print("To passages: ", to_passages)
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
