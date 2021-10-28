@@ -1,5 +1,10 @@
 from collections import defaultdict
-from typing import Optional, Sequence, Dict, List, Any, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -21,8 +26,6 @@ class GenerateSentences(Pipe):
         self.delimitter = delimitter
         self.required_keys = required_keys
 
-
-
     def __call__(self, batch: Batch) -> Batch:
         output = self.generate_sentences(
             batch,
@@ -37,19 +40,17 @@ class GenerateSentences(Pipe):
         keys: List[str],
     ) -> Tuple[List[int], Batch]:
         """
-            This functions generates the sentences for each corpus article.
+        This functions generates the sentences for each corpus article.
 
-            return:
-                - output: Batch of data (`document.text` + `idx` (document id))
+        return:
+            - output: Batch of data (`document.text` + `idx` (document id))
         """
-        #print(examples.keys())
+        # print(examples.keys())
         assert all(key in examples.keys() for key in self.required_keys)
 
         output = defaultdict(list)
-        for idx, text in zip(examples["idx"], examples['text']):
-            for sent_idx, sentence in enumerate(
-                    text.split(self.delimitter)
-            ):
+        for idx, text in zip(examples["idx"], examples["text"]):
+            for sent_idx, sentence in enumerate(text.split(self.delimitter)):
                 output["idx"].append(idx)
                 output["sentence_idx"].append(sent_idx)
                 output["text"].append(sentence)

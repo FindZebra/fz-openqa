@@ -1,7 +1,9 @@
 import datasets
+from utils import display_search_results
+from utils import gen_example_query
 
-from utils import gen_example_query, display_search_results
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule, MedQaCorpusDataModule
+from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
