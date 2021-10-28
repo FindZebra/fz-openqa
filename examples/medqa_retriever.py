@@ -1,6 +1,3 @@
-from pprint import pprint
-from typing import Optional
-
 import datasets
 import numpy as np
 import rich
@@ -11,7 +8,6 @@ from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
@@ -22,12 +18,30 @@ from fz_openqa.datamodules.pipes.concat_answer_options import (
 )
 from fz_openqa.datamodules.pipes.nesting import AsFlatten
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.train_utils import setup_safe_env
 
 datasets.set_caching_enabled(True)
 setup_safe_env()
+
+es_body = {
+    "settings": {
+        "analysis": {
+            "analyzer": {
+                "my_analyzer": {
+                    "tokenizer": "standard",
+                    "filter": ["snow"],
+                }
+            },
+            "filter": {
+                "snow": {
+                    "type": "snowball",
+                    "language": "English",
+                }
+            },
+        }
+    }
+}
 
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"
@@ -44,7 +58,7 @@ corpus = MedQaCorpusDataModule(
         num_proc=4,
         filter_mode=None,
         text_cleaner=TextFormatter(remove_symbols=True),
-        snowball_stemming=False,
+        es_body=es_body,
     ),
     verbose=False,
     num_proc=4,

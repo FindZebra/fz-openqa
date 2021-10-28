@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import warnings
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -44,40 +45,14 @@ class ElasticSearchEngine:
         return self._instance
 
     def es_create_index(
-        self, index_name: str, insert_body: Optional[bool] = False
+        self, index_name: str, body: Optional[Dict] = None
     ) -> bool:
         """
         Create ElasticSearch Index
         """
-        # todo @MotzWanted: don't override the dataset if existing.
-        #  The index is generated given the dataset fingerprint, and should be unique.
-
         try:
-            if insert_body:
-                body = {
-                    "settings": {
-                        "analysis": {
-                            "analyzer": {
-                                "my_analyzer": {
-                                    "tokenizer": "standard",
-                                    "filter": ["snow"],
-                                }
-                            },
-                            "filter": {
-                                "snow": {
-                                    "type": "snowball",
-                                    "language": "English",
-                                }
-                            },
-                        }
-                    }
-                }
-                _ = self.instance.indices.create(index=index_name, body=body)
-                created = True
-            else:
-                # self.es.indices.delete(index=index_name, ignore=[400, 404])
-                _ = self.instance.indices.create(index=index_name)
-                created = True
+            _ = self.instance.indices.create(index=index_name, body=body)
+            created = True
 
         # todo: handle specific exceptions
         except RequestError as err:
@@ -133,7 +108,6 @@ class ElasticSearchEngine:
         """
         Batch search in ElasticSearch Index
         """
-        request = []
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {

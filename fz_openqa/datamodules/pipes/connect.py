@@ -137,7 +137,10 @@ class Gate(Pipe):
         pipe: Optional[Pipe],
     ):
         self.condition = condition
-        self.pipe = pipe
+        if isinstance(condition, bool) and condition is False:
+            self.pipe = None
+        else:
+            self.pipe = pipe
 
     def as_fingerprintable(self) -> Pipe:
         return Gate(self.condition, self.pipe.as_fingerprintable())

@@ -144,25 +144,23 @@ class CorpusDataModule(BaseDataModule):
         # remove title for now
         dataset = dataset.remove_columns("title")
 
-        to_passages = True
-        if self.to_sentences:
-            to_passages = False
-
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
                 UpdateWith(Gate(self.to_sentences, GenerateSentences())),
                 self.get_tokenizer_pipe(),
                 UpdateWith(
-                    Gate(to_passages, self.get_generate_passages_pipe())
+                    Gate(
+                        not self.to_sentences,
+                        self.get_generate_passages_pipe(),
+                    )
                 ),
-                UpdateWith(Gate(to_passages, DropKeys(["offset_mapping"]))),
             ),
             batched=True,
             num_proc=self.num_proc,
             desc="Tokenizing documents and extracting overlapping passages",
         )
-        print("now we're here")
+
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
@@ -175,26 +173,27 @@ class CorpusDataModule(BaseDataModule):
             desc="Indexing documents",
         )
 
-        if to_passages:
-            # casting to tensors
-            dataset.set_format(
-                type="torch",
-                columns=self.pt_attributes,
-                output_all_columns=True,
-            )
+        # # casting to tensors
+        # dataset.set_format(
+        #     type="torch",
+        #     columns=self.pt_attributes,
+        #     output_all_columns=True,
+        # )
 
         return dataset
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
         passage_pipe = Sequential(
-            GeneratePassages(
-                size=self.passage_length,
-                stride=self.passage_stride,
-                start_tokens=self.get_prefix_tokens(),
-                end_tokens=[self.tokenizer.sep_token_id],
-                pad_token_id=self.tokenizer.pad_token_id,
-                verbose=self.verbose,
+            UpdateWith(
+                GeneratePassages(
+                    size=self.passage_length,
+                    stride=self.passage_stride,
+                    start_tokens=self.get_prefix_tokens(),
+                    end_tokens=[self.tokenizer.sep_token_id],
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    verbose=self.verbose,
+                )
             ),
             DropKeys(["offset_mapping"]),
         )

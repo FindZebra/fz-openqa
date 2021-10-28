@@ -3,8 +3,6 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Sequence
-from typing import Tuple
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -20,25 +18,27 @@ class GenerateSentences(Pipe):
     def __init__(
         self,
         *,
-        delimitter: Optional[str] = ".",
-        required_keys: Optional[Sequence[str]] = ["idx", "text"]
+        delimiter: Optional[str] = ".",
+        required_keys: Optional[List[str]] = None,
+        **kwargs
     ):
-        self.delimitter = delimitter
+        super(GenerateSentences, self).__init__(**kwargs)
+        required_keys = required_keys or ["idx", "text"]
+        self.delimiter = delimiter
         self.required_keys = required_keys
 
-    def __call__(self, batch: Batch) -> Batch:
-        output = self.generate_sentences(
-            batch,
-            keys=self.required_keys,
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        return self.generate_sentences(
+            batch, required_keys=self.required_keys, delimiter=self.delimiter
         )
 
-        return output
-
+    @staticmethod
     def generate_sentences(
-        self,
         examples: Dict[str, List[Any]],
-        keys: List[str],
-    ) -> Tuple[List[int], Batch]:
+        *,
+        required_keys: List[str],
+        delimiter: str
+    ) -> Batch:
         """
         This functions generates the sentences for each corpus article.
 
@@ -46,11 +46,11 @@ class GenerateSentences(Pipe):
             - output: Batch of data (`document.text` + `idx` (document id))
         """
         # print(examples.keys())
-        assert all(key in examples.keys() for key in self.required_keys)
+        assert all(key in examples.keys() for key in required_keys)
 
         output = defaultdict(list)
         for idx, text in zip(examples["idx"], examples["text"]):
-            for sent_idx, sentence in enumerate(text.split(self.delimitter)):
+            for sent_idx, sentence in enumerate(text.split(delimiter)):
                 output["idx"].append(idx)
                 output["sentence_idx"].append(sent_idx)
                 output["text"].append(sentence)
