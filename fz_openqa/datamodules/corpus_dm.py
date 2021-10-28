@@ -163,6 +163,9 @@ class CorpusDataModule(BaseDataModule):
             desc="Indexing documents",
         )
 
+        # flatten
+        dataset = dataset.flatten_indices()
+
         # casting to tensors
         dataset.set_format(
             type="torch", columns=self.pt_attributes, output_all_columns=True
