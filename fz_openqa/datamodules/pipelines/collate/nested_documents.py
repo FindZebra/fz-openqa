@@ -2,8 +2,8 @@ import torch
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ApplyToAll
-from fz_openqa.datamodules.pipes import AsFlatten
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import FirstEg
@@ -73,7 +73,9 @@ class MaybeCollateDocuments(Gate):
                     "document.text",
                 ]
             ),
-            AsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
+            ApplyAsFlatten(
+                Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)
+            ),
         )
 
         condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))

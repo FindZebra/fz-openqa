@@ -132,9 +132,10 @@ class FeatchDocuments(Pipe):
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = Collate(),
         index_key: str = "document.row_idx",
+        id: str = "fetch-documents-pipe",
         **kwargs,
     ):
-        super(FeatchDocuments, self).__init__(**kwargs)
+        super(FeatchDocuments, self).__init__(id=id)
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe

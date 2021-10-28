@@ -129,7 +129,7 @@ class FilterKeys(Pipe):
     Filter the keys in the batch.
     """
 
-    def __init__(self, condition: Callable, **kwargs):
+    def __init__(self, condition: Optional[Callable], **kwargs):
         super().__init__(**kwargs)
         self.condition = condition
 
@@ -137,6 +137,8 @@ class FilterKeys(Pipe):
         self, batch: Union[List[Batch], Batch], **kwargs
     ) -> Union[List[Batch], Batch]:
         """The call of the pipeline process"""
+        if self.condition is None:
+            return batch
         return self.filter(batch)
 
     def filter(self, batch):
@@ -265,9 +267,9 @@ class ApplyToAll(Pipe):
         """The call of the pipeline process"""
         for key, values in batch.items():
             if self.element_wise:
-                batch[key] = [self.op(x) for x in values]
+                batch[key] = [self.op(x, **kwargs) for x in values]
             else:
-                batch[key] = self.op(values)
+                batch[key] = self.op(values, **kwargs)
 
         return batch
 
@@ -282,13 +284,3 @@ class CopyBatch(Pipe):
             return deepcopy(batch)
         else:
             return copy(batch)
-
-
-def check_pickle_capability(pipe: Pipe):
-    """check that the pipe can be pickled, which is necessary for multiprocessing"""
-    if not pipe.dill_inspect(reduce=True):
-        rich.print(pipe.dill_inspect())
-        raise TypeError(
-            "Couldn't pickle pipe. Code would fail if `num_proc`>1. "
-            f"Make sure the pipe {pipe} can be pickled."
-        )

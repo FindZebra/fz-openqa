@@ -6,13 +6,12 @@ from typing import Optional
 import numpy as np
 import rich
 
+from ..utils.filter_keys import KeyWithPrefix
 from .base import Pipe
+from .nesting import ApplyAsFlatten
 from .nesting import Nested
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
-
-
-ARE_DOCS_SELECTED_KEY = "__doc_selected__"
 
 
 class SelectDocs(Nested):
@@ -27,6 +26,7 @@ class SelectDocs(Nested):
         neg_select_mode: str = "first",
         strict: bool = False,
         prefix="document.",
+        id="select-docs",
     ):
         pipe = SelectDocsOneEg(
             total=total,
@@ -36,10 +36,9 @@ class SelectDocs(Nested):
             strict=strict,
         )
 
-        def _filter(key):
-            return str(key).startswith(prefix)
-
-        super(SelectDocs, self).__init__(pipe=pipe, filter=_filter)
+        super(SelectDocs, self).__init__(
+            pipe=pipe, filter=KeyWithPrefix(prefix), id=id
+        )
 
 
 class SelectDocsOneEg(Pipe):
@@ -51,7 +50,9 @@ class SelectDocsOneEg(Pipe):
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
+        **kwargs,
     ):
+        super(SelectDocsOneEg, self).__init__(**kwargs)
         self.total = total
         self.max_pos_docs = max_pos_docs
         self.pos_select_mode = pos_select_mode
@@ -59,7 +60,7 @@ class SelectDocsOneEg(Pipe):
         self.strict = strict
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        return input_keys + [ARE_DOCS_SELECTED_KEY]
+        return input_keys
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         is_positive = [x > 0 for x in batch["document.match_score"]]
@@ -124,10 +125,7 @@ class SelectDocsOneEg(Pipe):
                 raise NotImplementedError
 
                 # re-index and return
-        return {
-            ARE_DOCS_SELECTED_KEY: True,
-            **{k: reindex(v, index) for k, v in batch.items()},
-        }
+        return {k: reindex(v, index) for k, v in batch.items()}
 
 
 def select_values(

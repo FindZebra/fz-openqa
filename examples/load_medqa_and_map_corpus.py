@@ -1,5 +1,6 @@
 import json
 import logging
+import os.path
 
 import datasets
 import rich
@@ -56,7 +57,7 @@ def run():
         train_batch_size=100,
         num_proc=4,
         num_workers=4,
-        use_subset=False,
+        use_subset=True,
         verbose=True,
         corpus=corpus,
         # retrieve 100 documents for each question
@@ -106,6 +107,8 @@ def run():
 
     # dump data
     for split, dset in dm.dataset.items():
+        if not os.path.exists("outputs/"):
+            os.makedirs("outputs/")
         with open(f"outputs/compiled-dataset-{split}.jsonl", mode="w") as fp:
             for i, row in enumerate(dset):
                 row["split"] = str(split)

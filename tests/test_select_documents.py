@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import torch
 
-from fz_openqa.datamodules.pipes.documents import SelectDocsOneEg, ARE_DOCS_SELECTED_KEY
+from fz_openqa.datamodules.pipes.documents import SelectDocsOneEg
 
 
 class TestSelectDocuments(TestCase):
@@ -20,8 +20,6 @@ class TestSelectDocuments(TestCase):
 
             output = SelectDocsOneEg(total=total, max_pos_docs=max_pos_docs)(deepcopy(self.data))
 
-            self.assertIn(ARE_DOCS_SELECTED_KEY, output)
-            output.pop(ARE_DOCS_SELECTED_KEY)
             for k, v in output.items():
                 self.assertEqual(len(v), total)
 
@@ -37,8 +35,6 @@ class TestSelectDocuments(TestCase):
                                      strict=False,
                                      max_pos_docs=max_pos_docs)(deepcopy(self.data))
 
-            self.assertIn(ARE_DOCS_SELECTED_KEY, output)
-            output.pop(ARE_DOCS_SELECTED_KEY)
             for k, v in output.items():
                 self.assertEqual(len(v), total)
 
@@ -48,7 +44,5 @@ class TestSelectDocuments(TestCase):
         output = SelectDocsOneEg(total=total,
                                  strict=False,
                                  max_pos_docs=max_pos_docs)(deepcopy(self.data))
-
-        self.assertIn(ARE_DOCS_SELECTED_KEY, output)
 
         self.assertEqual([x for x in output['document.feature']], [5, 4, 3, 2, 1, 10, 9, 8, 7, 6])

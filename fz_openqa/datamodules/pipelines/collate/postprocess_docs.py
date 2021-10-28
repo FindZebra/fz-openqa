@@ -1,14 +1,13 @@
 from typing import Optional
 
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Nested
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.documents import ARE_DOCS_SELECTED_KEY
 from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
 from fz_openqa.datamodules.utils.condition import Not
 from fz_openqa.datamodules.utils.condition import Reduce
@@ -32,7 +31,7 @@ class PostprocessPipe(BlockSequential):
             super().__init__([("identity", Identity())])
         else:
             # sort the documents based on score and `match_score`
-            sorter = Nested(
+            sorter = ApplyAsFlatten(
                 Sort(
                     keys=["document.match_score", "document.retrieval_score"]
                 ),
@@ -58,12 +57,7 @@ class PostprocessPipe(BlockSequential):
                 max_pos_docs=max_select_pos_docs,
                 strict=False,
             )
-            activate_selector = Reduce(
-                HasKeyWithPrefix("document.match_score"),
-                Not(HasKeyWithPrefix(ARE_DOCS_SELECTED_KEY)),
-                reduce_op=all,
-            )
-            selector = Gate(activate_selector, selector)
+            selector = Gate(HasKeyWithPrefix("document.match_score"), selector)
 
             super().__init__(
                 [

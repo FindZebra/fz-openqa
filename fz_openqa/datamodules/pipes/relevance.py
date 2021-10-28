@@ -116,9 +116,10 @@ class RelevanceClassifier(Pipe):
         output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
+        id="relevance-classifier",
         **kwargs,
     ):
-        super(RelevanceClassifier, self).__init__(**kwargs)
+        super(RelevanceClassifier, self).__init__(id=id)
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix

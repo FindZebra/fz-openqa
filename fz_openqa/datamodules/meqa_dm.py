@@ -20,21 +20,20 @@ from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
 from .pipelines.preprocessing import SearchDocuments
 from .pipelines.preprocessing import SortDocuments
-from .pipes import AsFlatten
+from .pipes import ApplyAsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
-from .pipes import FilterKeys
 from .pipes import Parallel
 from .pipes import Pipe
 from .pipes import RelevanceClassifier
 from .pipes import SelectDocs
 from .pipes import Sequential
-from .pipes import UpdateWith
-from .pipes.base import check_pickle_capability
 from .pipes.search import FeatchDocuments
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
+from .utils.filter_keys import KeyIn
+from .utils.map_with_fingerprint import MapWithFingerprint
 from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (
@@ -262,16 +261,14 @@ class MedQaDataModule(BaseDataModule):
         if corpus is None:
             return None
 
-        fetch_documents = Sequential(
-            FilterKeys(lambda key: key in ["document.row_idx"]),
-            AsFlatten(
-                FeatchDocuments(
-                    corpus_dataset=corpus.dataset,
-                    collate_pipe=corpus.collate_pipe,
-                )
+        return ApplyAsFlatten(
+            FeatchDocuments(
+                corpus_dataset=corpus.dataset,
+                collate_pipe=corpus.collate_pipe,
             ),
+            filter=KeyIn(["document.row_idx"]),
+            update=True,
         )
-        return UpdateWith(fetch_documents)
 
     def get_qa_collate_pipe(self):
         # get the raw text questions, extract and collate
@@ -348,14 +345,14 @@ class MedQaDataModule(BaseDataModule):
         original_size = {k: len(dset) for k, dset in self.dataset.items()}
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
-            check_pickle_capability(block)
-            self.dataset = self.dataset.map(
+            mapper = MapWithFingerprint(
                 block,
                 batched=True,
                 num_proc=num_proc,
                 batch_size=batch_size,
                 desc=f"[Corpus mapping] {k}",
             )
+            self.dataset = mapper(self.dataset)
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:

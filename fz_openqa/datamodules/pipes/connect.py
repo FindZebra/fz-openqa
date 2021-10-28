@@ -109,6 +109,12 @@ class UpdateWith(Pipe):
         # output.update(**{k: v for k, v in batch.items() if k not in output})
         return batch
 
+    def fingerprint(self) -> Dict[str, Any]:
+        return {
+            "__self__": self._fingerprint(self),
+            "pipe": self.pipe.fingerprint(),
+        }
+
     def dill_inspect(self, reduce: bool = False) -> bool:
         return self.pipe.dill_inspect()
 
