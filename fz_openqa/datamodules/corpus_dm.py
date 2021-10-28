@@ -23,7 +23,7 @@ from .datasets import meqa_en_corpus
 from .index.base import Index
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
-from .pipes import Apply
+from .pipes import Apply, UpdateWith
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
@@ -36,6 +36,7 @@ from .pipes import SearchCorpus
 from .pipes import Sequential
 from .pipes import TokenizerPipe
 from .pipes.passage import GeneratePassages
+from .pipes.sentence import GenerateSentences
 from .utils.transformations import add_spec_token
 from .utils.transformations import set_row_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
@@ -79,16 +80,17 @@ class CorpusDataModule(BaseDataModule):
     vectors_id = "document.vectors"
 
     def __init__(
-        self,
-        *args,
-        passage_length: int = 200,
-        passage_stride: int = 100,
-        index: Optional[Index] = None,
-        add_encoding_tokens: bool = True,
-        append_document_title: bool = False,
-        max_length: Optional[int] = None,
-        input_dir: Optional[str] = None,
-        **kwargs,
+            self,
+            *args,
+            passage_length: int = 200,
+            passage_stride: int = 100,
+            index: Optional[Index] = None,
+            to_sentences: bool = True,
+            add_encoding_tokens: bool = True,
+            append_document_title: bool = False,
+            max_length: Optional[int] = None,
+            input_dir: Optional[str] = None,
+            **kwargs,
     ):
         super().__init__(*args, max_length=max_length, **kwargs)
         assert self.max_length is None, (
@@ -101,6 +103,7 @@ class CorpusDataModule(BaseDataModule):
         self.passage_length = passage_length
         self.passage_stride = passage_stride
         self.add_encoding_tokens = add_encoding_tokens
+        self.to_sentences = to_sentences
         if append_document_title:
             raise NotImplementedError
         self.append_document_title = append_document_title
@@ -140,22 +143,28 @@ class CorpusDataModule(BaseDataModule):
         # remove title for now
         dataset = dataset.remove_columns("title")
 
+        to_passages = True
+        if self.to_sentences:
+            to_passages = False
+
+        print("To sentences: ", self.to_sentences)
+        print("To passages: ", to_passages)
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
-                # maybe split to sentences
+                UpdateWith(Gate(self.to_sentences, GenerateSentences())),
                 self.get_tokenizer_pipe(),
-                Gate("ARG", self.get_generate_passages_pipe()),
+                UpdateWith(Gate(to_passages, self.get_generate_passages_pipe())),
+                UpdateWith(Gate(to_passages, DropKeys(["offset_mapping"]))),
             ),
             batched=True,
             num_proc=self.num_proc,
             desc="Tokenizing documents and extracting overlapping passages",
         )
-
+        print("now we're here")
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
-
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
@@ -165,10 +174,11 @@ class CorpusDataModule(BaseDataModule):
             desc="Indexing documents",
         )
 
-        # casting to tensors
-        dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=True
-        )
+        if to_passages:
+            # casting to tensors
+            dataset.set_format(
+                type="torch", columns=self.pt_attributes, output_all_columns=True
+            )
 
         return dataset
 
@@ -267,9 +277,9 @@ class CorpusDataModule(BaseDataModule):
         return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
 
     def build_index(
-        self,
-        model: Optional[Callable] = None,
-        **kwargs,
+            self,
+            model: Optional[Callable] = None,
+            **kwargs,
     ):
         """
         Compute vectors (sparse or dense) for the whole dataset.
@@ -281,13 +291,13 @@ class CorpusDataModule(BaseDataModule):
         return self._index.build(self.dataset, model=model, **kwargs)
 
     def search_index(
-        self,
-        query: Batch,
-        *,
-        k: int = 1,
-        model: Optional[Union[Callable, torch.nn.Module]] = None,
-        simple_collate: bool = False,
-        **kwargs,
+            self,
+            query: Batch,
+            *,
+            k: int = 1,
+            model: Optional[Union[Callable, torch.nn.Module]] = None,
+            simple_collate: bool = False,
+            **kwargs,
     ) -> Union[Batch, List[Dict[str, Any]]]:
         """
         Query index given a input query

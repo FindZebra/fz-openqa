@@ -1,4 +1,8 @@
+from collections import defaultdict
+from typing import Optional, Sequence, Dict, List, Any, Tuple
+
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.utils.datastruct import Batch
 
 
 class GenerateSentences(Pipe):
@@ -8,38 +12,46 @@ class GenerateSentences(Pipe):
     https://github.com/jind11/MedQA/blob/master/IR/scripts/insert_text_to_elasticsearch.py
     """
 
-    required_keys = ["text"]
-
     def __init__(
         self,
         *,
-        delimitter: str,
-        batch_size: int,
+        delimitter: Optional[str] = ".",
+        required_keys: Optional[Sequence[str]] = ["idx", "text"]
     ):
         self.delimitter = delimitter
-        self.batch_size = batch_size
-
-
-"""
-    def __call__(self, text: str) -> str:
-        pass
+        self.required_keys = required_keys
 
 
 
-    def groups(stream, size):
-        batch = []
-        for item in stream:
-            batch += [item]
-            if len(batch) % size == 0:
-                yield batch
-                batch = []
-        if len(batch) > 0:
-            yield batch
+    def __call__(self, batch: Batch) -> Batch:
+        output = self.generate_sentences(
+            batch,
+            keys=self.required_keys,
+        )
 
-    def text_to_sentences(self, text):
-        for line in line_stream:
-            for sentence in line_cleaned.split("."):
-                if len(sentence) == 0:
-                    continue
-                yield sentence
-"""
+        return output
+
+    def generate_sentences(
+        self,
+        examples: Dict[str, List[Any]],
+        keys: List[str],
+    ) -> Tuple[List[int], Batch]:
+        """
+            This functions generates the sentences for each corpus article.
+
+            return:
+                - output: Batch of data (`document.text` + `idx` (document id))
+        """
+        #print(examples.keys())
+        assert all(key in examples.keys() for key in self.required_keys)
+
+        output = defaultdict(list)
+        for idx, text in zip(examples["idx"], examples['text']):
+            for sent_idx, sentence in enumerate(
+                    text.split(self.delimitter)
+            ):
+                output["idx"].append(idx)
+                output["sentence_idx"].append(sent_idx)
+                output["text"].append(sentence)
+
+        return output

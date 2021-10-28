@@ -140,26 +140,35 @@ rich.print("[green]>> index is built.")
 print(get_separator())
 
 # Compile the dataset
-# ExactMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
-# >  - train: 3473 (34.12%)
-# >  - validation: 474 (37.26%)
-# >  - test: 450 (35.35%)
-# SciSpacyMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~75s/batch, phoebe.compute.dtu.dk
-# >  - train: 7605 (74.72%)
-# >  - validation: 967 (76.02%)
-# >  - test: 954 (74.94%)
-# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~4.6s/batch, phoebe.compute.dtu.dk
+# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~4.6s/batch
 # >  - train: 2296 (22.56%)
 # >  - validation: 338 (26.57%)
 # >  - test: 306 (24.04%)
-# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~3.6s/batch, phoebe.compute.dtu.dk
+# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~3.6s/batch
 # >  - train: 2702 (26.55%)
 # >  - validation: 354 (27.83%)
 # >  - test: 371 (29.14%)
-# ExactMatch: FZxMedQA dataset, num_proc=4, 1000 docs, bs=10: ~6s/batch, phoebe.compute.dtu.dk
+# ExactMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~6s/batch
 # >  - train: 2487 (24.44%)
 # >  - validation: 349 (27.44%)
 # >  - test: 334 (26.24%)
+# ExactMatch: full dataset, filter Stopwords, num_proc=4, 1000 docs, bs=10: ~6s/batch
+# >  - train: 2698 (26.51%)
+# >  - validation: 370 (29.09%)
+# >  - test: 364 (28.59%)
+# MetaMapMatch: FZ dataset, num_proc=4, 1000 docs: bs 10, ~30s/batch
+# >  - train: 2296 (22.56%)
+# >  - validation: 338 (26.57%)
+# >  - test: 306 (24.04%)
+# MetaMapMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~32s/batch
+# >  - train: 2702 (26.55%)
+# >  - validation: 354 (27.83%)
+# >  - test: 371 (29.14%)
+
+# MetaMapMatch: full dataset, filter Stopwords, num_proc=4, 1000 docs, bs=10: ~30s/batch
+# >  - train: 2698 (26.51%)
+# >  - validation: 370 (29.09%)
+# >  - test: 364 (28.59%)
 
 run_time_block = dm.compile_dataset(
     filter_unmatched=True, num_proc=3, batch_size=10
