@@ -1,9 +1,9 @@
 import warnings
-from dataclasses import dataclass
 from typing import Any
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from datasets import Split
 from torch import Tensor
@@ -30,27 +30,25 @@ class ReaderMultipleChoice(Module):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-        "document.is_positive",
         "answer.input_ids",
         "answer.attention_mask",
     ]
 
     # named of the features required for evaluation
-    _required_eval_feature_names = [
-        "answer.target",
-    ]
+    _required_eval_feature_names = ["answer.target", "document.match_score"]
 
     # prefix for the logged metrics
     task_id: Optional[str] = "reading"
 
     # metrics to display
     pbar_metrics = [
-        "train/reading/loss",
         "train/reading/Accuracy",
-        "validation/reading/Accuracy",
+        # "validation/reading/Accuracy",
         "train/reading/relevance-Accuracy",
-        "validation/reading/relevance-Accuracy",
+        # "validation/reading/relevance-Accuracy",
     ]
+
+    _required_heads = ["option", "evidence", "relevance"]
 
     def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
@@ -69,7 +67,7 @@ class ReaderMultipleChoice(Module):
 
         self.relevance_metrics = SplitMetrics(init_relevance_metric)
 
-    def _forward(self, batch: Batch, reshape: bool = True, **kwargs) -> Batch:
+    def _forward(self, batch: Batch, **kwargs) -> Batch:
         """
         Compute the multiple choice answer model:
          * log p(a_i | q, e)
@@ -93,42 +91,35 @@ class ReaderMultipleChoice(Module):
         # todo batch = copy(batch)  # make sure the original batch is not modified
         # checks inputs, set parameters and concat the questions with the documents
         bs, n_options, *_ = batch["answer.input_ids"].shape
-        b_, n_docs, *_ = batch["document.input_ids"].shape
+        _, n_docs, *_ = batch["document.input_ids"].shape
 
         batch = self._expand_and_flatten_qd(batch, n_docs)
 
         # concatenate questions and documents such that there is no padding between Q and D
+        # todo: check switching q and d
         qd_batch = self.concat_fields_across_dim_one(
             batch, ["question", "document"]
         )
 
-        # compute contextualized representations
-        heq = self.backbone(
-            qd_batch["input_ids"][:, : self.max_length],
-            attention_mask=qd_batch["attention_mask"][:, : self.max_length],
-        )  # [bs*n_doc, h]
+        # compute evidence and relevance heads: [bs*n_doc, h]
+        heq_heads = self._backbone(qd_batch, heads=["evidence", "relevance"])
 
-        ha = self.backbone(
-            flatten(batch["answer.input_ids"]),
-            flatten(batch["answer.attention_mask"]),
-        )  # [bs * N_a, h]
-
-        # infer the number of documents
-        n_docs = heq.shape[0] // bs
-        assert n_docs > 0, (
-            f"number of documents should be at least one: "
-            f"got n_docs={n_docs}, heq.shape={heq.shape}, bs={bs}"
+        # compute answer head:  [bs * N_a, h]
+        ha = self._backbone(
+            {
+                "input_ids": flatten(batch["answer.input_ids"]),
+                "attention_mask": flatten(batch["answer.attention_mask"]),
+            },
+            head="option",
         )
 
         # relevance model (see Dense Passage Retrieval)
-        h_relevance = self.relevance_head(self.dropout(heq)).mean(-1)
+        h_relevance = heq_heads["relevance"].mean(-1)
         h_relevance = h_relevance.view(bs, n_docs)
 
         # answer-question final representation
-        heq = self.qd_head(self.dropout(heq))  # [bs * n_doc, h]
-        ha = self.a_head(self.dropout(ha)).view(
-            bs, n_options, self.hparams.hidden_size
-        )
+        heq = heq_heads["evidence"]  # [bs * n_doc, h]
+        ha = ha.view(bs, n_options, heq.shape[-1])
         # dot-product model S(qd, a)
         heq = heq.view(bs, n_docs, *heq.shape[1:])
         S_qda = torch.einsum("bdh, bah -> bda", heq, ha)
@@ -137,7 +128,6 @@ class ReaderMultipleChoice(Module):
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         check_only_first_doc_positive(batch)
-        relevance_targets = batch["document.is_positive"].long().argmax(-1)
 
         # arguments
         bs, n_docs = batch["document.input_ids"].shape[:2]
@@ -145,23 +135,27 @@ class ReaderMultipleChoice(Module):
         # forward pass through the reader model
         output = self._forward(batch, **kwargs)
 
-        # relevance loss
+        # relevance loss: match the positive document
         # It is assumed that there is only a single positive document
-        relevance_loss = self.batched_cross_entropy(
-            relevance_targets, output["_relevance_logits_"]
+        relevance_targets = batch["document.match_score"].argmax(-1)
+        relevance_loss = self._batched_cross_entropy(
+            targets=relevance_targets, logits=output["_relevance_logits_"]
         )
 
-        # select the logits of the answering model corresponding to the positive document
-        _index = relevance_targets.view(bs, 1, 1).expand(
-            bs, 1, output["_relevance_logits_"].shape[-1]
-        )
-        answer_logits = (
-            output["_answer_logits_"].gather(dim=1, index=_index).squeeze(1)
-        )
+        # select the logits of the answering model corresponding
+        # to the positive document (relevance_target)
+        _index = relevance_targets.view(bs, 1, 1)
+        _index = _index.expand(bs, 1, output["_relevance_logits_"].shape[-1])
+        answer_logits = output["_answer_logits_"].permute(
+            0, 2, 1
+        )  # [bs, n_options, hdim]
+        answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
 
         # compute the reader loss
         answer_targets: Tensor = batch["answer.target"]
-        answer_loss = self.batched_cross_entropy(answer_targets, answer_logits)
+        answer_loss = self._batched_cross_entropy(
+            targets=answer_targets, logits=answer_logits
+        )
 
         # final loss
         loss = answer_loss + relevance_loss
@@ -172,10 +166,11 @@ class ReaderMultipleChoice(Module):
             "answer_loss": answer_loss.detach(),
             "_answer_targets_": answer_targets.detach(),
             "_relevance_targets_": relevance_targets.detach(),
-            **{k: v.detach() for k, v in output.items()},
+            "_answer_logits_": answer_logits.detach(),
+            "_relevance_logits_": output["_relevance_logits_"].detach(),
         }
 
-    def batched_cross_entropy(self, targets, logits):
+    def _batched_cross_entropy(self, *, targets, logits):
         """Compute cross entropy for each batch elements"""
         loss = F.cross_entropy(logits, targets, reduction="none")
         # keep one loss term per batch element: shape [batch_size, ]

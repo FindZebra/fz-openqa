@@ -230,6 +230,7 @@ class Module(nn.Module):
 
         Implement `_step` for each sub-class.
         """
+        # todo: before dispatching to devices: filter the fields to keep only the required ones
         self._check_features(batch, self._required_eval_feature_names)
         return self._step(batch, **kwargs)
 
@@ -238,7 +239,7 @@ class Module(nn.Module):
 
         # example
         logits = self.forward(batch, **kwargs)
-        nll = torch.nn.functional.batched_cross_entropy(
+        nll = torch.nn.functional._batched_cross_entropy(
             logits, batch["labels"], reduce="none"
         )
 
