@@ -3,6 +3,7 @@ import logging
 import os.path
 
 import datasets
+import hydra
 import rich
 import torch
 from rich.logging import RichHandler
@@ -19,7 +20,8 @@ from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
 
-def run():
+@hydra.main(config_path=None)
+def run(config):
     FORMAT = "%(message)s"
     logging.basicConfig(
         level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
@@ -48,6 +50,7 @@ def run():
         verbose=False,
         num_proc=4,
         use_subset=False,
+        cache_dir=config.get("cache_dir", None),
     )
 
     # load the QA dataset
@@ -57,7 +60,7 @@ def run():
         train_batch_size=100,
         num_proc=4,
         num_workers=4,
-        use_subset=True,
+        use_subset=config.get("use_subset", True),
         verbose=True,
         corpus=corpus,
         # retrieve 100 documents for each question
@@ -71,6 +74,7 @@ def run():
         #     interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
         # ),
         relevance_classifier=ExactMatch(interpretable=True),
+        cache_dir=config.get("cache_dir", None),
     )
 
     # prepare both the QA dataset and the corpus
