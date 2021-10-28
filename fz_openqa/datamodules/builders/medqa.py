@@ -43,6 +43,17 @@ class MedQABuilder(DatasetBuilder):
     # number of options
     n_options = 4
 
+    # output columns
+    column_names = [
+        "answer.text",
+        "answer.input_ids",
+        "answer.attention_mask",
+        "answer.target",
+        "question.text",
+        "question.input_ids",
+        "question.attention_mask",
+    ]
+
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(

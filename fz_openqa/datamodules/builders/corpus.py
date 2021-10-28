@@ -49,8 +49,16 @@ class CorpusBuilder(DatasetBuilder):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [
-        10,
+    subset_size = [3]
+
+    # output columns
+    column_names = [
+        "document.text",
+        "document.input_ids",
+        "document.attention_mask",
+        "document.passage_idx",
+        "document.row_idx",
+        "document.idx",
     ]
 
     def __init__(
@@ -212,20 +220,17 @@ class CorpusBuilder(DatasetBuilder):
 
 
 class MedQaCorpusBuilder(CorpusBuilder):
-    subset_size = [
-        1,
-    ]
+    subset_size = [1]
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 
 class FzCorpusCorpusBuilder(CorpusBuilder):
-    subset_size = [
-        3,
-    ]
+    subset_size = [3]
     dset_script_path_or_id = fz_corpus.__file__
 
 
 class FZxMedQaCorpusBuilder(CorpusBuilder):
+    subset_size = [3]
     dset_script_path_or_id: List = [
         fz_corpus.__file__,
         meqa_en_corpus.__file__,

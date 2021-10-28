@@ -32,6 +32,9 @@ class DatasetBuilder:
     # number of data points per subset train/val/test
     subset_size = [100, 10, 10]
 
+    # output columns
+    column_names = ["input_ids", "attention_mask"]
+
     def __init__(
         self,
         *,
