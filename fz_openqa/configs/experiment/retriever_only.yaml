@@ -7,7 +7,7 @@ defaults:
   - override /trainer: minimal.yaml
   - override /model: retriever.yaml
   - override /datamodule: medqa_dm.yaml
-  - override /corpus: fz_x_medqa_corpus.yaml
+  - override /corpus: medqa_corpus.yaml
   - override /callbacks: default.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
 

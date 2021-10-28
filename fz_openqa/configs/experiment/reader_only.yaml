@@ -8,11 +8,13 @@ defaults:
   - override /model: reader.yaml
   - override /datamodule: medqa_dm.yaml
   - override /corpus: medqa_corpus.yaml
-  - override /callbacks: none.yaml #index_corpus.yaml # list callbacks using `- callback_i`
+  - override /callbacks: default.yaml #index_corpus.yaml # list callbacks using `- callback_i`
   - override /logger: wandb.yaml
 
 base:
   seed: 8
+  target_metric: validation/reading/Accuracy
+  target_mode: max
 
 trainer:
   gpus: 4
@@ -21,15 +23,14 @@ trainer:
   max_epochs: 10000
   gradient_clip_val: 0.5
   # stochastic_weight_avg: True
-  checkpoint_callback: False # disable checkpointing for faster training
+  # checkpoint_callback: False # disable checkpointing for faster training
 
 model:
   lr: 1e-5
   weight_decay: 1e-4
-  dropout: 0
-  hidden_size: 128
+  hidden_size: 256
   bert:
-    hidden_dropout_prob: 0
+    hidden_dropout_prob: 0.1
     attention_probs_dropout_prob: 0.3
 
 
@@ -40,6 +41,7 @@ datamodule:
   use_subset: False
   num_workers: 8
   n_documents: 10
+  max_pos_docs: 1
 
 logger:
   wandb:

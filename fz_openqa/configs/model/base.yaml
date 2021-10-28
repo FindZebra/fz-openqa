@@ -1,6 +1,5 @@
 defaults:
   - module: ???
-  - backbone: bert_linear_head_cls.yaml
   - bert: bio_bert.yaml
 
 _target_: fz_openqa.modeling.Model
