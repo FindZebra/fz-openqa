@@ -38,9 +38,10 @@ corpus = MedQaCorpusDataModule(
     ),
     verbose=False,
     num_proc=4,
-    use_subset=True,
+    use_subset=False,
     passage_length=200,
     max_length=None,
+    train_batch_size=500,
 )
 corpus.prepare_data()
 corpus.setup()
@@ -50,17 +51,16 @@ pprint_batch(batch_corpus)
 # load the QA dataset
 dm = MedQaDataModule(
     tokenizer=tokenizer,
-    train_batch_size=100,
+    train_batch_size=500,
     num_proc=4,
     num_workers=4,
-    use_subset=True,
+    use_subset=False,
     verbose=True,
     corpus=corpus,
     relevance_classifier=ExactMatch(),
     compile_in_setup=False,
 )
 
-dm.subset_size = [500, 100, 100]
 dm.prepare_data()
 dm.setup()
 batch_dm = next(iter(dm.train_dataloader()))
@@ -69,32 +69,28 @@ pprint_batch(batch_dm)
 
 with torch.no_grad():
     document_outputs = model(
-        input_ids=batch_corpus["document.input_ids"],
-        attention_mask=batch_corpus["document.attention_mask"],
+        input_ids=torch.tensor(batch_corpus["document.input_ids"]),
+        attention_mask=torch.tensor(batch_corpus["document.attention_mask"]),
     )
     document_encoded_layers = document_outputs[0]
 
     question_outputs = model(
-        input_ids=dm.dataset["train"]["question.input_ids"],
-        attention_mask=dm.dataset["train"]["question.attention_mask"],
+        input_ids=batch_dm["question.input_ids"].clone().detach(),
+        attention_mask=batch_dm["question.attention_mask"].clone().detach(),
     )
     question_encoded_layers = question_outputs[0]
 
-rich.print("Document encoded layers:", document_encoded_layers[:, 0, :])
-rich.print("Question encoded layers:", question_encoded_layers[:, 0, :])
+
+d = document_encoded_layers.shape[2]
+nlist = 1  # number of clusters
+index = faiss.IndexFlatL2(d)
+quantiser = faiss.IndexFlatL2(d)
+index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
 
 
-# d = batch["document.input_ids"].shape[1]
-# nlist = 2  # number of clusters
-# index = faiss.IndexFlatL2(d)
-# quantiser = faiss.IndexFlatL2(d)
-# index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
-
-# print(batch["document.input_ids"])
-
-# print(f"Index is trained: {index.is_trained}")
-# index.train(batch["document.input_ids"].type(torch.float32))
-# print(f"Index is trained: {index.is_trained}")
+print(f"Index is trained: {index.is_trained}")
+index.train(document_encoded_layers[:, 0, :].contiguous())
+print(f"Index is trained: {index.is_trained}")
 # index.add(batch["document.input_ids"].type(torch.float32))
 # print(f"Total number of indices: {index.ntotal}")
 
