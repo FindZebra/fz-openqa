@@ -22,8 +22,9 @@ class FaissIndex(Index):
     model: Callable = None
 
     def __init__(self, *, batch_size: int = 32, **kwargs):
-        super(FaissIndex, self).__init__(**kwargs)
+        self.params = {k: v for k, v in locals().items() if k != "self"}
         self.batch_size = batch_size
+        super(FaissIndex, self).__init__(**kwargs)
 
     def build(
         self,

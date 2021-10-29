@@ -1,10 +1,8 @@
 from copy import deepcopy
 from unittest import TestCase
 
-import rich
-
 from fz_openqa.datamodules.pipes import ApplyAsFlatten, Identity
-from fz_openqa.datamodules.utils.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 
 
 class TestAsFlatten(TestCase):

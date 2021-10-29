@@ -7,6 +7,9 @@ class Condition:
     def __call__(self, batch: Batch) -> bool:
         raise NotImplementedError
 
+    def __repr__(self):
+        return self.__class__.__name__
+
 
 class Reduce(Condition):
     def __init__(self, *conditions: Condition, reduce_op: Callable = all):
@@ -16,6 +19,9 @@ class Reduce(Condition):
     def __call__(self, batch: Batch) -> bool:
         return self.reduce_op(c(batch) for c in self.conditions)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(conditions={list(self.conditions)}, op={self.reduce_op})"
+
 
 class HasKeyWithPrefix(Condition):
     def __init__(self, prefix: str):
@@ -24,6 +30,9 @@ class HasKeyWithPrefix(Condition):
     def __call__(self, batch: Batch) -> bool:
         return any(str(k).startswith(self.prefix) for k in batch.keys())
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.prefix})"
+
 
 class Not(Condition):
     def __init__(self, condition: Condition):
@@ -31,6 +40,9 @@ class Not(Condition):
 
     def __call__(self, batch: Batch) -> bool:
         return not self.condition(batch)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.condition})"
 
 
 class Static(Condition):
@@ -41,3 +53,6 @@ class Static(Condition):
 
     def __call__(self, batch: Batch) -> bool:
         return self.cond
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.cond})"

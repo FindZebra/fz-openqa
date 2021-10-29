@@ -13,32 +13,33 @@ from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
 from .corpus_dm import CorpusDataModule
-from .datasets import medqa
-from .pipelines.collate import CollateAsTensor
-from .pipelines.collate import CollateTokens
-from .pipelines.preprocessing import ClassifyDocuments
-from .pipelines.preprocessing import FormatAndTokenize
-from .pipelines.preprocessing import SearchDocuments
-from .pipelines.preprocessing import SortDocuments
-from .pipes import ApplyAsFlatten
-from .pipes import BlockSequential
-from .pipes import Collate
-from .pipes import Parallel
-from .pipes import Pipe
-from .pipes import RelevanceClassifier
-from .pipes import SelectDocs
-from .pipes import Sequential
-from .pipes.search import FeatchDocuments
-from .utils.dataset import filter_questions_by_pos_docs
-from .utils.dataset import get_column_names
-from .utils.dataset import print_size_difference
-from .utils.filter_keys import KeyIn
-from .utils.map_with_fingerprint import MapWithFingerprint
-from .utils.transformations import set_row_idx
-from .utils.typing import HgDataset
+from fz_openqa.datamodules.index import Index
+from fz_openqa.datamodules.loaders import medqa
+from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
+from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (
     MaybeCollateDocuments,
 )
+from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
+from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
+from fz_openqa.datamodules.pipelines.preprocessing import SearchDocuments
+from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes import BlockSequential
+from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import RelevanceClassifier
+from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.search import FeatchDocuments
+from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
+from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.utils.dataset import print_size_difference
+from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
+from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.typing import HgDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
@@ -112,20 +113,43 @@ class MedQaDataModule(BaseDataModule):
         self.max_pos_docs = max_pos_docs
         self.relevance_classifier = relevance_classifier
 
+    def get_prepared_dataset(self) -> Dataset:
+        # load the dataset and potentially filter it
+        dataset = self.load_and_filter_dataset()
+        dataset = self.preprocess_dataset(dataset)
+
+        if self.corpus is not None:
+            corpus_dset = self.corpus.get_prepared_dataset()
+            corpus_index = self.corpus.build_index()
+
+            assert self.n_documents <= len(corpus_dset), (
+                f"The corpus is too small to retrieve that many documents\n:"
+                f"n_documents={self.n_documents} > n_passages={len(corpus_dset)}"
+            )
+
+            dataset = self.map_corpus(
+                dataset,
+                num_proc=self.num_proc,
+                verbose=self.verbose,
+                batch_size=self.map_corpus_batch_size,
+                corpus_index=corpus_index,
+                corpus_dataset=corpus_dset,
+            )
+
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
         super().prepare_data()
         if self.corpus is not None:
             self.corpus.prepare_data()
+            assert self.n_documents <= len(self.corpus.dataset), (
+                f"The corpus is too small to retrieve that many documents\n:"
+                f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
+            )
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
         # load the dataset and potentially filter it
-        self.dataset = self.load_and_filter_dataset()
-
-        # preprocess
-        self.dataset = self.preprocess_dataset(self.dataset)
 
         # setup the corpus object
         if self.corpus is not None:
@@ -145,9 +169,11 @@ class MedQaDataModule(BaseDataModule):
             self.dataset.reset_format()
             self.build_index()
             self.map_corpus(
+                self.dataset,
                 num_proc=self.num_proc,
                 verbose=self.verbose,
                 batch_size=self.map_corpus_batch_size,
+                corpus=self.corpus,
             )
 
         # cast features as tensors
@@ -308,6 +334,10 @@ class MedQaDataModule(BaseDataModule):
 
     def map_corpus(
         self,
+        dataset: HgDataset,
+        *,
+        corpus_index: Index,
+        corpus_dataset: Dataset,
         filter_unmatched: bool = True,
         num_proc: int = 1,
         batch_size: Optional[int] = 10,
@@ -326,14 +356,14 @@ class MedQaDataModule(BaseDataModule):
                 (
                     "Search documents",
                     SearchDocuments(
-                        corpus_index=self.corpus._index,
+                        corpus_index=corpus_index,
                         n_documents=self.n_retrieved_documents,
                     ),
                 ),
                 (
                     "Classify documents",
                     ClassifyDocuments(
-                        corpus_dataset=self.corpus.dataset,
+                        corpus_dataset=corpus_dataset,
                         relevance_classifier=self.relevance_classifier,
                     ),
                 ),
@@ -342,7 +372,7 @@ class MedQaDataModule(BaseDataModule):
         )
 
         # process the dataset with each block
-        original_size = {k: len(dset) for k, dset in self.dataset.items()}
+        original_size = {k: len(dset) for k, dset in dataset.items()}
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
@@ -352,7 +382,7 @@ class MedQaDataModule(BaseDataModule):
                 batch_size=batch_size,
                 desc=f"[Corpus mapping] {k}",
             )
-            self.dataset = mapper(self.dataset)
+            dataset = mapper(dataset)
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
@@ -361,13 +391,13 @@ class MedQaDataModule(BaseDataModule):
                 n_documents=self.n_documents,
                 max_pos_docs=self.max_pos_docs,
             )
-            self.dataset = self.dataset.filter(fn, num_proc=num_proc)
+            dataset = dataset.filter(fn, num_proc=num_proc)
 
         # print the difference in length for each split
         if verbose:
             print_size_difference(original_size, self.dataset)
 
-        self._is_mapped = True
+        return dataset
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)

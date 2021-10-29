@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import Callback
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 
 
 class AcceleratorWrapper:

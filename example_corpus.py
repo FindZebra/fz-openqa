@@ -1,11 +1,8 @@
-from fz_openqa.datamodules.medqa_dm import MedQaDataModule
-import numpy as np
-import rich, json, os
+import rich
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule, FzCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.medqa_dm import MedQaDataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from torch.utils.data import DataLoader
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path='bert-base-cased')
 

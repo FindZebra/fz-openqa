@@ -110,10 +110,15 @@ class BaseDataModule(LightningDataModule):
             self.dset_script_path_or_id, cache_dir=self.data_dir
         )
 
+    def get_prepared_dataset(self) -> Dataset:
+        # load the dataset and potentially filter it
+        dataset = self.load_and_filter_dataset()
+        return self.preprocess_dataset(dataset)
+
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        self.load_base_dataset()
+        self.get_prepared_dataset()
 
     def setup(self, stage: Optional[str] = None):
         """
@@ -121,11 +126,7 @@ class BaseDataModule(LightningDataModule):
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
-        # load the dataset and potentially filter it
-        self.dataset = self.load_and_filter_dataset()
-
-        # preprocess
-        self.dataset = self.preprocess_dataset(self.dataset)
+        self.dataset = self.get_prepared_dataset()
 
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()

@@ -1,7 +1,7 @@
 import datasets
 import rich
 
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
+from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator

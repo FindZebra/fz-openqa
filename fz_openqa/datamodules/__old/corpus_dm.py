@@ -17,26 +17,26 @@ from datasets import load_dataset
 from pytorch_lightning.utilities import rank_zero_only
 
 from .base_dm import BaseDataModule
-from .datasets import file_corpus
-from .datasets import fz_corpus
-from .datasets import meqa_en_corpus
-from .index.base import Index
-from .pipelines.collate import CollateAsTensor
-from .pipelines.collate import CollateTokens
-from .pipes import Apply
-from .pipes import Collate
-from .pipes import DropKeys
-from .pipes import FilterKeys
-from .pipes import Identity
-from .pipes import Parallel
-from .pipes import Pipe
-from .pipes import PrintBatch
-from .pipes import SearchCorpus
-from .pipes import Sequential
-from .pipes import TokenizerPipe
-from .pipes.passage import GeneratePassages
-from .utils.transformations import add_spec_token
-from .utils.transformations import set_row_idx
+from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.loaders import file_corpus
+from fz_openqa.datamodules.loaders import fz_corpus
+from fz_openqa.datamodules.loaders import meqa_en_corpus
+from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
+from fz_openqa.datamodules.pipelines.collate import CollateTokens
+from fz_openqa.datamodules.pipes import Apply
+from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import DropKeys
+from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import Identity
+from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import SearchCorpus
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes.passage import GeneratePassages
+from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -279,7 +279,8 @@ class CorpusDataModule(BaseDataModule):
         :@param index: string that determines which index to use (faiss or bm25).
         :@param filtering: string that determines whether SciSpacy filtering is used.
         """
-        return self._index.build(self.dataset, model=model, **kwargs)
+        self._index.build(self.dataset, model=model, **kwargs)
+        return self._index
 
     def search_index(
         self,
@@ -302,9 +303,7 @@ class CorpusDataModule(BaseDataModule):
 
 
 class MedQaCorpusDataModule(CorpusDataModule):
-    subset_size = [
-        1,
-    ]
+    subset_size = [1]
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 

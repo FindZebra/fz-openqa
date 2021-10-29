@@ -12,8 +12,8 @@ from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 
 
 class MaybeCollateDocuments(Gate):

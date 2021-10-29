@@ -21,9 +21,16 @@ class Index:
     """Keep an index of a Dataset and search using queries."""
 
     is_indexed: bool = False
+    params: Dict[str, Any] = {}
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, **kwargs):
+        self.params = {k: v for k, v in locals().items() if k != "self"}
         self.verbose = verbose
+
+    def new(self, **kwargs) -> "Index":
+        params = self.params.copy()
+        params.update(**kwargs)
+        return type(self)(**params)
 
     def dill_inspect(self) -> bool:
         """check if the module can be pickled."""

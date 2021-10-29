@@ -12,7 +12,7 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.__saved_models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )

@@ -5,6 +5,13 @@ class FilterKey:
     def __call__(self, key: str) -> bool:
         raise NotImplementedError
 
+    def todict(self) -> dict:
+        return {"__type__": type(self).__name__, **vars(self)}
+
+    def __repr__(self):
+        args = [f"{k}={v}" for k, v in self.todict().items()]
+        return self.__class__.__name__ + "(" + ", ".join(args) + ")"
+
 
 class KeyIn(FilterKey):
     """check if the key is in the allowed_keys"""

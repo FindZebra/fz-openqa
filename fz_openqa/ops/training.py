@@ -16,7 +16,7 @@ from transformers import PreTrainedTokenizerFast
 
 import fz_openqa
 from fz_openqa.datamodules import MedQaDataModule
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.train_utils import setup_safe_env
 

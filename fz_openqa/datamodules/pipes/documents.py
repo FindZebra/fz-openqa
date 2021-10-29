@@ -6,11 +6,10 @@ from typing import Optional
 import numpy as np
 import rich
 
-from ..utils.filter_keys import KeyWithPrefix
 from .base import Pipe
-from .nesting import ApplyAsFlatten
 from .nesting import Nested
 from .sorting import reindex
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.utils.datastruct import Batch
 
 

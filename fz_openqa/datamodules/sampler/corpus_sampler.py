@@ -4,7 +4,7 @@ from typing import Optional
 
 from datasets import Dataset
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.datamodules.pipes import Batchify
 from fz_openqa.datamodules.pipes import DeBatchify
 from fz_openqa.datamodules.pipes import RelevanceClassifier

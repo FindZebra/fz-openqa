@@ -8,11 +8,11 @@ from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.utils.condition import Not
-from fz_openqa.datamodules.utils.condition import Reduce
-from fz_openqa.datamodules.utils.condition import Static
-from fz_openqa.datamodules.utils.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import Not
+from fz_openqa.datamodules.pipes.control.condition import Reduce
+from fz_openqa.datamodules.pipes.control.condition import Static
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 
 
 class PostprocessPipe(BlockSequential):

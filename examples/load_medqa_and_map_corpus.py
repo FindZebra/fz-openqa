@@ -8,9 +8,9 @@ import rich
 import torch
 from rich.logging import RichHandler
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import TextFormatter

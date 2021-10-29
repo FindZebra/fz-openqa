@@ -15,12 +15,12 @@ from ..pipes import Collate
 from ..pipes import Parallel
 from ..utils.transformations import set_row_idx
 from ..utils.typing import HgDataset
-from .base import DatasetBuilder
+from .base import HfDatasetBuilder
 
 logger = logging.getLogger(__name__)
 
 
-class MedQABuilder(DatasetBuilder):
+class MedQABuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = medqa.__file__
 

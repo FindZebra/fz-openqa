@@ -66,7 +66,10 @@ class Sequential(Pipe):
 
     def __repr__(self):
         data = self.todict()
-        return json.dumps(data, indent=4)
+        try:
+            return json.dumps(data, indent=4)
+        except Exception:
+            return str(data)
 
 
 class Parallel(Sequential):

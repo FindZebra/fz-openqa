@@ -38,17 +38,16 @@ class ElasticSearchIndex(Index):
         batch_size: int = 32,
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
-        es: Optional[ElasticSearchEngine] = None,
         text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
         **kwargs,
     ):
-        super(ElasticSearchIndex, self).__init__(**kwargs)
+        self.params = {k: v for k, v in locals().items() if k != "self"}
         self.index_key = index_key
         self.text_key = text_key
         self.query_key = query_key
         self.batch_size = batch_size
         self.num_proc = num_proc
-        self.engine = es or ElasticSearchEngine()
+        self.engine = ElasticSearchEngine()
 
         # text cleaning
         if isinstance(text_cleaner, TextFormatter):
@@ -72,6 +71,8 @@ class ElasticSearchIndex(Index):
             filter_pipe,
             text_cleaner,
         )
+
+        super(ElasticSearchIndex, self).__init__(**kwargs)
 
     def dill_inspect(self) -> Dict[str, Any]:
         return {

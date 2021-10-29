@@ -11,7 +11,10 @@ def safe_todict(x):
     if isinstance(x, Pipe):
         return x.todict()
     else:
-        return dict(x)
+        try:
+            return dict(x)
+        except Exception:
+            return {"__obj_str__": str(x)}
 
 
 def safe_fingerprint(x):

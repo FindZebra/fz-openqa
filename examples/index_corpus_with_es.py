@@ -8,7 +8,7 @@ sys.path.append(parent_dir)
 import datasets
 from utils import display_search_results, gen_example_query
 
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 

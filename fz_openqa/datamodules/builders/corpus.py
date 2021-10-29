@@ -29,14 +29,14 @@ from ..pipes import TokenizerPipe
 from ..utils.transformations import add_spec_token
 from ..utils.transformations import set_row_idx
 from ..utils.typing import HgDataset
-from .base import DatasetBuilder
+from .base import HfDatasetBuilder
 
 logger = logging.getLogger(__name__)
 
 TXT_PATTERN = r"^.*\.txt$"
 
 
-class CorpusBuilder(DatasetBuilder):
+class CorpusBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = file_corpus.__file__
 
@@ -225,7 +225,7 @@ class MedQaCorpusBuilder(CorpusBuilder):
 
 
 class FzCorpusCorpusBuilder(CorpusBuilder):
-    subset_size = [3]
+    subset_size = [20]
     dset_script_path_or_id = fz_corpus.__file__
 
 

@@ -1,7 +1,6 @@
 import cProfile
 import logging
 import pstats
-from time import time
 from timeit import Timer
 
 import datasets
@@ -9,9 +8,9 @@ import numpy as np
 import rich
 from rich.logging import RichHandler
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer

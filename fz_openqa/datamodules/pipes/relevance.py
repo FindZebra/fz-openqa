@@ -22,9 +22,9 @@ from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 
-from ..utils.filter_keys import KeyWithPrefix
 from .nesting import nested_list
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
