@@ -2,6 +2,7 @@ from copy import deepcopy
 from unittest import TestCase
 
 import numpy as np
+import rich
 import torch
 
 from fz_openqa.datamodules.pipes import Sort
@@ -16,6 +17,7 @@ class TestSort(TestCase):
         assert self.check_if_values_are_the_same_length(batch)
         for cls in [lambda x: x, torch.tensor, np.array]:
             for reversed in [False, True]:
+                rich.print(f"\n> starting with: reverse={reversed}, cls={cls}")
                 self._test_sort_batch(
                     {k: cls(v) for k, v in deepcopy(batch).items()}, reversed=reversed
                 )
@@ -27,7 +29,7 @@ class TestSort(TestCase):
 
     def _test_sort_batch(self, batch: Batch, reversed=True):
         # init the pipe
-        pipe = Sort(key="a" if reversed else "b", reversed=reversed)
+        pipe = Sort(keys=["a"] if reversed else ["b"], reversed=reversed)
 
         # sort the batch
         reversed_batch = pipe(deepcopy(batch))
@@ -45,10 +47,16 @@ class TestSort(TestCase):
     def test_sort_with_filter(self):
         batch = {"a": [1, 2, 3, 4], "b": [4, 3, 2, 1], "c": [2, 5, 7, 3]}
 
-        pipe = Sort(key="a", reversed=True, filter=lambda key: key in {"a", "b"})
+        pipe = Sort(keys=["a"], reversed=True, filter=lambda key: key in {"a", "b"})
 
         # sort the batch
         reversed_batch = pipe(deepcopy(batch))
 
         # check that c is NOT sorted
         self.assertSequenceEqual(reversed_batch["c"], batch["c"])
+
+    def test_sort_multiple_keys(self):
+        batch = {"a": [0, 0, 1, 1, 2, 2], "b": [5, 6, 3, 7, 1, 0], '_index_': [1, 2, 3, 4, 5, 6]}
+        pipe = Sort(keys=["a", "b"], reversed=True)
+        output = pipe(batch)
+        self.assertEqual(output['_index_'], [5, 6, 4, 3, 2, 1])

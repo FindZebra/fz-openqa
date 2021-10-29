@@ -13,7 +13,7 @@ from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
 from ...datamodules.pipes.nesting import nested_list
-from .base import BaseEvaluator
+from .base import Module
 from .metrics import SplitMetrics
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
 from fz_openqa.utils.datastruct import add_prefix
@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.datastruct import infer_device_from_batch
 
 
-class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
+class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
     """
     End-to-end evaluation of an OpenQA model (retriever+reader) based on the reader accuracy.
         * Retrieve k documents from the corpus using the retriever model
@@ -42,7 +42,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         super().__init__(**kwargs)
         self.n_documents = n_documents
 
-    def init_metrics(self, prefix: str = ""):
+    def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
         fir both the answering model and the selection model"""
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
@@ -52,7 +52,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
         self.answer_metrics = SplitMetrics(init_answer_metric)
 
-    def forward(
+    def step(
         self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
     ) -> Batch:
         """
@@ -81,7 +81,9 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
 
         # retriever k documents from the corpus given the query
         retrieved_batch, effective_n_docs = self.retrieve_documents(
-            model.retriever.corpus, query_encoding, n_docs=self.n_documents
+            model.retriever.corpus_dataset,
+            query_encoding,
+            n_docs=self.n_documents,
         )
 
         reader_data = []
@@ -120,7 +122,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
     @staticmethod
     def _reader_forward(reader, batch_k: Batch, split: Split) -> Batch:
         kwargs = {"log_data": False, "split": split}
-        answer_logits, selection_logits = reader.forward(batch_k, **kwargs)
+        answer_logits, selection_logits = reader.step(batch_k, **kwargs)
         reader_data_k = {
             "answer_logits": answer_logits,
             "relevance_logits": selection_logits,
@@ -173,7 +175,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(BaseEvaluator):
         }
         return retrieved_batch, n_retrieved_docs
 
-    def forward_end(self, output: Batch, split: Split) -> Any:
+    def step_end(self, output: Batch, split: Split) -> Any:
         """Apply a post-processing step to the forward method.
         The output is the output of the forward method.
 

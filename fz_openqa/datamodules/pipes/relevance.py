@@ -117,7 +117,9 @@ class RelevanceClassifier(Pipe):
         output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
+        **kwargs,
     ):
+        super(RelevanceClassifier, self).__init__(**kwargs)
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
@@ -125,18 +127,24 @@ class RelevanceClassifier(Pipe):
         self.interpretation_key = interpretation_key
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        input_keys += [self.output_key]
+        input_keys = [self.output_key]
         if self.interpretable:
             input_keys += [self.interpretation_key]
         return input_keys
 
-    def classify(self, pair: Pair) -> int:
-        """Classify each pair."""
+    @staticmethod
+    def _get_matches(pair: Pair) -> List[str]:
+        """Return the list of matches given the pair of data.
+        Needs to be implemented for each sub-class."""
         raise NotImplementedError
 
+    def classify(self, pair: Pair) -> int:
+        matches = self._get_matches(pair)
+        return len(matches)
+
     def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
-        """Classify each pair."""
-        raise NotImplementedError
+        matches = self._get_matches(pair)
+        return (len(matches), matches)
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Preprocessing allows transforming all the pairs,
@@ -154,6 +162,7 @@ class RelevanceClassifier(Pipe):
         return length
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
+        output = {}
         n_documents = self._infer_n_docs(batch)
         batch_size = self._infer_batch_size(batch)
 
@@ -167,15 +176,15 @@ class RelevanceClassifier(Pipe):
         if self.interpretable:
             all_results = zip(*map(self.classify_and_interpret, pairs))
             results, interpretations = map(list, all_results)
-            batch[self.interpretation_key] = nested_list(
+            output[self.interpretation_key] = nested_list(
                 interpretations, stride=n_documents
             )
         else:
             results = list(map(self.classify, pairs))
 
         # reshape as [batch_size, n_documents] and cast as Tensor
-        batch[self.output_key] = nested_list(results, stride=n_documents)
-        return batch
+        output[self.output_key] = nested_list(results, stride=n_documents)
+        return output
 
     def _get_data_pairs(
         self, batch: Batch, batch_size: Optional[int] = None
@@ -204,20 +213,12 @@ class RelevanceClassifier(Pipe):
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
-    def classify(self, pair: Pair) -> int:
+    @staticmethod
+    def _get_matches(pair: Pair) -> List[str]:
         doc_text = pair.document["document.text"]
         answer_index = pair.answer["answer.target"]
         answer_text = pair.answer["answer.text"][answer_index]
-
-        return len(find_all(doc_text, [answer_text]))
-
-    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
-        doc_text = pair.document["document.text"]
-        answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index]
-
-        matches = find_all(doc_text, [answer_text])
-        return (len(matches), matches)
+        return find_all(doc_text, [answer_text])
 
     # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
     #     """Generate the field `pair.answer["aliases"]`"""
@@ -234,6 +235,7 @@ class AliasBasedMatch(RelevanceClassifier):
         self,
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
+        linker_name: str = "umls",
         lazy_setup: bool = True,
         spacy_kwargs: Optional[Dict] = None,
         **kwargs,
@@ -241,9 +243,16 @@ class AliasBasedMatch(RelevanceClassifier):
         super().__init__(**kwargs)
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
+        self.linker_name = linker_name
         self.spacy_kwargs = spacy_kwargs or {"batch_size": 100, "n_process": 1}
         if not lazy_setup:
             self._setup_models()
+
+    @staticmethod
+    def _get_matches(pair: Pair) -> List[str]:
+        doc_text = pair.document["document.text"]
+        answer_aliases = pair.answer["answer.aliases"]
+        return find_all(doc_text, answer_aliases)
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """Super-charge the __call__ method to load the spaCy models
@@ -272,7 +281,9 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def _setup_models(self):
         if self.model is None:
-            self.model = self._load_spacy_model(self.model_name)
+            self.model = self._load_spacy_model(
+                self.model_name, self.linker_name
+            )
         if self.linker is None:
             self.linker = self._setup_linker(self.model)
 
@@ -283,7 +294,7 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _load_spacy_model(model_name: str):
+    def _load_spacy_model(model_name: str, linker_name: str = "umls"):
         model = spacy.load(
             model_name,
             disable=[
@@ -297,20 +308,12 @@ class AliasBasedMatch(RelevanceClassifier):
         model.add_pipe(
             "scispacy_linker",
             config={
-                "linker_name": "umls",
+                "linker_name": linker_name,
                 "max_entities_per_mention": 3,
                 "threshold": 0.95,
             },
         )
         return model
-
-    def classify(self, pair: Pair) -> int:
-        """
-        Classifying retrieved documents as either positive or negative
-        """
-        doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer["answer.aliases"]
-        return len(find_all(doc_text, answer_aliases))
 
     def get_linked_entities(self, entity: Entity) -> Iterable[LinkedEntity]:
         for cui in entity._.kb_ents:
@@ -318,13 +321,6 @@ class AliasBasedMatch(RelevanceClassifier):
             tuis = self.linker.kb.cui_to_entity[cui_str].types
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
-
-    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
-        doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer["answer.aliases"]
-
-        matches = find_all(text=doc_text, queries=answer_aliases)
-        return (len(matches), matches)
 
     @staticmethod
     def _extract_answer_text(pair: Pair) -> str:

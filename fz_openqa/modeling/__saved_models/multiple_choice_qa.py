@@ -13,12 +13,11 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
-from fz_openqa.modeling.models.base import BaseModel
-from fz_openqa.modeling.models.multiple_choice_qa_reader import (
+from fz_openqa.modeling.__saved_models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )
-from fz_openqa.modeling.models.qa_retriever import QaRetriever
+from fz_openqa.modeling.__saved_models.qa_retriever import QaRetriever
+from fz_openqa.modeling.model import Module
 from fz_openqa.utils.datastruct import add_prefix
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import contains_prefix
@@ -26,7 +25,7 @@ from fz_openqa.utils.datastruct import filter_prefix
 from fz_openqa.utils.functional import only_trainable
 
 
-class MultipleChoiceQA(BaseModel):
+class MultipleChoiceQA(Module):
     """
     An end-to-end multiple choice openQA model with:
     * a dense retriever
@@ -57,7 +56,7 @@ class MultipleChoiceQA(BaseModel):
         bert: Union[BertPreTrainedModel, DictConfig],
         reader: Union[DictConfig, MultipleChoiceQAReader],
         retriever: Union[DictConfig, QaRetriever],
-        evaluator: Union[BaseEvaluator, DictConfig],
+        evaluator: Union[Module, DictConfig],
         corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         end_to_end_evaluation: bool = False,
         **kwargs,
@@ -104,8 +103,8 @@ class MultipleChoiceQA(BaseModel):
 
         # end-to-end step: retrieve document and use the reader
         if split != Split.TRAIN and self.end_to_end_evaluation:
-            assert self.evaluator is not None
-            output.update(**self.evaluator(self, batch, split=split))
+            assert self.module is not None
+            output.update(**self.module(self, batch, split=split))
 
         return output
 
@@ -200,7 +199,7 @@ class MultipleChoiceQA(BaseModel):
         return retriever_output
 
     def _step_end_end2end(self, output, split: Split, **kwargs):
-        end2end_output = self.evaluator.forward_end(output, split)
+        end2end_output = self.module.step_end(output, split)
         end2end_output = add_prefix(end2end_output, "end2end/")
         return end2end_output
 
@@ -213,9 +212,9 @@ class MultipleChoiceQA(BaseModel):
         if log_data:
             self.log_data(retriever_data, prefix=f"{split}/retriever/")
 
-        if self.evaluator is not None:
-            end2end_data = self.evaluator.compute_metrics(split=split)
-            self.evaluator.reset_metrics(split=split)
+        if self.module is not None:
+            end2end_data = self.module.compute_metrics(split=split)
+            self.module.reset_metrics(split=split)
             if log_data:
                 self.log_data(end2end_data, prefix=f"{split}/end2end/")
 

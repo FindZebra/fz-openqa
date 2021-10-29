@@ -11,13 +11,12 @@ from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.modeling.evaluators.base import BaseEvaluator
 from fz_openqa.modeling.layers.heads import cls_head
-from fz_openqa.modeling.models.base import BaseModel
+from fz_openqa.modeling.model import Module
 from fz_openqa.utils.functional import maybe_instantiate
 
 
-class QaRetriever(BaseModel):
+class QaRetriever(Module):
     """
     A Dense retriever model.
     """
@@ -33,14 +32,17 @@ class QaRetriever(BaseModel):
         "validation/retriever/top10_Accuracy",
     ]
     # prefix for the logged metrics
-    _model_log_prefix = "retriever/"
+    model_logging_prefix = "retriever/"
+
+    # metrics to display
+    pbar_metrics = ["train/loss", "train/Accuracy", "validation/Accuracy"]
 
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        evaluator: Union[BaseEvaluator, DictConfig],
+        evaluator: Union[Module, DictConfig],
         corpus: Optional[Union[CorpusDataModule, DictConfig]] = None,
         hidden_size: int = 256,
         dropout: float = 0,

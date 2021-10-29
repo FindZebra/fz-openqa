@@ -1,0 +1,2 @@
+_target_: fz_openqa.modeling.backbone.BertLinearHeadCls
+output_size: ${model.hidden_size}

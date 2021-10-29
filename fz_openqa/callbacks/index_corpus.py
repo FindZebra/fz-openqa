@@ -27,6 +27,6 @@ class IndexCorpus(Callback):
         """
         Compute the corpus vectors using the model.
         """
-        corpus: CorpusDataModule = trainer.datamodule.corpus
+        corpus: CorpusDataModule = trainer.datamodule.corpus_dataset
         model = AcceleratorWrapper(trainer)
         corpus.build_index(model=model, index_mode="faiss")

@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import torch
 
-from fz_openqa.modeling.functional import count_right_padding, pad, padless_cat
+from fz_openqa.modeling.functional import count_right_padding, pad, _padless_cat
 
 
 class Test_functional(TestCase):
@@ -12,7 +12,7 @@ class Test_functional(TestCase):
         b = {"input_ids": torch.tensor([[4, 0, 0], [6, 7, 8]])}
         for x in [a, b]:
             x["attention_mask"] = x["input_ids"].clone()
-        ab = padless_cat(a, b, pad_token=0, aux_pad_tokens={"attention_mask": -1})
+        ab = _padless_cat(a, b, pad_token=0, aux_pad_tokens={"attention_mask": -1})
         ref = torch.tensor([[1, 2, 3, 4, 0, 0, 0, 0, 0], [1, 2, 0, 3, 4, 5, 6, 7, 8]])
         attn_ref = torch.tensor([[1, 2, 3, 4, 0, 0, -1, -1, -1], [1, 2, 0, 3, 4, 5, 6, 7, 8]])
         self.assertTrue((1 - (ab["input_ids"] == ref).float()).sum() == 0)
@@ -39,7 +39,7 @@ class Test_functional(TestCase):
                     x["idx"] = torch.ones_like(x["input_ids"][:, 0])
 
                 # concatenate
-                ab = padless_cat(a, b, pad_token=pad_tok)
+                ab = _padless_cat(a, b, pad_token=pad_tok)
 
                 self.assertEqual(a.keys(), ab.keys())
                 self.assertEqual(a.keys(), b.keys())

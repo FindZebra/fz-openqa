@@ -6,7 +6,7 @@ with questions linked to FindZebra Corpus (using CUIs)
 A running instance of ElasticSearch 7.13 must be running on localhost:9200
 
 Run 'docker compose up' with the supplied docker-compose.yml file to start
-two containers (ElasticSearch and Kibana, both ver  7.13)
+two models (ElasticSearch and Kibana, both ver  7.13)
 """
 import argparse
 import json

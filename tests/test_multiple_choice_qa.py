@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import torch
 
-from fz_openqa.modeling.models.multiple_choice_qa import MultipleChoiceQA
+from fz_openqa.modeling.__saved_models.multiple_choice_qa import MultipleChoiceQA
 
 
 class TestMultipleChoiceQA(TestCase):

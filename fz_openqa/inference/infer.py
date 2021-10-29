@@ -29,13 +29,13 @@ from fz_openqa.utils.train_utils import setup_safe_env
 )
 def load_and_infer(config: DictConfig) -> Dict[str, float]:
     """
-    Load a train model and process some input data.
+    Load a train Module and process some input data.
     The input data is a source .json file if provided else this is
     the test set of the datamodule described in the config file.
 
-    NB: implemented for a reader model only
+    NB: implemented for a reader Module only
     todo: retriever evaluation
-    todo: full model evaluation
+    todo: full Module evaluation
     todo: loader both a reader and a retriever
     """
     setup_safe_env()
@@ -47,9 +47,9 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
     if config.get("print_config"):
         print_config(config, resolve=True)
 
-    # load a pretrained model from a checkpoint
+    # load a pretrained Module from a checkpoint
     rich.print(
-        f">> Instantiating model <{config.model._target_}> "
+        f">> Instantiating Module <{config.model._target_}> "
         f"\n\tfrom checkpoint=`{config.checkpoint_path}`"
         f"\n\ton device=`{config.device}`.."
     )
@@ -134,7 +134,7 @@ def load_model_from_checkpoint(
     device: torch.device,
     **kwargs,
 ):
-    """load the model form a checkpoint"""
+    """load the Module form a checkpoint"""
     model = cls.load_from_checkpoint(path, map_location=device, **kwargs)
     model.eval()
     model.freeze()
