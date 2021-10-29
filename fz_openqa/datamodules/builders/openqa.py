@@ -7,7 +7,6 @@ from typing import Optional
 
 from datasets import Dataset
 from datasets import DatasetDict
-from datasets import Split
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
@@ -32,6 +31,8 @@ from fz_openqa.datamodules.pipes.search import FeatchDocuments
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import print_size_difference
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -285,3 +286,38 @@ class OpenQaBuilder(DatasetBuilder):
             id="base-qa-collate",
         )
         return base_qa_collate_pipe
+
+    def format_row(self, row: Dict[str, Any]) -> str:
+        decode_kwargs = {
+            "skip_special_tokens": False,
+            "tokenizer": self.tokenizer,
+        }
+
+        repr = self.dataset_builder.format_row(row)
+        repr += get_separator("-") + "\n"
+        repr += (
+            f"* Documents: n={len(row['document.text'])}, "
+            f"n_positive={sum(row['document.match_score'] > 0)}, "
+            f"n_negative={sum(row['document.match_score'] == 0)}\n"
+        )
+        for j in range(min(len(row["document.text"]), 3)):
+            repr += get_separator(".") + "\n"
+            match_on = row.get("document.match_on", None)
+            match_on = match_on[j] if match_on is not None else None
+            repr += (
+                f"|-* Document #{1 + j}, "
+                f"score={row['document.retrieval_score'][j]:.2f}, "
+                f"match_score={row['document.match_score'][j]}, "
+                f"match_on={match_on}\n"
+            )
+
+            repr += (
+                pretty_decode(
+                    row["document.input_ids"][j],
+                    **decode_kwargs,
+                    style="white",
+                )
+                + "\n"
+            )
+
+        return repr

@@ -1,5 +1,7 @@
 import logging
 from functools import partial
+from typing import Any
+from typing import Dict
 
 import dill  # type: ignore
 from datasets import DatasetDict
@@ -7,6 +9,8 @@ from datasets import load_dataset
 
 from ...tokenizers.static import ANS_TOKEN
 from ...tokenizers.static import QUERY_TOKEN
+from ...utils.pretty import get_separator
+from ...utils.pretty import pretty_decode
 from ..loaders import medqa
 from ..pipelines.collate import CollateAsTensor
 from ..pipelines.collate import CollateTokens
@@ -15,7 +19,7 @@ from ..pipes import Collate
 from ..pipes import Parallel
 from ..utils.transformations import set_row_idx
 from ..utils.typing import HgDataset
-from .base import HfDatasetBuilder
+from .hf_dataset import HfDatasetBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -148,3 +152,32 @@ class MedQABuilder(HfDatasetBuilder):
             id="base-qa-collate",
         )
         return base_qa_collate_pipe
+
+    def format_row(self, row: Dict[str, Any]) -> str:
+        """Decode and print one row from the batch"""
+        decode_kwargs = {
+            "skip_special_tokens": False,
+            "tokenizer": self.tokenizer,
+        }
+        u = "* Question:"
+        u += (
+            pretty_decode(
+                row["question.input_ids"],
+                **decode_kwargs,
+                style="deep_sky_blue3",
+            )
+            + "\n"
+        )
+
+        u += get_separator("-") + "\n"
+        u += "* Answer Choices:" + "\n"
+        idx = row["answer.target"]
+        for i, an in enumerate(row["answer.input_ids"]):
+            an_style = "green" if idx == i else "white"
+            line = (
+                f"   - ({'x' if idx == i else ' '}) "
+                f"{pretty_decode(an, **decode_kwargs, only_text=True, style=an_style)}\n"
+            )
+            u += line
+
+        return u

@@ -2,6 +2,8 @@ import logging
 import os
 import re
 from functools import partial
+from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -11,6 +13,7 @@ from datasets import DatasetDict
 from datasets import load_dataset
 
 from ...tokenizers.static import DOC_TOKEN
+from ...utils.pretty import pretty_decode
 from ..loaders import file_corpus
 from ..loaders import fz_corpus
 from ..loaders import meqa_en_corpus
@@ -29,7 +32,7 @@ from ..pipes import TokenizerPipe
 from ..utils.transformations import add_spec_token
 from ..utils.transformations import set_row_idx
 from ..utils.typing import HgDataset
-from .base import HfDatasetBuilder
+from .hf_dataset import HfDatasetBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +220,15 @@ class CorpusBuilder(HfDatasetBuilder):
         document_pipe = CollateTokens("document.", tokenizer=self.tokenizer)
 
         return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
+
+    def format_row(self, row: Dict[str, Any]) -> str:
+        """Decode and print one example from the batch"""
+        decode_kwargs = {"skip_special_tokens": False}
+        return pretty_decode(
+            row["document.input_ids"],
+            tokenizer=self.tokenizer,
+            **decode_kwargs,
+        )
 
 
 class MedQaCorpusBuilder(CorpusBuilder):

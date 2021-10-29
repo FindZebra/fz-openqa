@@ -4,7 +4,7 @@ from unittest import TestCase
 import rich
 from datasets import Dataset, DatasetDict
 
-from fz_openqa.datamodules.builders.base import HfDatasetBuilder
+from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
