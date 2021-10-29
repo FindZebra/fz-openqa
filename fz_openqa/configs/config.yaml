@@ -1,16 +1,13 @@
 # @package _global_
 
 defaults:
-  - _self_
-  - sys: local.yaml
-  - trainer: minimal.yaml
-  - datamodule: fz_x_medqa.yaml
-  - corpus: none.yaml
-  - tokenizer: pretrained.yaml
-  - model: retriever_only.yaml
-  - callbacks: default.yaml # set this to null if you don't want to use callbacks
+  - sys: local
+  - trainer: minimal
+  - datamodule: openqa
+  - model: retriever
+  - callbacks: default # set this to null if you don't want to use callbacks
   - logger: null # set logger here or use command line (e.g. `python run.py logger=wandb`)
-  - hydra: default.yaml
+  - hydra: default
 
     # enable color logging
   - override hydra/hydra_logging: colorlog
@@ -23,7 +20,6 @@ base:
   # metrics to track
   target_metric: validation/Accuracy
   target_mode: max
-
 
 # version info (useful for filtering runs on wandb)
 exp_version: 10

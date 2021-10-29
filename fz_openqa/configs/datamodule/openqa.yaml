@@ -1,0 +1,23 @@
+defaults:
+  - builder: openqa
+  - text_formatter: simple_lowercase
+  - tokenizer: pretrained
+  - index_builder: elasticsearch
+  - relevance_classifier: exact_match
+
+_target_: fz_openqa.datamodules.DataModule
+
+# datamodule args
+train_batch_size: 10
+eval_batch_size: 20
+num_workers: 4
+pin_memory: False
+persistent_workers: False
+
+# global: args
+add_encoding_tokens: true
+use_subset: false
+
+# global: meta
+cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
+num_proc: 4

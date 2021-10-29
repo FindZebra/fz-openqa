@@ -16,11 +16,11 @@ from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
-
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ class DataModule(LightningDataModule):
         num_workers: int = 2,
         pin_memory: bool = True,
         persistent_workers: bool = False,
+        **kwargs,
     ):
         super().__init__()
 
@@ -123,7 +124,7 @@ class DataModule(LightningDataModule):
         return self._eval_loader(Split.TEST)
 
     def get_dataset(
-        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+        self, split: Union[str, Split], dataset: Optional[HfDataset] = None
     ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""

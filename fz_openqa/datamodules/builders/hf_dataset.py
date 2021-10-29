@@ -14,8 +14,9 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import take_subset
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def cache_hf_dataset(func):
     def wrapper(self, *args, **kwargs):
         if self._cache_path is None:
             # process dataset
-            dataset: HgDataset = func(self, *args, **kwargs)
+            dataset: HfDataset = func(self, *args, **kwargs)
 
             if self._cache_dir is not None:
                 # get fingerprint
@@ -52,10 +53,11 @@ def cache_hf_dataset(func):
                 self._cache_path = os.path.join(self._cache_dir, fingerprint)
                 self._cache_type = type(dataset)
                 if not os.path.exists(self._cache_path):
+                    logger.info(f"Writing dataset to {self._cache_path}")
                     dataset.save_to_disk(self._cache_path)
         else:
             logger.info(f"Loading cached dataset from {self._cache_path}")
-            dataset: HgDataset = self._cache_type.load_from_disk(
+            dataset: HfDataset = self._cache_type.load_from_disk(
                 self._cache_path
             )
 
@@ -98,7 +100,7 @@ class HfDatasetBuilder(DatasetBuilder):
     ):
         super().__init__(cache_dir=cache_dir)
 
-        self.data_dir = cache_dir
+        self.cache_dir = cache_dir
         self.use_subset = use_subset
         self.num_proc = num_proc
         self.verbose = verbose
@@ -109,13 +111,28 @@ class HfDatasetBuilder(DatasetBuilder):
         self.tokenizer = tokenizer
         self.add_encoding_tokens = add_encoding_tokens
 
-    def __call__(self) -> HgDataset:
+    # @cache_hf_dataset
+    def __call__(self, format: Optional[str] = "torch", **kwargs) -> HfDataset:
         # load the dataset, potentially filter, preprocess and return
         dataset = self.load_and_filter_dataset()
-        return self.preprocess_dataset(dataset)
+        dataset = self.preprocess_dataset(dataset)
+        if format is not None:
+            dataset = self.set_format(dataset, format=format)
+        return dataset
 
-    def load_and_filter_dataset(self) -> HgDataset:
-        dataset: HgDataset = self.load_base_dataset()
+    def set_format(
+        self, dataset: HfDataset, *, format: str = "torch"
+    ) -> HfDataset:
+        pt_cols = [
+            c for c in self.pt_attributes if c in get_column_names(dataset)
+        ]
+        dataset.set_format(
+            type=format, columns=pt_cols, output_all_columns=True
+        )
+        return dataset
+
+    def load_and_filter_dataset(self) -> HfDataset:
+        dataset: HfDataset = self.load_base_dataset()
         dataset = self.filter_dataset(dataset)
         if self.use_subset:
             dataset = take_subset(dataset, self.subset_size)
@@ -124,14 +141,14 @@ class HfDatasetBuilder(DatasetBuilder):
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(
-            self.dset_script_path_or_id, cache_dir=self.data_dir
+            self.dset_script_path_or_id, cache_dir=self.cache_dir
         )
 
-    def filter_dataset(self, dataset: HgDataset) -> HgDataset:
+    def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
 
-    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
         pipe = Sequential(

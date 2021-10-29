@@ -23,27 +23,15 @@ class Index:
 
     index_name: Optional[str] = None
     is_indexed: bool = False
-    params: Dict[str, Any] = {}
 
-    def __init__(self, verbose: bool = False, **kwargs):
-        self.params = {
-            k: v
-            for k, v in {**locals(), **kwargs}.items()
-            if k not in ["self", "kwargs", "__class__"]
-        }
+    def __init__(self, dataset: Dataset, *, verbose: bool = False, **kwargs):
         self.verbose = verbose
+        self.build(dataset=dataset, **kwargs)
 
     def __repr__(self):
-        params = self.params
-        params["is_indexed"] = self.is_indexed
-        params["index_name"] = self.index_name
+        params = {"is_indexed": self.is_indexed, "index_name": self.index_name}
         params = [f"{k}={v}" for k, v in params.items()]
         return f"{self.__class__.__name__}({', '.join(params)})"
-
-    def new(self, **kwargs) -> "Index":
-        params = self.params.copy()
-        params.update(**kwargs)
-        return type(self)(**params)
 
     def dill_inspect(self) -> bool:
         """check if the module can be pickled."""

@@ -12,6 +12,7 @@ from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.index import Index
+from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipelines.collate import MaybeCollateDocuments
@@ -29,8 +30,10 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.search import FeatchDocuments
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
-from fz_openqa.datamodules.utils.dataset import print_size_difference
+from fz_openqa.datamodules.utils.dataset import format_size_difference
+from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
 
@@ -68,7 +71,7 @@ class OpenQaBuilder(DatasetBuilder):
         *,
         dataset_builder: MedQABuilder,
         corpus_builder: CorpusBuilder,
-        index: Index,
+        index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
         n_retrieved_documents: int,
         n_documents: Optional[int] = None,
@@ -76,7 +79,6 @@ class OpenQaBuilder(DatasetBuilder):
         filter_unmatched: bool = True,
         num_proc: int = 2,
         batch_size: int = 100,
-        verbose: bool = False,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None)
 
@@ -89,28 +91,34 @@ class OpenQaBuilder(DatasetBuilder):
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
         # objects
-        self.index = index
-        self.relevance_classifier = relevance_classifier
+        self.index_builder = index_builder
 
         # arguments
-        self.n_retrieved_documents = n_retrieved_documents
         self.n_documents = n_documents or n_retrieved_documents
         self.max_pos_docs = max_pos_docs
-        self.filter_unmatched = filter_unmatched
-        self.num_proc = num_proc
-        self.batch_size = batch_size
-        self.verbose = verbose
+        self.map_args = {
+            "relevance_classifier": relevance_classifier,
+            "n_retrieved_documents": n_retrieved_documents,
+            "n_documents": self.n_documents,
+            "max_pos_docs": max_pos_docs,
+            "filter_unmatched": filter_unmatched,
+            "num_proc": num_proc,
+            "batch_size": batch_size,
+        }
+
+    @property
+    def pt_attributes(self):
+        return (
+            self.dataset_builder.pt_attributes
+            + self.corpus_builder.pt_attributes
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "dataset_builder": self.dataset_builder,
             "corpus_builder": self.corpus_builder,
-            "index": self.index,
-            "relevance_classifier": self.relevance_classifier,
-            "n_retrieved_documents": self.n_retrieved_documents,
-            "n_documents": self.n_documents,
-            "max_pos_docs": self.max_pos_docs,
-            "filter_unmatched": self.filter_unmatched,
+            "index_builder": self.index_builder,
+            **self.map_args,
         }
 
     def __repr__(self):
@@ -119,20 +127,46 @@ class OpenQaBuilder(DatasetBuilder):
         )
         return f"{self.__class__.__name__}({args})"
 
-    def __call__(self, **kwargs) -> OpenQaDataset:
-        dataset = self.dataset_builder()
-        corpus = self.corpus_builder()
-        index = self.index.new()
-        index.build(corpus, **kwargs)
+    def __call__(
+        self, format: Optional[str] = "torch", **kwargs
+    ) -> OpenQaDataset:
+        dataset = self.dataset_builder(format=None)
+        corpus = self.corpus_builder(format=None)
+        index = self.index_builder(dataset=corpus, **kwargs)
         dataset = self.map_dataset(
-            dataset=dataset,
-            corpus=corpus,
-            index=index,
+            dataset=dataset, corpus=corpus, index=index, **self.map_args
         )
+
+        if format is not None:
+            corpus = self.set_format(corpus, format=format)
+            dataset = self.set_format(dataset, format=format)
+
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
+    def set_format(
+        self, dataset: HfDataset, *, format: str = "torch"
+    ) -> HfDataset:
+        pt_cols = [
+            c for c in self.pt_attributes if c in get_column_names(dataset)
+        ]
+        dataset.set_format(
+            type=format, columns=pt_cols, output_all_columns=True
+        )
+        return dataset
+
     def map_dataset(
-        self, dataset: DatasetDict, corpus: Dataset, index: Index
+        self,
+        *,
+        dataset: DatasetDict,
+        corpus: Dataset,
+        index: Index,
+        n_retrieved_documents: int,
+        n_documents: int,
+        max_pos_docs: Optional[int],
+        num_proc: int,
+        batch_size: int,
+        relevance_classifier: RelevanceClassifier,
+        filter_unmatched: bool,
     ) -> DatasetDict:
         """
         Map the dataset with documents from the corpus.
@@ -148,14 +182,14 @@ class OpenQaBuilder(DatasetBuilder):
                     "Search documents",
                     SearchDocuments(
                         corpus_index=index,
-                        n_documents=self.n_retrieved_documents,
+                        n_documents=n_retrieved_documents,
                     ),
                 ),
                 (
                     "Classify documents",
                     ClassifyDocuments(
                         corpus_dataset=corpus,
-                        relevance_classifier=self.relevance_classifier.copy(),
+                        relevance_classifier=relevance_classifier,
                     ),
                 ),
                 ("Sort documents", SortDocuments()),
@@ -169,25 +203,23 @@ class OpenQaBuilder(DatasetBuilder):
             mapper = MapWithFingerprint(
                 block,
                 batched=True,
-                num_proc=self.num_proc,
-                batch_size=self.batch_size,
+                num_proc=num_proc,
+                batch_size=batch_size,
                 desc=f"[Mapping] {k}",
             )
             dataset = mapper(dataset)
 
         # filter out questions that are not match to any  positive document
-        if self.filter_unmatched:
+        if filter_unmatched:
             fn = partial(
                 filter_questions_by_pos_docs,
-                n_documents=self.n_documents,
-                max_pos_docs=self.max_pos_docs,
+                n_documents=n_documents,
+                max_pos_docs=max_pos_docs,
             )
-            dataset = dataset.filter(fn, num_proc=self.num_proc)
+            dataset = dataset.filter(fn, num_proc=num_proc)
 
         # print the difference in length for each split
-        logger.info(
-            f"New dataset size: {print_size_difference(original_size, dataset)}"
-        )
+        logger.info(format_size_difference(original_size, dataset))
 
         return dataset
 
@@ -209,7 +241,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # C. select documents
         select_documents = self.get_select_documents_pipe(
-            self.n_documents or self.n_retrieved_documents,
+            self.n_documents,
             max_pos_docs=self.max_pos_docs,
         )
 

@@ -21,7 +21,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import take_subset
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -64,7 +64,7 @@ class BaseDataModule(LightningDataModule):
     subset_size = [100, 10, 10]
 
     # the attribute used to store the dataset
-    dataset: HgDataset = None
+    dataset: HfDataset = None
 
     # define the operator that allows converting a sequence of
     # examples into a Batch
@@ -131,15 +131,15 @@ class BaseDataModule(LightningDataModule):
         # define the collate operator
         self.collate_pipe = self.get_collate_pipe()
 
-    def load_and_filter_dataset(self) -> HgDataset:
-        dataset: HgDataset = self.load_base_dataset()
+    def load_and_filter_dataset(self) -> HfDataset:
+        dataset: HfDataset = self.load_base_dataset()
         dataset = self.filter_dataset(dataset)
         if self.use_subset:
             dataset = take_subset(dataset, self.subset_size)
 
         return dataset
 
-    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
         pipe = Sequential(
@@ -167,7 +167,7 @@ class BaseDataModule(LightningDataModule):
     def get_collate_pipe(self) -> Pipe:
         return Lambda(self.tokenizer.pad)
 
-    def filter_dataset(self, dataset: HgDataset) -> HgDataset:
+    def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
 
@@ -204,7 +204,7 @@ class BaseDataModule(LightningDataModule):
         return self._eval_loader(Split.TEST)
 
     def get_dataset(
-        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+        self, split: Union[str, Split], dataset: Optional[HfDataset] = None
     ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""

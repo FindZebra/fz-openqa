@@ -35,11 +35,11 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.search import FeatchDocuments
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
+from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import print_size_difference
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.transformations import set_row_idx
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
@@ -180,7 +180,7 @@ class MedQaDataModule(BaseDataModule):
         self.dataset.reset_format()
         self.cast_dataset_as_tensors(self.dataset)
 
-    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
@@ -334,7 +334,7 @@ class MedQaDataModule(BaseDataModule):
 
     def map_corpus(
         self,
-        dataset: HgDataset,
+        dataset: HfDataset,
         *,
         corpus_index: Index,
         corpus_dataset: Dataset,
@@ -395,7 +395,7 @@ class MedQaDataModule(BaseDataModule):
 
         # print the difference in length for each split
         if verbose:
-            print_size_difference(original_size, self.dataset)
+            format_size_difference(original_size, self.dataset)
 
         return dataset
 
@@ -437,7 +437,7 @@ class MedQaDataModule(BaseDataModule):
             )
 
     def get_dataset(
-        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+        self, split: Union[str, Split], dataset: Optional[HfDataset] = None
     ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
         or the dataset itself if there is no split."""

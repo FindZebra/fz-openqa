@@ -30,7 +30,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
 
@@ -108,15 +108,15 @@ class CorpusBuilder(HfDatasetBuilder):
         )
         return self._load_dataset(
             self.dset_script_path_or_id,
-            cache_dir=self.data_dir,
+            cache_dir=self.cache_dir,
             data_files=input_files,
         )
 
-    def filter_dataset(self, dataset: HgDataset) -> HgDataset:
+    def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
 
-    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
         # remove title for now
@@ -129,6 +129,7 @@ class CorpusBuilder(HfDatasetBuilder):
                 self.get_generate_passages_pipe(),
             ),
             batched=True,
+            batch_size=10,
             num_proc=self.num_proc,
             desc="Tokenizing documents and extracting overlapping passages",
         )
@@ -145,9 +146,12 @@ class CorpusBuilder(HfDatasetBuilder):
             with_indices=True,
             desc="Indexing documents",
         )
-
+        logger.info(
+            f"Dataset contains {len(dataset)} documents. Flatten indices and return."
+        )
         # flatten and return
-        return dataset.flatten_indices()
+        # todo return dataset.flatten_indices()
+        return dataset
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -244,7 +248,7 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
 
     def load_base_dataset(self) -> DatasetDict:
         assert self.input_dir is None
-        kwargs = {"cache_dir": self.data_dir}
+        kwargs = {"cache_dir": self.cache_dir}
         dsets = [
             self._load_dataset(s, **kwargs)
             for s in self.dset_script_path_or_id

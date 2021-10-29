@@ -11,7 +11,7 @@ from ray.tune import CLIReporter
 
 import fz_openqa.utils.config
 import fz_openqa.utils.config_utils
-from fz_openqa.ops.experiment import run_exp
+from fz_openqa.ops.experiment import run_experiment
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.config import print_config
 
@@ -39,7 +39,7 @@ def trial(args, checkpoint_dir=None, **kwargs):
             return_hydra_config=True,
             overrides=overrides,
         )
-        run_exp(cfg)
+        run_experiment(cfg)
 
 
 def run_tune(config: DictConfig) -> Optional[float]:

@@ -163,17 +163,17 @@ class FeatchDocuments(Pipe):
 
         # todo: do not return the whole column
         # find a memory efficient way to do that
-        if self.keys is not None and len(self.keys) == 1:
-            key = self.keys[0]
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset[key].__getitem__, indexes)
-            retrieved_docs = [{key: x} for x in retrieved_docs]
-        else:
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset.__getitem__, indexes)
-            # filter keys
-            retrieved_docs = list(
-                self._filter_row(x, keys=self.keys) for x in retrieved_docs
-            )
+        # if self.keys is not None and len(self.keys) == 1:
+        #     key = self.keys[0]
+        #     # fetch documents
+        #     retrieved_docs = map(self.corpus_dataset[key].__getitem__, indexes)
+        #     retrieved_docs = [{key: x} for x in retrieved_docs]
+        # else:
+        # fetch documents
+        retrieved_docs = map(self.corpus_dataset.__getitem__, indexes)
+        # filter keys
+        retrieved_docs = list(
+            self._filter_row(x, keys=self.keys) for x in retrieved_docs
+        )
         # collate and return
         return self.collate_pipe(retrieved_docs)

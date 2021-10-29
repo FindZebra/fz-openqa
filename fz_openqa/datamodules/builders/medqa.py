@@ -15,7 +15,7 @@ from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.utils.transformations import set_row_idx
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
@@ -61,14 +61,14 @@ class MedQABuilder(HfDatasetBuilder):
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(
-            self.dset_script_path_or_id, cache_dir=self.data_dir
+            self.dset_script_path_or_id, cache_dir=self.cache_dir
         )
 
-    def filter_dataset(self, dataset: HgDataset) -> HgDataset:
+    def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
 
-    def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 

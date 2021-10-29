@@ -30,6 +30,7 @@ class ElasticSearchIndex(Index):
 
     def __init__(
         self,
+        dataset: Dataset,
         *,
         index_key: str = "document.row_idx",
         text_key: str = "document.text",
@@ -40,12 +41,7 @@ class ElasticSearchIndex(Index):
         text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
         **kwargs,
     ):
-        super(ElasticSearchIndex, self).__init__(**kwargs)
-        self.params = {
-            k: v
-            for k, v in {**locals(), **kwargs}.items()
-            if k not in ["self", "kwargs", "__class__"]
-        }
+
         self.index_key = index_key
         self.text_key = text_key
         self.query_key = query_key
@@ -75,6 +71,9 @@ class ElasticSearchIndex(Index):
             filter_pipe,
             text_cleaner,
         )
+
+        # important
+        super(ElasticSearchIndex, self).__init__(dataset=dataset, **kwargs)
 
     def dill_inspect(self) -> Dict[str, Any]:
         return {

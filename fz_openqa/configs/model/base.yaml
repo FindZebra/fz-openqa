@@ -5,6 +5,7 @@ defaults:
 _target_: fz_openqa.modeling.Model
 
 bert_id: ${model.bert.pretrained_model_name_or_path}
+tokenizer: ${datamodule.tokenizer}
 cache_dir: ${cache_dir}
 hidden_size: 128
 lr: 2e-5

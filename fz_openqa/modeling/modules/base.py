@@ -88,12 +88,13 @@ class Module(nn.Module):
         self,
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
-        tokenizer: PreTrainedTokenizerFast,
+        tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
         heads: Union[DictConfig, Dict[str, Head]],
         prefix: str = "",
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
+        tokenizer = maybe_instantiate(tokenizer)
         self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
         self.heads = nn.ModuleDict(
             {

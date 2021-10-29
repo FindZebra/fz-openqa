@@ -5,23 +5,32 @@ from pathlib import Path
 import datasets
 import hydra
 import rich
+from hydra.utils import get_original_cwd
+from omegaconf import OmegaConf
 from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
-from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
+from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
+from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
+_root = Path(fz_openqa.__file__).parent.parent
+
+OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
+OmegaConf.register_new_resolver("get_original_cwd", get_original_cwd)
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+
 
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
-    config_name="script_config.yaml",
+    config_name="config.yaml",
 )
 def run(config):
     datasets.set_caching_enabled(True)
@@ -57,7 +66,7 @@ def run(config):
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
-        index=ElasticSearchIndex(),
+        index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(),
         n_retrieved_documents=1000,
         n_documents=100,

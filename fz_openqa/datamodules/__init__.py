@@ -1,1 +1,1 @@
-from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
+from fz_openqa.datamodules.datamodule import DataModule

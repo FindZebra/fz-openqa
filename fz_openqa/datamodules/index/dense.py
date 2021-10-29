@@ -21,14 +21,9 @@ class FaissIndex(Index):
     dataset: Dataset = None
     model: Callable = None
 
-    def __init__(self, *, batch_size: int = 32, **kwargs):
-        super(FaissIndex, self).__init__(**kwargs)
-        self.params = {
-            k: v
-            for k, v in {**locals(), **kwargs}.items()
-            if k not in ["self", "kwargs", "__class__"]
-        }
+    def __init__(self, dataset: Dataset, *, batch_size: int = 32, **kwargs):
         self.batch_size = batch_size
+        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
     def build(
         self,

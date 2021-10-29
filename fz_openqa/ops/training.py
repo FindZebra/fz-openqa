@@ -1,32 +1,21 @@
 import os
-from pathlib import Path
 from typing import List
 from typing import Optional
 
 import rich
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-from omegaconf import OmegaConf
 from pytorch_lightning import Callback
 from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
-from transformers import PreTrainedTokenizerFast
 
-import fz_openqa
-from fz_openqa.datamodules import MedQaDataModule
-from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules import DataModule
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = train_utils.get_logger(__name__)
-
-_root = Path(fz_openqa.__file__).parent.parent
-
-OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
-OmegaConf.register_new_resolver("get_original_cwd", lambda: _root)
-OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -41,42 +30,25 @@ def train(config: DictConfig) -> Optional[float]:
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
 
-    if config.verbose:
-        rich.print(f"> work_dir: {config.work_dir}")
-        rich.print(f"> original_wdir: {config.original_wdir}")
-        rich.print(f"> cache_dir: {os.path.abspath(config.cache_dir)}")
-        rich.print(f"> Current working directory : {os.getcwd()}")
+    log.info(f"work_dir={config.work_dir}")
+    log.info(f"original_wdir={config.original_wdir}")
+    log.info(f"cache_dir={os.path.abspath(config.cache_dir)}")
+    log.info(f"Current working directory: {os.getcwd()}")
 
-    # Set seed for random number generators in pytorch, numpy and python.random
+    # # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
         seed_everything(config.base.seed, workers=True)
 
-    # Init HuggingFace tokenizer
-    log.info(f"Instantiating tokenizer <{config.tokenizer._target_}>")
-    tokenizer: PreTrainedTokenizerFast = instantiate(config.tokenizer)
-
-    # Init the Corpus
-    has_corpus = config.corpus and "_target_" in config.corpus.keys()
-    log.info(
-        f"Instantiating corpus <{config.corpus._target_ if has_corpus else 'none'}>"
-    )
-    corpus: CorpusDataModule = (
-        instantiate(config.corpus, tokenizer=tokenizer) if has_corpus else None
-    )
-
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: MedQaDataModule = instantiate(
-        config.datamodule,
-        tokenizer=tokenizer,
-        corpus=corpus,
-    )
+    datamodule: DataModule = instantiate(config.datamodule)
+    datamodule.prepare_data()
+    datamodule.setup()
+    datamodule.display_sample()
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")
-    model: LightningModule = instantiate(
-        config.model, tokenizer=tokenizer, corpus=corpus, _recursive_=False
-    )
+    model: LightningModule = instantiate(config.model, _recursive_=False)
 
     # Init Lightning callbacks
     callbacks: List[Callback] = []
@@ -86,7 +58,7 @@ def train(config: DictConfig) -> Optional[float]:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
                 callbacks.append(instantiate(cb_conf))
 
-    # Init Lightning loggers
+    # Init Lightning loggers # todo: check this
     logger: List[LightningLoggerBase] = []
     if config.get("logger", None):
         for _, lg_conf in config["logger"].items():
@@ -102,7 +74,7 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
 
-    # Send some parameters from config to all lightning loggers
+    # Log config to all lightning loggers
     log.info("Logging hyperparameters.")
     train_utils.log_hyperparameters(
         config=config,
@@ -113,7 +85,7 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
 
-    # Train the Module
+    # Training...
     log.info("Starting training..")
     trainer.fit(model=model, datamodule=datamodule)
 

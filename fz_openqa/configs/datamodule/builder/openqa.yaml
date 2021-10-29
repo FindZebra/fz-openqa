@@ -1,0 +1,14 @@
+defaults:
+  - medqa@dataset_builder
+  - medqa_corpus@corpus_builder
+
+_target_: fz_openqa.datamodules.builders.OpenQaBuilder
+index_builder: ${datamodule.index_builder}
+relevance_classifier: ${datamodule.relevance_classifier}
+n_retrieved_documents: 1000
+n_documents: 10
+max_pos_docs: 1
+filter_unmatched: true
+
+num_proc: ${datamodule.num_proc}
+batch_size: 100

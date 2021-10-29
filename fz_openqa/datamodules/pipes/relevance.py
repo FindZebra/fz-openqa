@@ -15,7 +15,6 @@ from typing import Tuple
 import dill
 import numpy as np
 import spacy
-from pydantic import BaseModel
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
@@ -31,7 +30,8 @@ from fz_openqa.utils.datastruct import Batch
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 
-class LinkedEntity(BaseModel):
+@dataclass
+class LinkedEntity:
     entity: str
     tuis: List[str]
     aliases: List[str]

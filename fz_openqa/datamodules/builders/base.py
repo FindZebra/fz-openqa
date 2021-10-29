@@ -2,6 +2,7 @@ import os
 import re
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -34,7 +35,7 @@ class DatasetBuilder:
             if not os.path.exists(self._cache_dir):
                 os.makedirs(self._cache_dir)
 
-    def __call__(self) -> Union[Dataset, DatasetDict]:
+    def __call__(self, **kwargs) -> Union[Dataset, DatasetDict]:
         raise NotImplementedError
 
     def get_collate_pipe(self) -> Pipe:

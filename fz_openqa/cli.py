@@ -1,7 +1,7 @@
 import hydra
 from omegaconf import DictConfig
 
-from fz_openqa.ops.experiment import run_exp
+from fz_openqa.ops.experiment import run_experiment
 from fz_openqa.ops.tuning import run_tune
 
 

@@ -1,3 +1,5 @@
+from typing import Final
+
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential

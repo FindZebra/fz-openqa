@@ -7,7 +7,7 @@ from datasets import DatasetDict
 from datasets.fingerprint import update_fingerprint
 
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.datamodules.utils.typing import HfDataset
 
 
 class MapWithFingerprint:
@@ -22,7 +22,7 @@ class MapWithFingerprint:
         self.pipe = pipe
         self.map_kwargs = {"batched": batched, **map_kwargs}
 
-    def __call__(self, dataset: HgDataset) -> HgDataset:
+    def __call__(self, dataset: HfDataset) -> HfDataset:
         """Apply the `pipe` to the `dataset` using deterministic fingerprints."""
 
         if isinstance(dataset, Dataset):

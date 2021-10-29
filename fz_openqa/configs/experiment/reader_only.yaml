@@ -4,12 +4,11 @@
 # poetry run fzqa experiment=reader_only
 
 defaults:
-  - override /trainer: minimal.yaml
-  - override /model: reader.yaml
-  - override /datamodule: medqa_dm.yaml
-  - override /corpus: medqa_corpus.yaml
-  - override /callbacks: default.yaml #index_corpus.yaml # list callbacks using `- callback_i`
-  - override /logger: wandb.yaml
+  - override /trainer: minimal
+  - override /model: reader
+  - override /datamodule: openqa
+  - override /callbacks: default
+  - override /logger: wandb
 
 base:
   seed: 8
