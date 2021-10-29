@@ -130,7 +130,10 @@ class Gate(Pipe):
         pipe: Optional[Pipe],
     ):
         self.condition = condition
-        self.pipe = pipe
+        if isinstance(condition, bool) and condition is False:
+            self.pipe = None
+        else:
+            self.pipe = pipe
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         if self.condition({k: None for k in input_keys}):

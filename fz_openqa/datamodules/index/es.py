@@ -25,6 +25,9 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 
 
+DEFAULT_ES_BODY = None  # todo
+
+
 class ElasticSearchIndex(Index):
     index_name: Optional[str] = None
     preprocesing_pipe: Optional[Pipe] = None
@@ -39,7 +42,8 @@ class ElasticSearchIndex(Index):
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
         es: Optional[ElasticSearchEngine] = None,
-        text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
+        text_cleaner: Optional[TextFormatter] = None,
+        es_body: Optional[Dict] = DEFAULT_ES_BODY,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -49,6 +53,7 @@ class ElasticSearchIndex(Index):
         self.batch_size = batch_size
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
+        self.es_body = es_body
 
         # text cleaning
         if isinstance(text_cleaner, TextFormatter):
@@ -62,7 +67,9 @@ class ElasticSearchIndex(Index):
                 "metamap": MetaMapFilter,
                 "stopwords": StopWordsFilter,
             }[filter_mode]
-            filter_pipe = filter_pipe_cls(text_key=self.text_key)
+            filter_pipe = filter_pipe_cls(
+                text_key=self.text_key, query_key=self.query_key
+            )
         else:
             filter_pipe = None
 
@@ -94,8 +101,12 @@ class ElasticSearchIndex(Index):
         dataset = self.preprocess_text(dataset)
 
         # init the index
-        self.index_name = dataset._fingerprint
-        is_new_index = self.engine.es_create_index(self.index_name)
+        self.index_name = Pipe._fingerprint(
+            {"fingerprint": dataset._fingerprint, "es_body": self.es_body}
+        )
+        is_new_index = self.engine.es_create_index(
+            self.index_name, body=self.es_body
+        )
 
         # build the index
         if is_new_index:

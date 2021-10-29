@@ -1,6 +1,8 @@
 import multiprocessing as mp
 import warnings
+from typing import Dict
 from typing import List
+from typing import Optional
 
 import rich
 from elasticsearch import Elasticsearch
@@ -42,16 +44,14 @@ class ElasticSearchEngine:
 
         return self._instance
 
-    def es_create_index(self, index_name: str) -> bool:
+    def es_create_index(
+        self, index_name: str, body: Optional[Dict] = None
+    ) -> bool:
         """
         Create ElasticSearch Index
         """
-        # todo @MotzWanted: don't override the dataset if existing.
-        #  The index is generated given the dataset fingerprint, and should be unique.
-
         try:
-            # self.es.indices.delete(index=index_name, ignore=[400, 404])
-            _ = self.instance.indices.create(index=index_name)
+            _ = self.instance.indices.create(index=index_name, body=body)
             created = True
 
         # todo: handle specific exceptions

@@ -1,5 +1,6 @@
 import logging
 from functools import partial
+from time import time
 from typing import Callable
 from typing import Optional
 from typing import Union
@@ -220,23 +221,23 @@ class MedQaDataModule(BaseDataModule):
             ),
         )
 
-        # C. select documents
-        select_documents = self.get_select_documents_pipe(
-            self.n_documents or self.n_retrieved_documents,
-            max_pos_docs=self.max_pos_docs,
-        )
+        # # C. select documents
+        # select_documents = self.get_select_documents_pipe(
+        #     self.n_documents or self.n_retrieved_documents,
+        #     max_pos_docs=self.max_pos_docs,
+        # )
 
-        # D. fetch documents attributes (input_ids)
-        fetch_documents = self.get_fetch_documents_pipe(self.corpus)
+        # # D. fetch documents attributes (input_ids)
+        # fetch_documents = self.get_fetch_documents_pipe(self.corpus)
 
         return BlockSequential(
             [
                 # A, B: collate QA fields
                 ("Collate Q&A + document indexes", collate_qad),
                 # C: select documents
-                ("Select documents", select_documents),
+                # ("Select documents", select_documents),
                 # D: Fetch all document fields
-                ("Fetch document data", fetch_documents),
+                # ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
         )
