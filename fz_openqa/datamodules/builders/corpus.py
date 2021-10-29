@@ -12,27 +12,27 @@ from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 
-from ...tokenizers.static import DOC_TOKEN
-from ...utils.pretty import pretty_decode
-from ..loaders import file_corpus
-from ..loaders import fz_corpus
-from ..loaders import meqa_en_corpus
-from ..pipelines.collate import CollateAsTensor
-from ..pipelines.collate import CollateTokens
-from ..pipes import Apply
-from ..pipes import Collate
-from ..pipes import DropKeys
-from ..pipes import FilterKeys
-from ..pipes import GeneratePassages
-from ..pipes import Identity
-from ..pipes import Parallel
-from ..pipes import Pipe
-from ..pipes import Sequential
-from ..pipes import TokenizerPipe
-from ..utils.transformations import add_spec_token
-from ..utils.transformations import set_row_idx
-from ..utils.typing import HgDataset
 from .hf_dataset import HfDatasetBuilder
+from fz_openqa.datamodules.generators import file_corpus
+from fz_openqa.datamodules.generators import fz_corpus
+from fz_openqa.datamodules.generators import meqa_en_corpus
+from fz_openqa.datamodules.pipelines import collate
+from fz_openqa.datamodules.pipelines.collate import CollateTokens
+from fz_openqa.datamodules.pipes import Apply
+from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import DropKeys
+from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import GeneratePassages
+from fz_openqa.datamodules.pipes import Identity
+from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,10 @@ class CorpusBuilder(HfDatasetBuilder):
         passage_stride: int = 100,
         input_dir: Optional[str] = None,
         append_document_title: bool = False,
+        max_length: Optional[int] = None,
         **kwargs,
     ):
-        super(CorpusBuilder, self).__init__(**kwargs)
+        super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
 
         assert self.max_length is None, (
             "`max_length` is not a valid argument for this dataset "
@@ -145,15 +146,8 @@ class CorpusBuilder(HfDatasetBuilder):
             desc="Indexing documents",
         )
 
-        # flatten
-        dataset = dataset.flatten_indices()
-
-        # casting to tensors
-        dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=True
-        )
-
-        return dataset
+        # flatten and return
+        return dataset.flatten_indices()
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -207,7 +201,7 @@ class CorpusBuilder(HfDatasetBuilder):
         raw_text_pipe = Collate(keys=["document.text"])
 
         # collate simple attributes
-        simple_attr_pipe = CollateAsTensor(
+        simple_attr_pipe = collate.CollateAsTensor(
             keys=[
                 "document.row_idx",
                 "document.idx",

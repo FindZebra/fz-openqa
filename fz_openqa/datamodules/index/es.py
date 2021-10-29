@@ -26,7 +26,6 @@ from fz_openqa.utils.pretty import get_separator
 
 
 class ElasticSearchIndex(Index):
-    index_name: Optional[str] = None
     preprocesing_pipe: Optional[Pipe] = None
 
     def __init__(
@@ -41,7 +40,12 @@ class ElasticSearchIndex(Index):
         text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
         **kwargs,
     ):
-        self.params = {k: v for k, v in locals().items() if k != "self"}
+        super(ElasticSearchIndex, self).__init__(**kwargs)
+        self.params = {
+            k: v
+            for k, v in {**locals(), **kwargs}.items()
+            if k not in ["self", "kwargs", "__class__"]
+        }
         self.index_key = index_key
         self.text_key = text_key
         self.query_key = query_key
@@ -71,8 +75,6 @@ class ElasticSearchIndex(Index):
             filter_pipe,
             text_cleaner,
         )
-
-        super(ElasticSearchIndex, self).__init__(**kwargs)
 
     def dill_inspect(self) -> Dict[str, Any]:
         return {

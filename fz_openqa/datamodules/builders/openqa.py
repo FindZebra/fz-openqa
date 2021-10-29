@@ -50,7 +50,7 @@ class OpenQaDataset(DatasetDict):
 
     def __repr__(self):
         u = f"{self.__class__.__name__}:\n"
-        u += f" - dataset={self}\n"
+        u += f" - dataset={super().__repr__()}\n"
         u += f" - corpus={self.corpus}\n"
         u += f" - index={self.index}\n"
         return u
@@ -124,11 +124,16 @@ class OpenQaBuilder(DatasetBuilder):
         corpus = self.corpus_builder()
         index = self.index.new()
         index.build(corpus, **kwargs)
-        return self.map_dataset(
-            OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
+        dataset = self.map_dataset(
+            dataset=dataset,
+            corpus=corpus,
+            index=index,
         )
+        return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
-    def map_dataset(self, openqa: OpenQaDataset) -> OpenQaDataset:
+    def map_dataset(
+        self, dataset: DatasetDict, corpus: Dataset, index: Index
+    ) -> DatasetDict:
         """
         Map the dataset with documents from the corpus.
 
@@ -142,14 +147,14 @@ class OpenQaBuilder(DatasetBuilder):
                 (
                     "Search documents",
                     SearchDocuments(
-                        corpus_index=openqa.index,
+                        corpus_index=index,
                         n_documents=self.n_retrieved_documents,
                     ),
                 ),
                 (
                     "Classify documents",
                     ClassifyDocuments(
-                        corpus_dataset=openqa.corpus,
+                        corpus_dataset=corpus,
                         relevance_classifier=self.relevance_classifier.copy(),
                     ),
                 ),
@@ -158,8 +163,7 @@ class OpenQaBuilder(DatasetBuilder):
         )
 
         # process the dataset with each block
-        _dataset = openqa
-        original_size = {k: len(dset) for k, dset in openqa.items()}
+        original_size = {k: len(dset) for k, dset in dataset.items()}
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
@@ -169,7 +173,7 @@ class OpenQaBuilder(DatasetBuilder):
                 batch_size=self.batch_size,
                 desc=f"[Mapping] {k}",
             )
-            _dataset = mapper(_dataset)
+            dataset = mapper(dataset)
 
         # filter out questions that are not match to any  positive document
         if self.filter_unmatched:
@@ -178,13 +182,14 @@ class OpenQaBuilder(DatasetBuilder):
                 n_documents=self.n_documents,
                 max_pos_docs=self.max_pos_docs,
             )
-            _dataset = _dataset.filter(fn, num_proc=self.num_proc)
+            dataset = dataset.filter(fn, num_proc=self.num_proc)
 
         # print the difference in length for each split
-        if self.verbose:
-            print_size_difference(original_size, _dataset)
+        logger.info(
+            f"New dataset size: {print_size_difference(original_size, dataset)}"
+        )
 
-        return openqa.new(dataset=_dataset)
+        return dataset
 
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""

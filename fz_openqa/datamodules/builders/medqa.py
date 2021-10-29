@@ -7,19 +7,19 @@ import dill  # type: ignore
 from datasets import DatasetDict
 from datasets import load_dataset
 
-from ...tokenizers.static import ANS_TOKEN
-from ...tokenizers.static import QUERY_TOKEN
-from ...utils.pretty import get_separator
-from ...utils.pretty import pretty_decode
-from ..loaders import medqa
-from ..pipelines.collate import CollateAsTensor
-from ..pipelines.collate import CollateTokens
-from ..pipelines.preprocessing import FormatAndTokenize
-from ..pipes import Collate
-from ..pipes import Parallel
-from ..utils.transformations import set_row_idx
-from ..utils.typing import HgDataset
 from .hf_dataset import HfDatasetBuilder
+from fz_openqa.datamodules.generators import medqa
+from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
+from fz_openqa.datamodules.pipelines.collate import CollateTokens
+from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
+from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.typing import HgDataset
+from fz_openqa.tokenizers.static import ANS_TOKEN
+from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class MedQABuilder(HfDatasetBuilder):
             ),
             batched=True,
             num_proc=self.num_proc,
-            desc="Tokenizing documents and extracting overlapping passages",
+            desc="Tokenizing questions and answers",
         )
 
         # add an index column

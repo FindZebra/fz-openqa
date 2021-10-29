@@ -1,3 +1,4 @@
+import logging
 import multiprocessing as mp
 import warnings
 from typing import List
@@ -6,6 +7,8 @@ import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.exceptions import RequestError
+
+logger = logging.getLogger(__name__)
 
 
 def get_process_id():
@@ -46,17 +49,14 @@ class ElasticSearchEngine:
         """
         Create ElasticSearch Index
         """
-        # todo @MotzWanted: don't override the dataset if existing.
-        #  The index is generated given the dataset fingerprint, and should be unique.
-
         try:
             # self.es.indices.delete(index=index_name, ignore=[400, 404])
             _ = self.instance.indices.create(index=index_name)
             created = True
 
-        # todo: handle specific exceptions
+        # todo: handle specific errors
         except RequestError as err:
-            warnings.warn(f"{err}")
+            logger.warning(f"{err}")
             created = False
 
         return created

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import dill
@@ -20,12 +21,24 @@ class SearchResult:
 class Index:
     """Keep an index of a Dataset and search using queries."""
 
+    index_name: Optional[str] = None
     is_indexed: bool = False
     params: Dict[str, Any] = {}
 
     def __init__(self, verbose: bool = False, **kwargs):
-        self.params = {k: v for k, v in locals().items() if k != "self"}
+        self.params = {
+            k: v
+            for k, v in {**locals(), **kwargs}.items()
+            if k not in ["self", "kwargs", "__class__"]
+        }
         self.verbose = verbose
+
+    def __repr__(self):
+        params = self.params
+        params["is_indexed"] = self.is_indexed
+        params["index_name"] = self.index_name
+        params = [f"{k}={v}" for k, v in params.items()]
+        return f"{self.__class__.__name__}({', '.join(params)})"
 
     def new(self, **kwargs) -> "Index":
         params = self.params.copy()

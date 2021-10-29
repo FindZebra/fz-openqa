@@ -13,8 +13,8 @@ from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
 from .corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.index import Index
-from fz_openqa.datamodules.loaders import medqa
 from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (

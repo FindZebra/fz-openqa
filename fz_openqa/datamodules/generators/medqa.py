@@ -3,7 +3,7 @@ import json
 import datasets
 
 
-class MedQAxCorpusConfig(datasets.BuilderConfig):
+class MedQAConfig(datasets.BuilderConfig):
     """BuilderConfig for MedQAxCorpus."""
 
     def __init__(self, **kwargs):
@@ -11,7 +11,7 @@ class MedQAxCorpusConfig(datasets.BuilderConfig):
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(MedQAxCorpusConfig, self).__init__(**kwargs)
+        super(MedQAConfig, self).__init__(**kwargs)
 
 
 _TRAIN_URL = "https://drive.google.com/file/d/18a1TxYHHlNqXNBHaSgfLRgI4kBmYXcyn/view?usp=sharing"
@@ -26,7 +26,7 @@ _HOMEPAGE = ""
 _CITATION = ""
 
 
-class MedQAxCorpusDataset(datasets.GeneratorBasedBuilder):
+class MedQaGenerator(datasets.GeneratorBasedBuilder):
     """MedQAxCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)

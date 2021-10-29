@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 from typing import Dict
@@ -17,8 +18,22 @@ from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HgDataset
 from fz_openqa.utils.pretty import pretty_decode
 
+logger = logging.getLogger(__name__)
+
 
 def cache_hf_dataset(func):
+    """
+    Cache the output of the __call__ function by saving the dataset to a file.
+    Looks actually slower, but might be useful in a distributed setup.
+
+    Usage:
+    ```
+    @cache_hf_dataset
+    def __call__(self, *args, **kwargs):
+        ...
+    ```
+    """
+
     def wrapper(self, *args, **kwargs):
         if self._cache_path is None:
             # process dataset
@@ -39,6 +54,7 @@ def cache_hf_dataset(func):
                 if not os.path.exists(self._cache_path):
                     dataset.save_to_disk(self._cache_path)
         else:
+            logger.info(f"Loading cached dataset from {self._cache_path}")
             dataset: HgDataset = self._cache_type.load_from_disk(
                 self._cache_path
             )
@@ -93,7 +109,6 @@ class HfDatasetBuilder(DatasetBuilder):
         self.tokenizer = tokenizer
         self.add_encoding_tokens = add_encoding_tokens
 
-    @cache_hf_dataset
     def __call__(self) -> HgDataset:
         # load the dataset, potentially filter, preprocess and return
         dataset = self.load_and_filter_dataset()

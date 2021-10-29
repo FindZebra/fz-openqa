@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -19,6 +20,9 @@ from fz_openqa.datamodules.utils.typing import HgDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
+
+
+logger = logging.getLogger(__name__)
 
 
 class DataModule(LightningDataModule):
@@ -75,6 +79,7 @@ class DataModule(LightningDataModule):
     def prepare_data(self):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
+        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
         self.builder()
 
     def setup(self, stage: Optional[str] = None):
@@ -83,6 +88,7 @@ class DataModule(LightningDataModule):
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
+        logger.info(f"Setting up with <{self.builder.__class__.__name__}>")
         self.dataset = self.builder()
 
         # define the collate operator

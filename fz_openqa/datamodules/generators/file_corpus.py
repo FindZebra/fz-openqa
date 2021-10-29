@@ -18,7 +18,7 @@ _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
 
 
-class CorpusDataset(datasets.GeneratorBasedBuilder):
+class CorpusGenerator(datasets.GeneratorBasedBuilder):
     """CorpusDataset Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)

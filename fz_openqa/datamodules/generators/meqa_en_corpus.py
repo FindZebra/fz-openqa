@@ -1,12 +1,14 @@
-import json
+import os
 import re
+import zipfile
+from pathlib import Path
 
 import datasets
 
 TXT_PATTERN = r"^.*\.txt$"
 
 
-class FzCorpusConfig(datasets.BuilderConfig):
+class MedQaEnCorpusConfig(datasets.BuilderConfig):
     """BuilderConfig for the MedQa English Corpus objecxt."""
 
     def __init__(self, **kwargs):
@@ -14,18 +16,18 @@ class FzCorpusConfig(datasets.BuilderConfig):
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(FzCorpusConfig, self).__init__(**kwargs)
+        super(MedQaEnCorpusConfig, self).__init__(**kwargs)
 
 
 _DESCRIPTION = "A class to load the english MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1665FL0D-QZwW-8os8xmxSXubw3jn1-ki/view?usp=sharing"
+_URL = "https://drive.google.com/file/d/1KrEZuUaHHZa1WfA3AO-uLWZdaRe9Sdmf/view?usp=sharing"
 
 
-class FzCorpusDataset(datasets.GeneratorBasedBuilder):
-    """FzCorpus Dataset. Version 0.0.1"""
+class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
+    """MedQaEnCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
     force = False
@@ -59,21 +61,17 @@ class FzCorpusDataset(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": downloaded_file},
+                gen_kwargs={"output_dir": Path(downloaded_file) / "en"},
             )
         ]
 
-    def _generate_examples(self, filepath: str):
+    def _generate_examples(self, output_dir: str):
         """Yields examples."""
-
-        cleanr = re.compile(r"(<.*?>)|(\[.*?\])")
-
-        with open(filepath, "r") as f:
-            data = json.load(f)
-            for idx, article in enumerate(data):
-                text = re.sub(cleanr, "", article["raw_content"])
-                yield idx, {
-                    "text": text,
-                    "title": article["title"],
-                    "idx": idx,
-                }
+        data_files = [
+            os.path.join(output_dir, p)
+            for p in os.listdir(output_dir)
+            if re.findall(TXT_PATTERN, p)
+        ]
+        for i, fn in enumerate(data_files):
+            with open(fn, "r") as f:
+                yield i, {"text": f.read(), "idx": i, "title": ""}

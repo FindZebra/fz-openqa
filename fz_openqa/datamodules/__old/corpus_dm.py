@@ -17,10 +17,10 @@ from datasets import load_dataset
 from pytorch_lightning.utilities import rank_zero_only
 
 from .base_dm import BaseDataModule
+from fz_openqa.datamodules.generators import file_corpus
+from fz_openqa.datamodules.generators import fz_corpus
+from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.loaders import file_corpus
-from fz_openqa.datamodules.loaders import fz_corpus
-from fz_openqa.datamodules.loaders import meqa_en_corpus
 from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import Apply

@@ -24,7 +24,7 @@ _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
 
 
-class FZxMedQADataset(datasets.GeneratorBasedBuilder):
+class FZxMedQAGenerator(datasets.GeneratorBasedBuilder):
     """FZxMedQA Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)

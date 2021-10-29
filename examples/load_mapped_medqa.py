@@ -1,19 +1,14 @@
-import cProfile
 import logging
-import pstats
+import os.path
 from pathlib import Path
-from timeit import Timer
 
 import datasets
 import hydra
-import numpy as np
 import rich
 from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
-from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
@@ -22,8 +17,6 @@ from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.train_utils import setup_safe_env
 
 
 @hydra.main(
@@ -32,7 +25,6 @@ from fz_openqa.utils.train_utils import setup_safe_env
 )
 def run(config):
     datasets.set_caching_enabled(True)
-    setup_safe_env()
 
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
@@ -51,7 +43,6 @@ def run(config):
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
-    dataset_builder.subset_size = [1000, 100, 100]
 
     # define the corpus builder
     corpus_builder = MedQaCorpusBuilder(
@@ -79,31 +70,16 @@ def run(config):
     # define the data module
     dm = DataModule(builder=builder)
 
-    # prepare both the QA dataset and the corpus
+    # preprocess the data
     dm.prepare_data()
     dm.setup()
+    dm.display_sample()
 
-    class GetBatch:
-        def __init__(self, loader):
-            self.it_loader = iter(loader)
+    # access dataset
+    rich.print(dm.dataset)
 
-        def __call__(self):
-            return next(self.it_loader)
-
-    get_batch = GetBatch(dm.train_dataloader())
-
-    profiler = cProfile.Profile()
-    profiler.enable()
-    times = Timer(get_batch).repeat(20, 1)
-    profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats("time")
-    stats.print_stats(20)
-    print(get_separator())
-    rich.print(
-        f">> duration={np.mean(times):.3f}s/batch (std={np.std(times):.3f}s)"
-    )
-    # fetch docs in collate: >> duration=0.142s/batch (std=0.293s)
-    # fetch docs in __getitem__: >> duration=1.351s/batch (std=2.645s)make
+    # sample a batch
+    _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":

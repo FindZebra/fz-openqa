@@ -6,11 +6,10 @@ import datasets
 import hydra
 import rich
 from omegaconf import DictConfig
-from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -34,7 +33,7 @@ def run(config: DictConfig) -> None:
     )
 
     # initialize the data module
-    builder = MedQABuilder(
+    builder = MedQaCorpusBuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
