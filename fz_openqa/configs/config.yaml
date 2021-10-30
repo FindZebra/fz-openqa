@@ -22,8 +22,8 @@ base:
   target_mode: max
 
 # version info (useful for filtering runs on wandb)
-exp_version: 10
-code_version: "0.1.0"
+exp_version: 11
+code_version: "0.1.1"
 
 
 

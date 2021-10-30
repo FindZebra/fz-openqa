@@ -2,7 +2,6 @@ import os
 from typing import List
 from typing import Optional
 
-import rich
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
@@ -44,7 +43,7 @@ def train(config: DictConfig) -> Optional[float]:
     datamodule: DataModule = instantiate(config.datamodule)
     datamodule.prepare_data()
     datamodule.setup()
-    datamodule.display_sample()
+    datamodule.display_samples()
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")

@@ -8,11 +8,20 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import dill
+
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.utils import reduce_dict_values
 from fz_openqa.datamodules.pipes.utils import safe_fingerprint
 from fz_openqa.datamodules.pipes.utils import safe_todict
 from fz_openqa.utils.datastruct import Batch
+
+
+def safe_dill_inspect(p):
+    if isinstance(p, Pipe):
+        return p.dill_inspect()
+    else:
+        return dill.pickles(p)
 
 
 class Sequential(Pipe):
@@ -49,7 +58,7 @@ class Sequential(Pipe):
         self, reduce: bool = False
     ) -> Union[Dict[str, Any], bool]:
         diagnostic = {
-            self.get_pipe_id(p): p.dill_inspect() for p in self.pipes
+            self.get_pipe_id(p): safe_dill_inspect(p) for p in self.pipes
         }
         if reduce:
             return reduce_dict_values(diagnostic)

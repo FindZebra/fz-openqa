@@ -271,7 +271,7 @@ class AliasBasedMatch(RelevanceClassifier):
         }
 
     def dill_inspect(self, reduce=True) -> Dict:
-        return {**{k: dill.pickles(v) for k, v in self.__getstate__().items()}}
+        return {k: dill.pickles(v) for k, v in self.__getstate__().items()}
 
     def _setup_models(self):
         if self.model is None:

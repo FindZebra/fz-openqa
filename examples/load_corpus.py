@@ -42,7 +42,7 @@ def run(config: DictConfig) -> None:
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_sample()
+    dm.display_samples()
 
     # access dataset
     rich.print(dm.dataset)

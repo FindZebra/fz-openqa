@@ -17,6 +17,10 @@ OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 
 @hydra.main(config_path="../configs/", config_name="config.yaml")
 def run_experiment(config: DictConfig):
+    # todo: try re-inserrting local imakemports again
+    # from fz_openqa.ops import training
+    # from fz_openqa.utils import train_utils
+
     # replace config paths with loaded configs
     resolve_config_paths(config, path=os.path.dirname(configs.__file__))
 

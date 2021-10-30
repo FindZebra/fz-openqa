@@ -21,12 +21,6 @@ from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
-_root = Path(fz_openqa.__file__).parent.parent
-
-OmegaConf.register_new_resolver("getcwd", lambda: os.getcwd())
-OmegaConf.register_new_resolver("get_original_cwd", get_original_cwd)
-OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
-
 
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
@@ -38,10 +32,10 @@ def run(config):
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
+    # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(
         pretrained_model_name_or_path="bert-base-cased"
     )
-
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
@@ -82,7 +76,7 @@ def run(config):
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_sample()
+    dm.display_samples(n_samples=10)
 
     # access dataset
     rich.print(dm.dataset)

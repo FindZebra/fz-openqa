@@ -16,7 +16,7 @@ from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
@@ -145,7 +145,7 @@ class DataModule(LightningDataModule):
         return f"{self.__class__.__name__}(\nbuilder={self.builder}\n)"
 
     @rank_zero_only
-    def display_sample(self):
+    def display_samples(self, n_samples: int = 1):
         """Sample a batch and pretty print it."""
         batch = next(iter(self.train_dataloader()))
         print(get_separator("="))
@@ -154,8 +154,9 @@ class DataModule(LightningDataModule):
         pprint_batch(batch)
         print(get_separator())
         print("=== example ===")
-        print(get_separator())
-        self.display_one_sample({k: v[0] for k, v in batch.items()})
+        for i in range(min(n_samples, infer_batch_size(batch))):
+            print(get_separator())
+            self.display_one_sample({k: v[i] for k, v in batch.items()})
         print(get_separator("="))
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):
