@@ -25,7 +25,14 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 
 
-DEFAULT_ES_BODY = None  # todo
+DEFAULT_ES_BODY = {
+    "settings": {
+        "index": {
+            "number_of_shards": 1,
+            "number_of_replicas": 1
+        }
+    }
+}
 
 
 class ElasticSearchIndex(Index):
@@ -44,6 +51,7 @@ class ElasticSearchIndex(Index):
         es: Optional[ElasticSearchEngine] = None,
         text_cleaner: Optional[TextFormatter] = None,
         es_body: Optional[Dict] = DEFAULT_ES_BODY,
+        analyze: Optional[bool] = False,
         **kwargs,
     ):
         super(ElasticSearchIndex, self).__init__(**kwargs)
@@ -54,6 +62,7 @@ class ElasticSearchIndex(Index):
         self.num_proc = num_proc
         self.engine = es or ElasticSearchEngine()
         self.es_body = es_body
+        self.analyze = analyze
 
         # text cleaning
         if isinstance(text_cleaner, TextFormatter):
@@ -141,10 +150,16 @@ class ElasticSearchIndex(Index):
         used to build the index."""
         query = self.preprocesing_pipe(query, text_key=self.query_key)
 
-        scores, indexes = self.engine.es_search_bulk(
+        scores, indexes, contents = self.engine.es_search_bulk(
             self.index_name, query[self.query_key], k=k
         )
-        return SearchResult(score=scores, index=indexes)
+
+        analyzed_tokens = [[[]]*k for i in range(len(scores))]
+        if self.analyze:
+            analyzed_tokens = self.engine.es_analyze_text(
+                self.index_name, contents
+            )
+        return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

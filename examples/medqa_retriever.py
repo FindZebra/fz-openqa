@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import datasets
 import numpy as np
 import rich
@@ -26,19 +28,63 @@ setup_safe_env()
 
 es_body = {
     "settings": {
+        # Shards are used to parallelize work on an index
+        'number_of_shards': 1,
+        # Replicas are copies of the shards and provide reliability if a node is lost
+        'number_of_replicas': 0,
+        #
+        'similarity': {
+            'default': {
+                # By default, b has a value of 0.75 and k1 a value of 1.2
+                'type': "BM25",
+                # text which touch on several different topics in a broad way often benefit by choosing a larger b
+                # most experiments seem to show the optimal b to be in a range of 0.3-0.9
+                "b": 0.75,
+                # should generally trend toward larger numbers when the text is a long and diverse
+                # most experiments seem to show the optimal k1 to be in a range of 0.5-2.0
+                "k1": 1.2
+            }
+        },
+        # Defines changes to the text before tokenization and indexing
         "analysis": {
             "analyzer": {
-                "my_analyzer": {
+                "custom_analyzer": {
+                    "type": "custom",
                     "tokenizer": "standard",
-                    "filter": ["snow"],
+                    # token filters
+                    "filter": [
+                        # Converts tokens to lowercase
+                        "lowercase",
+                        # Removes tokens equivalent to english stopwords
+                        #"stop",
+                        # Converts alphabetic, numeric, and symbolic characters to their ASCII equivalent
+                        #"asciifolding",
+                        # Converts tokens to its root word based snowball stemming
+                        "my_snow"
+                    ]
                 }
             },
             "filter": {
-                "snow": {
+                "my_snow": {
                     "type": "snowball",
-                    "language": "English",
+                    "language": "English"
                 }
+            }
+        }
+    },
+    # defining a mapping will help: (1) optimize the performance, (2) save disk space
+    "mappings": {
+        "properties": {
+            "text": {
+                "type": "text"
             },
+            "title": {
+                # Prevents the inverted index and doc values from being created
+                "enabled": False
+            },
+            "idx": {
+                "type": "integer"
+            }
         }
     }
 }
@@ -46,6 +92,7 @@ es_body = {
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"
 )
+
 
 # load the corpus object
 corpus = MedQaCorpusDataModule(
@@ -59,6 +106,7 @@ corpus = MedQaCorpusDataModule(
         filter_mode=None,
         text_cleaner=TextFormatter(remove_symbols=True),
         es_body=es_body,
+        analyze=False
     ),
     verbose=False,
     num_proc=4,
@@ -89,7 +137,7 @@ print(get_separator())
 
 concat_pipe = ConcatQuestionAnswerOption()
 select_fields = FilterKeys(lambda key: key == "question.metamap")
-search_index = SearchCorpus(corpus=corpus, k=10)
+search_index = SearchCorpus(corpus_index=corpus._index, k=25)
 flatten_and_search = AsFlatten(search_index)
 
 pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
@@ -108,17 +156,22 @@ total = (
     + len(dm.dataset["validation"])
     + len(dm.dataset["test"])
 )
+
 num_corrects = 0
+equals = 0
 for batch in track(
     dm.train_dataloader(), description="Iterating through the dataset..."
 ):
-    # pprint(batch)
+    #pprint(batch)
 
     # 1 do a pipe to concat question + answer option
     batch = pipe(batch)
-    # print(len(batch["document.retrieval_score"]))
-    # print(len(batch["answer.target"]))
-    # print(get_separator())
+
+    for question in batch["document.retrieval_score"]:
+        sums = np.sum(question, axis=1)
+        if np.all(sums == sums[0]):
+            equals += 1
+
     predictions = [
         np.argmax(np.sum(question, axis=1))
         for question in batch["document.retrieval_score"]
@@ -142,6 +195,7 @@ print(
         num_corrects, total, num_corrects * 100.0 / total
     )
 )
+print(equals)
 
 # Accuracy metrics
 # Query : "question.text" , Argmax : "No randomness"
