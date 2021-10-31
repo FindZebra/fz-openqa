@@ -19,6 +19,7 @@ from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
+from fz_openqa.datamodules.index import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -66,18 +67,18 @@ def run(config):
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
-        index=ElasticSearchIndex(),
+        index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(),
         n_retrieved_documents=1000,
-        n_documents=100,
-        max_pos_docs=10,
+        n_documents=1000,
+        max_pos_docs=None,
         filter_unmatched=True,
         num_proc=2,
         batch_size=10,
     )
 
     # define the data module
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, train_batch_size=10)
 
     # prepare both the QA dataset and the corpus
     dm.prepare_data()
@@ -94,7 +95,7 @@ def run(config):
 
     profiler = cProfile.Profile()
     profiler.enable()
-    times = Timer(get_batch).repeat(20, 1)
+    times = Timer(get_batch).repeat(10, 1)
     profiler.disable()
     stats = pstats.Stats(profiler).sort_stats("time")
     stats.print_stats(20)
@@ -102,8 +103,20 @@ def run(config):
     rich.print(
         f">> duration={np.mean(times):.3f}s/batch (std={np.std(times):.3f}s)"
     )
+    # A. < 31-10-2021 - testing fetching in __getitem__ vs. in dataloader
     # fetch docs in collate: >> duration=0.142s/batch (std=0.293s)
     # fetch docs in __getitem__: >> duration=1.351s/batch (std=2.645s)make
+
+    # B. fetching without loading the whole column (100 docs)
+    # base: >> duration=0.277s/batch (std=0.275s)
+    # removed columns: >> duration=0.262s/batch (std=0.263s)
+    # using select: >> duration=0.622s/batch (std=0.621s)
+    # using table.take: >> duration=0.458s/batch (std=0.466s)
+
+    # C. fetching 10000 rows: 1000 docs, batch size 10
+    # __getitem__: >> duration=2.206s/batch (std=2.221s)
+    # select: >> duration=5.897s/batch (std=5.594s)
+    # Table.take: >> duration=1.620s/batch (std=1.490s)
 
 
 if __name__ == "__main__":

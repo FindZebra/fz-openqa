@@ -287,10 +287,16 @@ class MedQaDataModule(BaseDataModule):
         if corpus is None:
             return None
 
+        # todo: check keys
         return ApplyAsFlatten(
             FeatchDocuments(
                 corpus_dataset=corpus.dataset,
                 collate_pipe=corpus.collate_pipe,
+                keys=[
+                    "document.input_ids",
+                    "document.attention_mask",
+                    "document.text",
+                ],
             ),
             filter=KeyIn(["document.row_idx"]),
             update=True,
