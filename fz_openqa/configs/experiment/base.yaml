@@ -2,15 +2,15 @@
 
 defaults:
   - override /trainer: minimal
-  - override /model: retriever
+  - override /model: ???
   - override /datamodule: openqa
-  - override /callbacks: checkpoint
+  - override /callbacks: default
   - override /logger: wandb
 
 base:
   seed: null
-  target_metric: validation/retriever/top10_Accuracy
-  target_mode: max
+  target_metric: ???
+  target_mode: ???
 
 trainer:
   gpus: 4
@@ -20,8 +20,6 @@ trainer:
   gradient_clip_val: 0.5
   # stochastic_weight_avg: True
   checkpoint_callback: True
-  accumulate_grad_batches: 4
-  # val_check_interval: 100
 
 model:
   lr: 1e-5
@@ -33,14 +31,14 @@ model:
 
 
 datamodule:
-  train_batch_size: 8
+  train_batch_size: 16
   valid_batch_size: 100
   max_length: 512
   use_subset: False
   num_workers: 8
-  n_documents: 20
+  n_documents: 10
   max_pos_docs: 1
 
 logger:
   wandb:
-    group: retriever-only
+    group: base

@@ -8,16 +8,11 @@ resources_per_trial:
   gpu: ${base.gpus}
 fail_fast: False
 raise_on_failed_trial: False
-#  checkpoint_freq: 0
-#  checkpoint_at_end: False
 local_dir: ${sys.work_dir}
-  #  progress_reporter:
-  #    _target_: ray.tune.CLIReporter
-#    metric_columns: ['validation/loss', 'validation/F1']
 scheduler:
   _target_: ray.tune.schedulers.AsyncHyperBandScheduler
-  max_t: 1000
-  grace_period: 10
+  max_t: 100
+  grace_period: 2
 search_alg:
   _target_: ray.tune.suggest.hyperopt.HyperOptSearch
   points_to_evaluate: null

@@ -9,6 +9,7 @@ import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
@@ -18,6 +19,7 @@ from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.utils.typing import HfDataset
+from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -57,7 +59,7 @@ class DataModule(LightningDataModule):
     def __init__(
         self,
         *,
-        builder: DatasetBuilder,
+        builder: Union[DatasetBuilder, DictConfig],
         train_batch_size: int = 64,
         eval_batch_size: int = 128,
         num_workers: int = 2,
@@ -68,7 +70,7 @@ class DataModule(LightningDataModule):
         super().__init__()
 
         # builder used to generate the dataset
-        self.builder = builder
+        self.builder = maybe_instantiate(builder)
 
         # data loader parameters
         self.train_batch_size = train_batch_size

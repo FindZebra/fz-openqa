@@ -1,6 +1,7 @@
 # @package _global_
 
 defaults:
+  - _self_
   - sys: local
   - trainer: minimal
   - datamodule: openqa
@@ -29,18 +30,6 @@ code_version: "0.1.1"
 
 # base pretrained model
 pretrained_model: ${model.bert.pretrained_model_name_or_path}
-
-# path to original working directory
-# hydra hijacks working directory by changing it to the current log directory,
-# so it's useful to have this path as a special variable
-# learn more here: https://hydra.cc/docs/next/tutorials/basic/running_your_app/working_directory
-work_dir: ${sys.work_dir}
-
-# path to folder with data
-cache_dir: ${sys.cache_dir}
-
-# original working dir
-original_wdir: ${get_original_cwd:}
 
 # use `python run.py debug=true` for easy debugging!
 # this will run 1 train, val and test loop with only 1 batch

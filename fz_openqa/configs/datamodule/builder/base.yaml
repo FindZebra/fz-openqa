@@ -5,7 +5,7 @@ use_subset: ${datamodule.use_subset}
 
 # global
 tokenizer: ${datamodule.tokenizer}
-cache_dir: ${cache_dir}
+cache_dir: ${sys.cache_dir}
 num_proc: ${datamodule.num_proc}
 text_formatter: ${datamodule.text_formatter}
 add_encoding_tokens: ${datamodule.add_encoding_tokens}

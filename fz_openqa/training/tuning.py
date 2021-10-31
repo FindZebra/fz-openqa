@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 
+import hydra
 import ray
 import rich
 from hydra import compose
@@ -11,7 +12,7 @@ from ray.tune import CLIReporter
 
 import fz_openqa.utils.config
 import fz_openqa.utils.config_utils
-from fz_openqa.ops.experiment import run_experiment
+from fz_openqa.training.experiment import run_experiment_with_config
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.config import print_config
 
@@ -33,18 +34,19 @@ def trial(args, checkpoint_dir=None, **kwargs):
     with initialize(config_path="../configs/"):
         overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
         overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
-        overrides += [f"work_dir='{os.getcwd()}'"]
+        overrides += [f"sys.work_dir='{os.getcwd()}'"]
         cfg = compose(
             config_name="config.yaml",
             return_hydra_config=True,
             overrides=overrides,
         )
-        run_experiment(cfg)
+        run_experiment_with_config(cfg)
 
 
-def run_tune(config: DictConfig) -> Optional[float]:
+def run_tune_with_config(config: DictConfig) -> Optional[float]:
+    # todo: error: SystemError 1: debug by runnning simple code in `trial`...
     if fz_openqa.utils.config.print_config:
-        print_config(config)
+        print_config(config, resolve=True)
 
     log.info("Initializing Ray")
     if config.base.server_address is not None:
@@ -81,6 +83,11 @@ def run_tune(config: DictConfig) -> Optional[float]:
 
     log.info("Running HPO!")
     rich.print("Best hyperparameters found were: \n", runner.best_config)
+
+
+@hydra.main(config_path="../configs/", config_name="hpo_config.yaml")
+def run_tune(config: DictConfig) -> None:
+    return run_tune_with_config(config)
 
 
 if __name__ == "__main__":

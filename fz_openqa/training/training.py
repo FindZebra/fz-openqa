@@ -2,6 +2,7 @@ import os
 from typing import List
 from typing import Optional
 
+import datasets
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
@@ -28,11 +29,12 @@ def train(config: DictConfig) -> Optional[float]:
     setup_safe_env()
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
+        datasets.logging.set_verbosity(datasets.logging.ERROR)
+    datasets.disable_progress_bar()
 
-    log.info(f"work_dir={config.work_dir}")
-    log.info(f"original_wdir={config.original_wdir}")
-    log.info(f"cache_dir={os.path.abspath(config.cache_dir)}")
-    log.info(f"Current working directory: {os.getcwd()}")
+    log.info(f"work_dir={config.sys.work_dir}")
+    log.info(f"cache_dir={os.path.abspath(config.sys.cache_dir)}")
+    log.info(f"Experiment working directory: {os.getcwd()}")
 
     # # Set seed for random number generators in pytorch, numpy and python.random
     if "seed" in config:
@@ -41,9 +43,9 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: DataModule = instantiate(config.datamodule)
-    datamodule.prepare_data()
-    datamodule.setup()
-    datamodule.display_samples()
+    # datamodule.prepare_data()
+    # datamodule.setup()
+    # datamodule.display_samples()
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")

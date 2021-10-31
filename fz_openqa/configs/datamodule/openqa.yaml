@@ -11,13 +11,18 @@ _target_: fz_openqa.datamodules.DataModule
 train_batch_size: 10
 eval_batch_size: 20
 num_workers: 4
-pin_memory: False
+pin_memory: True
 persistent_workers: False
 
-# global: args
+# global: dataset preprocessing
 add_encoding_tokens: true
 use_subset: false
-
-# global: meta
-cache_dir: ${cache_dir} # cache_dir is specified in config.yaml
 num_proc: 4
+cache_dir: ${sys.cache_dir}
+
+
+# global: openqa
+n_retrieved_documents: 1000
+n_documents: 10
+max_pos_docs: 1
+filter_unmatched: true

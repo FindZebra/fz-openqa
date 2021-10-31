@@ -38,14 +38,14 @@ class ReaderMultipleChoice(Module):
     _required_eval_feature_names = ["answer.target", "document.match_score"]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "reading"
+    task_id: Optional[str] = "reader"
 
     # metrics to display
     pbar_metrics = [
-        "train/reading/Accuracy",
-        # "validation/reading/Accuracy",
-        "train/reading/relevance-Accuracy",
-        # "validation/reading/relevance-Accuracy",
+        "train/reader/Accuracy",
+        # "validation/reader/Accuracy",
+        "train/reader/relevance-Accuracy",
+        # "validation/reader/relevance-Accuracy",
     ]
 
     _required_heads = ["option", "evidence", "relevance"]

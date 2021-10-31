@@ -5,10 +5,10 @@ defaults:
 _target_: fz_openqa.datamodules.builders.OpenQaBuilder
 index_builder: ${datamodule.index_builder}
 relevance_classifier: ${datamodule.relevance_classifier}
-n_retrieved_documents: 1000
-n_documents: 10
-max_pos_docs: 1
-filter_unmatched: true
+n_retrieved_documents: ${datamodule.n_retrieved_documents}
+n_documents: ${datamodule.n_documents}
+max_pos_docs: ${datamodule.max_pos_docs}
+filter_unmatched: ${datamodule.filter_unmatched}
 
 num_proc: ${datamodule.num_proc}
 batch_size: 100

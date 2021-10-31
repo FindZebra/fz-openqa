@@ -1,0 +1,12 @@
+datamodule.relevance_classifier._target_:
+  _target_: ray.tune.choice
+  categories:
+    - fz_openqa.datamodules.pipes.ExactMatch
+    - fz_openqa.datamodules.pipes.ScispaCyMatch
+model.hidden_size:
+  _target_: ray.tune.choice
+  categories:
+    - 64
+    - 128
+    - 256
+    - 512

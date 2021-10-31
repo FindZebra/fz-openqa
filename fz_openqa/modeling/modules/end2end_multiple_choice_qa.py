@@ -64,7 +64,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
         """
         # check features, check that the first document of each question is positive
         # and flatten the documents
-        self.check_batch_type(batch)
+        self._check_batch_type(batch)
         self.check_feature_names(batch)
         assert hasattr(
             model, "retriever"

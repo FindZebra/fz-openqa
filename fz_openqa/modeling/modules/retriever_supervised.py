@@ -31,14 +31,14 @@ class RetrieverSupervised(Module):
     ]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "retrieval"
+    task_id: Optional[str] = "retriever"
 
     # metrics to display in the progress bar
     pbar_metrics = [
-        "train/retrieval/Accuracy",
-        "validation/retrieval/Accuracy",
-        "validation/retrieval/top10_Accuracy",
-        "validation/retrieval/n_options",
+        "train/retriever/Accuracy",
+        "validation/retriever/Accuracy",
+        "validation/retriever/top10_Accuracy",
+        "validation/retriever/n_options",
     ]
 
     # require heads
