@@ -1,3 +1,5 @@
+from abc import ABC
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any
 from typing import Dict
@@ -18,7 +20,7 @@ class SearchResult:
     index: List[List[int]]
 
 
-class Index:
+class Index(ABC):
     """Keep an index of a Dataset and search using queries."""
 
     index_name: Optional[str] = None
@@ -37,6 +39,7 @@ class Index:
         """check if the module can be pickled."""
         return dill.pickles(self)
 
+    @abstractmethod
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
         raise NotImplementedError

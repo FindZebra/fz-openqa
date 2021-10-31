@@ -1,3 +1,5 @@
+from abc import ABC
+from abc import abstractmethod
 from copy import copy
 from copy import deepcopy
 from typing import Any
@@ -8,7 +10,6 @@ from typing import Optional
 from typing import Union
 
 import dill
-import rich
 from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
@@ -22,7 +23,7 @@ def always_true(*args, **kwargs):
     return True
 
 
-class Pipe(object):
+class Pipe(ABC):
     """
     A pipe is a small unit of computation that ingests,
     modify and returns a batch of data.
@@ -46,6 +47,7 @@ class Pipe(object):
     def batch_size(self, batch: Batch) -> int:
         return len(next(iter(batch.values())))
 
+    @abstractmethod
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """The call of the pipeline process"""
         raise NotImplementedError
