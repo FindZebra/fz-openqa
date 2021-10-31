@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -98,6 +99,8 @@ class DataModule(LightningDataModule):
         self.collate_pipe = self.builder.get_collate_pipe()
 
     def train_dataloader(self):
+        collate_fn = self._get_collate_fn(split=Split.TRAIN)
+
         return DataLoader(
             dataset=self.get_dataset(Split.TRAIN),
             batch_size=self.train_batch_size,
@@ -105,10 +108,12 @@ class DataModule(LightningDataModule):
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
             shuffle=True,
-            collate_fn=self.collate_fn,
+            collate_fn=collate_fn,
         )
 
     def _eval_loader(self, split):
+        collate_fn = self._get_collate_fn(split=split)
+
         return DataLoader(
             dataset=self.get_dataset(split),
             batch_size=self.eval_batch_size,
@@ -116,8 +121,14 @@ class DataModule(LightningDataModule):
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
             shuffle=False,
-            collate_fn=self.collate_fn,
+            collate_fn=collate_fn,
         )
+
+    def _get_collate_fn(self, split: Split):
+        collate_fn = self.collate_pipe
+        if isinstance(collate_fn, Pipe):
+            collate_fn = partial(collate_fn, split=split)
+        return collate_fn
 
     def val_dataloader(self):
         return self._eval_loader(Split.VALIDATION)

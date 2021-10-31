@@ -23,6 +23,9 @@ cache_dir: ${sys.cache_dir}
 
 # global: openqa
 n_retrieved_documents: 1000
-n_documents: 10
+n_documents:
+  train: 10
+  validation: 100
+  test: 100
 max_pos_docs: 1
 filter_unmatched: true

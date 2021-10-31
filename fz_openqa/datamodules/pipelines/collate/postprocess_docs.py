@@ -1,4 +1,6 @@
+from typing import Dict
 from typing import Optional
+from typing import Union
 
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import BlockSequential
@@ -21,7 +23,7 @@ class PostprocessPipe(BlockSequential):
         relevance_classifier: RelevanceClassifier,
         *,
         n_retrieved_documents: int,
-        n_select_documents: Optional[int],
+        n_select_documents: Optional[Union[int, Dict]],
         max_select_pos_docs: Optional[int],
         **kwargs
     ):
@@ -57,7 +59,9 @@ class PostprocessPipe(BlockSequential):
                 max_pos_docs=max_select_pos_docs,
                 strict=False,
             )
-            selector = Gate(HasKeyWithPrefix("document.match_score"), selector)
+            selector = Gate(
+                HasKeyWithPrefix("document.match_score"), pipe=selector
+            )
 
             super().__init__(
                 [

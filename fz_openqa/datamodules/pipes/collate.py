@@ -26,7 +26,7 @@ class Collate(Pipe):
         self.keys = keys
         self.key_op = key_op
 
-    def __call__(self, examples: Iterable[Batch]) -> Batch:
+    def __call__(self, examples: Iterable[Batch], **kwargs) -> Batch:
         # cast, filter keys and check type and keys consistency
         examples = list(examples)
         first_eg = examples[0]
@@ -63,7 +63,7 @@ class Collate(Pipe):
 
 
 class DeCollate(Pipe):
-    def __call__(self, batch: Batch) -> List[Dict[str, Any]]:
+    def __call__(self, batch: Batch, **kwargs) -> List[Dict[str, Any]]:
         keys = list(batch.keys())
         length = len(batch[keys[0]])
         lengths = {k: len(v) for k, v in batch.items()}

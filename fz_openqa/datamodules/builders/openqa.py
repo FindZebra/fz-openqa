@@ -4,9 +4,11 @@ from functools import partial
 from typing import Any
 from typing import Dict
 from typing import Optional
+from typing import Union
 
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import Split
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
@@ -74,7 +76,7 @@ class OpenQaBuilder(DatasetBuilder):
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
         n_retrieved_documents: int,
-        n_documents: Optional[int] = None,
+        n_documents: Optional[Union[int, Dict]] = None,
         max_pos_docs: Optional[int] = None,
         filter_unmatched: bool = True,
         num_proc: int = 2,
@@ -211,12 +213,21 @@ class OpenQaBuilder(DatasetBuilder):
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
-            fn = partial(
-                filter_questions_by_pos_docs,
-                n_documents=n_documents,
-                max_pos_docs=max_pos_docs,
+
+            def fn(split: Split):
+                return partial(
+                    filter_questions_by_pos_docs,
+                    n_documents=n_documents,
+                    max_pos_docs=max_pos_docs,
+                    split=split,
+                )
+
+            dataset = DatasetDict(
+                {
+                    split: dset.filter(fn(split), num_proc=num_proc)
+                    for split, dset in dataset.items()
+                }
             )
-            dataset = dataset.filter(fn, num_proc=num_proc)
 
         # print the difference in length for each split
         logger.info(format_size_difference(original_size, dataset))
@@ -262,7 +273,7 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: int, *, max_pos_docs: Optional[int]
+        n_documents: Union[int, Dict], *, max_pos_docs: Optional[int]
     ) -> Optional[Pipe]:
         if n_documents == 0:
             return None

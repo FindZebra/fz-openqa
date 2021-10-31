@@ -30,8 +30,8 @@ class Sequential(Pipe):
     def __init__(
         self, *pipes: Optional[Union[Callable, Pipe]], id: Optional[str] = None
     ):
+        super(Sequential, self).__init__(id=id)
         self.pipes = [pipe for pipe in pipes if pipe is not None]
-        self.id = id
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
@@ -146,7 +146,10 @@ class Gate(Pipe):
         self,
         condition: Union[bool, Callable],
         pipe: Optional[Pipe],
+        id: Optional[str] = None,
     ):
+        super().__init__(id=id)
+
         self.condition = condition
         self.pipe = pipe
 
@@ -169,7 +172,7 @@ class Gate(Pipe):
             switched_on = self.condition(batch)
 
         if switched_on and self.pipe is not None:
-            return self.pipe(batch)
+            return self.pipe(batch, **kwargs)
         else:
             return {}
 
@@ -196,10 +199,10 @@ class BlockSequential(Pipe):
 
     def __init__(
         self, blocks: List[Tuple[str, Pipe]], id: Optional[str] = None
-    ) -> object:
+    ):
+        super(BlockSequential, self).__init__(id=id)
         blocks = [(k, b) for k, b in blocks if b is not None]
         self.blocks: OrderedDict[str, Pipe] = OrderedDict(blocks)
-        self.id = id
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""

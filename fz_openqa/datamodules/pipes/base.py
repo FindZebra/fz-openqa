@@ -33,7 +33,8 @@ class Pipe(ABC):
     requires_keys: Optional[List[str]] = None
 
     def __init__(self, *, id: Optional[str] = None):
-        self.id = id or self.id
+        if id is not None:
+            self.id = id
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
@@ -99,11 +100,16 @@ class Lambda(Pipe):
     """
 
     def __init__(
-        self, op: Callable, output_keys: Optional[List[str]] = None, **kwargs
+        self,
+        op: Callable,
+        output_keys: Optional[List[str]] = None,
+        allow_kwargs: bool = False,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.op = op
         self._output_keys = output_keys
+        self.allow_kwargs = allow_kwargs
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -260,13 +266,22 @@ class ApplyToAll(Pipe):
     The argument `element_wise` allows to process each value in the batch element wise.
     """
 
-    def __init__(self, op: Callable, element_wise: bool = False, **kwargs):
+    def __init__(
+        self,
+        op: Callable,
+        element_wise: bool = False,
+        allow_kwargs: bool = False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.op = op
         self.element_wise = element_wise
+        self.allow_kwargs = allow_kwargs
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
+        if not self.allow_kwargs:
+            kwargs = {}
         for key, values in batch.items():
             if self.element_wise:
                 batch[key] = [self.op(x, **kwargs) for x in values]

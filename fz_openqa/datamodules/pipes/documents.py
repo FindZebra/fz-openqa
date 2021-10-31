@@ -1,10 +1,14 @@
 import warnings
 from copy import copy
+from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 import numpy as np
 import rich
+from datasets import Split
+from omegaconf import DictConfig
 
 from .base import Pipe
 from .nesting import Nested
@@ -19,7 +23,7 @@ class SelectDocs(Nested):
     def __init__(
         self,
         *,
-        total: int,
+        total: Union[int, Dict],
         max_pos_docs: Optional[int] = 1,
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
@@ -44,7 +48,7 @@ class SelectDocsOneEg(Pipe):
     def __init__(
         self,
         *,
-        total: int,
+        total: Union[int, Dict],
         max_pos_docs: int = 1,
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
@@ -61,9 +65,15 @@ class SelectDocsOneEg(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def __call__(
+        self, batch: Batch, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+        total = self.total
+        if isinstance(total, (dict, DictConfig)):
+            total = total[str(split)]
+
         is_positive = [x > 0 for x in batch["document.match_score"]]
-        assert len(is_positive) >= self.total
+        assert len(is_positive) >= total
 
         # get the positive indexes
         positive_idx = [i for i, x in enumerate(is_positive) if x]
@@ -77,7 +87,7 @@ class SelectDocsOneEg(Pipe):
         negative_idx = [i for i, x in enumerate(is_positive) if not x]
         selected_negative_idx = select_values(
             negative_idx,
-            k=self.total - len(selected_positive_idx),
+            k=total - len(selected_positive_idx),
             mode=self.neg_select_mode,
         )
 
@@ -88,17 +98,17 @@ class SelectDocsOneEg(Pipe):
             # check output
             debug_str = (
                 f"The resulting index is smaller (N={len(index)}) "
-                f"than the expected size (total={self.total}). "
+                f"than the expected size (total={total}). "
                 f"You probably need to increase `max_pos_docs` or "
                 f"reduce `total. "
             )
             assert len(index) == self.total, debug_str
-        elif len(index) < self.total:
+        elif len(index) < total:
             if len(selected_negative_idx) == len(negative_idx):
                 warnings.warn(
                     f"There were not enough negative documents to "
                     f"return the right number of selected "
-                    f"documents (total={self.total}) with this "
+                    f"documents (total={total}) with this "
                     f"value of max_pos_docs={self.max_pos_docs}. "
                     f"Completing the selection with more positive "
                     f"documents than specified with max_pos_docs. "
@@ -107,7 +117,7 @@ class SelectDocsOneEg(Pipe):
                     f"n_negative={len(negative_idx)})"
                 )
                 args = {
-                    "k": self.total - len(negative_idx),
+                    "k": total - len(negative_idx),
                     "mode": self.pos_select_mode,
                 }
                 selected_positive_idx = select_values(positive_idx, **args)
@@ -115,7 +125,7 @@ class SelectDocsOneEg(Pipe):
             else:
                 rich.print(
                     f"=== SelectDocs: debugging ===\n"
-                    f"len(index)({len(index)})<total({self.total}). \n"
+                    f"len(index)({len(index)})<total({total}). \n"
                     f"n_selected_positive={len(selected_positive_idx)}, \n"
                     f"n_selected_negative={len(selected_negative_idx)}, \n"
                     f"n_positive={len(positive_idx)}, \n"

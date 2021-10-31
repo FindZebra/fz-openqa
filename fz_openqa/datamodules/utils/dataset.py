@@ -1,10 +1,13 @@
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 import rich
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import Split
+from omegaconf import DictConfig
 
 from .typing import HfDataset
 from fz_openqa.utils.pretty import get_separator
@@ -49,7 +52,11 @@ def format_size_difference(
 
 
 def filter_questions_by_pos_docs(
-    row, *, n_documents: int, max_pos_docs: Optional[int]
+    row,
+    *,
+    n_documents: Union[int, Dict],
+    max_pos_docs: Optional[int],
+    split: Optional[Split],
 ):
     """
     This function checks if a given row can should be filtered out.
@@ -58,6 +65,9 @@ def filter_questions_by_pos_docs(
         2. There are not enough negative documents to
            select `n_documents` with at max. `max_pos_docs` positive docs.
     """
+    if isinstance(n_documents, (dict, DictConfig)):
+        n_documents = n_documents[split]
+
     total = len(row["document.match_score"])
     n_positive = sum([int(s > 0) for s in row["document.match_score"]])
     if max_pos_docs is None:

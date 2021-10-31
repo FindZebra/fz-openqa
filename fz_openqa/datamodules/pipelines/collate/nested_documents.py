@@ -48,7 +48,7 @@ class MaybeCollateDocuments(Gate):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         tokens_pipe = Gate(
             HasKeyWithPrefix("document.input_ids"),
-            Sequential(
+            pipe=Sequential(
                 FilterKeys(
                     KeyIn(["document.input_ids", "document.attention_mask"])
                 ),

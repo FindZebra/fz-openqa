@@ -21,7 +21,7 @@ trainer:
   # stochastic_weight_avg: True
   checkpoint_callback: True
   accumulate_grad_batches: 4
-  # val_check_interval: 100
+  val_check_interval: 300
 
 model:
   lr: 1e-5
@@ -34,11 +34,14 @@ model:
 
 datamodule:
   train_batch_size: 8
-  valid_batch_size: 100
+  valid_batch_size: 16
   max_length: 512
   use_subset: False
   num_workers: 8
-  n_documents: 20
+  n_documents:
+    train: 20
+    validation: 100
+    test: 100
   max_pos_docs: 1
 
 logger:

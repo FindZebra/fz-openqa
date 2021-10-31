@@ -70,10 +70,17 @@ class Nest(ApplyToAll):
     {key: [values]} -> {key: [[group] for group in groups]}"""
 
     def __init__(self, stride: Optional[int]):
-        super(Nest, self).__init__(element_wise=False, op=self.nest)
+        super(Nest, self).__init__(
+            element_wise=False, op=self.nest, allow_kwargs=True
+        )
         self.stride = stride
 
-    def nest(self, x: Union[Tensor, List[Any]], stride: Optional[int] = None):
+    def nest(
+        self,
+        x: Union[Tensor, List[Any]],
+        stride: Optional[int] = None,
+        **kwargs,
+    ):
         stride = stride or self.stride
         if isinstance(x, Tensor):
             return x.view(-1, stride, *x.shape[1:])

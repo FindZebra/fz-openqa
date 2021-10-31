@@ -30,7 +30,7 @@ def train(config: DictConfig) -> Optional[float]:
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
         datasets.logging.set_verbosity(datasets.logging.ERROR)
-    datasets.disable_progress_bar()
+        # datasets.disable_progress_bar()
 
     log.info(f"work_dir={config.sys.work_dir}")
     log.info(f"cache_dir={os.path.abspath(config.sys.cache_dir)}")
