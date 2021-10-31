@@ -10,60 +10,6 @@ from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
-es_body = {
-    "settings": {
-        # Shards are used to parallelize work on an index
-        "number_of_shards": 1,
-        # Replicas are copies of the shards and provide reliability if a node is lost
-        "number_of_replicas": 0,
-        #
-        "similarity": {
-            "default": {
-                # By default, b has a value of 0.75 and k1 a value of 1.2
-                "type": "BM25",
-                # texts which touch on several topics often benefit by choosing a larger b
-                # most experiments seem to show the optimal b to be in a range of 0.3-0.9
-                "b": 0.75,
-                # should generally trend toward larger numbers when the text is a long and diverse
-                # most experiments seem to show the optimal k1 to be in a range of 0.5-2.0
-                "k1": 1.2,
-            }
-        },
-        # Defines changes to the text before tokenization and indexing
-        "analysis": {
-            "analyzer": {
-                "custom_analyzer": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    # token filters
-                    "filter": [
-                        # Converts tokens to lowercase
-                        "lowercase",
-                        # Removes tokens equivalent to english stopwords
-                        "stop",
-                        # Converts a-z, 1-9, and symbolic characters to their ASCII equivalent
-                        "asciifolding",
-                        # Converts tokens to its root word based snowball stemming
-                        "my_snow",
-                    ],
-                }
-            },
-            "filter": {"my_snow": {"type": "snowball", "language": "English"}},
-        },
-    },
-    # defining a mapping will help: (1) optimize the performance, (2) save disk space
-    "mappings": {
-        "properties": {
-            "text": {"type": "text"},
-            "title": {
-                # Prevents the inverted index and doc values from being created
-                "enabled": False
-            },
-            "idx": {"type": "integer"},
-        }
-    },
-}
-
 datasets.set_caching_enabled(False)
 
 tokenizer = init_pretrained_tokenizer(
@@ -79,7 +25,6 @@ es = ElasticSearchIndex(
     num_proc=4,
     filter_mode=None,
     text_cleaner=TextFormatter(remove_symbols=True),
-    es_body=es_body,
     analyze=False,
 )
 
