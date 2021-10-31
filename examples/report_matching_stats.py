@@ -70,12 +70,6 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
-
-text_formatter = TextFormatter(lowercase=True)
-
 if args.cls == "scispacy":
     cls = ScispaCyMatch(
         interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
@@ -96,10 +90,16 @@ elif args.corpus == "FZxMedQA":
 else:
     NotImplementedError
 
+datasets.set_caching_enabled(True)
+setup_safe_env()
+
+tokenizer = init_pretrained_tokenizer(
+    pretrained_model_name_or_path="bert-base-cased"
+)
+
 # load the corpus object
 corpus = corpus_module(
     tokenizer=tokenizer,
-    text_formatter=text_formatter,
     index=ElasticSearchIndex(
         index_key="document.row_idx",
         text_key="document.text",
@@ -116,10 +116,9 @@ corpus = corpus_module(
 # load the QA dataset
 dm = MedQaDataModule(
     tokenizer=tokenizer,
-    text_formatter=text_formatter,
-    train_batch_size=100,
+    train_batch_size=10,
     num_proc=4,
-    num_workers=4,
+    num_workers=5,
     use_subset=args.subset,
     verbose=True,
     corpus=corpus,
@@ -157,7 +156,7 @@ dm = MedQaDataModule(
 # >  - test: 334 (26.24%)
 
 # prepare both the QA dataset and the corpus
-dm.subset_size = [500, 100, 100]
+dm.subset_size = [1000, 100, 100]
 dm.prepare_data()
 dm.setup()
 
