@@ -1,11 +1,9 @@
 import argparse
 import json
-from time import time
 
 import datasets
 import rich
 import torch
-from torch.utils.data import DataLoader
 
 from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.corpus_dm import FZxMedQaCorpusDataModule
@@ -15,6 +13,7 @@ from fz_openqa.datamodules.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
@@ -75,12 +74,16 @@ tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"
 )
 
+text_formatter = TextFormatter(lowercase=True)
+
 if args.cls == "scispacy":
-    cls = ScispaCyMatch()
+    cls = ScispaCyMatch(
+        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
+    )
 elif args.cls == "metamap":
-    cls = MetaMapMatch()
+    cls = MetaMapMatch(interpretable=True)
 elif args.cls == "exact":
-    cls = ExactMatch()
+    cls = ExactMatch(interpretable=True)
 else:
     NotImplementedError
 
@@ -96,8 +99,9 @@ else:
 # load the corpus object
 corpus = corpus_module(
     tokenizer=tokenizer,
+    text_formatter=text_formatter,
     index=ElasticSearchIndex(
-        index_key="idx",
+        index_key="document.row_idx",
         text_key="document.text",
         query_key="question.text",
         num_proc=4,
@@ -112,6 +116,7 @@ corpus = corpus_module(
 # load the QA dataset
 dm = MedQaDataModule(
     tokenizer=tokenizer,
+    text_formatter=text_formatter,
     train_batch_size=100,
     num_proc=4,
     num_workers=4,
@@ -121,100 +126,71 @@ dm = MedQaDataModule(
     # retrieve 100 documents for each question
     n_retrieved_documents=args.topn,
     # keep only one positive doc
-    max_pos_docs=None,
+    max_pos_docs=10,
     # keep only 10 docs (1 pos + 9 neg)
-    n_documents=None,
+    n_documents=100,
     # simple exact match
     relevance_classifier=cls,
-    compile_in_setup=False,
     cache_dir="/scratch/s154097/cache",
 )
 
+# Compile the dataset
+# ExactMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~8s/batch, phoebe.compute.dtu.dk
+# >  - train: 3473 (34.12%)
+# >  - validation: 474 (37.26%)
+# >  - test: 450 (35.35%)
+# SciSpacyMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~75s/batch, phoebe.compute.dtu.dk
+# >  - train: 7605 (74.72%)
+# >  - validation: 967 (76.02%)
+# >  - test: 954 (74.94%)
+# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~4.6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2296 (22.56%)
+# >  - validation: 338 (26.57%)
+# >  - test: 306 (24.04%)
+# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~3.6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2702 (26.55%)
+# >  - validation: 354 (27.83%)
+# >  - test: 371 (29.14%)
+# ExactMatch: FZxMedQA dataset, num_proc=4, 1000 docs, bs=10: ~6s/batch, phoebe.compute.dtu.dk
+# >  - train: 2487 (24.44%)
+# >  - validation: 349 (27.44%)
+# >  - test: 334 (26.24%)
+
 # prepare both the QA dataset and the corpus
+dm.subset_size = [500, 100, 100]
 dm.prepare_data()
 dm.setup()
 
-print(get_separator())
-dm.build_index()
-rich.print("[green]>> index is built.")
-print(get_separator())
-
-# Compile the dataset
-# ExactMatch: FZ dataset, num_proc=4, 1000 docs, bs=10: ~4.6s/batch
-# >  - train: 2296 (22.56%)
-# >  - validation: 338 (26.57%)
-# >  - test: 306 (24.04%)
-# ExactMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~3.6s/batch
-# >  - train: 2702 (26.55%)
-# >  - validation: 354 (27.83%)
-# >  - test: 371 (29.14%)
-# ExactMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~6s/batch
-# >  - train: 2487 (24.44%)
-# >  - validation: 349 (27.44%)
-# >  - test: 334 (26.24%)
-# ExactMatch: full dataset, filter Stopwords, num_proc=4, 1000 docs, bs=10: ~6s/batch
-# >  - train: 2698 (26.51%)
-# >  - validation: 370 (29.09%)
-# >  - test: 364 (28.59%)
-# MetaMapMatch: FZ dataset, num_proc=4, 1000 docs: bs 10, ~30s/batch
-# >  - train: 2296 (22.56%)
-# >  - validation: 338 (26.57%)
-# >  - test: 306 (24.04%)
-# MetaMapMatch: MedQA dataset, num_proc=4, 1000 docs, bs=10: ~32s/batch
-# >  - train: 2702 (26.55%)
-# >  - validation: 354 (27.83%)
-# >  - test: 371 (29.14%)
-# MetaMapMatch: full dataset, num_proc=4, 1000 docs, bs=10: ~30s/batch
-# >  - train: 2487 (24.44%)
-# >  - validation: 349 (27.44%)
-# >  - test: 334 (26.24%)
-# MetaMapMatch: full dataset, filter Stopwords, num_proc=4, 1000 docs, bs=10: ~30s/batch
-# >  - train: 2698 (26.51%)
-# >  - validation: 370 (29.09%)
-# >  - test: 364 (28.59%)
-# ScispaCyMatch: FZ dataset,  1000 docs, bs=10: ~1800s/batch
-# >  - train: 3182 (31.26%)
-# >  - validation: 413 (32.47%)
-# >  - test: 403 (31.66%)
-
-run_time_block = dm.compile_dataset(
-    filter_unmatched=True, num_proc=3, batch_size=10
-)
-
-rich.print("[green]>> index is compiled.")
-
 rich.print("=== Compiled Dataset ===")
-rich.print(dm.compiled_dataset)
+rich.print(dm.dataset)
 
 batch = next(iter(dm.train_dataloader()))
 pprint_batch(batch, "compiled batch")
-
-for k, x in run_time_block.items():
-    rich.print(f"[red] Runtime for {k} : {x} seconds")
 
 for idx in range(3):
     print(get_separator("-"))
     eg = Pipe.get_eg(batch, idx=idx)
     rich.print(
-        f"Example #{idx}: \n"
+        f"Example #{1 + idx}: \n"
         f" * answer=[magenta]{eg['answer.text'][eg['answer.target']]}[/magenta]\n"
         f" * question=[cyan]{eg['question.text']}[/cyan]\n"
-        f" * documents: n_pos={sum(eg['document.is_positive'])}, "
-        f"n_neg={sum(eg['document.is_positive'] == 0)}"
+        f" * documents: n_positive={sum(eg['document.match_score'] > 0)}, "
+        f"n_negative={sum(eg['document.match_score'] == 0)}"
     )
     for j in range(min(len(eg["document.text"]), 3)):
         print(get_separator("."))
+        match_on = eg.get("document.match_on", None)
+        match_on = match_on[j] if match_on is not None else None
         rich.print(
-            f" |-* doc #{j}, "
-            f"score={eg['document.retrieval_score'][j]:.2f}, , "
-            f"is_positive={eg['document.is_positive'][j]}"
+            f" |-* document #{1 + j}, score={eg['document.retrieval_score'][j]:.2f}, "
+            f"match_score={eg['document.match_score'][j]}, match_on={match_on}"
         )
         txt = eg["document.text"][j].replace("\n", "")
         rich.print(f"[white]{txt}")
 
 
 # dump data
-for split, dset in dm.compiled_dataset.items():
+for split, dset in dm.dataset.items():
     with open(f"{args.filename}-{split}.jsonl", mode="w") as fp:
         for i, row in enumerate(dset):
             row["split"] = str(split)
