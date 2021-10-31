@@ -33,12 +33,11 @@ def gen_example_query(tokenizer):
 def display_search_results(corpus: HgDataset, queries: Dict, results: Dict):
     pprint_batch(results)
     print(get_separator())
-    for idx, (qst, row_idxs, scores, contents, tokens) in enumerate(
+    for idx, (qst, row_idxs, scores, tokens) in enumerate(
         zip(
             queries["question.text"],
             results["document.row_idx"],
             results["document.retrieval_score"],
-            results["document.context"],
             results["document.analyzed_tokens"],
         )
     ):

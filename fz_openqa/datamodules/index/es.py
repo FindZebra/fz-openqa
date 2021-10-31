@@ -24,7 +24,6 @@ from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 
-
 DEFAULT_ES_BODY = {
     "settings": {
         # Shards are used to parallelize work on an index
