@@ -1,4 +1,5 @@
-from typing import Dict, Any
+from typing import Any
+from typing import Dict
 
 import rich
 import torch
@@ -8,9 +9,8 @@ from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
-from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
-
 es_engine = ElasticSearchEngine()
+
 
 def gen_example_query(tokenizer):
     query = [
@@ -34,11 +34,13 @@ def display_search_results(corpus: HgDataset, queries: Dict, results: Dict):
     pprint_batch(results)
     print(get_separator())
     for idx, (qst, row_idxs, scores, contents, tokens) in enumerate(
-        zip(queries["question.text"],
+        zip(
+            queries["question.text"],
             results["document.row_idx"],
             results["document.retrieval_score"],
             results["document.context"],
-            results["document.analyzed_tokens"])
+            results["document.analyzed_tokens"],
+        )
     ):
         print(get_separator("-"))
         rich.print(f"#{idx}: [magenta]{qst}")

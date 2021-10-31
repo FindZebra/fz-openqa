@@ -26,12 +26,7 @@ from fz_openqa.utils.pretty import get_separator
 
 
 DEFAULT_ES_BODY = {
-    "settings": {
-        "index": {
-            "number_of_shards": 1,
-            "number_of_replicas": 1
-        }
-    }
+    "settings": {"index": {"number_of_shards": 1, "number_of_replicas": 1}}
 }
 
 
@@ -154,12 +149,14 @@ class ElasticSearchIndex(Index):
             self.index_name, query[self.query_key], k=k
         )
 
-        analyzed_tokens = [[[]]*k for i in range(len(scores))]
+        analyzed_tokens = [[[]] * k for i in range(len(scores))]
         if self.analyze:
             analyzed_tokens = self.engine.es_analyze_text(
                 self.index_name, contents
             )
-        return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
+        return SearchResult(
+            score=scores, index=indexes, tokens=analyzed_tokens
+        )
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

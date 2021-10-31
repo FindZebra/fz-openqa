@@ -6,8 +6,8 @@ from typing import Optional
 
 import rich
 from elasticsearch import Elasticsearch
-from elasticsearch.client import IndicesClient #ignore typo
 from elasticsearch import helpers
+from elasticsearch.client import IndicesClient  # ignore typo
 from elasticsearch.exceptions import RequestError
 
 
@@ -53,7 +53,9 @@ class ElasticSearchEngine:
         Create ElasticSearch Index
         """
         try:
-            response = self.instance.indices.create(index=index_name, body=body)
+            response = self.instance.indices.create(
+                index=index_name, body=body
+            )
             print()
             print(response)
             created = True
@@ -162,14 +164,16 @@ class ElasticSearchEngine:
     def es_analyze_text(self, index_name: str, queries: List[str]):
         analyzed_tokens = []
         for docs in queries:
-            results = [self._indices.analyze(index=index_name, body={
-                "analyzer": "custom_analyzer",
-                "text": doc
-            }) for doc in docs]
+            results = [
+                self._indices.analyze(
+                    index=index_name,
+                    body={"analyzer": "custom_analyzer", "text": doc},
+                )
+                for doc in docs
+            ]
             temp_analysed = []
             for res in results:
-                temp_analysed.append([term['token'] for term in res['tokens']])
+                temp_analysed.append([term["token"] for term in res["tokens"]])
             analyzed_tokens.append(temp_analysed)
 
         return analyzed_tokens
-

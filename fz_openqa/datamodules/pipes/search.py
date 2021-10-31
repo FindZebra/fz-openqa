@@ -119,8 +119,14 @@ class SearchCorpus(Pipe):
         flat_scores = (score for sub in search_result.score for score in sub)
         flat_tokens = (token for sub in search_result.tokens for token in sub)
         examples = [
-            {self.index_output_key: idx, self.score_output_key: score, self.analyzed_output_key: analyze}
-            for idx, score, analyze in zip(flat_indexes, flat_scores, flat_tokens)
+            {
+                self.index_output_key: idx,
+                self.score_output_key: score,
+                self.analyzed_output_key: analyze,
+            }
+            for idx, score, analyze in zip(
+                flat_indexes, flat_scores, flat_tokens
+            )
         ]
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
