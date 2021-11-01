@@ -24,7 +24,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
-    config_name="config.yaml",
+    config_name="script_config.yaml",
 )
 def run(config):
     datasets.set_caching_enabled(True)
