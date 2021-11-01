@@ -5,6 +5,7 @@ from typing import Optional
 from typing import Tuple
 
 import dill
+import numpy as np
 import rich
 from datasets import Dataset
 from rich.status import Status
@@ -198,7 +199,7 @@ class ElasticSearchIndex(Index):
             self.index_name, query[self.query_key], k=k
         )
 
-        analyzed_tokens = [[[]] * k for i in range(len(scores))]
+        analyzed_tokens = np.full(shape=(len(scores), k), fill_value=str([]))
         if self.analyze:
             analyzed_tokens = self.engine.es_analyze_text(
                 self.index_name, contents
