@@ -60,9 +60,7 @@ class MedQABuilder(HfDatasetBuilder):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        return load_dataset(
-            self.dset_script_path_or_id, cache_dir=self.cache_dir
-        )
+        return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
@@ -140,9 +138,7 @@ class MedQABuilder(HfDatasetBuilder):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
         # collate answer options
-        answer_pipe = CollateTokens(
-            "answer.", tokenizer=self.tokenizer, stride=self.n_options
-        )
+        answer_pipe = CollateTokens("answer.", tokenizer=self.tokenizer, stride=self.n_options)
         # the full pipe to collate question and answer fields
         base_qa_collate_pipe = Parallel(
             raw_text_pipe,

@@ -15,9 +15,7 @@ from fz_openqa.utils.pretty import get_separator
 
 def get_column_names(dataset: HfDataset) -> List[str]:
     if isinstance(dataset, DatasetDict):
-        return list(
-            set.union(*(set(d.column_names) for d in dataset.values()))
-        )
+        return list(set.union(*(set(d.column_names) for d in dataset.values())))
     else:
         return dataset.column_names
 
@@ -26,10 +24,7 @@ def take_subset(dataset: HfDataset, subset_size: List[int]) -> HfDataset:
     """Take a subset of the dataset and return."""
     if isinstance(dataset, DatasetDict):
         return DatasetDict(
-            {
-                k: dset.select(range(n))
-                for n, (k, dset) in zip(subset_size, dataset.items())
-            }
+            {k: dset.select(range(n)) for n, (k, dset) in zip(subset_size, dataset.items())}
         )
     elif isinstance(dataset, Dataset):
         size = next(iter(subset_size))
@@ -38,9 +33,7 @@ def take_subset(dataset: HfDataset, subset_size: List[int]) -> HfDataset:
         raise NotImplementedError
 
 
-def format_size_difference(
-    original_size: Dict[str, int], new_dataset: DatasetDict
-) -> str:
+def format_size_difference(original_size: Dict[str, int], new_dataset: DatasetDict) -> str:
     # store the previous split sizes
     prev_lengths = {k: v for k, v in original_size.items()}
     new_lengths = {k: len(v) for k, v in new_dataset.items()}

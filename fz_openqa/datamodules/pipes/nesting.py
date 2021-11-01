@@ -54,9 +54,7 @@ def reconcat(values: List[Any], original_type: Type):
     elif original_type == list:
         pass
     else:
-        raise ValueError(
-            f"Cannot reconstruct values of original type={original_type}"
-        )
+        raise ValueError(f"Cannot reconstruct values of original type={original_type}")
     return values
 
 
@@ -70,9 +68,7 @@ class Nest(ApplyToAll):
     {key: [values]} -> {key: [[group] for group in groups]}"""
 
     def __init__(self, stride: Optional[int]):
-        super(Nest, self).__init__(
-            element_wise=False, op=self.nest, allow_kwargs=True
-        )
+        super(Nest, self).__init__(element_wise=False, op=self.nest, allow_kwargs=True)
         self.stride = stride
 
     def nest(
@@ -94,9 +90,7 @@ class Nested(Pipe):
     This can be use to modify the nested field inplace  (i.e. sorting, deleting).
     """
 
-    def __init__(
-        self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs
-    ):
+    def __init__(self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs):
         super().__init__(**kwargs)
         self.pipe = pipe
         self.filter = filter or always_true

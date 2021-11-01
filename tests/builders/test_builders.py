@@ -1,18 +1,16 @@
 from typing import Dict, Optional, Iterable
 from unittest import TestCase
 
-import rich
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, Split
 
-from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusCorpusBuilder, \
     FZxMedQaCorpusBuilder
+from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
-from fz_openqa.datamodules.index import ElasticSearchIndex
+from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils.pretty import get_separator, pprint_batch
 
 
 def get_default_config():
@@ -33,6 +31,7 @@ class TestBuilder(TestCase):
     """This class loads a DatasetBuilder and tests
     1. calling it (data preprocessing)
     2. collating a batch
+    # todo: check output types (tensors)
     """
     cls = HfDatasetBuilder
     config_override: Optional[Dict] = None
@@ -80,19 +79,30 @@ class TestBuilder(TestCase):
 
 
 class TestMedQABuilder(TestBuilder):
+    config_override = {'use_subset': False}
     cls = MedQABuilder
 
+    def test_split_lengths(self):
+        """Test the size of the splits"""
+        self.assertEqual(len(self._dataset[Split.TRAIN]), 10178)
+        self.assertEqual(len(self._dataset[Split.VALIDATION]), 1272)
+        self.assertEqual(len(self._dataset[Split.TEST]), 1273)
 
-class TestMedQaCorpusBuilder(TestBuilder):
+
+class TestCorpusBuilder(TestBuilder):
     config_override = {'max_length': None, 'passage_length': 200, 'passage_stride': 200}
     cls = MedQaCorpusBuilder
 
 
-class TestFzCorpusCorpusBuilder(TestMedQaCorpusBuilder):
+class TestMedQaCorpusBuilder(TestCorpusBuilder):
+    cls = MedQaCorpusBuilder
+
+
+class TestFzCorpusCorpusBuilder(TestCorpusBuilder):
     cls = FzCorpusCorpusBuilder
 
 
-class TestFZxMedQaCorpusBuilder(TestMedQaCorpusBuilder):
+class TestFZxMedQaCorpusBuilder(TestCorpusBuilder):
     cls = FZxMedQaCorpusBuilder
 
 
@@ -106,14 +116,15 @@ class TestOpenQaBuilder(TestBuilder):
 
         # corpus builder
         corpus_config = get_default_config()
-        corpus_config.update({'max_length': None, 'passage_length': 200, 'passage_stride': 200, 'use_subset': False})
+        corpus_config.update(
+            {'max_length': None, 'passage_length': 200, 'passage_stride': 200, 'use_subset': False})
         corpus_builder = MedQaCorpusBuilder(**corpus_config)
 
         # index builder
         return {
             'dataset_builder': dataset_builder,
             'corpus_builder': corpus_builder,
-            'index': ElasticSearchIndex(),
+            'index_builder': ElasticSearchIndexBuilder(),
             'relevance_classifier': ExactMatch(),
             'n_retrieved_documents': 10,
             'n_documents': 5,

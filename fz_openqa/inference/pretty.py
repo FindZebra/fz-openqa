@@ -7,18 +7,14 @@ def pprint_results(data, output):
     """Print all results as a nicely using rich.table"""
     all_preds = output.argmax(-1).tolist()
     targets = data["answer.target"]
-    accuracy = sum([int(x == y) for x, y in zip(all_preds, targets)]) / len(
-        targets
-    )
+    accuracy = sum([int(x == y) for x, y in zip(all_preds, targets)]) / len(targets)
 
     table = Table(
         title=f"Results (Accuracy=[magenta bold]{100 * accuracy:.2f}%[/magenta bold])",
         show_lines=True,
     )
     table.add_column("Question", justify="left", style="cyan", no_wrap=False)
-    table.add_column(
-        "Document", justify="left", style="magenta", no_wrap=False
-    )
+    table.add_column("Document", justify="left", style="magenta", no_wrap=False)
     for idx in range(len(data["answer_choices"][0])):
         table.add_column(f"Answer {idx}", justify="center", style="white")
     for idx in range(len(data["question"])):

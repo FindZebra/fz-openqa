@@ -106,9 +106,7 @@ def collate_nested_examples(
     (
         flattened_examples,
         document_output,
-    ) = extract_and_collate_attributes_as_list(
-        flattened_examples, attribute="text", key=key
-    )
+    ) = extract_and_collate_attributes_as_list(flattened_examples, attribute="text", key=key)
 
     # collate the tensor attributes: input_ids, idx, ...
     document_output.update(
@@ -145,11 +143,8 @@ def collate_answer_options(
     keys = [k for k in examples[0].keys() if "answer." in k]
     n_options = len(list(examples[0].values())[0])
     examples = [
-        [{key: ex[key][idx] for key in keys} for idx in range(n_options)]
-        for ex in examples
+        [{key: ex[key][idx] for key in keys} for idx in range(n_options)] for ex in examples
     ]
 
-    output.update(
-        **collate_nested_examples(examples, tokenizer=tokenizer, key="answer")
-    )
+    output.update(**collate_nested_examples(examples, tokenizer=tokenizer, key="answer"))
     return output

@@ -25,9 +25,7 @@ class MaybeCollateDocuments(Gate):
 
     def __init__(self, tokenizer: PreTrainedTokenizerFast, **kwargs):
         # get the raw text
-        raw_text_pipe = FilterKeys(
-            KeyIn(["document.text", "document.match_on"])
-        )
+        raw_text_pipe = FilterKeys(KeyIn(["document.text", "document.match_on"]))
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
@@ -49,9 +47,7 @@ class MaybeCollateDocuments(Gate):
         tokens_pipe = Gate(
             HasKeyWithPrefix("document.input_ids"),
             pipe=Sequential(
-                FilterKeys(
-                    KeyIn(["document.input_ids", "document.attention_mask"])
-                ),
+                FilterKeys(KeyIn(["document.input_ids", "document.attention_mask"])),
                 ReplaceInKeys("document.", ""),
                 Lambda(tokenizer.pad),
                 AddPrefix("document."),
@@ -73,13 +69,9 @@ class MaybeCollateDocuments(Gate):
                     "document.text",
                 ]
             ),
-            ApplyAsFlatten(
-                Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)
-            ),
+            ApplyAsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
         )
 
         condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))
 
-        super(MaybeCollateDocuments, self).__init__(
-            condition, doc_collate_pipe, **kwargs
-        )
+        super(MaybeCollateDocuments, self).__init__(condition, doc_collate_pipe, **kwargs)

@@ -55,9 +55,7 @@ class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = dl_manager.download_and_extract(
-            self._get_drive_url(_URL)
-        )
+        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,

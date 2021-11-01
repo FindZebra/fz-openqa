@@ -110,15 +110,9 @@ def ingest_all(data: dict, dateset_name: str):
 
 
 if __name__ == "__main__":
-    train_url = (
-        "https://drive.google.com/uc?id=1K8Lu0rI2rK-WZFLxmuQ60mRNWIbSmiy2"
-    )
-    dev_url = (
-        "https://drive.google.com/uc?id=16sJUgYCVwYSp5Zy35xW7NlUUBGhDNdWO"
-    )
-    test_url = (
-        "https://drive.google.com/uc?id=1WZFwLpM_2RNHP2QE-JHlCm5mcb7I0FtN"
-    )
+    train_url = "https://drive.google.com/uc?id=1K8Lu0rI2rK-WZFLxmuQ60mRNWIbSmiy2"
+    dev_url = "https://drive.google.com/uc?id=16sJUgYCVwYSp5Zy35xW7NlUUBGhDNdWO"
+    test_url = "https://drive.google.com/uc?id=1WZFwLpM_2RNHP2QE-JHlCm5mcb7I0FtN"
 
     output = [
         str(os.path.join(args.cache_dir, "train.json")),
@@ -159,14 +153,11 @@ if __name__ == "__main__":
                 rank = 0
                 q_id = key[1:]
                 answer_options = [
-                    ds[key]["answer_options"][opt]
-                    for opt in ds[key]["answer_options"].keys()
+                    ds[key]["answer_options"][opt] for opt in ds[key]["answer_options"].keys()
                 ]
 
                 # returning top n hits from es index based on question (query input)
-                es_res = es_search(
-                    ds_names[ds_id], ds[key]["question"], args.topn
-                )
+                es_res = es_search(ds_names[ds_id], ds[key]["question"], args.topn)
                 # es_res is sorted by BM25 score where the first instance has the highest score
                 for hit in es_res["hits"]:
                     rank += 1
@@ -177,19 +168,13 @@ if __name__ == "__main__":
                             "question_id": q_id,
                             "question": ds[key]["question"],
                             "answer_choices": answer_options,
-                            "answer_idx": answer_options.index(
-                                ds[key]["answer"]
-                            ),
-                            "document": hit["_source"]["title"]
-                            + ". "
-                            + hit["_source"]["text"],
+                            "answer_idx": answer_options.index(ds[key]["answer"]),
+                            "document": hit["_source"]["title"] + ". " + hit["_source"]["text"],
                             "rank": rank,  # rank based on BM25
                         }
                     )
         # this line ensures to remove the elasticsearch index when finished
         es_remove_index(ds_names[ds_id])
 
-        with open(
-            os.path.join(args.output, ds_names[ds_id] + "_FZ-MedQA.json"), "w"
-        ) as file:
+        with open(os.path.join(args.output, ds_names[ds_id] + "_FZ-MedQA.json"), "w") as file:
             json.dump(out, file, indent=6)

@@ -10,11 +10,7 @@ from fz_openqa.modeling.heads.base import Head
 
 class ClsHead(Head):
     def __init__(
-        self,
-        *,
-        bert: BertPreTrainedModel,
-        output_size: Optional[int],
-        normalize: bool = False
+        self, *, bert: BertPreTrainedModel, output_size: Optional[int], normalize: bool = False
     ):
         super(ClsHead, self).__init__(bert=bert, output_size=output_size)
 

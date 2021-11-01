@@ -33,9 +33,7 @@ def run(config):
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
     # tokenizer and text formatter
-    tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="bert-base-cased"
-    )
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder

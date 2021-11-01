@@ -57,16 +57,12 @@ class ElasticSearchEngine:
 
         return self._instance
 
-    def es_create_index(
-        self, index_name: str, body: Optional[Dict] = None
-    ) -> bool:
+    def es_create_index(self, index_name: str, body: Optional[Dict] = None) -> bool:
         """
         Create ElasticSearch Index
         """
         try:
-            response = self.instance.indices.create(
-                index=index_name, body=body
-            )
+            response = self.instance.indices.create(index=index_name, body=body)
             print()
             print(response)
             created = True
@@ -89,9 +85,7 @@ class ElasticSearchEngine:
         Ingest to ElasticSearch Index
         """
         doc = {"title": title, "text": paragraph}
-        return self.instance.create(
-            index=index_name, body=doc, refresh="true", timeout=60
-        )
+        return self.instance.create(index=index_name, body=doc, refresh="true", timeout=60)
 
     def es_bulk(
         self,
@@ -136,9 +130,7 @@ class ElasticSearchEngine:
             for i in range(len(queries))
         ]
 
-        request = [
-            item for sublist in zip(req_head, req_body) for item in sublist
-        ]
+        request = [item for sublist in zip(req_head, req_body) for item in sublist]
 
         result = self.instance.msearch(body=request)
 
@@ -168,9 +160,7 @@ class ElasticSearchEngine:
             },
         )
 
-        return response[
-            "hits"
-        ]  # (object) Contains returned documents and metadata.
+        return response["hits"]  # (object) Contains returned documents and metadata.
 
     def es_analyze_text(self, index_name: str, queries: List[str]):
         analyzed_tokens = []

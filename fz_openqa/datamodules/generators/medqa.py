@@ -18,9 +18,7 @@ _TRAIN_URL = "https://drive.google.com/file/d/18a1TxYHHlNqXNBHaSgfLRgI4kBmYXcyn/
 _VALID_URL = "https://drive.google.com/file/d/1m4zUJoET3WDqpYvQ_aOJVmJbiSjGGhB0/view?usp=sharing"
 _TEST_URL = "https://drive.google.com/file/d/1cOOSjOjBIOlzi3Wk31kxnp-eIV6Ekslh/view?usp=sharing"
 
-_DESCRIPTION = (
-    "A mapping between the MedQA dataset and the MedQA corpus (18 books)"
-)
+_DESCRIPTION = "A mapping between the MedQA dataset and the MedQA corpus (18 books)"
 _VERSION = "0.0.1"
 _HOMEPAGE = ""
 _CITATION = ""
@@ -44,15 +42,11 @@ class MedQaGenerator(datasets.GeneratorBasedBuilder):
                 {
                     "question.idx": datasets.Value("int32"),
                     "question.text": datasets.Value("string"),
-                    "question.metamap": datasets.Sequence(
-                        datasets.Value("string")
-                    ),
+                    "question.metamap": datasets.Sequence(datasets.Value("string")),
                     "answer.target": datasets.Value("int32"),
                     "answer.text": datasets.Sequence(datasets.Value("string")),
                     "answer.cui": datasets.Sequence(datasets.Value("string")),
-                    "answer.synonyms": datasets.Sequence(
-                        datasets.Value("string")
-                    ),
+                    "answer.synonyms": datasets.Sequence(datasets.Value("string")),
                 }
             ),
             supervised_keys=None,

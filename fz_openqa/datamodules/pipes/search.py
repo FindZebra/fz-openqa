@@ -111,9 +111,7 @@ class SearchCorpus(Pipe):
         model = model or self.model
 
         # query the index
-        search_result = self.index.search(
-            query=query, k=k, model=model, **kwargs
-        )
+        search_result = self.index.search(query=query, k=k, model=model, **kwargs)
 
         # retrieve the examples from the dataset (flat list)
         flat_indexes = (idx for sub in search_result.index for idx in sub)
@@ -125,9 +123,7 @@ class SearchCorpus(Pipe):
                 self.score_output_key: score,
                 self.analyzed_output_key: analyze,
             }
-            for idx, score, analyze in zip(
-                flat_indexes, flat_scores, flat_tokens
-            )
+            for idx, score, analyze in zip(flat_indexes, flat_scores, flat_tokens)
         ]
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
@@ -147,9 +143,7 @@ class FeatchDocuments(Pipe):
     ):
         super(FeatchDocuments, self).__init__(id=id)
         if keys is not None:
-            corpus_dataset.remove_columns(
-                set(corpus_dataset.column_names) - set(keys)
-            )
+            corpus_dataset.remove_columns(set(corpus_dataset.column_names) - set(keys))
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe

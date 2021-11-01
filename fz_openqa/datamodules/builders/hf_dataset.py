@@ -43,9 +43,7 @@ def cache_hf_dataset(func):
             if self._cache_dir is not None:
                 # get fingerprint
                 if isinstance(dataset, DatasetDict):
-                    fingerprint = Pipe._fingerprint(
-                        {k: d._fingerprint for k, d in dataset.items()}
-                    )
+                    fingerprint = Pipe._fingerprint({k: d._fingerprint for k, d in dataset.items()})
                 else:
                     fingerprint = dataset._fingerprint
 
@@ -57,9 +55,7 @@ def cache_hf_dataset(func):
                     dataset.save_to_disk(self._cache_path)
         else:
             logger.info(f"Loading cached dataset from {self._cache_path}")
-            dataset: HfDataset = self._cache_type.load_from_disk(
-                self._cache_path
-            )
+            dataset: HfDataset = self._cache_type.load_from_disk(self._cache_path)
 
         return dataset
 
@@ -120,15 +116,9 @@ class HfDatasetBuilder(DatasetBuilder):
             dataset = self.set_format(dataset, format=format)
         return dataset
 
-    def set_format(
-        self, dataset: HfDataset, *, format: str = "torch"
-    ) -> HfDataset:
-        pt_cols = [
-            c for c in self.pt_attributes if c in get_column_names(dataset)
-        ]
-        dataset.set_format(
-            type=format, columns=pt_cols, output_all_columns=True
-        )
+    def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
+        pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]
+        dataset.set_format(type=format, columns=pt_cols, output_all_columns=True)
         return dataset
 
     def load_and_filter_dataset(self) -> HfDataset:
@@ -140,9 +130,7 @@ class HfDatasetBuilder(DatasetBuilder):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        return load_dataset(
-            self.dset_script_path_or_id, cache_dir=self.cache_dir
-        )
+        return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""

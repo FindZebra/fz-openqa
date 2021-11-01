@@ -38,9 +38,7 @@ def run(config):
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
-    tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="bert-base-cased"
-    )
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     text_formatter = TextFormatter(lowercase=True)
 
@@ -100,9 +98,7 @@ def run(config):
     stats = pstats.Stats(profiler).sort_stats("time")
     stats.print_stats(20)
     print(get_separator())
-    rich.print(
-        f">> duration={np.mean(times):.3f}s/batch (std={np.std(times):.3f}s)"
-    )
+    rich.print(f">> duration={np.mean(times):.3f}s/batch (std={np.std(times):.3f}s)")
     # A. < 31-10-2021 - testing fetching in __getitem__ vs. in dataloader
     # fetch docs in collate: >> duration=0.142s/batch (std=0.293s)
     # fetch docs in __getitem__: >> duration=1.351s/batch (std=2.645s)make

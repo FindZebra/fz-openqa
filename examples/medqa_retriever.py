@@ -26,9 +26,7 @@ from fz_openqa.utils.train_utils import setup_safe_env
 datasets.set_caching_enabled(True)
 setup_safe_env()
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
 
 # load the corpus object
@@ -82,22 +80,14 @@ printer = PrintBatch()
 
 def randargmax(retrieval_scores: np.array) -> np.array:
     """a random tie-breaking argmax"""
-    return np.random.choice(
-        np.flatnonzero(retrieval_scores == retrieval_scores.max())
-    )
+    return np.random.choice(np.flatnonzero(retrieval_scores == retrieval_scores.max()))
 
 
-total = (
-    len(dm.dataset["train"])
-    + len(dm.dataset["validation"])
-    + len(dm.dataset["test"])
-)
+total = len(dm.dataset["train"]) + len(dm.dataset["validation"]) + len(dm.dataset["test"])
 
 num_corrects = 0
 equals = 0
-for batch in track(
-    dm.train_dataloader(), description="Iterating through the dataset..."
-):
+for batch in track(dm.train_dataloader(), description="Iterating through the dataset..."):
     # pprint(batch)
 
     # 1 do a pipe to concat question + answer option
@@ -109,8 +99,7 @@ for batch in track(
             equals += 1
 
     predictions = [
-        np.argmax(np.sum(question, axis=1))
-        for question in batch["document.retrieval_score"]
+        np.argmax(np.sum(question, axis=1)) for question in batch["document.retrieval_score"]
     ]
 
     # predictions =[
@@ -122,15 +111,9 @@ for batch in track(
     # print(batch["answer.target"])
     # print(get_separator())
 
-    num_corrects += np.count_nonzero(
-        predictions - batch["answer.target"].numpy() == 0
-    )
+    num_corrects += np.count_nonzero(predictions - batch["answer.target"].numpy() == 0)
 
-print(
-    "accuracy is: {} / {} = {:.1f}%".format(
-        num_corrects, total, num_corrects * 100.0 / total
-    )
-)
+print("accuracy is: {} / {} = {:.1f}%".format(num_corrects, total, num_corrects * 100.0 / total))
 print(equals)
 
 # Accuracy metrics

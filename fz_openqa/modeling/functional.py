@@ -13,9 +13,7 @@ BatchValue = Union[Sequence[Tensor], Tensor]
 TorchBatch = Dict[str, BatchValue]
 
 
-def count_right_padding(
-    x: Union[Sequence[Any], Tensor], pad_token: Any
-) -> int:
+def count_right_padding(x: Union[Sequence[Any], Tensor], pad_token: Any) -> int:
     """count the number of right padding tokens"""
     if isinstance(x, Tensor):
         flipped_x = x.flip(0)
@@ -31,9 +29,7 @@ def count_right_padding(
 
 def pad(batch: BatchValue, pad_token: Any, length: Optional[int] = None):
     """pad a sequence of tensors to the same size, and remove the unnecessary right padding"""
-    length = length or max(
-        len(x) - count_right_padding(x, pad_token) for x in batch
-    )
+    length = length or max(len(x) - count_right_padding(x, pad_token) for x in batch)
 
     def pad_one(max_length, x):
         padding = torch.tensor(
@@ -71,9 +67,7 @@ def _padless_cat(
         aux_pad_tokens = {}
     assert a.keys() == b.keys()
     assert master_key in a.keys()
-    right_padding = [
-        count_right_padding(xa, pad_token) for xa in a[master_key]
-    ]
+    right_padding = [count_right_padding(xa, pad_token) for xa in a[master_key]]
     output = {}
     keys = [master_key] + [k for k in a.keys() if k != master_key]
 
@@ -84,8 +78,7 @@ def _padless_cat(
 
     for key in keys:
         if key == master_key or (
-            is_valid_seq_attr(a[key], a[master_key])
-            and is_valid_seq_attr(b[key], b[master_key])
+            is_valid_seq_attr(a[key], a[master_key]) and is_valid_seq_attr(b[key], b[master_key])
         ):
             batch_k = [
                 torch.cat([del_pad(xa, rpad), xb], dim=0)
@@ -95,9 +88,7 @@ def _padless_cat(
                 output[key] = pad(batch_k, pad_token)
             else:
                 length = int(output[master_key].shape[1])
-                output[key] = pad(
-                    batch_k, aux_pad_tokens.get(key, 0), length=length
-                )
+                output[key] = pad(batch_k, aux_pad_tokens.get(key, 0), length=length)
         else:
             err_msg = (
                 f"Attempting to concatenate two batches, however"

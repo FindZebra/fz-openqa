@@ -21,18 +21,14 @@ def to_snake_format(name: str) -> str:
 
 class DatasetBuilder(ABC):
     _cache_path: Optional[str] = None
-    _cache_type: Optional[
-        Union[Dataset.__class__, DatasetDict.__class__]
-    ] = None
+    _cache_type: Optional[Union[Dataset.__class__, DatasetDict.__class__]] = None
     _cache_dir = None
 
     def __init__(self, *, cache_dir: Optional[str]):
         if cache_dir is None:
             self._cache_dir = None
         else:
-            self._cache_dir = os.path.join(
-                cache_dir, to_snake_format(self.__class__.__name__)
-            )
+            self._cache_dir = os.path.join(cache_dir, to_snake_format(self.__class__.__name__))
             if not os.path.exists(self._cache_dir):
                 os.makedirs(self._cache_dir)
 

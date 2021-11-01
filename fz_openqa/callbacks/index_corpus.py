@@ -21,9 +21,7 @@ class IndexCorpus(Callback):
     #     super().__init__(write_interval)
 
     @torch.no_grad()
-    def on_validation_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
+    def on_validation_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """
         Compute the corpus vectors using the model.
         """

@@ -10,8 +10,6 @@ class SearchDocuments(Sequential):
     def __init__(self, *, corpus_index, n_documents: int):
         super().__init__(
             SearchCorpus(corpus_index=corpus_index, k=n_documents),
-            FilterKeys(
-                KeyIn(["document.row_idx", "document.retrieval_score"])
-            ),
+            FilterKeys(KeyIn(["document.row_idx", "document.retrieval_score"])),
             id="search-documents",
         )

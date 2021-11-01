@@ -141,9 +141,7 @@ class FilterKeys(Pipe):
         super().__init__(**kwargs)
         self.condition = condition
 
-    def __call__(
-        self, batch: Union[List[Batch], Batch], **kwargs
-    ) -> Union[List[Batch], Batch]:
+    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Union[List[Batch], Batch]:
         """The call of the pipeline process"""
         if self.condition is None:
             return batch
@@ -240,9 +238,7 @@ class Apply(Pipe):
     The argument `element_wise` allows to process each value in the batch element wise.
     """
 
-    def __init__(
-        self, ops: Dict[str, Callable], element_wise: bool = False, **kwargs
-    ):
+    def __init__(self, ops: Dict[str, Callable], element_wise: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.ops = ops
         self.element_wise = element_wise

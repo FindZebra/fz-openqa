@@ -71,9 +71,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 if args.cls == "scispacy":
-    cls = ScispaCyMatch(
-        interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1}
-    )
+    cls = ScispaCyMatch(interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1})
 elif args.cls == "metamap":
     cls = MetaMapMatch(interpretable=True)
 elif args.cls == "exact":
@@ -93,9 +91,7 @@ else:
 datasets.set_caching_enabled(True)
 setup_safe_env()
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
 # load the corpus object
 corpus = corpus_module(
@@ -195,9 +191,7 @@ for split, dset in dm.dataset.items():
             row["split"] = str(split)
             row["__index__"] = str(i)
             for key in list(row.keys()):
-                if any(
-                    ptrn in key for ptrn in ["input_ids", "attention_mask"]
-                ):
+                if any(ptrn in key for ptrn in ["input_ids", "attention_mask"]):
                     row.pop(key)
 
             for k, v in row.items():

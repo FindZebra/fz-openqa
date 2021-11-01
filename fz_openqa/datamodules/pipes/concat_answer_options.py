@@ -24,8 +24,7 @@ class ConcatQuestionAnswerOption(Pipe):
             return f"{q}, {a}"
 
         batch[self.question_key] = [
-            [_concat(q, a) for a in a_options]
-            for q, a_options in zip(questions, answers)
+            [_concat(q, a) for a in a_options] for q, a_options in zip(questions, answers)
         ]
 
         return batch
