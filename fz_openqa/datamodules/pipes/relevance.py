@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
+from itertools import tee
 from itertools import zip_longest
 from typing import Any
 from typing import Callable
@@ -219,6 +220,12 @@ class ExactMatch(RelevanceClassifier):
         answer_index = pair.answer["answer.target"]
         answer_text = pair.answer["answer.text"][answer_index]
         return find_all(doc_text, [answer_text])
+
+    # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
+    #     """Generate the field `pair.answer["aliases"]`"""
+    #     # An iterator can only be consumed once, generate two of them
+    #     # casting as a list would also work
+    #     pairs_1, pairs_2 = tee(pairs, 2)
 
 
 class AliasBasedMatch(RelevanceClassifier):

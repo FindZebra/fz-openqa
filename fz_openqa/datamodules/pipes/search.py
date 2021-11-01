@@ -22,6 +22,7 @@ from fz_openqa.utils.datastruct import Batch
 class SearchResult:
     score: List[List[float]]
     index: List[List[int]]
+    tokens: List[List[str]]
 
 
 class FakeIndex:
@@ -66,12 +67,14 @@ class SearchCorpus(Pipe):
         model: Optional[Union[Callable, torch.nn.Module]] = None,
         index_output_key: str = "document.row_idx",
         score_output_key: str = "document.retrieval_score",
+        analyzed_output_key: str = "document.analyzed_tokens",
         **kwargs,
     ):
         super(SearchCorpus, self).__init__(**kwargs)
         self.index = corpus_index
         self.index_output_key = index_output_key
         self.score_output_key = score_output_key
+        self.analyzed_output_key = analyzed_output_key
         self.k = k
         self.model = model
 
@@ -115,11 +118,17 @@ class SearchCorpus(Pipe):
         # retrieve the examples from the dataset (flat list)
         flat_indexes = (idx for sub in search_result.index for idx in sub)
         flat_scores = (score for sub in search_result.score for score in sub)
+        flat_tokens = (token for sub in search_result.tokens for token in sub)
         examples = [
-            {self.index_output_key: idx, self.score_output_key: score}
-            for idx, score in zip(flat_indexes, flat_scores)
+            {
+                self.index_output_key: idx,
+                self.score_output_key: score,
+                self.analyzed_output_key: analyze,
+            }
+            for idx, score, analyze in zip(
+                flat_indexes, flat_scores, flat_tokens
+            )
         ]
-
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
         return Nest(stride=k)(Collate()(examples))

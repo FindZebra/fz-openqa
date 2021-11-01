@@ -122,7 +122,7 @@ class TestRelevanceClassifier(TestCase):
         self.assertEqual(output['document.match_score'][8][0], 0)
 
     def test_metamap_match(self):
-        classifier = MetaMapMatch(linker_name="umls")
+        classifier = MetaMapMatch(model_name="en_core_sci_sm", linker_name="umls")
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
         self.assertEqual(output['document.match_score'][0][0], 0)
@@ -144,7 +144,7 @@ class TestRelevanceClassifier(TestCase):
         self.assertEqual(output['document.match_score'][8][0], 0)
 
     def test_scispacy_match(self):
-        classifier = ScispaCyMatch(linker_name="umls")
+        classifier = ScispaCyMatch(interpretable=True, model_name="en_core_sci_sm", linker_name="umls")
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed with 1 macth because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertEqual(output['document.match_score'][0][0], 1)

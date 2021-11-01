@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
@@ -5,12 +6,15 @@ from typing import Optional
 from typing import Tuple
 
 import dill
+import numpy as np
 import rich
 from datasets import Dataset
+from omegaconf import OmegaConf
 from rich.status import Status
 
 from .base import Index
 from .base import SearchResult
+from fz_openqa.configs.datamodule.index_builder import es_config
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import Batchify
 from fz_openqa.datamodules.pipes import CopyBatch
@@ -23,6 +27,10 @@ from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
+
+DEFAULT_ES_BODY = OmegaConf.to_object(
+    OmegaConf.load(Path(es_config.__file__).parent / "default.yaml")
+)
 
 
 class ElasticSearchIndex(Index):
@@ -38,7 +46,9 @@ class ElasticSearchIndex(Index):
         batch_size: int = 32,
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
-        text_cleaner: Optional[TextFormatter] = TextFormatter(lowercase=True),
+        text_cleaner: Optional[TextFormatter] = None,
+        es_body: Optional[Dict] = DEFAULT_ES_BODY,
+        analyze: Optional[bool] = False,
         **kwargs,
     ):
 
@@ -48,6 +58,8 @@ class ElasticSearchIndex(Index):
         self.batch_size = batch_size
         self.num_proc = num_proc
         self.engine = ElasticSearchEngine()
+        self.es_body = es_body
+        self.analyze = analyze
 
         # text cleaning
         if isinstance(text_cleaner, TextFormatter):
@@ -61,7 +73,9 @@ class ElasticSearchIndex(Index):
                 "metamap": MetaMapFilter,
                 "stopwords": StopWordsFilter,
             }[filter_mode]
-            filter_pipe = filter_pipe_cls(text_key=self.text_key)
+            filter_pipe = filter_pipe_cls(
+                text_key=self.text_key, query_key=self.query_key
+            )
         else:
             filter_pipe = None
 
@@ -96,8 +110,12 @@ class ElasticSearchIndex(Index):
         dataset = self.preprocess_text(dataset)
 
         # init the index
-        self.index_name = dataset._fingerprint
-        is_new_index = self.engine.es_create_index(self.index_name)
+        self.index_name = Pipe._fingerprint(
+            {"fingerprint": dataset._fingerprint, "es_body": self.es_body}
+        )
+        is_new_index = self.engine.es_create_index(
+            self.index_name, body=self.es_body
+        )
 
         # build the index
         if is_new_index:
@@ -132,10 +150,18 @@ class ElasticSearchIndex(Index):
         used to build the index."""
         query = self.preprocesing_pipe(query, text_key=self.query_key)
 
-        scores, indexes = self.engine.es_search_bulk(
+        scores, indexes, contents = self.engine.es_search_bulk(
             self.index_name, query[self.query_key], k=k
         )
-        return SearchResult(score=scores, index=indexes)
+
+        analyzed_tokens = np.full(shape=(len(scores), k), fill_value=str([]))
+        if self.analyze:
+            analyzed_tokens = self.engine.es_analyze_text(
+                self.index_name, contents
+            )
+        return SearchResult(
+            score=scores, index=indexes, tokens=analyzed_tokens
+        )
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

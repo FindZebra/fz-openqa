@@ -18,6 +18,7 @@ from fz_openqa.utils.datastruct import Batch
 class SearchResult:
     score: List[List[float]]
     index: List[List[int]]
+    tokens: List[List[str]]
 
 
 class Index(ABC):
@@ -58,7 +59,7 @@ class Index(ABC):
         The default method search for each example sequentially.
         """
         batch_size = len(next(iter(query.values())))
-        scores, indexes = [], []
+        scores, indexes, contents = [], [], []
         _iter = range(batch_size)
         if self.verbose:
             _iter = track(
@@ -67,11 +68,14 @@ class Index(ABC):
             )
         for i in _iter:
             eg = self.get_example(query, i)
-            scores_i, indexes_i = self.search_one(eg, k=k, **kwargs)
+            scores_i, indexes_i, contents_i = self.search_one(
+                eg, k=k, **kwargs
+            )
             scores += [scores_i]
             indexes += [indexes_i]
+            contents += [contents_i]
 
-        return SearchResult(index=indexes, score=scores)
+        return SearchResult(index=indexes, score=scores, content=contents)
 
     def get_example(self, query: Batch, index: int) -> Dict[str, Any]:
         return {k: v[index] for k, v in query.items()}

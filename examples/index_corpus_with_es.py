@@ -43,5 +43,6 @@ dm.build_index()
 
 print(">> query the dataset using Elastic Search")
 result = dm.search_index(query, k=3)
-
+print(query)
+print(dm.dataset[8])
 display_search_results(query, result)

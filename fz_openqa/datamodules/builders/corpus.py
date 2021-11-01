@@ -12,6 +12,7 @@ from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 
+from ..pipes.sentence import GenerateSentences
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
@@ -22,12 +23,14 @@ from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -68,6 +71,7 @@ class CorpusBuilder(HfDatasetBuilder):
         self,
         passage_length: int = 200,
         passage_stride: int = 100,
+        to_sentences: bool = False,
         input_dir: Optional[str] = None,
         append_document_title: bool = False,
         max_length: Optional[int] = None,
@@ -84,6 +88,14 @@ class CorpusBuilder(HfDatasetBuilder):
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
+        self.to_sentences = to_sentences
+        if self.to_sentences:
+            logger.warning(
+                f"Argument `to_sentence` is True, `passage_length`={self.passage_length} "
+                f"and `passage_stride`={self.passage_stride} will be ignored."
+            )
+            self.passage_length = self.passage_stride = None
+
         if append_document_title:
             raise NotImplementedError
         self.append_document_title = append_document_title
@@ -125,8 +137,15 @@ class CorpusBuilder(HfDatasetBuilder):
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
+                UpdateWith(Gate(self.to_sentences, GenerateSentences())),
                 self.get_tokenizer_pipe(),
-                self.get_generate_passages_pipe(),
+                UpdateWith(
+                    Gate(
+                        not self.to_sentences,
+                        self.get_generate_passages_pipe(),
+                    )
+                ),
+                DropKeys(["offset_mapping"]),
             ),
             batched=True,
             batch_size=10,
@@ -150,23 +169,18 @@ class CorpusBuilder(HfDatasetBuilder):
             f"Dataset contains {len(dataset)} documents. Flatten indices and return."
         )
         # flatten and return
-        # todo return dataset.flatten_indices()
-        return dataset
+        return dataset.flatten_indices()
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
-        passage_pipe = Sequential(
-            GeneratePassages(
-                size=self.passage_length,
-                stride=self.passage_stride,
-                start_tokens=self.get_prefix_tokens(),
-                end_tokens=[self.tokenizer.sep_token_id],
-                pad_token_id=self.tokenizer.pad_token_id,
-                verbose=self.verbose,
-            ),
-            DropKeys(["offset_mapping"]),
+        return GeneratePassages(
+            size=self.passage_length,
+            stride=self.passage_stride,
+            start_tokens=self.get_prefix_tokens(),
+            end_tokens=[self.tokenizer.sep_token_id],
+            pad_token_id=self.tokenizer.pad_token_id,
+            verbose=self.verbose,
         )
-        return passage_pipe
 
     def get_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, a shortcut with the Pipe

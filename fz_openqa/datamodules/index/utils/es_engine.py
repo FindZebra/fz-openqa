@@ -1,11 +1,14 @@
 import logging
 import multiprocessing as mp
 import warnings
+from typing import Dict
 from typing import List
+from typing import Optional
 
 import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
+from elasticsearch.client import IndicesClient  # ignore typo
 from elasticsearch.exceptions import RequestError
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,7 @@ class ElasticSearchEngine:
         super().__init__()
         self.timeout = timeout
         self._instance = self.instantiate_es()
+        self._indices = IndicesClient(self.instantiate_es())
         self.proc_id = get_process_id()
 
     def __getstate__(self):
@@ -45,13 +49,18 @@ class ElasticSearchEngine:
 
         return self._instance
 
-    def es_create_index(self, index_name: str) -> bool:
+    def es_create_index(
+        self, index_name: str, body: Optional[Dict] = None
+    ) -> bool:
         """
         Create ElasticSearch Index
         """
         try:
-            # self.es.indices.delete(index=index_name, ignore=[400, 404])
-            _ = self.instance.indices.create(index=index_name)
+            response = self.instance.indices.create(
+                index=index_name, body=body
+            )
+            print()
+            print(response)
             created = True
 
         # todo: handle specific errors
@@ -108,6 +117,7 @@ class ElasticSearchEngine:
         """
         Batch search in ElasticSearch Index
         """
+
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
@@ -124,16 +134,18 @@ class ElasticSearchEngine:
 
         result = self.instance.msearch(body=request)
 
-        indexes, scores = [], []
+        indexes, scores, contents = [], [], []
         for query in result["responses"]:
-            temp_indexes, temp_scores = [], []
+            temp_indexes, temp_scores, temp_content = [], [], []
             for hit in query["hits"]["hits"]:
                 temp_scores.append(hit["_score"])
                 temp_indexes.append(hit["_source"]["idx"])
+                temp_content.append(hit["_source"]["text"])
             indexes.append(temp_indexes)
             scores.append(temp_scores)
+            contents.append(temp_content)
 
-        return scores, indexes
+        return scores, indexes, contents
 
     def es_search(self, index_name: str, query: str, results: int):
         """
@@ -151,3 +163,20 @@ class ElasticSearchEngine:
         return response[
             "hits"
         ]  # (object) Contains returned documents and metadata.
+
+    def es_analyze_text(self, index_name: str, queries: List[str]):
+        analyzed_tokens = []
+        for docs in queries:
+            results = [
+                self._indices.analyze(
+                    index=index_name,
+                    body={"analyzer": "custom_analyzer", "text": doc},
+                )
+                for doc in docs
+            ]
+            temp_analysed = []
+            for res in results:
+                temp_analysed.append([term["token"] for term in res["tokens"]])
+            analyzed_tokens.append(temp_analysed)
+
+        return analyzed_tokens
