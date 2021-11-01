@@ -61,7 +61,7 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(),
-        relevance_classifier=ExactMatch(),
+        relevance_classifier=ExactMatch(interpretable=True),
         n_retrieved_documents=1000,
         n_documents=100,
         max_pos_docs=10,

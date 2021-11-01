@@ -14,7 +14,7 @@ from rich.status import Status
 
 from .base import Index
 from .base import SearchResult
-from fz_openqa.configs.datamodule.index_builder import es_config
+from fz_openqa.configs.datamodule.index_builder import es_body
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import Batchify
 from fz_openqa.datamodules.pipes import CopyBatch
@@ -28,8 +28,10 @@ from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 
+
+# load the default es configuration
 DEFAULT_ES_BODY = OmegaConf.to_object(
-    OmegaConf.load(Path(es_config.__file__).parent / "default.yaml")
+    OmegaConf.load(Path(es_body.__file__).parent / "default.yaml")
 )
 
 
@@ -57,7 +59,7 @@ class ElasticSearchIndex(Index):
         self.query_key = query_key
         self.batch_size = batch_size
         self.num_proc = num_proc
-        self.engine = ElasticSearchEngine()
+        self.engine = ElasticSearchEngine(analyze=False)
         self.es_body = es_body
         self.analyze = analyze
 
@@ -90,11 +92,12 @@ class ElasticSearchIndex(Index):
         super(ElasticSearchIndex, self).__init__(dataset=dataset, **kwargs)
 
     def dill_inspect(self) -> Dict[str, Any]:
-        return {
+        output = {
             "__all__": dill.pickles(self),
             "engine": dill.pickles(self.engine),
-            "preprocesing_pipe": dill.pickles(self.preprocesing_pipe),
         }
+
+        return output
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
@@ -111,7 +114,11 @@ class ElasticSearchIndex(Index):
 
         # init the index
         self.index_name = Pipe._fingerprint(
-            {"fingerprint": dataset._fingerprint, "es_body": self.es_body}
+            {
+                "fingerprint": dataset._fingerprint,
+                "es_body": self.es_body,
+                "analyse": self.analyze,
+            }
         )
         is_new_index = self.engine.es_create_index(
             self.index_name, body=self.es_body
