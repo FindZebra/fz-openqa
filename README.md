@@ -8,6 +8,8 @@
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
 
+
+[![unit testing](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml/badge.svg)](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml)
 [![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
 
 ## Setup
