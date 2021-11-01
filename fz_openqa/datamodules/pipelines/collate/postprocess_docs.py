@@ -34,9 +34,7 @@ class PostprocessPipe(BlockSequential):
         else:
             # sort the documents based on score and `match_score`
             sorter = ApplyAsFlatten(
-                Sort(
-                    keys=["document.match_score", "document.retrieval_score"]
-                ),
+                Sort(keys=["document.match_score", "document.retrieval_score"]),
                 filter=KeyWithPrefix("document."),
             )
 
@@ -59,9 +57,7 @@ class PostprocessPipe(BlockSequential):
                 max_pos_docs=max_select_pos_docs,
                 strict=False,
             )
-            selector = Gate(
-                HasKeyWithPrefix("document.match_score"), pipe=selector
-            )
+            selector = Gate(HasKeyWithPrefix("document.match_score"), pipe=selector)
 
             super().__init__(
                 [

@@ -5,7 +5,7 @@ description = "Medical Open Domain Quetion Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 torch = "^1.8.1"
 rich = "^10.2.2"
 wandb = "^0.10.30"

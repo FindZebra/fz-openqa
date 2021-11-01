@@ -49,9 +49,7 @@ class OpenQaDataset(DatasetDict):
         self.index = index
 
     def new(self, *, dataset: DatasetDict) -> "OpenQaDataset":
-        return OpenQaDataset(
-            dataset=dataset, corpus=self.corpus, index=self.index
-        )
+        return OpenQaDataset(dataset=dataset, corpus=self.corpus, index=self.index)
 
     def __repr__(self):
         u = f"{self.__class__.__name__}:\n"
@@ -81,6 +79,7 @@ class OpenQaBuilder(DatasetBuilder):
         filter_unmatched: bool = True,
         num_proc: int = 2,
         batch_size: int = 100,
+        **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None)
 
@@ -110,10 +109,7 @@ class OpenQaBuilder(DatasetBuilder):
 
     @property
     def pt_attributes(self):
-        return (
-            self.dataset_builder.pt_attributes
-            + self.corpus_builder.pt_attributes
-        )
+        return self.dataset_builder.pt_attributes + self.corpus_builder.pt_attributes
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -124,20 +120,14 @@ class OpenQaBuilder(DatasetBuilder):
         }
 
     def __repr__(self):
-        args = json.dumps(
-            {k: str(v) for k, v in self.to_dict().items()}, indent=2
-        )
+        args = json.dumps({k: str(v) for k, v in self.to_dict().items()}, indent=2)
         return f"{self.__class__.__name__}({args})"
 
-    def __call__(
-        self, format: Optional[str] = "torch", **kwargs
-    ) -> OpenQaDataset:
+    def __call__(self, format: Optional[str] = "torch", **kwargs) -> OpenQaDataset:
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder(format=None)
         index = self.index_builder(dataset=corpus, **kwargs)
-        dataset = self.map_dataset(
-            dataset=dataset, corpus=corpus, index=index, **self.map_args
-        )
+        dataset = self.map_dataset(dataset=dataset, corpus=corpus, index=index, **self.map_args)
 
         if format is not None:
             corpus = self.set_format(corpus, format=format)
@@ -145,15 +135,9 @@ class OpenQaBuilder(DatasetBuilder):
 
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
-    def set_format(
-        self, dataset: HfDataset, *, format: str = "torch"
-    ) -> HfDataset:
-        pt_cols = [
-            c for c in self.pt_attributes if c in get_column_names(dataset)
-        ]
-        dataset.set_format(
-            type=format, columns=pt_cols, output_all_columns=True
-        )
+    def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
+        pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]
+        dataset.set_format(type=format, columns=pt_cols, output_all_columns=True)
         return dataset
 
     def map_dataset(

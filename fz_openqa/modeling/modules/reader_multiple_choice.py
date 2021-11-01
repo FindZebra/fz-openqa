@@ -61,9 +61,7 @@ class ReaderMultipleChoice(Module):
         self.answer_metrics = SplitMetrics(init_answer_metric)
 
         def init_relevance_metric():
-            return MetricCollection(
-                [Accuracy(**metric_kwargs)], prefix=f"{prefix}relevance-"
-            )
+            return MetricCollection([Accuracy(**metric_kwargs)], prefix=f"{prefix}relevance-")
 
         self.relevance_metrics = SplitMetrics(init_relevance_metric)
 
@@ -97,9 +95,7 @@ class ReaderMultipleChoice(Module):
 
         # concatenate questions and documents such that there is no padding between Q and D
         # todo: check switching q and d
-        qd_batch = self.concat_fields_across_dim_one(
-            batch, ["question", "document"]
-        )
+        qd_batch = self.concat_fields_across_dim_one(batch, ["question", "document"])
 
         # compute evidence and relevance heads: [bs*n_doc, h]
         heq_heads = self._backbone(qd_batch, heads=["evidence", "relevance"])
@@ -146,16 +142,12 @@ class ReaderMultipleChoice(Module):
         # to the positive document (relevance_target)
         _index = relevance_targets.view(bs, 1, 1)
         _index = _index.expand(bs, 1, output["_relevance_logits_"].shape[-1])
-        answer_logits = output["_answer_logits_"].permute(
-            0, 2, 1
-        )  # [bs, n_options, hdim]
+        answer_logits = output["_answer_logits_"].permute(0, 2, 1)  # [bs, n_options, hdim]
         answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
 
         # compute the reader loss
         answer_targets: Tensor = batch["answer.target"]
-        answer_loss = self._batched_cross_entropy(
-            targets=answer_targets, logits=answer_logits
-        )
+        answer_loss = self._batched_cross_entropy(targets=answer_targets, logits=answer_logits)
 
         # final loss
         loss = answer_loss + relevance_loss
@@ -243,19 +235,15 @@ class ReaderMultipleChoice(Module):
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         answer_logits, answer_targets = (
-            output.get(k, None)
-            for k in ("_answer_logits_", "_answer_targets_")
+            output.get(k, None) for k in ("_answer_logits_", "_answer_targets_")
         )
         self.answer_metrics.update(split, answer_logits, answer_targets)
 
         relevance_logits, relevance_targets = (
-            output.get(k, None)
-            for k in ("_relevance_logits_", "_relevance_targets_")
+            output.get(k, None) for k in ("_relevance_logits_", "_relevance_targets_")
         )
         if relevance_targets is not None:
-            self.relevance_metrics.update(
-                split, relevance_logits, relevance_targets
-            )
+            self.relevance_metrics.update(split, relevance_logits, relevance_targets)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """

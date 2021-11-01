@@ -282,9 +282,7 @@ class MedQaDataModule(BaseDataModule):
             strict=False,
         )
 
-    def get_fetch_documents_pipe(
-        self, corpus: Optional[CorpusDataModule]
-    ) -> Optional[Pipe]:
+    def get_fetch_documents_pipe(self, corpus: Optional[CorpusDataModule]) -> Optional[Pipe]:
         if corpus is None:
             return None
 
@@ -326,9 +324,7 @@ class MedQaDataModule(BaseDataModule):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
         # collate answer options
-        answer_pipe = CollateTokens(
-            "answer.", tokenizer=self.tokenizer, stride=self.n_options
-        )
+        answer_pipe = CollateTokens("answer.", tokenizer=self.tokenizer, stride=self.n_options)
         # the full pipe to collate question and answer fields
         base_qa_collate_pipe = Parallel(
             raw_text_pipe,
@@ -419,9 +415,7 @@ class MedQaDataModule(BaseDataModule):
         pt_cols = [c for c in pt_cols if c in get_column_names(dataset)]
 
         # set the format
-        dataset.set_format(
-            type="torch", columns=pt_cols, output_all_columns=True
-        )
+        dataset.set_format(type="torch", columns=pt_cols, output_all_columns=True)
 
     def display_one_sample(self, example: Batch):
         """Decode and print one example from the batch"""
@@ -430,9 +424,7 @@ class MedQaDataModule(BaseDataModule):
             "tokenizer": self.tokenizer,
         }
         print("* Question:")
-        rich.print(
-            pretty_decode(example["question.input_ids"], **decode_kwargs)
-        )
+        rich.print(pretty_decode(example["question.input_ids"], **decode_kwargs))
 
         print(get_separator())
         print("* Answer Choices:")

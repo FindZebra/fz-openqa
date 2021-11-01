@@ -22,9 +22,7 @@ def add_spec_token(
     return f"{special_token}{text}"
 
 
-def set_row_idx(
-    example: Dict[str, Any], idx: int, key: str = "idx"
-) -> Dict[str, Any]:
+def set_row_idx(example: Dict[str, Any], idx: int, key: str = "idx") -> Dict[str, Any]:
     return {key: idx}
 
 
@@ -33,15 +31,11 @@ def append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:
     return example
 
 
-def truncate_examples_to_max_length(
-    output, *, key: str, tokenizer: PreTrainedTokenizerFast
-):
+def truncate_examples_to_max_length(output, *, key: str, tokenizer: PreTrainedTokenizerFast):
     # infer `max_length`
     tokens = [t for t in output[f"{key}.input_ids"]]
     pad_tok = tokenizer.pad_token_id
-    max_length = len(tokens[0]) - min(
-        map(lambda x: sum([int(t == pad_tok) for t in x]), tokens)
-    )
+    max_length = len(tokens[0]) - min(map(lambda x: sum([int(t == pad_tok) for t in x]), tokens))
 
     # truncate to `max_length`
     def maybe_truncate(x: Any, max_length: int):
@@ -51,7 +45,5 @@ def truncate_examples_to_max_length(
 
         return x[:, :max_length]
 
-    tensor_outpus = {
-        k: maybe_truncate(v, max_length) for k, v in output.items()
-    }
+    tensor_outpus = {k: maybe_truncate(v, max_length) for k, v in output.items()}
     return tensor_outpus

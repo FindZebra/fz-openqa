@@ -106,9 +106,7 @@ class BaseDataModule(LightningDataModule):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        return load_dataset(
-            self.dset_script_path_or_id, cache_dir=self.data_dir
-        )
+        return load_dataset(self.dset_script_path_or_id, cache_dir=self.data_dir)
 
     def get_prepared_dataset(self) -> Dataset:
         # load the dataset and potentially filter it
@@ -223,9 +221,7 @@ class BaseDataModule(LightningDataModule):
 
     def pprint(self):
         """Pretty print the dtaset"""
-        rich.print(
-            f">> Dataset: [use_subset={self.use_subset}]: \n" f"{self.dataset}"
-        )
+        rich.print(f">> Dataset: [use_subset={self.use_subset}]: \n" f"{self.dataset}")
 
     @rank_zero_only
     def display_sample(self):

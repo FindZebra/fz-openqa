@@ -75,9 +75,7 @@ class ElasticSearchIndex(Index):
                 "metamap": MetaMapFilter,
                 "stopwords": StopWordsFilter,
             }[filter_mode]
-            filter_pipe = filter_pipe_cls(
-                text_key=self.text_key, query_key=self.query_key
-            )
+            filter_pipe = filter_pipe_cls(text_key=self.text_key, query_key=self.query_key)
         else:
             filter_pipe = None
 
@@ -105,9 +103,7 @@ class ElasticSearchIndex(Index):
 
         # preprocess the dataset
         unused_columns = [
-            c
-            for c in dataset.column_names
-            if c not in [self.index_key, self.text_key]
+            c for c in dataset.column_names if c not in [self.index_key, self.text_key]
         ]
         dataset = dataset.remove_columns(unused_columns)
         dataset = self.preprocess_text(dataset)
@@ -120,9 +116,7 @@ class ElasticSearchIndex(Index):
                 "analyse": self.analyze,
             }
         )
-        is_new_index = self.engine.es_create_index(
-            self.index_name, body=self.es_body
-        )
+        is_new_index = self.engine.es_create_index(self.index_name, body=self.es_body)
 
         # build the index
         if is_new_index:
@@ -163,12 +157,8 @@ class ElasticSearchIndex(Index):
 
         analyzed_tokens = np.full(shape=(len(scores), k), fill_value=str([]))
         if self.analyze:
-            analyzed_tokens = self.engine.es_analyze_text(
-                self.index_name, contents
-            )
-        return SearchResult(
-            score=scores, index=indexes, tokens=analyzed_tokens
-        )
+            analyzed_tokens = self.engine.es_analyze_text(self.index_name, contents)
+        return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

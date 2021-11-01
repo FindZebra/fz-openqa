@@ -62,18 +62,13 @@ class RetrieverSupervised(Module):
         def init_metric():
             """generate a collection of topk accuracies."""
             return SafeMetricCollection(
-                {
-                    _name(k): Accuracy(top_k=k, **metric_kwargs)
-                    for k in [None, 5, 10, 20, 50, 100]
-                },
+                {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in [None, 5, 10, 20, 50, 100]},
                 prefix=prefix,
             )
 
         self.metrics = SplitMetrics(init_metric)
 
-    def _forward(
-        self, batch: Batch, _compute_similarity: bool = True, **kwargs
-    ) -> Batch:
+    def _forward(self, batch: Batch, _compute_similarity: bool = True, **kwargs) -> Batch:
         # flatten documents as [batch_size x n_documents]
         batch = flatten_first_dims(
             batch,
@@ -130,9 +125,7 @@ class RetrieverSupervised(Module):
 
         return output
 
-    def _generate_targets(
-        self, batch_size, *, n_docs: int, device: torch.device
-    ):
+    def _generate_targets(self, batch_size, *, n_docs: int, device: torch.device):
         """Generate targets. Assuming the target document is the first
         of each group, the targets are:
           * 0*n_docs for the first `n_docs` items

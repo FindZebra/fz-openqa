@@ -98,10 +98,7 @@ class Module(nn.Module, ABC):
         tokenizer = maybe_instantiate(tokenizer)
         self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
         self.heads = nn.ModuleDict(
-            {
-                k: maybe_instantiate(cls, bert=self.bert)
-                for k, cls in heads.items()
-            }
+            {k: maybe_instantiate(cls, bert=self.bert) for k, cls in heads.items()}
         )
         self._init_metrics(prefix=prefix)
 
@@ -176,9 +173,7 @@ class Module(nn.Module, ABC):
         with targets
         """
         step_output = self.step(batch, **kwargs)
-        return self.step_end(
-            step_output, None, update_metrics=False, filter_features=False
-        )
+        return self.step_end(step_output, None, update_metrics=False, filter_features=False)
 
     def step(self, batch: Batch, **kwargs: Any) -> Batch:
         """Compute the forward pass of the model and return output
@@ -245,9 +240,7 @@ class Module(nn.Module, ABC):
         A loss that requires outputs from all device must be
         implemented in `_reduce_step_output`"""
         logits = self.forward(batch, **kwargs)
-        nll = torch.nn.functional._batched_cross_entropy(
-            logits, batch["labels"], reduce="none"
-        )
+        nll = torch.nn.functional._batched_cross_entropy(logits, batch["labels"], reduce="none")
 
         # register internal values (which should not be passed to the pl module) using _<name>_.
         return {
@@ -292,32 +285,22 @@ class Module(nn.Module, ABC):
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:
         """filter the internal values such as _logits_ or _targets_"""
-        return {
-            k: v for k, v in output.items() if not re.match(FEATURE_PATTERN, k)
-        }
+        return {k: v for k, v in output.items() if not re.match(FEATURE_PATTERN, k)}
 
     @staticmethod
     def _select(prefix: str, batch: Batch) -> Batch:
         """Select attributes with prefix `prefix` from the `batch`"""
         prefix = f"{prefix}."
-        return {
-            k.replace(prefix, ""): v
-            for k, v in batch.items()
-            if str(k).startswith(prefix)
-        }
+        return {k.replace(prefix, ""): v for k, v in batch.items() if str(k).startswith(prefix)}
 
     def _check_batch_type(self, batch: Batch) -> None:
         """
         Check that the batch input is of the right type.
         Potentially raise an error.
         """
-        assert isinstance(
-            batch, (dict, collections.OrderedDict, collections.UserDict)
-        )
+        assert isinstance(batch, (dict, collections.OrderedDict, collections.UserDict))
 
-    def _format_exception(
-        self, batch: Batch, required_feature_names: List[str]
-    ) -> str:
+    def _format_exception(self, batch: Batch, required_feature_names: List[str]) -> str:
         missing = [f for f in required_feature_names if f not in batch]
         return (
             f"{type(self).__name__} requires features {required_feature_names}, "
@@ -325,6 +308,6 @@ class Module(nn.Module, ABC):
         )
 
     def _check_features(self, batch, required_feature_names: List[str]):
-        assert all(
-            f in batch for f in required_feature_names
-        ), self._format_exception(batch, required_feature_names)
+        assert all(f in batch for f in required_feature_names), self._format_exception(
+            batch, required_feature_names
+        )

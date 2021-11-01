@@ -19,12 +19,7 @@ def gen_example_query(tokenizer):
     ]
     batch_encoding = tokenizer(query)
     query = {
-        **tokenizer.pad(
-            {
-                k: [torch.tensor(vv) for vv in v]
-                for k, v in batch_encoding.items()
-            }
-        ),
+        **tokenizer.pad({k: [torch.tensor(vv) for vv in v] for k, v in batch_encoding.items()}),
         "text": query,
     }
     return {f"question.{k}": v for k, v in query.items()}

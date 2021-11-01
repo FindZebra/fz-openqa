@@ -27,9 +27,7 @@ def safe_dill_inspect(p):
 class Sequential(Pipe):
     """A sequence of Pipes."""
 
-    def __init__(
-        self, *pipes: Optional[Union[Callable, Pipe]], id: Optional[str] = None
-    ):
+    def __init__(self, *pipes: Optional[Union[Callable, Pipe]], id: Optional[str] = None):
         super(Sequential, self).__init__(id=id)
         self.pipes = [pipe for pipe in pipes if pipe is not None]
 
@@ -54,12 +52,8 @@ class Sequential(Pipe):
         else:
             return f"{cls}({p.id})"
 
-    def dill_inspect(
-        self, reduce: bool = False
-    ) -> Union[Dict[str, Any], bool]:
-        diagnostic = {
-            self.get_pipe_id(p): safe_dill_inspect(p) for p in self.pipes
-        }
+    def dill_inspect(self, reduce: bool = False) -> Union[Dict[str, Any], bool]:
+        diagnostic = {self.get_pipe_id(p): safe_dill_inspect(p) for p in self.pipes}
         if reduce:
             return reduce_dict_values(diagnostic)
         else:
@@ -101,9 +95,7 @@ class Parallel(Sequential):
         output_keys = []
         for p in self.pipes:
             p_keys = p.output_keys(input_keys)
-            assert all(
-                k not in output_keys for k in p_keys
-            ), "There is a conflict between pipes."
+            assert all(k not in output_keys for k in p_keys), "There is a conflict between pipes."
             output_keys += p_keys
         return output_keys
 
@@ -200,9 +192,7 @@ class Gate(Pipe):
 class BlockSequential(Pipe):
     """A sequence of Pipes organized into blocks"""
 
-    def __init__(
-        self, blocks: List[Tuple[str, Pipe]], id: Optional[str] = None
-    ):
+    def __init__(self, blocks: List[Tuple[str, Pipe]], id: Optional[str] = None):
         super(BlockSequential, self).__init__(id=id)
         blocks = [(k, b) for k, b in blocks if b is not None]
         self.blocks: OrderedDict[str, Pipe] = OrderedDict(blocks)
@@ -228,9 +218,7 @@ class BlockSequential(Pipe):
         else:
             return f"{cls}({p.id})"
 
-    def dill_inspect(
-        self, reduce: bool = False
-    ) -> Union[Dict[str, Any], bool]:
+    def dill_inspect(self, reduce: bool = False) -> Union[Dict[str, Any], bool]:
         diagnostic = {k: p.dill_inspect() for k, p in self.blocks.items()}
         if reduce:
             return reduce_dict_values(diagnostic)

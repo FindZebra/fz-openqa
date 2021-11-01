@@ -51,9 +51,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
 
         self.answer_metrics = SplitMetrics(init_answer_metric)
 
-    def step(
-        self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any
-    ) -> Batch:
+    def step(self, model: nn.Module, batch: Batch, split: Split, **kwargs: Any) -> Batch:
         """
         Compute the forward pass for the question and the documents.
 
@@ -66,17 +64,13 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
         # and flatten the documents
         self._check_batch_type(batch)
         self.check_feature_names(batch)
-        assert hasattr(
-            model, "retriever"
-        ), "A retriever model must be provided"
+        assert hasattr(model, "retriever"), "A retriever model must be provided"
         assert hasattr(model, "reader"), "A reader model must be provided"
 
         device = infer_device_from_batch(batch)
 
         # query the corpus
-        query_encoding = model.retriever(
-            batch, None, None, model_key="question"
-        )
+        query_encoding = model.retriever(batch, None, None, model_key="question")
 
         # retriever k documents from the corpus given the query
         retrieved_batch, effective_n_docs = self.retrieve_documents(
@@ -90,9 +84,7 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
             # index the k-th document for each batch element and
             # move the batch to device
             retrieved_batch_k = {
-                k: v[:, idx]
-                if isinstance(v, Tensor)
-                else [vv[idx] for vv in v]
+                k: v[:, idx] if isinstance(v, Tensor) else [vv[idx] for vv in v]
                 for k, v in retrieved_batch.items()
             }
             retrieved_batch_k = move_data_to_device(retrieved_batch_k, device)
@@ -138,26 +130,16 @@ class EndToEndMultipleChoiceQaMaximumLikelihood(Module):
         """
 
         batch_size = query.shape[0]
-        retrieved_docs: BatchedNearestExamplesResults = corpus.query_batch(
-            query, k=n_docs
-        )
-        n_retrieved_docs = len(
-            list(retrieved_docs.total_examples[0].values())[0]
-        )
+        retrieved_docs: BatchedNearestExamplesResults = corpus.query_batch(query, k=n_docs)
+        n_retrieved_docs = len(list(retrieved_docs.total_examples[0].values())[0])
 
         # create a list of retrieved documents such as:
         # [x[bs_idx=0, r_rank=0], x[bs_idx=0, r_rank=1]], ..., x[bs_idx=1, r_rank=0], ...]
         # NB: r_rank corresponds to the rank of the retrieved doc
         retrieved = retrieved_docs.total_examples
-        [
-            r.update({"document.r_rank": -1 + 0 * r["document.idx"]})
-            for r in retrieved
-        ]
+        [r.update({"document.r_rank": -1 + 0 * r["document.idx"]}) for r in retrieved]
         retrieved_batch = [
-            {
-                k: idx if k == "document.r_rank" else v[idx]
-                for k, v in d.items()
-            }
+            {k: idx if k == "document.r_rank" else v[idx] for k, v in d.items()}
             for d in retrieved
             for idx in range(n_retrieved_docs)
         ]
@@ -234,10 +216,6 @@ def argmax_select(inputs: Tensor, *, key: Tensor) -> Dict[str, Tensor]:
 
     # index the reader data using the max `key` position
     def reshape_index(index, v):
-        return index.view(batch_size, *(1 for _ in v.shape[1:])).expand(
-            -1, 1, *v.shape[2:]
-        )
+        return index.view(batch_size, *(1 for _ in v.shape[1:])).expand(-1, 1, *v.shape[2:])
 
-    return inputs.gather(index=reshape_index(arg_max, inputs), dim=1).squeeze(
-        1
-    )
+    return inputs.gather(index=reshape_index(arg_max, inputs), dim=1).squeeze(1)

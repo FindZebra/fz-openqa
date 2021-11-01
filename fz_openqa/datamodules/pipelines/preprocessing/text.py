@@ -64,8 +64,6 @@ class FormatAndTokenize(Sequential):
                 add_special_tokens=add_special_tokens,
                 return_offsets_mapping=return_offsets_mapping,
             ),
-            ApplyToAll(partial(nested_list, stride=stride))
-            if stride
-            else None,
+            ApplyToAll(partial(nested_list, stride=stride)) if stride else None,
             AddPrefix(prefix),
         )

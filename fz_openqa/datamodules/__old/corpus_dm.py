@@ -57,9 +57,7 @@ class CorpusDataModule(BaseDataModule):
     * querying passages
     """
 
-    dset_script_path_or_id = (
-        file_corpus.__file__
-    )  # HuggingFace dataset id or local path to script
+    dset_script_path_or_id = file_corpus.__file__  # HuggingFace dataset id or local path to script
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
@@ -167,9 +165,7 @@ class CorpusDataModule(BaseDataModule):
         dataset = dataset.flatten_indices()
 
         # casting to tensors
-        dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=True
-        )
+        dataset.set_format(type="torch", columns=self.pt_attributes, output_all_columns=True)
 
         return dataset
 
@@ -297,9 +293,7 @@ class CorpusDataModule(BaseDataModule):
         :@param query: query data stored as a Batch
         :@param k: integer that sets number of results to be queried.
         """
-        return SearchCorpus(self)(
-            query, model=model, k=k, simple_collate=simple_collate, **kwargs
-        )
+        return SearchCorpus(self)(query, model=model, k=k, simple_collate=simple_collate, **kwargs)
 
 
 class MedQaCorpusDataModule(CorpusDataModule):
@@ -320,8 +314,5 @@ class FZxMedQaCorpusDataModule(CorpusDataModule):
     def load_base_dataset(self) -> DatasetDict:
         assert self.input_dir is None
         kwargs = {"cache_dir": self.data_dir}
-        dsets = [
-            self._load_dataset(s, **kwargs)
-            for s in self.dset_script_path_or_id
-        ]
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)

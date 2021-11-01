@@ -85,9 +85,7 @@ class Model(LightningModule):
 
     def _infer_head_configs(self, kwargs):
         heads_cfgs = {
-            k.replace("head_", ""): v
-            for k, v in kwargs.items()
-            if str(k).startswith("head_")
+            k.replace("head_", ""): v for k, v in kwargs.items() if str(k).startswith("head_")
         }
         return heads_cfgs
 
@@ -106,9 +104,7 @@ class Model(LightningModule):
         """
         return self.module.step(batch, **kwargs)
 
-    def _step_end(
-        self, pre_output: Batch, *, split: Split, log_data=True
-    ) -> Batch:
+    def _step_end(self, pre_output: Batch, *, split: Split, log_data=True) -> Batch:
         """
         Call the `evaluator.forward_end` method (finalize the loss computation
         and update the metrics) using the `pre_output` data gathered from
@@ -125,9 +121,7 @@ class Model(LightningModule):
 
         return output
 
-    def _epoch_end(
-        self, outputs: List[Any], *, split: Split, log_data=True
-    ) -> Batch:
+    def _epoch_end(self, outputs: List[Any], *, split: Split, log_data=True) -> Batch:
         """
         1. Compute the metrics for the whole epoch using `evaluator.compute_metrics`
         2. Log the metrics for the whole epoch
@@ -153,9 +147,7 @@ class Model(LightningModule):
         the split id.
         """
         for k, v in data.items():
-            key = "/".join(
-                u for u in (prefix, self.module.task_id, k) if u is not None
-            )
+            key = "/".join(u for u in (prefix, self.module.task_id, k) if u is not None)
             if is_loggable(v):
                 self.log(
                     key,
@@ -202,9 +194,7 @@ class Model(LightningModule):
         batch_idx: int,
         dataloader_idx: Optional[int] = None,
     ) -> Batch:
-        return self._step(
-            batch, batch_idx, dataloader_idx, split=Split.VALIDATION
-        )
+        return self._step(batch, batch_idx, dataloader_idx, split=Split.VALIDATION)
 
     def test_step(
         self,
@@ -212,9 +202,7 @@ class Model(LightningModule):
         batch_idx: int,
         dataloader_idx: Optional[int] = None,
     ) -> Batch:
-        return self._step(
-            batch, batch_idx, dataloader_idx, split=Split.VALIDATION
-        )
+        return self._step(batch, batch_idx, dataloader_idx, split=Split.VALIDATION)
 
     def training_epoch_end(self, outputs: List[Any]):
         self._epoch_end(outputs, split=Split.TRAIN)

@@ -40,9 +40,7 @@ class Itemize(Pipe):
 class Forward(Pipe):
     """Process a batch of data using a model: output[key] = model(batch)"""
 
-    def __init__(
-        self, *, model: Union[Callable, torch.nn.Module], output_key: str
-    ):
+    def __init__(self, *, model: Union[Callable, torch.nn.Module], output_key: str):
         self.model = model
         self.output_key = output_key
 

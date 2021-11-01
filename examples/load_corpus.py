@@ -28,9 +28,7 @@ def run(config: DictConfig) -> None:
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="bert-base-cased"
-    )
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
     builder = MedQaCorpusBuilder(

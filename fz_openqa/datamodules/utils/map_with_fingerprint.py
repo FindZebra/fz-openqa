@@ -15,9 +15,7 @@ class MapWithFingerprint:
     Make sure to set `new_fingerprint` to each split.
     """
 
-    def __init__(
-        self, pipe: Pipe, batched=True, _id: str = None, **map_kwargs
-    ):
+    def __init__(self, pipe: Pipe, batched=True, _id: str = None, **map_kwargs):
         self._id = _id
         self.pipe = pipe
         self.map_kwargs = {"batched": batched, **map_kwargs}
@@ -56,9 +54,7 @@ class MapWithFingerprint:
                 f"Make sure the pipe {pipe} can be pickled."
             )
 
-    def _gen_fingerprints(
-        self, dataset: DatasetDict, pipe: Pipe, params: Optional[Dict]
-    ):
+    def _gen_fingerprints(self, dataset: DatasetDict, pipe: Pipe, params: Optional[Dict]):
         params = params or {}
         return {
             k: update_fingerprint(

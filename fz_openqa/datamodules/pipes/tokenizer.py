@@ -42,9 +42,7 @@ class TokenizerPipe(Pipe):
     def __call__(self, batch: TorchBatch, **kwargs) -> TorchBatch:
         tokenizer_input = {field: batch[field] for field in self.fields}
 
-        batch_encoding = self.tokenizer(
-            *tokenizer_input.values(), **self.args, **kwargs
-        )
+        batch_encoding = self.tokenizer(*tokenizer_input.values(), **self.args, **kwargs)
 
         if self.drop_columns:
             batch = {k: v for k, v in batch_encoding.items()}
@@ -69,9 +67,7 @@ class CleanupPadTokens(Pipe):
                 all_tokens = batch[k]
                 k_attn = k.replace(".input_ids", ".attention_mask")
                 all_attn = batch[k_attn]
-                assert isinstance(
-                    all_tokens, list
-                ), "not implemented for other types"
+                assert isinstance(all_tokens, list), "not implemented for other types"
 
                 # iterate examples
                 new_tokens = []
@@ -101,7 +97,5 @@ class CleanupPadTokens(Pipe):
         return batch
 
     def filter_tokens(self, tokens, attn):
-        tokens, atten = zip(
-            *((t, a) for t, a in zip(tokens, attn) if t != self.pad_tok)
-        )
+        tokens, atten = zip(*((t, a) for t, a in zip(tokens, attn) if t != self.pad_tok))
         return list(tokens), list(atten)

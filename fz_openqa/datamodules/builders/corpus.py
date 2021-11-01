@@ -165,9 +165,7 @@ class CorpusBuilder(HfDatasetBuilder):
             with_indices=True,
             desc="Indexing documents",
         )
-        logger.info(
-            f"Dataset contains {len(dataset)} documents. Flatten indices and return."
-        )
+        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
         # flatten and return
         return dataset.flatten_indices()
 
@@ -263,8 +261,5 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
     def load_base_dataset(self) -> DatasetDict:
         assert self.input_dir is None
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [
-            self._load_dataset(s, **kwargs)
-            for s in self.dset_script_path_or_id
-        ]
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)

@@ -39,9 +39,7 @@ class SelectDocs(Nested):
             strict=strict,
         )
 
-        super(SelectDocs, self).__init__(
-            pipe=pipe, filter=KeyWithPrefix(prefix), id=id
-        )
+        super(SelectDocs, self).__init__(pipe=pipe, filter=KeyWithPrefix(prefix), id=id)
 
 
 class SelectDocsOneEg(Pipe):
@@ -65,9 +63,7 @@ class SelectDocsOneEg(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
 
-    def __call__(
-        self, batch: Batch, split: Optional[Split] = None, **kwargs
-    ) -> Batch:
+    def __call__(self, batch: Batch, split: Optional[Split] = None, **kwargs) -> Batch:
         total = self.total
         if isinstance(total, (dict, DictConfig)):
             total = total[str(split)]
@@ -137,15 +133,11 @@ class SelectDocsOneEg(Pipe):
         return {k: reindex(v, index) for k, v in batch.items()}
 
 
-def select_values(
-    values: List[int], *, k: int, mode: str = "first"
-) -> List[int]:
+def select_values(values: List[int], *, k: int, mode: str = "first") -> List[int]:
     if mode == "first":
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return [
-            x for x in np.random.choice(copy(values), size=k, replace=False)
-        ]
+        return [x for x in np.random.choice(copy(values), size=k, replace=False)]
     else:
         raise ValueError(f"Unknown mode {mode}")

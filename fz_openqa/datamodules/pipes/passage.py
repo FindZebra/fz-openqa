@@ -74,8 +74,7 @@ class GeneratePassages(Pipe):
     def _check_input_keys(self, batch):
         for key in self.required_keys:
             assert key in batch.keys(), (
-                f"key={key} must be provided. "
-                f"Found batch.keys={list(batch.keys())}."
+                f"key={key} must be provided. " f"Found batch.keys={list(batch.keys())}."
             )
 
     @staticmethod
@@ -107,9 +106,7 @@ class GeneratePassages(Pipe):
         first_key, *other_keys = keys
         output = defaultdict(list)
         indexes = []
-        for idx, (doc_idx, example) in enumerate(
-            zip(examples["idx"], examples[first_key])
-        ):
+        for idx, (doc_idx, example) in enumerate(zip(examples["idx"], examples[first_key])):
 
             # do a first pass to compute the passage masks
             for pas_idx, (passage, passage_mask) in enumerate(
@@ -124,9 +121,7 @@ class GeneratePassages(Pipe):
             # do another pass to generate the passages for each remaining attribute
         for key in other_keys:
             for example in examples[key]:
-                passages = gen_passages(
-                    example, **args[key], return_mask=False
-                )
+                passages = gen_passages(example, **args[key], return_mask=False)
                 for i, passage in enumerate(passages):
                     output[key].append(passage)
 
@@ -136,16 +131,12 @@ class GeneratePassages(Pipe):
         return indexes, output
 
     @staticmethod
-    def extract_passage_text_from_doc(
-        document: str, offset_mapping: List[Tuple[int, int]]
-    ) -> str:
+    def extract_passage_text_from_doc(document: str, offset_mapping: List[Tuple[int, int]]) -> str:
         """
         Extract the text passage from the original document
         given the offset mapping of the passage
         """
-        indexes = [
-            x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0
-        ]
+        indexes = [x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0]
         return document[min(indexes) : max(indexes)]
 
 

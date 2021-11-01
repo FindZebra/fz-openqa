@@ -68,9 +68,7 @@ class Index(ABC):
             )
         for i in _iter:
             eg = self.get_example(query, i)
-            scores_i, indexes_i, contents_i = self.search_one(
-                eg, k=k, **kwargs
-            )
+            scores_i, indexes_i, contents_i = self.search_one(eg, k=k, **kwargs)
             scores += [scores_i]
             indexes += [indexes_i]
             contents += [contents_i]

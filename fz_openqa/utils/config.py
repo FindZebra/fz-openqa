@@ -13,9 +13,7 @@ from pytorch_lightning.utilities import rank_zero_only
 YAML_PATTERN = r"^.*\.yaml$"
 
 
-def resolve_config_paths(
-    config: DictConfig, path: str = "", excludes: List[str] = ["hydra"]
-):
+def resolve_config_paths(config: DictConfig, path: str = "", excludes: List[str] = ["hydra"]):
     for k, v in ((k_, v_) for k_, v_ in config.items() if k_ not in excludes):
         if isinstance(v, DictConfig):
             resolve_config_paths(v, os.path.join(path, k))
@@ -59,11 +57,7 @@ def print_training_config(
         if isinstance(config_section, DictConfig):
             branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
 
-        branch.add(
-            rich.syntax.Syntax(
-                branch_content, "yaml", indent_guides=True, word_wrap=True
-            )
-        )
+        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
 
     rich.print(tree)
 
@@ -81,9 +75,7 @@ def print_config(config, resolve: bool = True):
         branch_content = str(config_section)
         if isinstance(config_section, DictConfig):
             try:
-                branch_content = OmegaConf.to_yaml(
-                    config_section, resolve=resolve
-                )
+                branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
             except Exception:
                 pass
 

@@ -68,9 +68,7 @@ def run_tune_with_config(config: DictConfig) -> Optional[float]:
         search_alg = instantiate(config.runner.search_alg)
         # cast `points_to_evaluate` into a list
         if search_alg._points_to_evaluate is not None:
-            search_alg._points_to_evaluate = [
-                p for p in search_alg._points_to_evaluate
-            ]
+            search_alg._points_to_evaluate = [p for p in search_alg._points_to_evaluate]
     else:
         search_alg = None
 

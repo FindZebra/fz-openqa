@@ -16,11 +16,7 @@ class GenerateSentences(Pipe):
     """
 
     def __init__(
-        self,
-        *,
-        delimiter: Optional[str] = ".",
-        required_keys: Optional[List[str]] = None,
-        **kwargs
+        self, *, delimiter: Optional[str] = ".", required_keys: Optional[List[str]] = None, **kwargs
     ):
         super(GenerateSentences, self).__init__(**kwargs)
         required_keys = required_keys or ["idx", "text"]
@@ -34,10 +30,7 @@ class GenerateSentences(Pipe):
 
     @staticmethod
     def generate_sentences(
-        examples: Dict[str, List[Any]],
-        *,
-        required_keys: List[str],
-        delimiter: str
+        examples: Dict[str, List[Any]], *, required_keys: List[str], delimiter: str
     ) -> Batch:
         """
         This functions generates the sentences for each corpus article.
