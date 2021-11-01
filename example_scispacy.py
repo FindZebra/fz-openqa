@@ -1,9 +1,7 @@
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.scispacy import display_entities_pipe
-import en_ner_bc5cdr_md
 import en_core_sci_md
 import rich
 

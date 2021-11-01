@@ -313,17 +313,17 @@ class CorpusDataModule(BaseDataModule):
 
 
 class MedQaCorpusDataModule(CorpusDataModule):
-    subset_size = [
-        1,
-    ]
+    subset_size = [1]
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 
 class FzCorpusDataModule(CorpusDataModule):
+    subset_size = [10]
     dset_script_path_or_id = fz_corpus.__file__
 
 
 class FZxMedQaCorpusDataModule(CorpusDataModule):
+    subset_size = [10]
     dset_script_path_or_id: List = [
         fz_corpus.__file__,
         meqa_en_corpus.__file__,

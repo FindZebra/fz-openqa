@@ -1,14 +1,15 @@
+import logging
 import multiprocessing as mp
-import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
-from elasticsearch.client import IndicesClient  # ignore typo
+from elasticsearch.client.indices import IndicesClient
 from elasticsearch.exceptions import RequestError
+
+logger = logging.getLogger(__name__)
 
 
 def get_process_id():
@@ -17,14 +18,20 @@ def get_process_id():
 
 class ElasticSearchEngine:
     _instance: Elasticsearch
+    _indices_client: Optional[IndicesClient] = None
 
-    def __init__(self, timeout=60):
+    def __init__(self, timeout=60, analyze=False):
 
         super().__init__()
         self.timeout = timeout
-        self._instance = self.instantiate_es()
-        self._indices = IndicesClient(self.instantiate_es())
+        self.analyze = analyze
+        self._instantiate_instances()
         self.proc_id = get_process_id()
+
+    def _instantiate_instances(self):
+        self._instance = self.instantiate_es()
+        if self.analyze:
+            self._indices_client = IndicesClient(self._instance)
 
     def __getstate__(self):
         """this method is called when attempting pickling"""
@@ -32,6 +39,10 @@ class ElasticSearchEngine:
         # Don't pickle the ES instance
         del state["_instance"]
         state["_instance"] = None
+        # Don't pickle the indices client
+        if "_indices_client" in state:
+            del state["_indices_client"]
+            state["_indices_client"] = None
         return state
 
     def instantiate_es(self) -> Elasticsearch:
@@ -41,7 +52,7 @@ class ElasticSearchEngine:
     def instance(self):
         curr_id = get_process_id()
         if curr_id != self.proc_id or self._instance is None:
-            self._instance = self.instantiate_es()
+            self._instantiate_instances()
             self.proc_id = curr_id
 
         return self._instance
@@ -60,9 +71,9 @@ class ElasticSearchEngine:
             print(response)
             created = True
 
-        # todo: handle specific exceptions
+        # todo: handle specific errors
         except RequestError as err:
-            warnings.warn(f"{err}")
+            logger.warning(f"{err}")
             created = False
 
         return created
@@ -165,7 +176,7 @@ class ElasticSearchEngine:
         analyzed_tokens = []
         for docs in queries:
             results = [
-                self._indices.analyze(
+                self._indices_client.analyze(
                     index=index_name,
                     body={"analyzer": "custom_analyzer", "text": doc},
                 )

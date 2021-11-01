@@ -1,19 +1,15 @@
 # @package _global_
 
-# to execute this experiment run:
-# poetry run fzqa experiment=reader_only
-
 defaults:
-  - override /trainer: minimal.yaml
-  - override /model: retriever.yaml
-  - override /datamodule: medqa_dm.yaml
-  - override /corpus: fz_x_medqa_corpus.yaml
-  - override /callbacks: default.yaml #index_corpus.yaml # list callbacks using `- callback_i`
-  - override /logger: wandb.yaml
+  - override /trainer: minimal
+  - override /model: retriever
+  - override /datamodule: openqa
+  - override /callbacks: checkpoint
+  - override /logger: wandb
 
 base:
-  seed: 8
-  target_metric: validation/retrieval/top10_Accuracy
+  seed: null
+  target_metric: validation/retriever/top10_Accuracy
   target_mode: max
 
 trainer:
@@ -23,7 +19,9 @@ trainer:
   max_epochs: 10000
   gradient_clip_val: 0.5
   # stochastic_weight_avg: True
-  # checkpoint_callback: False # disable checkpointing for faster training
+  checkpoint_callback: True
+  accumulate_grad_batches: 4
+  val_check_interval: 300
 
 model:
   lr: 1e-5
@@ -35,14 +33,17 @@ model:
 
 
 datamodule:
-  train_batch_size: 16
-  valid_batch_size: 100
+  train_batch_size: 8
+  valid_batch_size: 16
   max_length: 512
   use_subset: False
   num_workers: 8
-  n_documents: 10
+  n_documents:
+    train: 20
+    validation: 100
+    test: 100
   max_pos_docs: 1
 
 logger:
   wandb:
-    group: retriever-only # name your experiment here
+    group: retriever-only

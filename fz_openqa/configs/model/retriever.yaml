@@ -1,3 +1,5 @@
 defaults:
   - base
+  - head/cls@head_question
+  - head/cls@head_document
   - override module: retriever_supervised

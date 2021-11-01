@@ -91,7 +91,8 @@ def log_hyperparameters(
             for k, v in config.items()
             if k
             in (
-                "base" "trainer",
+                "base",
+                "trainer",
                 "model",
                 "datamodule",
                 "tokenizer",
@@ -178,10 +179,8 @@ def print_config(
     config: DictConfig,
     fields: Sequence[str] = (
         "trainer",
-        "tokenizer",
         "model",
         "datamodule",
-        "corpus",
         "callbacks",
         "logger",
         "base",

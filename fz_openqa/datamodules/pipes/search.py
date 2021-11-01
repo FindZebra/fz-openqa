@@ -10,6 +10,7 @@ from typing import Union
 import dill
 import torch
 from datasets import Dataset
+from pyarrow import Table
 
 from . import Collate
 from . import Nest
@@ -141,47 +142,43 @@ class FeatchDocuments(Pipe):
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = Collate(),
         index_key: str = "document.row_idx",
+        id: str = "fetch-documents-pipe",
         **kwargs,
     ):
-        super(FeatchDocuments, self).__init__(**kwargs)
+        super(FeatchDocuments, self).__init__(id=id)
+        if keys is not None:
+            corpus_dataset.remove_columns(
+                set(corpus_dataset.column_names) - set(keys)
+            )
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe
         self.index_key = index_key
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        features = self.corpus_dataset.column_names
-        return list(
-            self._filter_row(
-                {c: None for c in features}, keys=self.keys
-            ).values()
-        )
+        return self.corpus_dataset.column_names
 
-    @staticmethod
-    def _filter_row(
-        row: Dict[str, Any], *, keys: Optional[List[str]]
-    ) -> Dict[str, Any]:
-        return {k: v for k, v in row.items() if keys is None or k in keys}
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def __call__(self, batch: Batch, **kwargs) -> Union[List[Dict], Batch]:
         # todo: check dataset fingerprint
+        # todo: get table in the __init__, removing dependencies
+        #  on `datasets`might solve issues
 
         # get the `dataset` indexes
-        indexes = (int(idx) for idx in batch[self.index_key])
+        indexes = [int(idx) for idx in batch[self.index_key]]
 
-        # todo: do not return the whole column
-        # find a memory efficient way to do that
-        if self.keys is not None and len(self.keys) == 1:
-            key = self.keys[0]
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset[key].__getitem__, indexes)
-            retrieved_docs = [{key: x} for x in retrieved_docs]
+        err_msg = (
+            "There is a mismatch between the query indexes and the retrieved indexes, "
+            "make sure you are using the same dataset."
+        )
+        # fetch documents
+        if len(indexes) < 500:
+            rows: List[Dict] = [self.corpus_dataset[idx] for idx in indexes]
+            assert indexes[0] == rows[0][self.index_key], err_msg
+        # rows = self.corpus_dataset.select(indexes, keep_in_memory=True)
         else:
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset.__getitem__, indexes)
-            # filter keys
-            retrieved_docs = list(
-                self._filter_row(x, keys=self.keys) for x in retrieved_docs
-            )
+            rows: Table = self.corpus_dataset._data.table.take(indexes)
+            rows: Batch = rows.to_pydict()
+            assert indexes[0] == rows[self.index_key][0], err_msg
+
         # collate and return
-        return self.collate_pipe(retrieved_docs)
+        return self.collate_pipe(rows)

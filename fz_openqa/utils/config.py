@@ -1,5 +1,6 @@
 import os
 import re
+from typing import List
 from typing import Sequence
 
 import omegaconf
@@ -13,7 +14,7 @@ YAML_PATTERN = r"^.*\.yaml$"
 
 
 def resolve_config_paths(
-    config: DictConfig, path: str = "", excludes: Sequence[str] = ["hydra"]
+    config: DictConfig, path: str = "", excludes: List[str] = ["hydra"]
 ):
     for k, v in ((k_, v_) for k_, v_ in config.items() if k_ not in excludes):
         if isinstance(v, DictConfig):

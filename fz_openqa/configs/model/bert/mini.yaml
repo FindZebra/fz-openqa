@@ -1,0 +1,4 @@
+defaults:
+  - bert
+
+pretrained_model_name_or_path: "google/bert_uncased_L-2_H-128_A-2"

@@ -25,8 +25,7 @@ def add_spec_token(
 def set_row_idx(
     example: Dict[str, Any], idx: int, key: str = "idx"
 ) -> Dict[str, Any]:
-    example[key] = idx
-    return example
+    return {key: idx}
 
 
 def append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:

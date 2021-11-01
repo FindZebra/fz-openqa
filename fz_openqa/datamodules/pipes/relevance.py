@@ -16,23 +16,23 @@ from typing import Tuple
 import dill
 import numpy as np
 import spacy
-from pydantic import BaseModel
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 
-from ..utils.filter_keys import KeyWithPrefix
 from .nesting import nested_list
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 
-class LinkedEntity(BaseModel):
+@dataclass
+class LinkedEntity:
     entity: str
     tuis: List[str]
     aliases: List[str]
@@ -117,9 +117,10 @@ class RelevanceClassifier(Pipe):
         output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
+        id="relevance-classifier",
         **kwargs,
     ):
-        super(RelevanceClassifier, self).__init__(**kwargs)
+        super(RelevanceClassifier, self).__init__(id=id)
         self.output_key = output_key
         self.answer_prefix = answer_prefix
         self.document_prefix = document_prefix
@@ -277,7 +278,7 @@ class AliasBasedMatch(RelevanceClassifier):
         }
 
     def dill_inspect(self, reduce=True) -> Dict:
-        return {**{k: dill.pickles(v) for k, v in self.__getstate__().items()}}
+        return {k: dill.pickles(v) for k, v in self.__getstate__().items()}
 
     def _setup_models(self):
         if self.model is None:

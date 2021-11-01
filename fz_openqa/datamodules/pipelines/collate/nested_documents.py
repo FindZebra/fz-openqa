@@ -2,8 +2,8 @@ import torch
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ApplyToAll
-from fz_openqa.datamodules.pipes import AsFlatten
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import FirstEg
@@ -12,8 +12,8 @@ from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 
 
 class MaybeCollateDocuments(Gate):
@@ -48,7 +48,7 @@ class MaybeCollateDocuments(Gate):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         tokens_pipe = Gate(
             HasKeyWithPrefix("document.input_ids"),
-            Sequential(
+            pipe=Sequential(
                 FilterKeys(
                     KeyIn(["document.input_ids", "document.attention_mask"])
                 ),
@@ -73,7 +73,9 @@ class MaybeCollateDocuments(Gate):
                     "document.text",
                 ]
             ),
-            AsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
+            ApplyAsFlatten(
+                Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)
+            ),
         )
 
         condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))

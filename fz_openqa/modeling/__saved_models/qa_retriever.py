@@ -10,7 +10,7 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.layers.heads import cls_head
 from fz_openqa.modeling.model import Module
 from fz_openqa.utils.functional import maybe_instantiate

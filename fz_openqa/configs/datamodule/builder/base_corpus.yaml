@@ -1,0 +1,7 @@
+defaults:
+  - base
+
+max_length: null
+use_subset: false
+passage_length: 200
+passage_stride: 100

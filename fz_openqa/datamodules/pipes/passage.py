@@ -25,7 +25,9 @@ class GeneratePassages(Pipe):
         end_tokens: List[int],
         pad_token_id: int,
         verbose: bool = True,
+        **kwargs,
     ):
+        super(GeneratePassages, self).__init__(**kwargs)
 
         self.verbose = verbose
         base_args = {"size": size, "stride": stride}
@@ -53,7 +55,7 @@ class GeneratePassages(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys + ["idx", "passage_idx", "passage_mask"]
 
-    def __call__(self, batch: Batch) -> Batch:
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
         indexes, output = self.generate_passages_for_all_keys(
             batch,
