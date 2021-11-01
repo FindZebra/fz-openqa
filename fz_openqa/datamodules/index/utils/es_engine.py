@@ -1,13 +1,15 @@
+import logging
 import multiprocessing as mp
-import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
+from elasticsearch.client.indices import IndicesClient
 from elasticsearch.exceptions import RequestError
+
+logger = logging.getLogger(__name__)
 
 
 def get_process_id():
@@ -16,13 +18,20 @@ def get_process_id():
 
 class ElasticSearchEngine:
     _instance: Elasticsearch
+    _indices_client: Optional[IndicesClient] = None
 
-    def __init__(self, timeout=60):
+    def __init__(self, timeout=60, analyze=False):
 
         super().__init__()
         self.timeout = timeout
-        self._instance = self.instantiate_es()
+        self.analyze = analyze
+        self._instantiate_instances()
         self.proc_id = get_process_id()
+
+    def _instantiate_instances(self):
+        self._instance = self.instantiate_es()
+        if self.analyze:
+            self._indices_client = IndicesClient(self._instance)
 
     def __getstate__(self):
         """this method is called when attempting pickling"""
@@ -30,6 +39,10 @@ class ElasticSearchEngine:
         # Don't pickle the ES instance
         del state["_instance"]
         state["_instance"] = None
+        # Don't pickle the indices client
+        if "_indices_client" in state:
+            del state["_indices_client"]
+            state["_indices_client"] = None
         return state
 
     def instantiate_es(self) -> Elasticsearch:
@@ -39,7 +52,7 @@ class ElasticSearchEngine:
     def instance(self):
         curr_id = get_process_id()
         if curr_id != self.proc_id or self._instance is None:
-            self._instance = self.instantiate_es()
+            self._instantiate_instances()
             self.proc_id = curr_id
 
         return self._instance
@@ -51,12 +64,16 @@ class ElasticSearchEngine:
         Create ElasticSearch Index
         """
         try:
-            _ = self.instance.indices.create(index=index_name, body=body)
+            response = self.instance.indices.create(
+                index=index_name, body=body
+            )
+            print()
+            print(response)
             created = True
 
-        # todo: handle specific exceptions
+        # todo: handle specific errors
         except RequestError as err:
-            warnings.warn(f"{err}")
+            logger.warning(f"{err}")
             created = False
 
         return created
@@ -108,6 +125,7 @@ class ElasticSearchEngine:
         """
         Batch search in ElasticSearch Index
         """
+
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
@@ -124,16 +142,18 @@ class ElasticSearchEngine:
 
         result = self.instance.msearch(body=request)
 
-        indexes, scores = [], []
+        indexes, scores, contents = [], [], []
         for query in result["responses"]:
-            temp_indexes, temp_scores = [], []
+            temp_indexes, temp_scores, temp_content = [], [], []
             for hit in query["hits"]["hits"]:
                 temp_scores.append(hit["_score"])
                 temp_indexes.append(hit["_source"]["idx"])
+                temp_content.append(hit["_source"]["text"])
             indexes.append(temp_indexes)
             scores.append(temp_scores)
+            contents.append(temp_content)
 
-        return scores, indexes
+        return scores, indexes, contents
 
     def es_search(self, index_name: str, query: str, results: int):
         """
@@ -151,3 +171,20 @@ class ElasticSearchEngine:
         return response[
             "hits"
         ]  # (object) Contains returned documents and metadata.
+
+    def es_analyze_text(self, index_name: str, queries: List[str]):
+        analyzed_tokens = []
+        for docs in queries:
+            results = [
+                self._indices_client.analyze(
+                    index=index_name,
+                    body={"analyzer": "custom_analyzer", "text": doc},
+                )
+                for doc in docs
+            ]
+            temp_analysed = []
+            for res in results:
+                temp_analysed.append([term["token"] for term in res["tokens"]])
+            analyzed_tokens.append(temp_analysed)
+
+        return analyzed_tokens

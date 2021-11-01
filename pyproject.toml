@@ -13,13 +13,13 @@ pytorch-lightning = {version="^1.4", allow-prereleases = true}
 torchmetrics = {version="^0.5", allow-prereleases = true}
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"
-datasets = {git="https://github.com/vlievin/datasets.git", branch="inconsistent-caching-map-multiprocessing"}
+datasets = "^1.4"
 hydra-core = {version="^1.1", allow-prereleases = false}
 hydra-colorlog = {version="^1.0.1", allow-prereleases = false}
 faiss-cpu = { version = "^1.7.1", allow-prereleases = true }
 gdown = "^3.13.0"
 elasticsearch = "^7.13.2"
-ray = {extras = ["default", "tune"], version = "^1.3.0", allow-prereleases = false}
+ray = {extras = ["default", "tune"], version = "^1.7.0", allow-prereleases = false}
 hyperopt = "^0.2.5"
 spacy =  {version = "^3.0", allow-prereleases = true }
 scispacy =  {version = "^0.4.0", allow-prereleases = true }
@@ -29,6 +29,7 @@ en_core_sci_lg = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/rel
 en_ner_bc5cdr_md = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_ner_bc5cdr_md-0.4.0.tar.gz" }
 pre-commit = "^2.15.0"
 nltk = "^3.6.5"
+coverage = "^6.0.2"
 
 
 [tool.poetry.scripts]

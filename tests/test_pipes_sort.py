@@ -17,7 +17,6 @@ class TestSort(TestCase):
         assert self.check_if_values_are_the_same_length(batch)
         for cls in [lambda x: x, torch.tensor, np.array]:
             for reversed in [False, True]:
-                rich.print(f"\n> starting with: reverse={reversed}, cls={cls}")
                 self._test_sort_batch(
                     {k: cls(v) for k, v in deepcopy(batch).items()}, reversed=reversed
                 )

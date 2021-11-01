@@ -31,15 +31,18 @@ class RetrieverSupervised(Module):
     ]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "retrieval"
+    task_id: Optional[str] = "retriever"
 
     # metrics to display in the progress bar
     pbar_metrics = [
-        "train/retrieval/Accuracy",
-        "validation/retrieval/Accuracy",
-        "validation/retrieval/top10_Accuracy",
-        "validation/retrieval/n_options",
+        "train/retriever/Accuracy",
+        "validation/retriever/Accuracy",
+        "validation/retriever/top10_Accuracy",
+        "validation/retriever/n_options",
     ]
+
+    # require heads
+    _required_heads = ["question", "document"]
 
     def __init__(
         self,
@@ -79,15 +82,9 @@ class RetrieverSupervised(Module):
         )
 
         # shape: [bs, h]
-        hq = self.backbone(
-            batch["question.input_ids"],
-            attention_mask=batch["question.attention_mask"],
-        )
+        hq = self._backbone(batch, prefix="question", head="question")
         # shape: # [bs * n_docs, h]
-        hd = self.backbone(
-            batch["document.input_ids"],
-            attention_mask=batch["document.attention_mask"],
-        )
+        hd = self._backbone(batch, prefix="document", head="document")
 
         output = {"_hq_": hq, "_hd_": hd}
 

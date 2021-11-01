@@ -98,7 +98,6 @@ class MetaMapFilter(TextFilter):
     def __call__(
         self, batch: Batch, query_key: Optional[str] = None, **kwargs
     ) -> Batch:
-        print("Printing keys...")
         rich.print(f"[green]{batch.keys()}")
         query_key = query_key or self.query_key
         batch[query_key] = [

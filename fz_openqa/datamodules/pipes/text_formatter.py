@@ -21,7 +21,6 @@ class TextFormatter(Pipe):
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
-        # snowball_stemmer: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -31,7 +30,6 @@ class TextFormatter(Pipe):
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
         self.remove_symbols = remove_symbols
-        # self.snowball_stemmer = snowball_stemmer
 
     def clean(self, text: str) -> str:
 

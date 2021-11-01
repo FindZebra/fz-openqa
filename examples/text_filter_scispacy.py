@@ -1,7 +1,7 @@
 import en_core_sci_scibert
 import rich
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.pipes.text_filtering import SciSpacyFilter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 

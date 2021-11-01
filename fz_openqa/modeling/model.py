@@ -3,6 +3,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
@@ -15,6 +16,7 @@ from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
+from fz_openqa.utils.pretty import get_separator
 
 
 class Model(LightningModule):
@@ -58,7 +60,6 @@ class Model(LightningModule):
         *,
         tokenizer: PreTrainedTokenizerFast,
         bert: Union[BertPreTrainedModel, DictConfig],
-        backbone: DictConfig,
         module: DictConfig,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
@@ -77,10 +78,18 @@ class Model(LightningModule):
         self.module: Optional[Module] = maybe_instantiate(
             module,
             bert=bert,
-            backbone=backbone,
+            heads=self._infer_head_configs(kwargs),
             tokenizer=tokenizer,
             _recursive_=False,
         )
+
+    def _infer_head_configs(self, kwargs):
+        heads_cfgs = {
+            k.replace("head_", ""): v
+            for k, v in kwargs.items()
+            if str(k).startswith("head_")
+        }
+        return heads_cfgs
 
     def _step(
         self,

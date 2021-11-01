@@ -1,0 +1,44 @@
+# @package _global_
+
+defaults:
+  - override /trainer: minimal
+  - override /model: ???
+  - override /datamodule: openqa
+  - override /callbacks: default
+  - override /logger: wandb
+
+base:
+  seed: null
+  target_metric: ???
+  target_mode: ???
+
+trainer:
+  gpus: 4
+  accelerator: dp
+  min_epochs: 1
+  max_epochs: 10000
+  gradient_clip_val: 0.5
+  # stochastic_weight_avg: True
+  checkpoint_callback: True
+
+model:
+  lr: 1e-5
+  weight_decay: 1e-4
+  hidden_size: 256
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.3
+
+
+datamodule:
+  train_batch_size: 16
+  valid_batch_size: 100
+  max_length: 512
+  use_subset: False
+  num_workers: 8
+  n_documents: 10
+  max_pos_docs: 1
+
+logger:
+  wandb:
+    group: base

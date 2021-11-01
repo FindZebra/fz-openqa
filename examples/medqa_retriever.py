@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import datasets
 import numpy as np
 import rich
@@ -24,28 +26,10 @@ from fz_openqa.utils.train_utils import setup_safe_env
 datasets.set_caching_enabled(True)
 setup_safe_env()
 
-es_body = {
-    "settings": {
-        "analysis": {
-            "analyzer": {
-                "my_analyzer": {
-                    "tokenizer": "standard",
-                    "filter": ["snow"],
-                }
-            },
-            "filter": {
-                "snow": {
-                    "type": "snowball",
-                    "language": "English",
-                }
-            },
-        }
-    }
-}
-
 tokenizer = init_pretrained_tokenizer(
     pretrained_model_name_or_path="bert-base-cased"
 )
+
 
 # load the corpus object
 corpus = MedQaCorpusDataModule(
@@ -58,7 +42,7 @@ corpus = MedQaCorpusDataModule(
         num_proc=4,
         filter_mode=None,
         text_cleaner=TextFormatter(remove_symbols=True),
-        es_body=es_body,
+        analyze=False,
     ),
     verbose=False,
     num_proc=4,
@@ -89,7 +73,7 @@ print(get_separator())
 
 concat_pipe = ConcatQuestionAnswerOption()
 select_fields = FilterKeys(lambda key: key == "question.metamap")
-search_index = SearchCorpus(corpus=corpus, k=10)
+search_index = SearchCorpus(corpus_index=corpus._index, k=25)
 flatten_and_search = AsFlatten(search_index)
 
 pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
@@ -108,7 +92,9 @@ total = (
     + len(dm.dataset["validation"])
     + len(dm.dataset["test"])
 )
+
 num_corrects = 0
+equals = 0
 for batch in track(
     dm.train_dataloader(), description="Iterating through the dataset..."
 ):
@@ -116,9 +102,12 @@ for batch in track(
 
     # 1 do a pipe to concat question + answer option
     batch = pipe(batch)
-    # print(len(batch["document.retrieval_score"]))
-    # print(len(batch["answer.target"]))
-    # print(get_separator())
+
+    for question in batch["document.retrieval_score"]:
+        sums = np.sum(question, axis=1)
+        if np.all(sums == sums[0]):
+            equals += 1
+
     predictions = [
         np.argmax(np.sum(question, axis=1))
         for question in batch["document.retrieval_score"]
@@ -142,6 +131,7 @@ print(
         num_corrects, total, num_corrects * 100.0 / total
     )
 )
+print(equals)
 
 # Accuracy metrics
 # Query : "question.text" , Argmax : "No randomness"

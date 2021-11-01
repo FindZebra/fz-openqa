@@ -1,14 +1,11 @@
 from datasets import Dataset
 
-from fz_openqa.datamodules.pipes import AsFlatten
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import UpdateWith
-from fz_openqa.datamodules.pipes.search import FakeDataset
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.search import FeatchDocuments
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
 
 
 class ClassifyDocuments(Sequential):
@@ -32,16 +29,13 @@ class ClassifyDocuments(Sequential):
 
         super().__init__(
             FilterKeys(KeyIn(input_keys)),
-            UpdateWith(
-                Sequential(
-                    FilterKeys(KeyIn(["document.row_idx"])),
-                    AsFlatten(
-                        FeatchDocuments(
-                            corpus_dataset=corpus_dataset,
-                            keys=["document.text"],
-                        )
-                    ),
-                )
+            ApplyAsFlatten(
+                FeatchDocuments(
+                    corpus_dataset=corpus_dataset,
+                    keys=["document.text"],
+                ),
+                filter=KeyIn(["document.row_idx"]),
+                update=True,
             ),
             FilterKeys(KeyIn(classifier_input_keys)),
             relevance_classifier,

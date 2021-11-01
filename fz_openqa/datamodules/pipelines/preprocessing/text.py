@@ -12,9 +12,9 @@ from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.nesting import flatten_nested
 from fz_openqa.datamodules.pipes.nesting import nested_list
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 
 

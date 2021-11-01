@@ -24,10 +24,9 @@ from .connect import Sequential
 from .connect import UpdateWith
 from .documents import SelectDocs
 from .filtering import FilterExamples
-from .nesting import AsFlatten
+from .nesting import ApplyAsFlatten
 from .nesting import Flatten
 from .nesting import Nest
-from .nesting import Nested
 from .passage import GeneratePassages
 from .pprint import PrintBatch
 from .pprint import PrintText

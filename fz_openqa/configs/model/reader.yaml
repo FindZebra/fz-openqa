@@ -1,3 +1,10 @@
 defaults:
   - base
+  - head/cls@head_option
+  - head/cls@head_evidence
+  - head/cls@head_relevance
   - override module: reader_multiple_choice
+
+
+head_relevance:
+  output_size: 1

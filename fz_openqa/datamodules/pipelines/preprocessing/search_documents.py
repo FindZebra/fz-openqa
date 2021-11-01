@@ -1,8 +1,9 @@
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from typing import Final
+
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 
 
 class SearchDocuments(Sequential):
