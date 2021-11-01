@@ -27,6 +27,7 @@ from .pipes import Apply
 from .pipes import Collate
 from .pipes import DropKeys
 from .pipes import FilterKeys
+from .pipes import Gate
 from .pipes import Identity
 from .pipes import Parallel
 from .pipes import Pipe
@@ -34,7 +35,9 @@ from .pipes import PrintBatch
 from .pipes import SearchCorpus
 from .pipes import Sequential
 from .pipes import TokenizerPipe
+from .pipes import UpdateWith
 from .pipes.passage import GeneratePassages
+from .pipes.sentence import GenerateSentences
 from .utils.transformations import add_spec_token
 from .utils.transformations import set_row_idx
 from fz_openqa.tokenizers.static import DOC_TOKEN
@@ -83,6 +86,7 @@ class CorpusDataModule(BaseDataModule):
         passage_length: int = 200,
         passage_stride: int = 100,
         index: Optional[Index] = None,
+        to_sentences: bool = True,
         add_encoding_tokens: bool = True,
         append_document_title: bool = False,
         max_length: Optional[int] = None,
@@ -100,6 +104,7 @@ class CorpusDataModule(BaseDataModule):
         self.passage_length = passage_length
         self.passage_stride = passage_stride
         self.add_encoding_tokens = add_encoding_tokens
+        self.to_sentences = to_sentences
         if append_document_title:
             raise NotImplementedError
         self.append_document_title = append_document_title
@@ -142,8 +147,14 @@ class CorpusDataModule(BaseDataModule):
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
+                UpdateWith(Gate(self.to_sentences, GenerateSentences())),
                 self.get_tokenizer_pipe(),
-                self.get_generate_passages_pipe(),
+                UpdateWith(
+                    Gate(
+                        not self.to_sentences,
+                        self.get_generate_passages_pipe(),
+                    )
+                ),
             ),
             batched=True,
             num_proc=self.num_proc,
@@ -153,7 +164,6 @@ class CorpusDataModule(BaseDataModule):
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
-
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
@@ -163,23 +173,27 @@ class CorpusDataModule(BaseDataModule):
             desc="Indexing documents",
         )
 
-        # casting to tensors
-        dataset.set_format(
-            type="torch", columns=self.pt_attributes, output_all_columns=True
-        )
+        # # casting to tensors
+        # dataset.set_format(
+        #     type="torch",
+        #     columns=self.pt_attributes,
+        #     output_all_columns=True,
+        # )
 
         return dataset
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
         passage_pipe = Sequential(
-            GeneratePassages(
-                size=self.passage_length,
-                stride=self.passage_stride,
-                start_tokens=self.get_prefix_tokens(),
-                end_tokens=[self.tokenizer.sep_token_id],
-                pad_token_id=self.tokenizer.pad_token_id,
-                verbose=self.verbose,
+            UpdateWith(
+                GeneratePassages(
+                    size=self.passage_length,
+                    stride=self.passage_stride,
+                    start_tokens=self.get_prefix_tokens(),
+                    end_tokens=[self.tokenizer.sep_token_id],
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    verbose=self.verbose,
+                )
             ),
             DropKeys(["offset_mapping"]),
         )
