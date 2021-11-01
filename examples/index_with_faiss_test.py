@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import datasets
 import faiss.contrib.torch_utils
 import numpy as np
@@ -65,10 +67,10 @@ corpus = MedQaCorpusDataModule(
     ),
     verbose=False,
     num_proc=1,
-    use_subset=False,
+    use_subset=True,
     passage_length=200,
     max_length=None,
-    train_batch_size=300,
+    train_batch_size=200,
 )
 corpus.prepare_data()
 corpus.setup()
@@ -78,10 +80,10 @@ pprint_batch(batch_corpus)
 # load the QA dataset
 dm = MedQaDataModule(
     tokenizer=tokenizer,
-    train_batch_size=300,
+    train_batch_size=200,
     num_proc=1,
     num_workers=1,
-    use_subset=False,
+    use_subset=True,
     verbose=True,
     corpus=corpus,
     relevance_classifier=ExactMatch(),
@@ -109,20 +111,23 @@ document_encoded_layers, question_encoded_layers = encode_bert(
 
 d = document_encoded_layers.shape[2]  # dimension
 rich.print(d)
-nlist = 1  # number of clusters
+nlist = 5  # number of clusters
 index = faiss.IndexFlatL2(d)
 # quantiser = faiss.IndexFlatL2(d)
 # index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
 
 
+# print(f"Index is trained: {index.is_trained}")
+# index.train(document_encoded_layers[:, 0, :].contiguous())
 print(f"Index is trained: {index.is_trained}")
-index.train(document_encoded_layers[:, 0, :].contiguous())
-print(f"Index is trained: {index.is_trained}")
-index.add(document_encoded_layers[:, 0, :].contiguous())
+index.add(document_encoded_layers[:10, 0, :].contiguous())
 print(f"Total number of indices: {index.ntotal}")
 
+# rich.print(question_encoded_layers[1:5, 0, :].contiguous().shape)
 k = 3  # number of nearest neighbours
-xq = question_encoded_layers[:, 0, :].contiguous()
+xq = deepcopy(
+    torch.zeros_like(question_encoded_layers[1:2, 0, :].contiguous())
+)
 
 # Perform search on index
 distances, indices = index.search(xq, k)
