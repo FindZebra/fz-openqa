@@ -42,7 +42,6 @@ corpus = MedQaCorpusDataModule(
         num_proc=4,
         filter_mode=None,
         text_cleaner=TextFormatter(remove_symbols=True),
-        es_body=es_body,
         analyze=False,
     ),
     verbose=False,
