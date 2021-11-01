@@ -3,6 +3,7 @@ import faiss.contrib.torch_utils
 import numpy as np
 import rich
 import torch
+from torch.functional import Tensor
 from transformers import AutoModel
 
 from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
@@ -26,6 +27,32 @@ tokenizer = init_pretrained_tokenizer(
 model = AutoModel.from_pretrained("google/bert_uncased_L-2_H-128_A-2")
 model.eval()
 
+
+def encode_bert(
+    document_input_ids: Tensor,
+    document_attention_mask: Tensor,
+    question_input_ids: Tensor,
+    question_attention_mask: Tensor,
+):
+    """
+    Compute document and question embeddings using BERT
+    """
+    with torch.no_grad():
+        document_outputs = model(
+            input_ids=document_input_ids,
+            attention_mask=document_attention_mask,
+        )
+        document_encoded_layers = document_outputs[0]
+
+        question_outputs = model(
+            input_ids=question_input_ids,
+            attention_mask=question_attention_mask,
+        )
+        question_encoded_layers = question_outputs[0]
+
+    return document_encoded_layers, question_encoded_layers
+
+
 # load the corpus object
 corpus = MedQaCorpusDataModule(
     tokenizer=tokenizer,
@@ -33,15 +60,15 @@ corpus = MedQaCorpusDataModule(
         index_key="document.row_idx",
         text_key="document.text",
         query_key="question.metamap",
-        num_proc=4,
+        num_proc=1,
         filter_mode=None,
     ),
     verbose=False,
-    num_proc=4,
+    num_proc=1,
     use_subset=False,
     passage_length=200,
     max_length=None,
-    train_batch_size=500,
+    train_batch_size=300,
 )
 corpus.prepare_data()
 corpus.setup()
@@ -51,9 +78,9 @@ pprint_batch(batch_corpus)
 # load the QA dataset
 dm = MedQaDataModule(
     tokenizer=tokenizer,
-    train_batch_size=500,
-    num_proc=4,
-    num_workers=4,
+    train_batch_size=300,
+    num_proc=1,
+    num_workers=1,
     use_subset=False,
     verbose=True,
     corpus=corpus,
@@ -67,38 +94,36 @@ batch_dm = next(iter(dm.train_dataloader()))
 pprint_batch(batch_dm)
 
 
-with torch.no_grad():
-    document_outputs = model(
-        input_ids=torch.tensor(batch_corpus["document.input_ids"]),
-        attention_mask=torch.tensor(batch_corpus["document.attention_mask"]),
-    )
-    document_encoded_layers = document_outputs[0]
+# Compute document and question embeddings
+document_encoded_layers, question_encoded_layers = encode_bert(
+    document_input_ids=torch.tensor(batch_corpus["document.input_ids"]),
+    document_attention_mask=torch.tensor(
+        batch_corpus["document.attention_mask"]
+    ),
+    question_input_ids=batch_dm["question.input_ids"].clone().detach(),
+    question_attention_mask=batch_dm["question.attention_mask"]
+    .clone()
+    .detach(),
+)
 
-    question_outputs = model(
-        input_ids=batch_dm["question.input_ids"].clone().detach(),
-        attention_mask=batch_dm["question.attention_mask"].clone().detach(),
-    )
-    question_encoded_layers = question_outputs[0]
 
-
-d = document_encoded_layers.shape[2]
+d = document_encoded_layers.shape[2]  # dimension
+rich.print(d)
 nlist = 1  # number of clusters
 index = faiss.IndexFlatL2(d)
-quantiser = faiss.IndexFlatL2(d)
-index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
+# quantiser = faiss.IndexFlatL2(d)
+# index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
 
 
 print(f"Index is trained: {index.is_trained}")
 index.train(document_encoded_layers[:, 0, :].contiguous())
 print(f"Index is trained: {index.is_trained}")
-# index.add(batch["document.input_ids"].type(torch.float32))
-# print(f"Total number of indices: {index.ntotal}")
+index.add(document_encoded_layers[:, 0, :].contiguous())
+print(f"Total number of indices: {index.ntotal}")
 
-# rich.print(type(dm.dataset["train"]["question.input_ids"]))
+k = 3  # number of nearest neighbours
+xq = question_encoded_layers[:, 0, :].contiguous()
 
-# k = 4
-# xq_numpy = np.array(dm.dataset["train"]["question.input_ids"])
-# xq = np.expand_dims(xq_numpy, axis=0)
-# rich.print(xq.shape, batch["document.input_ids"].shape)
-# distances, indices = index.search(xq, k)
-# print(indices)
+# Perform search on index
+distances, indices = index.search(xq, k)
+print(indices)
