@@ -5,7 +5,7 @@ description = "Medical Open Domain Quetion Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 torch = "^1.8.1"
 rich = "^10.2.2"
 wandb = "^0.10.30"
@@ -43,7 +43,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-line-length = 79
+line-length = 100
 include = '\.pyi?$'
 exclude = '''
 /(
