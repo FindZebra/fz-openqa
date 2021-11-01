@@ -29,7 +29,7 @@ class Itemize(Pipe):
         if isinstance(values, Tensor) and values.dim() > 0:
             return [self.itemize(x) for x in values]
         elif isinstance(values, Tensor):
-            return values.item()
+            return values.detach().item()
         else:
             return values
 

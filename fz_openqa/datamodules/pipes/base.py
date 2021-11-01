@@ -8,6 +8,7 @@ from typing import Optional
 from typing import Union
 
 import dill
+import rich
 from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
@@ -56,12 +57,6 @@ class Pipe(object):
     def fingerprint(self) -> str:
         """return the fingerprint of this object"""
         return self._fingerprint(self)
-
-    def as_fingerprintable(self) -> Any:
-        """return a fingerprintable version of the object. This version does
-        not necessarily run as a pipe, but the fingerprint of the returned object
-        must be deterministic."""
-        return self
 
     def todict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the object"""
@@ -278,5 +273,22 @@ class ApplyToAll(Pipe):
 
 
 class CopyBatch(Pipe):
+    def __init__(self, *, deep: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.deep = deep
+
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        return copy(batch)
+        if self.deep:
+            return deepcopy(batch)
+        else:
+            return copy(batch)
+
+
+def check_pickle_capability(pipe: Pipe):
+    """check that the pipe can be pickled, which is necessary for multiprocessing"""
+    if not pipe.dill_inspect(reduce=True):
+        rich.print(pipe.dill_inspect())
+        raise TypeError(
+            "Couldn't pickle pipe. Code would fail if `num_proc`>1. "
+            f"Make sure the pipe {pipe} can be pickled."
+        )

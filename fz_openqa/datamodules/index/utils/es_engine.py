@@ -108,7 +108,6 @@ class ElasticSearchEngine:
         """
         Batch search in ElasticSearch Index
         """
-        request = []
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {

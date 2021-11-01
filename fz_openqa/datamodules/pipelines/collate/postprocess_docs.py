@@ -4,7 +4,6 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Nested
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
@@ -34,9 +33,8 @@ class PostprocessPipe(BlockSequential):
         else:
             # sort the documents based on score and `match_score`
             sorter = Nested(
-                Sequential(
-                    Sort(key="document.retrieval_score"),
-                    Sort(key="document.match_score"),
+                Sort(
+                    keys=["document.match_score", "document.retrieval_score"]
                 ),
                 filter=KeyWithPrefix("document."),
             )

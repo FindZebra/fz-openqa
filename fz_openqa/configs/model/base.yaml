@@ -1,0 +1,12 @@
+defaults:
+  - module: ???
+  - backbone: bert_linear_head_cls.yaml
+  - bert: bio_bert.yaml
+
+_target_: fz_openqa.modeling.Model
+
+bert_id: ${model.bert.pretrained_model_name_or_path}
+cache_dir: ${cache_dir}
+hidden_size: 128
+lr: 2e-5
+weight_decay: 1e-4

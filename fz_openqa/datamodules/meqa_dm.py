@@ -1,4 +1,4 @@
-from collections import OrderedDict
+import logging
 from functools import partial
 from typing import Callable
 from typing import Optional
@@ -8,6 +8,7 @@ import dill  # type: ignore
 import rich
 from datasets import Dataset
 from datasets import Split
+from torch.utils.data import Dataset as TorchDataset
 from transformers import PreTrainedTokenizerFast
 
 from .base_dm import BaseDataModule
@@ -15,34 +16,37 @@ from .corpus_dm import CorpusDataModule
 from .datasets import medqa
 from .pipelines.collate import CollateAsTensor
 from .pipelines.collate import CollateTokens
-from .pipelines.collate import MaybeSearchDocuments
+from .pipelines.preprocessing import ClassifyDocuments
 from .pipelines.preprocessing import FormatAndTokenize
+from .pipelines.preprocessing import SearchDocuments
+from .pipelines.preprocessing import SortDocuments
+from .pipes import AsFlatten
 from .pipes import BlockSequential
 from .pipes import Collate
-from .pipes import DeCollate
-from .pipes import Itemize
+from .pipes import FilterKeys
 from .pipes import Parallel
+from .pipes import Pipe
 from .pipes import RelevanceClassifier
+from .pipes import SelectDocs
 from .pipes import Sequential
 from .pipes import UpdateWith
-from .pipes.tokenizer import CleanupPadTokens
+from .pipes.base import check_pickle_capability
+from .pipes.search import FeatchDocuments
 from .utils.dataset import filter_questions_by_pos_docs
 from .utils.dataset import get_column_names
 from .utils.dataset import print_size_difference
-from .utils.fingerprintable_map import FingerprintableMap
-from .utils.transformations import set_example_idx
+from .utils.transformations import set_row_idx
 from .utils.typing import HgDataset
 from fz_openqa.datamodules.pipelines.collate.nested_documents import (
     MaybeCollateDocuments,
-)
-from fz_openqa.datamodules.pipelines.collate.postprocess_docs import (
-    PostprocessPipe,
 )
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
+
+logger = logging.getLogger(__name__)
 
 
 class MedQaDataModule(BaseDataModule):
@@ -60,10 +64,12 @@ class MedQaDataModule(BaseDataModule):
         "answer.input_ids",
         "answer.attention_mask",
         "answer.target",
+        "document.match_score",
+        "document.retrieval_score",
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 20, 20]
+    subset_size = [100, 50, 50]
 
     # number of options
     n_options = 4
@@ -71,8 +77,8 @@ class MedQaDataModule(BaseDataModule):
     # Optional: corpus
     corpus: Optional[CorpusDataModule] = None
 
-    # Optional: compiled dataset (pre-computed)
-    compiled_dataset: Optional[HgDataset] = None
+    # check if the dataset is mapped with the corpus
+    _is_mapped = False
 
     def __init__(
         self,
@@ -84,7 +90,7 @@ class MedQaDataModule(BaseDataModule):
         n_documents: Optional[int] = None,
         max_pos_docs: Optional[int] = 1,
         relevance_classifier: Optional[RelevanceClassifier] = None,
-        compile_in_setup: bool = True,
+        map_corpus_batch_size: int = 100,
         **kwargs,
     ):
         super().__init__(tokenizer=tokenizer, **kwargs)
@@ -94,7 +100,7 @@ class MedQaDataModule(BaseDataModule):
         self.corpus = corpus
 
         # document retrieval
-        self.compile_in_setup = compile_in_setup
+        self.map_corpus_batch_size = map_corpus_batch_size
         if n_documents is not None:
             assert n_retrieved_documents > 0
             assert n_documents <= n_retrieved_documents
@@ -131,22 +137,23 @@ class MedQaDataModule(BaseDataModule):
                 f"n_documents={self.n_documents} > n_passages={len(self.corpus.dataset)}"
             )
 
-        # the postprocessing pipe is applied after the documents are sampeld
-        self.postprocessing = PostprocessPipe(
-            self.relevance_classifier,
-            n_retrieved_documents=self.n_retrieved_documents,
-            n_select_documents=self.n_documents,
-            max_select_pos_docs=self.max_pos_docs,
-        )
-
         # define the collate operator
         self.collate_pipe: BlockSequential = self.get_collate_pipe()
 
-        # compile
-        if self.compile_in_setup:
-            # todo: move this in a callback, so a model can be used
+        # map the questions with documents from the corpus
+        if self.n_retrieved_documents > 0 and not self._is_mapped:
+            assert self.corpus is not None, "A corpus must be set and set up."
+            self.dataset.reset_format()
             self.build_index()
-            self.compile_dataset(num_proc=self.num_proc)
+            self.map_corpus(
+                num_proc=self.num_proc,
+                verbose=self.verbose,
+                batch_size=self.map_corpus_batch_size,
+            )
+
+        # cast features as tensors
+        self.dataset.reset_format()
+        self.cast_dataset_as_tensors(self.dataset)
 
     def preprocess_dataset(self, dataset: HgDataset) -> HgDataset:
         """Apply processing steps to the dataset.
@@ -165,18 +172,13 @@ class MedQaDataModule(BaseDataModule):
 
         # add an index column
         dataset = dataset.map(
-            set_example_idx,
+            partial(set_row_idx, key="question.row_idx"),
             batched=False,
             num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing",
         )
 
-        # cast to tensors
-        # todo: check if we can remove this one totally
-        # dataset.set_format(
-        #     type="torch", columns=self.pt_attributes, output_all_columns=True
-        # )
         return dataset
 
     def get_answer_tokenizer_pipe(self):
@@ -208,12 +210,6 @@ class MedQaDataModule(BaseDataModule):
         # collate questions and couments
         base_qa_collate_pipe = self.get_qa_collate_pipe()
 
-        # get a pipe to search document only if `n_retrieved_documents>0`
-        # and documents are not already stored
-        search_docs_pipe = MaybeSearchDocuments(
-            self.n_retrieved_documents, corpus=self.corpus
-        )
-
         # merge Q&A + documents (collate if available, else search)
         collate_qad = Sequential(
             Parallel(
@@ -222,24 +218,60 @@ class MedQaDataModule(BaseDataModule):
                 # B. this one collate the question and answer fields
                 base_qa_collate_pipe,
             ),
-            # C. Query the corpus for documents, only if A. did not return any document
-            UpdateWith(search_docs_pipe),
         )
 
-        # get the post processing blocks (RelevanceClassifier + doc selection)
-        postprocessing = (
-            (k, UpdateWith(b)) for k, b in self.postprocessing.blocks.items()
+        # C. select documents
+        select_documents = self.get_select_documents_pipe(
+            self.n_documents or self.n_retrieved_documents,
+            max_pos_docs=self.max_pos_docs,
         )
+
+        # D. fetch documents attributes (input_ids)
+        fetch_documents = self.get_fetch_documents_pipe(self.corpus)
 
         return BlockSequential(
             [
-                # A, B, C
-                ("Collate Q&A + Search documents", collate_qad),
-                # D: Classify documents +  F: select documents
-                *postprocessing,
+                # A, B: collate QA fields
+                ("Collate Q&A + document indexes", collate_qad),
+                # C: select documents
+                ("Select documents", select_documents),
+                # D: Fetch all document fields
+                ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
         )
+
+    @staticmethod
+    def get_select_documents_pipe(
+        n_documents: int, *, max_pos_docs: Optional[int]
+    ) -> Optional[Pipe]:
+        if n_documents == 0:
+            return None
+
+        return SelectDocs(
+            total=n_documents,
+            max_pos_docs=max_pos_docs,
+            pos_select_mode="first",
+            neg_select_mode="first",
+            strict=False,
+        )
+
+    def get_fetch_documents_pipe(
+        self, corpus: Optional[CorpusDataModule]
+    ) -> Optional[Pipe]:
+        if corpus is None:
+            return None
+
+        fetch_documents = Sequential(
+            FilterKeys(lambda key: key in ["document.row_idx"]),
+            AsFlatten(
+                FeatchDocuments(
+                    corpus_dataset=corpus.dataset,
+                    collate_pipe=corpus.collate_pipe,
+                )
+            ),
+        )
+        return UpdateWith(fetch_documents)
 
     def get_qa_collate_pipe(self):
         # get the raw text questions, extract and collate
@@ -254,7 +286,12 @@ class MedQaDataModule(BaseDataModule):
         )
         # collate simple attributes
         simple_attr_pipe = CollateAsTensor(
-            keys=["idx", "question.idx", "answer.target", "answer.n_options"]
+            keys=[
+                "question.row_idx",
+                "question.idx",
+                "answer.target",
+                "answer.n_options",
+            ]
         )
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
@@ -272,74 +309,83 @@ class MedQaDataModule(BaseDataModule):
         )
         return base_qa_collate_pipe
 
-    def compile_dataset(
+    def map_corpus(
         self,
         filter_unmatched: bool = True,
         num_proc: int = 1,
-        batch_size: Optional[int] = 100,
+        batch_size: Optional[int] = 10,
+        verbose: bool = False,
     ):
         """
-        Process the whole dataset with `collate_fn` and store
-        into `self.compiled_dataset`
+        Map the dataset with documents from the corpus.
 
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
 
-        # unpack the Q&A collate pipe and the postprocessing
-        (qa_desc, qa_collate), *post = self.collate_pipe.blocks.items()
-
-        # wrap p1 to avoid casting issues and avoid storing padding
-        wrapped_qa_collate = Sequential(
-            DeCollate(),
-            qa_collate,
-            Itemize(),
-            CleanupPadTokens(self.tokenizer),
+        # Search the document and tag them with `document.match_score`
+        pipe = BlockSequential(
+            [
+                (
+                    "Search documents",
+                    SearchDocuments(
+                        corpus_index=self.corpus._index,
+                        n_documents=self.n_retrieved_documents,
+                    ),
+                ),
+                (
+                    "Classify documents",
+                    ClassifyDocuments(
+                        corpus_dataset=self.corpus.dataset,
+                        relevance_classifier=self.relevance_classifier,
+                    ),
+                ),
+                ("Sort documents", SortDocuments()),
+            ]
         )
 
-        # store
-        blocks = OrderedDict([(qa_desc, wrapped_qa_collate), *post])
-
-        # create a map operator on the fly for a given key and pipe
-        def m(desc, block):
-            # run dataset.map() with extra steps to allow safe caching and multiprocessing
-            return FingerprintableMap(
+        # process the dataset with each block
+        original_size = {k: len(dset) for k, dset in self.dataset.items()}
+        for k, block in pipe.blocks.items():
+            logger.info(f"Processing: {k}")
+            check_pickle_capability(block)
+            self.dataset = self.dataset.map(
                 block,
                 batched=True,
                 num_proc=num_proc,
                 batch_size=batch_size,
-                desc=f"Compiling: {desc}",
+                desc=f"[Corpus mapping] {k}",
             )
 
-        dset = self.dataset
-        for k, block in blocks.items():
-            # block = Sequential(block, PrintBatch(f"out: {k}"))
-            dset = m(k, block)(dset)
-        self.compiled_dataset = dset
-
-        # cast tensor values
-        self.cast_compiled_dataset()
-
+        # filter out questions that are not match to any  positive document
         if filter_unmatched:
-            # filter out questions that are not match to any  positive document
             fn = partial(
-                filter_questions_by_pos_docs, max_pos_docs=self.max_pos_docs
+                filter_questions_by_pos_docs,
+                n_documents=self.n_documents,
+                max_pos_docs=self.max_pos_docs,
             )
-            self.compiled_dataset = self.compiled_dataset.filter(fn)
+            self.dataset = self.dataset.filter(fn, num_proc=num_proc)
 
         # print the difference in length for each split
-        if self.verbose:
-            print_size_difference(self.dataset, self.compiled_dataset)
+        if verbose:
+            print_size_difference(original_size, self.dataset)
+
+        self._is_mapped = True
 
     def build_index(self, model: Optional[Callable] = None, **kwargs):
         self.corpus.build_index(model=model, **kwargs)
 
-    def cast_compiled_dataset(self):
-        pt_cols = self.pt_attributes + self.corpus.pt_attributes
-        pt_cols = [
-            c for c in pt_cols if c in get_column_names(self.compiled_dataset)
-        ]
-        self.compiled_dataset.set_format(
+    def cast_dataset_as_tensors(self, dataset: Dataset):
+        """Cast dataset features as tensors"""
+        pt_cols = self.pt_attributes
+        if self.corpus is not None:
+            pt_cols += self.corpus.pt_attributes
+
+        # filter columns
+        pt_cols = [c for c in pt_cols if c in get_column_names(dataset)]
+
+        # set the format
+        dataset.set_format(
             type="torch", columns=pt_cols, output_all_columns=True
         )
 
@@ -363,12 +409,11 @@ class MedQaDataModule(BaseDataModule):
                 f"{self.tokenizer.decode(an, **decode_kwargs).replace('[PAD]', '').strip()}"
             )
 
-    def get_dataset(self, split: Union[str, Split]) -> Dataset:
+    def get_dataset(
+        self, split: Union[str, Split], dataset: Optional[HgDataset] = None
+    ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
         or the dataset itself if there is no split."""
 
-        # use the compiled dataset if available
-        dset = self.compiled_dataset or self.dataset
-
         # retrieve the dataset split
-        return super().get_dataset(split, dset)
+        return super().get_dataset(split, dataset or self.dataset)

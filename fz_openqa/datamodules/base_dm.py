@@ -12,6 +12,7 @@ from datasets import Split
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset as TorchDataset
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import Lambda
@@ -203,7 +204,7 @@ class BaseDataModule(LightningDataModule):
 
     def get_dataset(
         self, split: Union[str, Split], dataset: Optional[HgDataset] = None
-    ) -> Dataset:
+    ) -> Union[TorchDataset, Dataset]:
         """Return the dataset corresponding to the split,
         or the dataset iteself if there is no split."""
         dataset = dataset or self.dataset
