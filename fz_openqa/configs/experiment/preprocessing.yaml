@@ -1,0 +1,8 @@
+# @package _global_
+
+defaults:
+  - override /datamodule: openqa
+  - override /model: retriever
+  - override /trainer: null
+  - override /callbacks: null
+  - override /logger: null

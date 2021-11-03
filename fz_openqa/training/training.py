@@ -43,9 +43,12 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: DataModule = instantiate(config.datamodule)
-    # datamodule.prepare_data()
-    # datamodule.setup()
-    # datamodule.display_samples()
+
+    # only preprocess the data if there is no trainer
+    if config.get("trainer", None) is None:
+        datamodule.prepare_data()
+        datamodule.setup()
+        return
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")

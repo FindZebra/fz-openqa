@@ -9,7 +9,7 @@
 defaults:
   - override /sys: hpo-titan.yaml
   - override /space: search_preprocessing.yaml
-  - override /runner: default.yaml
+  - override /runner: hyperopt_asha.yaml
 
 base:
   name: search_retriever
