@@ -51,7 +51,6 @@ class CorpusBuilder(HfDatasetBuilder):
     pt_attributes = [
         "document.input_ids",
         "document.attention_mask",
-        "document.passage_mask",
     ]
 
     # number of data points per subset train/val/test

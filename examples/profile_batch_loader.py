@@ -81,6 +81,7 @@ def run(config):
     # prepare both the QA dataset and the corpus
     dm.prepare_data()
     dm.setup()
+    rich.print(dm.dataset)
 
     class GetBatch:
         def __init__(self, loader):
@@ -115,10 +116,15 @@ def run(config):
     # index: >> duration=0.090s/batch (std=0.105s)
     # hf_take: >> duration=0.088s/batch (std=0.102s)
 
-    # E. Final
+    # E. Final - without formatting
     # 10 docs: >> duration=0.094s/batch (std=0.107s)
     # 100 docs: >> duration=0.228s/batch (std=0.226s)
     # 1000 docs: >> duration=1.722s/batch (std=1.635s)
+
+    # E. Final
+    # 10 docs: >> duration=0.097s/batch (std=0.111s)
+    # 100 docs: >> duration=0.304s/batch (std=0.298s)
+    # 1000 docs: >> duration=2.529s/batch (std=2.401s)
 
 
 if __name__ == "__main__":

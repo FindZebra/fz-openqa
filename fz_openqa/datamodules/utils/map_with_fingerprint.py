@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 from typing import Optional
 
@@ -8,6 +9,8 @@ from datasets.fingerprint import update_fingerprint
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
+
+logger = logging.getLogger(__name__)
 
 
 class MapWithFingerprint:
@@ -56,6 +59,7 @@ class MapWithFingerprint:
 
     def _gen_fingerprints(self, dataset: DatasetDict, pipe: Pipe, params: Optional[Dict]):
         params = params or {}
+
         return {
             k: update_fingerprint(
                 dset._fingerprint,

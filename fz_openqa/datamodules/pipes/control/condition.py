@@ -34,6 +34,17 @@ class HasKeyWithPrefix(Condition):
         return f"{self.__class__.__name__}({self.prefix})"
 
 
+class IsInstance(Condition):
+    def __init__(self, cls: type):
+        self.cls = cls
+
+    def __call__(self, batch: Batch) -> bool:
+        return all(isinstance(v, self.cls) for v in batch.values())
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.cls.__name__})"
+
+
 class Not(Condition):
     def __init__(self, condition: Condition):
         self.condition = condition

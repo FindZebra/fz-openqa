@@ -144,17 +144,28 @@ class FeatchDocuments(Pipe):
         super(FeatchDocuments, self).__init__(id=id)
         if keys is not None:
             keys = set(keys).union([index_key])
-            corpus_dataset = corpus_dataset.remove_columns(set(corpus_dataset.column_names) - keys)
+            # make sure to sort the keys to ensure deterministic fingerprinting
+            cols_to_drop = list(sorted(set(corpus_dataset.column_names) - keys))
+            corpus_dataset = corpus_dataset.remove_columns(cols_to_drop)
+
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe
         self.index_key = index_key
         self.output_format = output_format
 
+    def fingerprint(self) -> Dict[str, Any]:
+        return {
+            "__all__": self._fingerprint(self),
+            "corpus_dataset": self._fingerprint(self.corpus_dataset),
+            "corpus_dataset_fingerprint": self.corpus_dataset._fingerprint,
+            "self.collate_pipe": self._fingerprint(self.collate_pipe),
+        }
+
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
-    def __call__(self, batch: Batch, **kwargs) -> Union[List[Dict], Batch]:
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes
@@ -166,14 +177,16 @@ class FeatchDocuments(Pipe):
         )
 
         # fetch documents
+        table = self.corpus_dataset.select(indexes, keep_in_memory=True)
+
         if self.output_format == "list":
-            rows: List[Dict] = [self.corpus_dataset[idx] for idx in indexes]
+            rows: List[Batch] = [dict(row) for row in table]
             assert indexes[0] == rows[0][self.index_key], err_msg
         elif self.output_format == "dict":
-            rows: Batch = self.corpus_dataset.select(indexes, keep_in_memory=True).to_dict()
+            rows: Batch = table[None:None]
             assert indexes[0] == rows[self.index_key][0], err_msg
         else:
-            raise ValueError(f"Unknown output_format: {self.output_format}")
+            raise ValueError(f"Unknown output format: {self.output_format}")
 
         # collate and return
         return self.collate_pipe(rows)
