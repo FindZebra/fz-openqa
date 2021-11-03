@@ -20,9 +20,7 @@ from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 logger = logging.getLogger(__name__)
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
-from fz_openqa.utils.train_utils import setup_safe_env
 
 
 @hydra.main(
@@ -46,11 +44,13 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
-        train_batch_size=config.get("train_batch_size", 200),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=1,
     )
-    corpus = DataModule(builder=corpus_builder)
+    corpus = DataModule(
+        builder=corpus_builder,
+        train_batch_size=config.get("train_batch_size", 200),
+    )
     corpus.prepare_data()
     corpus.setup()
     batch_corpus = next(iter(corpus.train_dataloader()))
@@ -60,11 +60,13 @@ def run(config: DictConfig) -> None:
     dm_builder = MedQABuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
-        train_batch_size=config.get("train_batch_size", 200),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=1,
     )
-    dm = DataModule(builder=dm_builder)
+    dm = DataModule(
+        builder=dm_builder,
+        train_batch_size=config.get("train_batch_size", 200),
+    )
     dm.prepare_data()
     dm.setup()
     batch_dm = next(iter(dm.train_dataloader()))
