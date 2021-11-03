@@ -3,10 +3,11 @@ datamodule.relevance_classifier._target_:
   categories:
     - fz_openqa.datamodules.pipes.ExactMatch
     - fz_openqa.datamodules.pipes.ScispaCyMatch
-model.hidden_size:
+    - fz_openqa.datamodules.pipes.MetaMapMatch
+
+datamodule.builder.corpus_builder._target_:
   _target_: ray.tune.choice
   categories:
-    - 64
-    - 128
-    - 256
-    - 512
+    - fz_openqa.datamodules.builders.MedQaCorpusBuilder
+    - fz_openqa.datamodules.builders.FzCorpusBuilder
+    - fz_openqa.datamodules.builders.FZxMedQaCorpusBuilder

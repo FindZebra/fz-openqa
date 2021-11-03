@@ -1,0 +1,6 @@
+defaults:
+  - base
+  - override scheduler: asha
+  - override search_alg: hyperopt
+
+num_samples: 1000

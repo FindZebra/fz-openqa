@@ -1,6 +1,10 @@
+defaults:
+  - scheduler: null
+  - search_alg: null
+
 name: ${base.name}
 resume: False
-num_samples: 5000
+num_samples: 1
 metric: ${base.target_metric}
 mode: ${base.target_mode}
 resources_per_trial:
@@ -9,10 +13,3 @@ resources_per_trial:
 fail_fast: False
 raise_on_failed_trial: False
 local_dir: ${sys.work_dir}
-scheduler:
-  _target_: ray.tune.schedulers.AsyncHyperBandScheduler
-  max_t: 100
-  grace_period: 2
-search_alg:
-  _target_: ray.tune.suggest.hyperopt.HyperOptSearch
-  points_to_evaluate: null

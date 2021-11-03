@@ -6,6 +6,7 @@ import ray
 import rich
 from hydra import compose
 from hydra import initialize
+from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from ray.tune import CLIReporter
@@ -31,19 +32,20 @@ def format_key(k, globals=DEFAULT_GLOBALS):
 
 
 def trial(args, checkpoint_dir=None, **kwargs):
-    with initialize(config_path="../configs/"):
-        overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
-        overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
-        overrides += [f"sys.work_dir='{os.getcwd()}'"]
-        cfg = compose(
-            config_name="config.yaml",
-            return_hydra_config=True,
-            overrides=overrides,
-        )
-        run_experiment_with_config(cfg)
+    if not GlobalHydra.instance().is_initialized():
+        initialize(config_path="../configs/")
+    overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
+    overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
+    overrides += [f"sys.work_dir='{os.getcwd()}'"]
+    cfg = compose(
+        config_name="config.yaml",
+        return_hydra_config=True,
+        overrides=overrides,
+    )
+    run_experiment_with_config(cfg)
 
 
-def run_tune_with_config(config: DictConfig) -> Optional[float]:
+def run_tune_with_config(config: DictConfig):
     # todo: error: SystemError 1: debug by runnning simple code in `trial`...
     if fz_openqa.utils.config.print_config:
         print_config(config, resolve=True)
