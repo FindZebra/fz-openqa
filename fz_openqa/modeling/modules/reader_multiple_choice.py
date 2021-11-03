@@ -95,7 +95,7 @@ class ReaderMultipleChoice(Module):
 
         # concatenate questions and documents such that there is no padding between Q and D
         # todo: check switching q and d
-        qd_batch = self.concat_fields_across_dim_one(batch, ["question", "document"])
+        qd_batch = self._concat_fields_across_dim_one(batch, ["question", "document"])
 
         # compute evidence and relevance heads: [bs*n_doc, h]
         heq_heads = self._backbone(qd_batch, heads=["evidence", "relevance"])
@@ -109,18 +109,24 @@ class ReaderMultipleChoice(Module):
             head="option",
         )
 
+        # get all the hidden representations
+        heq = heq_heads["evidence"]  # [bs * n_doc, h]
+        h_relevance = heq_heads["relevance"]
+        heq = heq.view(bs, n_docs, *heq.shape[1:])
+        h_relevance = h_relevance.view(bs, n_docs, *h_relevance.shape[1:])
+        ha = ha.view(bs, n_options, heq.shape[-1])
+
         # relevance model (see Dense Passage Retrieval)
-        h_relevance = heq_heads["relevance"].mean(-1)
-        h_relevance = h_relevance.view(bs, n_docs)
+        # modified so it includes the similarity with the answers as well
+        # todo: modify so each answer can be weighted differently,
+        #  this is too much biased toward the answer
+        S_relevance = torch.einsum("bdh, bah -> bd", h_relevance, ha) / n_options
 
         # answer-question final representation
-        heq = heq_heads["evidence"]  # [bs * n_doc, h]
-        ha = ha.view(bs, n_options, heq.shape[-1])
         # dot-product model S(qd, a)
-        heq = heq.view(bs, n_docs, *heq.shape[1:])
         S_qda = torch.einsum("bdh, bah -> bda", heq, ha)
 
-        return {"_answer_logits_": S_qda, "_relevance_logits_": h_relevance}
+        return {"_answer_logits_": S_qda, "_relevance_logits_": S_relevance}
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         check_only_first_doc_positive(batch)
@@ -140,9 +146,9 @@ class ReaderMultipleChoice(Module):
 
         # select the logits of the answering model corresponding
         # to the positive document (relevance_target)
-        _index = relevance_targets.view(bs, 1, 1)
-        _index = _index.expand(bs, 1, output["_relevance_logits_"].shape[-1])
-        answer_logits = output["_answer_logits_"].permute(0, 2, 1)  # [bs, n_options, hdim]
+        _index = relevance_targets.view(bs, 1, 1).clone()
+        _index = _index.expand(bs, 1, *output["_answer_logits_"].shape[2:])
+        answer_logits = output["_answer_logits_"]  # [bs, n_documents, n_options, hdim]
         answer_logits = answer_logits.gather(dim=1, index=_index).squeeze(1)
 
         # compute the reader loss
@@ -168,7 +174,7 @@ class ReaderMultipleChoice(Module):
         # keep one loss term per batch element: shape [batch_size, ]
         return batch_reduce(loss, torch.mean)
 
-    def _reduce_step_output(self, output: Batch) -> Any:
+    def _reduce_step_output(self, output: Batch) -> Batch:
         """
         Gather losses and logits from all devides and return
         """
@@ -181,7 +187,7 @@ class ReaderMultipleChoice(Module):
 
         return output
 
-    def concat_fields_across_dim_one(self, batch: Batch, fields: List[str]):
+    def _concat_fields_across_dim_one(self, batch: Batch, fields: List[str]):
         """
         Concatenate fields across the time dimension, and without padding
         """
@@ -198,7 +204,7 @@ class ReaderMultipleChoice(Module):
             aux_pad_tokens={"attention_mask": 0},
         )
         if len(padded_batch["input_ids"]) > self.max_length:
-            warnings.warn("the tensor [question; document] was truncated.")
+            warnings.warn(f"the tensor [{'; '.join(fields)}] was truncated.")
 
         return padded_batch
 
