@@ -20,3 +20,8 @@ from fz_openqa.training.tuning import run_tune_with_config
 # @hydra.main(config_path="configs/", config_name="hpo_config.yaml")
 # def run_tune(config: DictConfig) -> None:
 #     return run_tune_with_config(config)
+
+
+@hydra.main(config_path="configs/", config_name="config.yaml")
+def run_experiment(config: DictConfig):
+    return run_experiment_with_config(config)
