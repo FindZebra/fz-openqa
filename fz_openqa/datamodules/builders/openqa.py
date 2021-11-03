@@ -125,12 +125,12 @@ class OpenQaBuilder(DatasetBuilder):
 
     def __call__(self, format: Optional[str] = "torch", **kwargs) -> OpenQaDataset:
         dataset = self.dataset_builder(format=None)
-        corpus = self.corpus_builder(format=None)
+        corpus = self.corpus_builder()
+
         index = self.index_builder(dataset=corpus, **kwargs)
         dataset = self.map_dataset(dataset=dataset, corpus=corpus, index=index, **self.map_args)
 
         if format is not None:
-            corpus = self.set_format(corpus, format=format)
             dataset = self.set_format(dataset, format=format)
 
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
@@ -160,7 +160,6 @@ class OpenQaBuilder(DatasetBuilder):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
-
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
             [
@@ -241,7 +240,7 @@ class OpenQaBuilder(DatasetBuilder):
         )
 
         # D. fetch documents attributes (input_ids)
-        fetch_documents = self.get_fetch_documents_pipe()
+        fetch_documents = self.get_fetch_documents_pipe(self.corpus_builder)
 
         return BlockSequential(
             [
@@ -270,12 +269,11 @@ class OpenQaBuilder(DatasetBuilder):
             strict=False,
         )
 
-    def get_fetch_documents_pipe(self) -> Optional[Pipe]:
-
+    def get_fetch_documents_pipe(self, corpus_builder: CorpusBuilder) -> Optional[Pipe]:
         return ApplyAsFlatten(
             FeatchDocuments(
-                corpus_dataset=self.corpus_builder(),
-                collate_pipe=self.corpus_builder.get_collate_pipe(),
+                corpus_dataset=corpus_builder(),
+                collate_pipe=corpus_builder.get_collate_pipe(),
             ),
             filter=KeyIn(["document.row_idx"]),
             update=True,

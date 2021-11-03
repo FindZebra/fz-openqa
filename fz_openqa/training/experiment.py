@@ -15,14 +15,6 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 def run_experiment_with_config(config: DictConfig):
 
-    # using hydra.main here and importing this function directly works fine,
-    # calling from cli.py returns SystemError 15
-    # seems the error is caused by import two funcs with hydra main?
-
-    # todo: try re-inserting local imports again
-    # from fz_openqa.ops import training
-    # from fz_openqa.utils import train_utils
-
     # replace config paths with loaded configs
     resolve_config_paths(config, path=os.path.dirname(configs.__file__))
 
