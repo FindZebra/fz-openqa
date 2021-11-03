@@ -72,10 +72,10 @@ def run(config: DictConfig) -> None:
 
     # Compute document and question embeddings
     document_encoded_layers, question_encoded_layers = encode_bert(
-        document_input_ids=torch.tensor(batch_corpus["document.input_ids"]),
-        document_attention_mask=torch.tensor(
-            batch_corpus["document.attention_mask"]
-        ),
+        document_input_ids=batch_corpus["document.input_ids"].clone().detach(),
+        document_attention_mask=batch_corpus["document.attention_mask"]
+        .clone()
+        .detach(),
         question_input_ids=batch_dm["question.input_ids"].clone().detach(),
         question_attention_mask=batch_dm["question.attention_mask"]
         .clone()
@@ -83,8 +83,9 @@ def run(config: DictConfig) -> None:
     )
 
     d = document_encoded_layers.shape[2]  # dimension
-    nlist = 2  # number of clusters
-    # index = faiss.IndexFlatL2(d)
+    rich.print(document_encoded_layers[:, 0, :].shape)
+    nlist = 1  # number of clusters
+
     quantiser = faiss.IndexFlatL2(d)
     index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
 
