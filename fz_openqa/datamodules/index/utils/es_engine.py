@@ -1,5 +1,4 @@
 import logging
-import multiprocessing as mp
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,10 +11,6 @@ from elasticsearch.exceptions import RequestError
 logger = logging.getLogger(__name__)
 
 
-def get_process_id():
-    return str(mp.current_process()._identity)
-
-
 class ElasticSearchEngine:
     _instance: Elasticsearch
     _indices_client: Optional[IndicesClient] = None
@@ -25,36 +20,30 @@ class ElasticSearchEngine:
         super().__init__()
         self.timeout = timeout
         self.analyze = analyze
-        self._instantiate_instances()
-        self.proc_id = get_process_id()
-
-    def _instantiate_instances(self):
-        self._instance = self.instantiate_es()
+        self._instance = Elasticsearch(timeout=self.timeout)
         if self.analyze:
             self._indices_client = IndicesClient(self._instance)
 
     def __getstate__(self):
-        """this method is called when attempting pickling"""
+        """this method is called when attempting pickling.
+        ES instances cannot be properly pickled"""
         state = self.__dict__.copy()
-        # Don't pickle the ES instance
-        del state["_instance"]
-        state["_instance"] = None
-        # Don't pickle the indices client
-        if "_indices_client" in state:
-            del state["_indices_client"]
-            state["_indices_client"] = None
+        # Don't pickle the ES instances
+        for attr in ["_instance", "_indices_client"]:
+            if attr in state:
+                state.pop(attr)
+
         return state
 
-    def instantiate_es(self) -> Elasticsearch:
-        return Elasticsearch(timeout=self.timeout)
+    def __setstate__(self, state):
+        state["_instance"] = Elasticsearch(timeout=state["timeout"])
+        if state["analyze"]:
+            state["_indices_client"] = IndicesClient(state["_instance"])
+
+        self.__dict__ = state
 
     @property
     def instance(self):
-        curr_id = get_process_id()
-        if curr_id != self.proc_id or self._instance is None:
-            self._instantiate_instances()
-            self.proc_id = curr_id
-
         return self._instance
 
     def es_create_index(self, index_name: str, body: Optional[Dict] = None) -> bool:
@@ -63,16 +52,17 @@ class ElasticSearchEngine:
         """
         try:
             response = self.instance.indices.create(index=index_name, body=body)
-            print()
-            print(response)
-            created = True
+            logger.info(response)
+            newly_created = True
 
-        # todo: handle specific errors
         except RequestError as err:
-            logger.warning(f"{err}")
-            created = False
+            if err.error == "resource_already_exists_exception":
+                logger.info(f"ElasticSearch index with name=`{index_name}` already exists.")
+                newly_created = False
+            else:
+                raise err
 
-        return created
+        return newly_created
 
     def es_remove_index(self, index_name: str):
         """

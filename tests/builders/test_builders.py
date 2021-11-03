@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from datasets import Dataset, DatasetDict, Split
 
-from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusCorpusBuilder, \
+from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
@@ -99,7 +99,7 @@ class TestMedQaCorpusBuilder(TestCorpusBuilder):
 
 
 class TestFzCorpusCorpusBuilder(TestCorpusBuilder):
-    cls = FzCorpusCorpusBuilder
+    cls = FzCorpusBuilder
 
 
 class TestFZxMedQaCorpusBuilder(TestCorpusBuilder):

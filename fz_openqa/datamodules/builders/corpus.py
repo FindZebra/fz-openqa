@@ -246,7 +246,7 @@ class MedQaCorpusBuilder(CorpusBuilder):
     dset_script_path_or_id = meqa_en_corpus.__file__
 
 
-class FzCorpusCorpusBuilder(CorpusBuilder):
+class FzCorpusBuilder(CorpusBuilder):
     subset_size = [20]
     dset_script_path_or_id = fz_corpus.__file__
 
