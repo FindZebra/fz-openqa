@@ -103,16 +103,22 @@ def run(config):
     # fetch docs in collate: >> duration=0.142s/batch (std=0.293s)
     # fetch docs in __getitem__: >> duration=1.351s/batch (std=2.645s)make
 
-    # B. fetching without loading the whole column (100 docs)
-    # base: >> duration=0.277s/batch (std=0.275s)
-    # removed columns: >> duration=0.262s/batch (std=0.263s)
-    # using select: >> duration=0.622s/batch (std=0.621s)
-    # using table.take: >> duration=0.458s/batch (std=0.466s)
+    # B. fetching without loading the whole column (1000 docs)
+    # index: >> duration=1.952s/batch (std=1.935s)
+    # hf_take: >> duration=1.380s/batch (std=1.250s)
 
-    # C. fetching 10000 rows: 1000 docs, batch size 10
-    # __getitem__: >> duration=2.206s/batch (std=2.221s)
-    # select: >> duration=5.897s/batch (std=5.594s)
-    # Table.take: >> duration=1.620s/batch (std=1.490s)
+    # C. fetching without loading the whole column (100 docs)
+    # index: >> duration=0.246s/batch (std=0.250s)
+    # hf_take: >> duration=0.194s/batch (std=0.197s)
+
+    # D. fetching without loading the whole column (10 docs)
+    # index: >> duration=0.090s/batch (std=0.105s)
+    # hf_take: >> duration=0.088s/batch (std=0.102s)
+
+    # E. Final
+    # 10 docs: >> duration=0.094s/batch (std=0.107s)
+    # 100 docs: >> duration=0.228s/batch (std=0.226s)
+    # 1000 docs: >> duration=1.722s/batch (std=1.635s)
 
 
 if __name__ == "__main__":

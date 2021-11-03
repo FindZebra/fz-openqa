@@ -10,7 +10,6 @@ from typing import Union
 import dill
 import torch
 from datasets import Dataset
-from pyarrow import Table
 
 from . import Collate
 from . import Nest
@@ -138,24 +137,25 @@ class FeatchDocuments(Pipe):
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = Collate(),
         index_key: str = "document.row_idx",
+        output_format: str = "dict",
         id: str = "fetch-documents-pipe",
         **kwargs,
     ):
         super(FeatchDocuments, self).__init__(id=id)
         if keys is not None:
-            corpus_dataset.remove_columns(set(corpus_dataset.column_names) - set(keys))
+            keys = set(keys).union([index_key])
+            corpus_dataset = corpus_dataset.remove_columns(set(corpus_dataset.column_names) - keys)
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe
         self.index_key = index_key
+        self.output_format = output_format
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
     def __call__(self, batch: Batch, **kwargs) -> Union[List[Dict], Batch]:
-        # todo: check dataset fingerprint
-        # todo: get table in the __init__, removing dependencies
-        #  on `datasets`might solve issues
+        # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes
         indexes = [int(idx) for idx in batch[self.index_key]]
@@ -164,15 +164,16 @@ class FeatchDocuments(Pipe):
             "There is a mismatch between the query indexes and the retrieved indexes, "
             "make sure you are using the same dataset."
         )
+
         # fetch documents
-        if len(indexes) < 500:
+        if self.output_format == "list":
             rows: List[Dict] = [self.corpus_dataset[idx] for idx in indexes]
             assert indexes[0] == rows[0][self.index_key], err_msg
-        # rows = self.corpus_dataset.select(indexes, keep_in_memory=True)
-        else:
-            rows: Table = self.corpus_dataset._data.table.take(indexes)
-            rows: Batch = rows.to_pydict()
+        elif self.output_format == "dict":
+            rows: Batch = self.corpus_dataset.select(indexes, keep_in_memory=True).to_dict()
             assert indexes[0] == rows[self.index_key][0], err_msg
+        else:
+            raise ValueError(f"Unknown output_format: {self.output_format}")
 
         # collate and return
         return self.collate_pipe(rows)
