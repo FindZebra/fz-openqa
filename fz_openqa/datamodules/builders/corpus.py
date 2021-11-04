@@ -28,6 +28,7 @@ from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.pipes import UpdateWith
@@ -45,6 +46,7 @@ TXT_PATTERN = r"^.*\.txt$"
 class CorpusBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = file_corpus.__file__
+    dset_name: Optional[str] = None
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
@@ -119,6 +121,7 @@ class CorpusBuilder(HfDatasetBuilder):
         )
         return self._load_dataset(
             self.dset_script_path_or_id,
+            name=self.dset_name,
             cache_dir=self.cache_dir,
             data_files=input_files,
         )
@@ -133,6 +136,17 @@ class CorpusBuilder(HfDatasetBuilder):
         # remove title for now
         dataset = dataset.remove_columns("title")
 
+        # add the document index column if not already provided
+        if "idx" not in dataset.column_names:
+            dataset = dataset.map(
+                partial(set_row_idx, key="idx"),
+                batched=False,
+                num_proc=self.num_proc,
+                with_indices=True,
+                desc="Indexing documents",
+            )
+
+        # process the whole dataset (tokenization + passage generation)
         dataset = dataset.map(
             Sequential(
                 self.text_formatter.copy(text_key="text"),
@@ -262,3 +276,9 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)
+
+
+class WkipediaCorpusBuilder(CorpusBuilder):
+    subset_size = [10]
+    dset_script_path_or_id = "wikipedia"
+    dset_name = "20200501.en"

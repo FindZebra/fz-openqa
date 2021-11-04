@@ -1,0 +1,4 @@
+defaults:
+  - base_corpus
+
+_target_: fz_openqa.datamodules.builders.WkipediaCorpusBuilder
