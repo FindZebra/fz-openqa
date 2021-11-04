@@ -85,8 +85,7 @@ def run(config: DictConfig) -> None:
     )
 
     d = document_encoded_layers.shape[2]  # dimension
-    rich.print(document_encoded_layers[:, 0, :].shape)
-    nlist = 1  # number of clusters
+    nlist = 3  # number of clusters
 
     quantiser = faiss.IndexFlatL2(d)
     index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
@@ -98,7 +97,7 @@ def run(config: DictConfig) -> None:
     print(f"Total number of indices: {index.ntotal}")
 
     k = 3  # number of nearest neighbours
-    xq = np.ascontiguousarray(question_encoded_layers[1:2, 0, :].numpy())
+    xq = np.ascontiguousarray(question_encoded_layers[:, 0, :].numpy())
 
     # Perform search on index
     distances, indices = index.search(xq, k)
