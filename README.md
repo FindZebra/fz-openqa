@@ -171,6 +171,12 @@ poetry run fzqa +experiment=quick_test
 
 The ´environ´ configuration adjust the experiment to the environment (e.g. cache location).
 
+Config groups selected using `@` (i.e. corpus_builder) can be overrided using command line with:
+```shell
+poetry run python run.py +experiment=preprocessing +environ=titan +datamodule/builder@datamodule.builder.corpus_builder=wikipedia_corpus.yaml
+```
+
+
 </details>
 
 <details>
