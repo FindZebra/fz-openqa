@@ -3,18 +3,26 @@
 defaults:
   - base
   - override /model: reader
-  - override /datamodule: openqa
-  - override /callbacks: default
-  - override /logger: wandb
 
 base:
   seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
 
+
+trainer:
+  gpus: 1
+  accelerator: ddp
+  min_epochs: 1
+  max_epochs: 1000
+  accumulate_grad_batches: 4
+  val_check_interval: 100
+
+
+
 datamodule:
-  train_batch_size: 16
-  valid_batch_size: 100
+  train_batch_size: 1
+  eval_batch_size: 1
   n_documents: 10
   max_pos_docs: 1
 

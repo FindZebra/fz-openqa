@@ -10,13 +10,13 @@ from torch.nn import functional as F
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from ..functional import flatten
-from ..functional import padless_cat
 from .base import Module
 from .metrics import SplitMetrics
 from .utils import check_only_first_doc_positive
 from .utils import expand_and_flatten
 from .utils import flatten_first_dims
+from fz_openqa.modeling.functional import flatten
+from fz_openqa.modeling.functional import padless_cat
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
@@ -42,9 +42,9 @@ class ReaderMultipleChoice(Module):
     # metrics to display
     pbar_metrics = [
         "train/reader/Accuracy",
-        # "validation/reader/Accuracy",
+        "validation/reader/Accuracy",
         "train/reader/relevance-Accuracy",
-        # "validation/reader/relevance-Accuracy",
+        "validation/reader/relevance-Accuracy",
     ]
 
     _required_heads = ["option", "evidence", "relevance"]
@@ -89,6 +89,12 @@ class ReaderMultipleChoice(Module):
         bs, n_options, *_ = batch["answer.input_ids"].shape
         _, n_docs, *_ = batch["document.input_ids"].shape
 
+        # gather answers
+        answer_batch = {
+            "input_ids": flatten(batch["answer.input_ids"]),
+            "attention_mask": flatten(batch["answer.attention_mask"]),
+        }
+
         # concatenate questions and documents such that there is no padding between Q and D
         # todo: check switching q and d
         qd_batch = self._concat_questions_and_answers(batch, fields=["question", "document"])
@@ -97,13 +103,7 @@ class ReaderMultipleChoice(Module):
         heq_heads = self._backbone(qd_batch, heads=["evidence", "relevance"])
 
         # compute answer head:  [bs * N_a, h]
-        ha = self._backbone(
-            {
-                "input_ids": flatten(batch["answer.input_ids"]),
-                "attention_mask": flatten(batch["answer.attention_mask"]),
-            },
-            head="option",
-        )
+        ha = self._backbone(answer_batch, head="option")
 
         # get all the hidden representations
         heq = heq_heads["evidence"]  # [bs * n_doc, h]

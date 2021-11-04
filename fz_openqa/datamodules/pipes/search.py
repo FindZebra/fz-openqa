@@ -13,6 +13,7 @@ from datasets import Dataset
 
 from . import Collate
 from . import Nest
+from . import Sequential
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -76,6 +77,7 @@ class SearchCorpus(Pipe):
         self.analyzed_output_key = analyzed_output_key
         self.k = k
         self.model = model
+        self.collate_pipe = Sequential(Collate(), Nest(stride=k))
 
     def __repr__(self):
         return {
@@ -126,7 +128,7 @@ class SearchCorpus(Pipe):
         ]
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        return Nest(stride=k)(Collate()(examples))
+        return self.collate_pipe(examples, stride=k)
 
 
 class FeatchDocuments(Pipe):

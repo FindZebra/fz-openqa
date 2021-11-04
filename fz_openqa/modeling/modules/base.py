@@ -249,8 +249,8 @@ class Module(nn.Module, ABC):
         # register internal values (which should not be passed to the pl module) using _<name>_.
         return {
             "loss": batch_reduce(nll, op=torch.mean),
-            "_logits_": logits,
-            "_targets_": batch["labels"],
+            "_logits_": logits.detach(),
+            "_targets_": batch["labels"].detach(),
         }
 
     @abstractmethod

@@ -4,7 +4,7 @@ defaults:
   - override /trainer: minimal
   - override /model: ???
   - override /datamodule: openqa
-  - override /callbacks: default
+  - override /callbacks: checkpoint
   - override /logger: wandb
 
 base:
