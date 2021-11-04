@@ -22,9 +22,6 @@ class TestRetrieverSupervised(TestModel):
         # keys
         self.assertIn("_hq_", scores)
         self.assertIn("_hd_", scores)
-        # dimension
-        self.assertEqual(scores["_hq_"].dim(), 2)
-        self.assertEqual(scores["_hd_"].dim(), 2)
         # shape
         self.assertEqual(scores["_hq_"].shape[:1], (self.batch_size,))
         self.assertEqual(scores["_hd_"].shape[:1], (self.batch_size * self.n_documents,))

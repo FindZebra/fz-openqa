@@ -3,7 +3,6 @@ from typing import Any
 from typing import List
 from typing import Optional
 
-import rich
 import torch
 from datasets import Split
 from torch import Tensor
@@ -86,16 +85,13 @@ class ReaderMultipleChoice(Module):
         'answer.input_ids': [batch_size, n_options, L_q]
         }
         """
-        # todo batch = copy(batch)  # make sure the original batch is not modified
         # checks inputs, set parameters and concat the questions with the documents
         bs, n_options, *_ = batch["answer.input_ids"].shape
         _, n_docs, *_ = batch["document.input_ids"].shape
 
-        batch = self._expand_and_flatten_qd(batch, n_docs)
-
         # concatenate questions and documents such that there is no padding between Q and D
         # todo: check switching q and d
-        qd_batch = self._concat_fields_across_dim_one(batch, ["question", "document"])
+        qd_batch = self._concat_questions_and_answers(batch, fields=["question", "document"])
 
         # compute evidence and relevance heads: [bs*n_doc, h]
         heq_heads = self._backbone(qd_batch, heads=["evidence", "relevance"])
@@ -120,7 +116,8 @@ class ReaderMultipleChoice(Module):
         # modified so it includes the similarity with the answers as well
         # todo: modify so each answer can be weighted differently,
         #  this is too much biased toward the answer
-        S_relevance = torch.einsum("bdh, bah -> bd", h_relevance, ha) / n_options
+        #  edit: use the max instead of avg.
+        S_relevance, _ = torch.einsum("bdh, bah -> bda", h_relevance, ha).max(-1)
 
         # answer-question final representation
         # dot-product model S(qd, a)
@@ -187,15 +184,26 @@ class ReaderMultipleChoice(Module):
 
         return output
 
-    def _concat_fields_across_dim_one(self, batch: Batch, fields: List[str]):
+    def _concat_questions_and_answers(self, batch: Batch, *, fields: List[str]):
         """
         Concatenate fields across the time dimension, and without padding
         """
+        assert set(fields) == {
+            "question",
+            "document",
+        }, "Question and document fields must be provided."
+        batch_size, n_docs = batch["document.input_ids"].shape[:2]
+
+        # expand and flatten documents and questions such that
+        # both are of shape [batch_size * n_docs, ...]
+        batch = self._expand_and_flatten_qd(batch, n_docs)
+
+        # concatenate keys across the time dimension, CLS tokens are removed
         padded_batch = padless_cat(
             [
                 {
-                    "input_ids": batch[f"{key}.input_ids"],
-                    "attention_mask": batch[f"{key}.attention_mask"],
+                    "input_ids": batch[f"{key}.input_ids"][:, 1:],
+                    "attention_mask": batch[f"{key}.attention_mask"][:, 1:],
                 }
                 for key in fields
             ],
@@ -203,6 +211,12 @@ class ReaderMultipleChoice(Module):
             pad_token=self._pad_token_id,
             aux_pad_tokens={"attention_mask": 0},
         )
+
+        # append the CLS tokens
+        for key in ["input_ids", "attention_mask"]:
+            cls_tokens = batch[f"{fields[0]}.{key}"][:, :1]
+            padded_batch[key] = torch.cat([cls_tokens, padded_batch[key]], 1)
+
         if len(padded_batch["input_ids"]) > self.max_length:
             warnings.warn(f"the tensor [{'; '.join(fields)}] was truncated.")
 
@@ -210,33 +224,18 @@ class ReaderMultipleChoice(Module):
 
     def _expand_and_flatten_qd(self, batch: Batch, n_docs: int) -> Batch:
         # flatten documents of shape [bs, n_docs, L_docs] to [bs*n_docs, L_docs]
-        batch.update(
-            **flatten_first_dims(
-                batch,
-                2,
-                keys=["document.input_ids", "document.attention_mask"],
-            )
+        d_batch = flatten_first_dims(
+            batch,
+            2,
+            keys=["document.input_ids", "document.attention_mask"],
         )
         # expand questions to shape [bs, n_docs, L_1] and flatten to shape [bs*n_docs, L_q]
-        batch.update(
-            **expand_and_flatten(
-                batch,
-                n_docs,
-                keys=["question.input_ids", "question.attention_mask"],
-            )
+        q_batch = expand_and_flatten(
+            batch,
+            n_docs,
+            keys=["question.input_ids", "question.attention_mask"],
         )
-        return batch
-
-    @staticmethod
-    def expand_and_flatten(x: Tensor, n: int) -> Tensor:
-        """
-        Expand a tensor of shape [bs, *dims] as
-        [bs, n, *dims] and flatten to [bs * n, *dims]
-        """
-        bs, *dims = x.shape
-        x = x[:, None].expand(bs, n, *dims)
-        x = x.contiguous().view(bs * n, *dims)
-        return x
+        return {**q_batch, **d_batch}
 
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
