@@ -23,6 +23,5 @@ def expand_and_flatten(batch: Batch, n_docs, *, keys: List[str]) -> Batch:
 
 
 def flatten_first_dims(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
-    for k in keys:
-        batch[k] = batch[k].view(-1, *batch[k].shape[n_dims:])
-    return batch
+    """Collapse the first `n_dims` into a single dimension."""
+    return {k: batch[k].view(-1, *batch[k].shape[n_dims:]) for k in keys}

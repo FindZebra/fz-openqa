@@ -5,9 +5,10 @@ import numpy as np
 import rich
 from rich.progress import track
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import PrintBatch
@@ -18,7 +19,6 @@ from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.concat_answer_options import (
     ConcatQuestionAnswerOption,
 )
-from fz_openqa.datamodules.pipes.nesting import AsFlatten
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -30,7 +30,7 @@ tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-c
 
 
 # load the corpus object
-corpus = MedQaCorpusDataModule(
+corpus = MedQaCorpusBuilder(
     tokenizer=tokenizer,
     to_sentences=True,
     index=ElasticSearchIndex(
@@ -48,7 +48,7 @@ corpus = MedQaCorpusDataModule(
 )
 
 # load the QA dataset
-dm = MedQaDataModule(
+dm = MedQABuilder(
     tokenizer=tokenizer,
     train_batch_size=100,
     num_proc=4,
@@ -72,7 +72,7 @@ print(get_separator())
 concat_pipe = ConcatQuestionAnswerOption()
 select_fields = FilterKeys(lambda key: key == "question.metamap")
 search_index = SearchCorpus(corpus_index=corpus._index, k=25)
-flatten_and_search = AsFlatten(search_index)
+flatten_and_search = ApplyAsFlatten(search_index)
 
 pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
 printer = PrintBatch()

@@ -97,8 +97,12 @@ class Module(nn.Module, ABC):
         super().__init__()
         tokenizer = maybe_instantiate(tokenizer)
         self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
+
+        for k in self._required_heads:
+            assert k in self._required_heads, f"Head {k} is required."
+
         self.heads = nn.ModuleDict(
-            {k: maybe_instantiate(cls, bert=self.bert) for k, cls in heads.items()}
+            {k: maybe_instantiate(heads[k], bert=self.bert) for k in self._required_heads}
         )
         self._init_metrics(prefix=prefix)
 

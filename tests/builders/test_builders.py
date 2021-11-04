@@ -1,3 +1,4 @@
+import unittest
 from typing import Dict, Optional, Iterable
 from unittest import TestCase
 
@@ -9,6 +10,7 @@ from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
+from fz_openqa.datamodules.index.utils.es_engine import ping_es
 from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -105,7 +107,7 @@ class TestFzCorpusCorpusBuilder(TestCorpusBuilder):
 class TestFZxMedQaCorpusBuilder(TestCorpusBuilder):
     cls = FZxMedQaCorpusBuilder
 
-
+@unittest.skipIf(lambda : not ping_es(), "Elastic Search is not reachable.")
 class TestOpenQaBuilder(TestBuilder):
     cls = OpenQaBuilder
 
