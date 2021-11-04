@@ -195,4 +195,7 @@ def setup_safe_env():
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
         import multiprocessing
 
-        multiprocessing.set_start_method("fork")
+        try:
+            multiprocessing.set_start_method("fork")
+        except Exception:
+            pass

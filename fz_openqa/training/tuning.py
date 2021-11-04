@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Optional
 
@@ -9,6 +10,8 @@ from hydra import initialize
 from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
+from ray import tune
 from ray.tune import CLIReporter
 
 import fz_openqa.utils.config
@@ -34,6 +37,13 @@ def format_key(k, globals=DEFAULT_GLOBALS):
 def trial(args, checkpoint_dir=None, **kwargs):
     if not GlobalHydra.instance().is_initialized():
         initialize(config_path="../configs/")
+
+    import rich
+
+    rich.print("[magenta] TRIAL")
+    rich.print(kwargs)
+    rich.print(args)
+
     overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
     overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
     overrides += [f"sys.work_dir='{os.getcwd()}'"]
@@ -77,7 +87,7 @@ def run_tune_with_config(config: DictConfig):
     log.info("Instantiating the runner")
     runner = ray.tune.run(
         trainable,
-        config={**space},
+        config=OmegaConf.to_object(space),
         **instantiate(config.runner, search_alg=search_alg),
     )
 
