@@ -88,7 +88,7 @@ def run(config: DictConfig) -> None:
     nlist = 3  # number of clusters
 
     quantiser = faiss.IndexFlatL2(d)
-    index = faiss.IndexIVFFlat(quantiser, d, nlist, faiss.METRIC_L2)
+    index = faiss.IndexIVFPQ(quantiser, d, nlist, faiss.METRIC_L2)
 
     print(f"Index is trained: {index.is_trained}")
     index.train(np.ascontiguousarray(document_encoded_layers[:, 0, :].numpy()))

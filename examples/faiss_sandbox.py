@@ -47,9 +47,9 @@ rich.print(f"Document representations: {document_representations.shape}")
 
 # faiss parameters + init
 ndims = document_representations.shape[-1]
-nlist = 3  # number of clusters
+nlist = 10  # number of clusters
 quantiser = faiss.IndexFlatL2(ndims)
-index = faiss.IndexIVFFlat(quantiser, ndims, nlist, faiss.METRIC_L2)
+index = faiss.IndexIVFPQ(quantiser, ndims, nlist, 4, 4, faiss.METRIC_L2)
 
 # attempting to add the vectors to the index
 rich.print(f"Index is trained: {index.is_trained}")
