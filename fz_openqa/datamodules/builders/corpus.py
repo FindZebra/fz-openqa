@@ -278,7 +278,7 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
         return concatenate_datasets(dsets)
 
 
-class WkipediaCorpusBuilder(CorpusBuilder):
+class WikipediaCorpusBuilder(CorpusBuilder):
     subset_size = [10]
     dset_script_path_or_id = "wikipedia"
     dset_name = "20200501.en"
