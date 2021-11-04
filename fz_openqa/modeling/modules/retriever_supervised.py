@@ -70,10 +70,12 @@ class RetrieverSupervised(Module):
 
     def _forward(self, batch: Batch, _compute_similarity: bool = True, **kwargs) -> Batch:
         # flatten documents as [batch_size x n_documents]
-        batch = flatten_first_dims(
-            batch,
-            n_dims=2,
-            keys=["document.input_ids", "document.attention_mask"],
+        batch.update(
+            flatten_first_dims(
+                batch,
+                n_dims=2,
+                keys=["document.input_ids", "document.attention_mask"],
+            )
         )
 
         # shape: [bs, h]

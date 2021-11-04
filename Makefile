@@ -3,7 +3,7 @@
 # Run tests for the library
 
 test:
-	poetry run python -m unittest discover tests/
+	poetry run coverage run -m pytest tests/
 
 
 # Install the project
