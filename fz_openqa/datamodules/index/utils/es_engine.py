@@ -11,6 +11,10 @@ from elasticsearch.exceptions import RequestError
 logger = logging.getLogger(__name__)
 
 
+def ping_es() -> bool:
+    return Elasticsearch().ping()
+
+
 class ElasticSearchEngine:
     _instance: Elasticsearch
     _indices_client: Optional[IndicesClient] = None
