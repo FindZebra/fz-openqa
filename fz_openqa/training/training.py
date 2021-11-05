@@ -1,6 +1,9 @@
+import json
 import os
 from typing import List
 from typing import Optional
+
+from rich.progress import track
 
 import datasets
 from hydra.utils import instantiate
@@ -12,10 +15,15 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 
 from fz_openqa.datamodules import DataModule
+from fz_openqa.datamodules.pipes import UpdateWith, Sequential, torch, Pipe
+from fz_openqa.datamodules.pipes.nesting import infer_batch_size
+from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = train_utils.get_logger(__name__)
+
+
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -48,6 +56,43 @@ def train(config: DictConfig) -> Optional[float]:
     if config.get("trainer", None) is None:
         datamodule.prepare_data()
         datamodule.setup()
+
+        corpus_name = str(config.datamodule.builder.corpus_builder._id)
+        cls_name = str(config.datamodule.relevance_classifier._id)
+        trial_path = os.getcwd()
+
+        dataloaders = {
+            "train": datamodule.train_dataloader(),
+            "val": datamodule.val_dataloader(),
+            "test": datamodule.test_dataloader(),
+        }
+
+        drop_fields = DropKeys(
+            keys=[
+                "answer.attention_mask",
+                "answer.input_ids",
+                "document.attention_mask",
+                "document.input_ids",
+                "question.attention_mask",
+                "question.input_ids",
+            ]
+        )
+        update_fields = UpdateKeys(lambda v: isinstance(v, torch.Tensor))
+        pipe = UpdateWith(Sequential(drop_fields, update_fields))
+
+        for split, dataloader in dataloaders.items():
+            with open(
+                    os.path.join(trial_path, f"{corpus_name}-{cls_name}-{split}.jsonl"), mode="w"
+            ) as fp:
+                for batch in track(
+                        dataloader, description=f"Iterating through the {split} dataset..."
+                ):
+
+                    batch = pipe(batch)
+
+                    for i in range(infer_batch_size(batch)):
+                        row = Pipe.get_eg(batch, idx=i)
+                        fp.write(f"{json.dumps(row)}\n")
         return
 
     # Init Lightning Module
