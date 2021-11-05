@@ -378,7 +378,7 @@ screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/v
 </details>
 
 <details>
-<summary>Deleting ElasticSearch indexes</summary>
+<summary>ElastiSearch tips and tricks/summary>
 
 ```bash
 # check indexes
@@ -386,6 +386,9 @@ curl 'localhost:9200/_cat/indices?v'
 
 # delete all
 curl -X DELETE 'http://localhost:9200/_all'
+
+# start elastic search with limited heap size (16 GB)
+ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 ```
 </details>
 

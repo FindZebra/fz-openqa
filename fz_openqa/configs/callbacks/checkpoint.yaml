@@ -5,5 +5,5 @@ model_checkpoint:
   save_last: True # additionally always save model from last epoch
   mode: ${base.target_mode} # can be "max" or "min"
   verbose: False
-  dirpath: "checkpoints/"
-  filename: "{epoch:02d}"
+  dirpath: "${getcwd:}/checkpoints/"
+  filename: "model-{epoch:02d}"
