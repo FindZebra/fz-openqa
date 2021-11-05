@@ -222,8 +222,9 @@ class RenameKeys(Pipe):
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         for old_key, new_key in self.keys.items():
-            value = batch.pop(old_key)
-            batch[new_key] = value
+            if old_key in batch:
+                value = batch.pop(old_key)
+                batch[new_key] = value
 
         return batch
 

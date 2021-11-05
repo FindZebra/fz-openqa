@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 from fz_openqa import configs
 from fz_openqa.training import training
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
@@ -32,7 +33,7 @@ def run_experiment_with_config(config: DictConfig):
 
     # Pretty print config using Rich library
     if config.get("print_config"):
-        train_utils.print_config(config, resolve=False)
+        print_config(config, resolve=False)
 
     # Train model
     return training.train(config)

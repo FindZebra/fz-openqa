@@ -15,8 +15,7 @@ class TestModel(TestCase, ABC):
     @abstractmethod
     def setUp(self) -> None:
         """Instantiate the TestCase with dummy data"""
-
-
+        torch.set_grad_enabled(False)
         self.batch_size = 2
         self.n_documents = 4
         self.n_options = 3

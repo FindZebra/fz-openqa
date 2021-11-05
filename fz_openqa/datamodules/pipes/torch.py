@@ -1,7 +1,5 @@
 from typing import Any
 from typing import Callable
-from typing import List
-from typing import Optional
 from typing import Union
 
 import torch
@@ -40,7 +38,8 @@ class Itemize(Pipe):
 class Forward(Pipe):
     """Process a batch of data using a model: output[key] = model(batch)"""
 
-    def __init__(self, *, model: Union[Callable, torch.nn.Module], output_key: str):
+    def __init__(self, *, model: Union[Callable, torch.nn.Module], output_key: str, **kwargs):
+        super(Forward, self).__init__()
         self.model = model
         self.output_key = output_key
 
@@ -54,7 +53,4 @@ class Forward(Pipe):
             batch = move_data_to_device(batch, device)
 
         # process with the model (Dense or Sparse)
-        batch[self.output_key] = self.model(batch)
-
-        # cast to numpy and return
-        return batch
+        return self.model(batch)

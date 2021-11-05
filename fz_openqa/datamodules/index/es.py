@@ -102,10 +102,8 @@ class ElasticSearchIndex(Index):
         We make sure a unique index is created for each dataset"""
 
         # preprocess the dataset
-        unused_columns = [
-            c for c in dataset.column_names if c not in [self.index_key, self.text_key]
-        ]
-        dataset = dataset.remove_columns(unused_columns)
+        cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
+        dataset = dataset.remove_columns(cols_to_drop)
         dataset = self.preprocess_text(dataset)
 
         # init the index

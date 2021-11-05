@@ -19,14 +19,15 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class RetrieverSupervised(Module):
-    _required_feature_names = [
+    # features are not all required in forward() depending on the context,
+    # so we pass this check for that model
+    _required_feature_names = []
+
+    _required_eval_feature_names = [
         "question.input_ids",
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
-    ]
-
-    _required_eval_feature_names = [
         "document.match_score",
     ]
 
@@ -68,25 +69,48 @@ class RetrieverSupervised(Module):
 
         self.metrics = SplitMetrics(init_metric)
 
-    def _forward(self, batch: Batch, _compute_similarity: bool = True, **kwargs) -> Batch:
-        # flatten documents as [batch_size x n_documents]
-        batch.update(
-            flatten_first_dims(
+    def _forward_question(self, batch: Batch, **kwargs: Any) -> Batch:
+        assert batch["question.input_ids"].dim() == 2
+        hq = self._backbone(batch, prefix="question", head="question", **kwargs)
+        return {"_hq_": hq}
+
+    def _forward_document(self, batch: Batch, **kwargs: Any) -> Batch:
+        # check input dimensions
+        input_dim = batch["document.input_ids"].dim()
+        msg = (
+            f"Expected input_ids to be of shape [batch_size, n_docs, seq_len], "
+            f"or [batch_size, seq_len], got {input_dim} dimensions"
+        )
+        assert input_dim in {2, 3}, msg
+
+        # potentially flatten the batch_size and n_docs dimensions
+        if input_dim == 3:
+            batch = flatten_first_dims(
                 batch,
                 n_dims=2,
                 keys=["document.input_ids", "document.attention_mask"],
             )
-        )
 
-        # shape: [bs, h]
-        hq = self._backbone(batch, prefix="question", head="question")
-        # shape: # [bs * n_docs, h]
-        hd = self._backbone(batch, prefix="document", head="document")
+        # process the document with the backbone and returns
+        hd = self._backbone(batch, prefix="document", head="document", **kwargs)
+        return {"_hd_": hd}
 
-        output = {"_hq_": hq, "_hd_": hd}
+    def _forward(self, batch: Batch, _compute_similarity: bool = True, **kwargs) -> Batch:
+
+        # check inputs and set arguments accordingly
+        assert "question.input_ids" in batch or "document.input_ids" in batch
+        if not ("question.input_ids" in batch and "document.input_ids" in batch):
+            _compute_similarity = False
+
+        output = {}
+        if "question.input_ids" in batch:
+            output.update(self._forward_question(batch, **kwargs))
+
+        if "document.input_ids" in batch:
+            output.update(self._forward_document(batch, **kwargs))
 
         if _compute_similarity:
-            output["score"] = self.similarity(hq, hd)
+            output["score"] = self.similarity(output["_hq_"], output["_hd_"])
 
         return output
 

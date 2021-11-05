@@ -12,8 +12,6 @@ import torch
 from datasets import Dataset
 
 from . import Collate
-from . import Nest
-from . import Sequential
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -77,7 +75,6 @@ class SearchCorpus(Pipe):
         self.analyzed_output_key = analyzed_output_key
         self.k = k
         self.model = model
-        self.collate_pipe = Sequential(Collate(), Nest(stride=k))
 
     def __repr__(self):
         return {
@@ -114,24 +111,19 @@ class SearchCorpus(Pipe):
         # query the index
         search_result = self.index.search(query=query, k=k, model=model, **kwargs)
 
-        # retrieve the examples from the dataset (flat list)
-        flat_indexes = (idx for sub in search_result.index for idx in sub)
-        flat_scores = (score for sub in search_result.score for score in sub)
-        flat_tokens = (token for sub in search_result.tokens for token in sub)
-        examples = [
-            {
-                self.index_output_key: idx,
-                self.score_output_key: score,
-                self.analyzed_output_key: analyze,
-            }
-            for idx, score, analyze in zip(flat_indexes, flat_scores, flat_tokens)
-        ]
-        # nest the examples:
-        # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        return self.collate_pipe(examples, stride=k)
+        # store as a dictionary and return
+        output = {
+            self.index_output_key: search_result.index,
+            self.score_output_key: search_result.score,
+        }
+
+        if search_result.tokens is not None:
+            output[self.analyzed_output_key] = search_result.tokens
+
+        return output
 
 
-class FeatchDocuments(Pipe):
+class FetchDocuments(Pipe):
     def __init__(
         self,
         *,
@@ -143,7 +135,7 @@ class FeatchDocuments(Pipe):
         id: str = "fetch-documents-pipe",
         **kwargs,
     ):
-        super(FeatchDocuments, self).__init__(id=id)
+        super(FetchDocuments, self).__init__(id=id)
         if keys is not None:
             keys = set(keys).union([index_key])
             # make sure to sort the keys to ensure deterministic fingerprinting

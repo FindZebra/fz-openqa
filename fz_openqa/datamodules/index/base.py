@@ -18,7 +18,7 @@ from fz_openqa.utils.datastruct import Batch
 class SearchResult:
     score: List[List[float]]
     index: List[List[int]]
-    tokens: List[List[str]]
+    tokens: Optional[List[List[str]]] = None
 
 
 class Index(ABC):

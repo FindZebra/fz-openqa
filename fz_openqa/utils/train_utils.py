@@ -3,6 +3,7 @@ import os
 import warnings
 from sys import platform
 from typing import List
+from typing import Optional
 from typing import Sequence
 
 import pytorch_lightning as pl
@@ -149,43 +150,6 @@ def extras(config: DictConfig) -> None:
 
     # disable adding new keys to config
     OmegaConf.set_struct(config, True)
-
-
-@rank_zero_only
-def print_config(
-    config: DictConfig,
-    fields: Sequence[str] = (
-        "trainer",
-        "model",
-        "datamodule",
-        "callbacks",
-        "logger",
-        "base",
-    ),
-    resolve: bool = True,
-) -> None:
-    """Prints content of DictConfig using Rich library and its tree structure.
-    Args:
-        config (DictConfig): Configuration composed by Hydra.
-        fields (Sequence[str], optional): Determines which main fields from config will
-        be printed and in what order.
-        resolve (bool, optional): Whether to resolve reference fields of DictConfig.
-    """
-
-    style = "dim"
-    tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
-
-    for field in fields:
-        branch = tree.add(field, style=style, guide_style=style)
-
-        config_section = config.get(field)
-        branch_content = str(config_section)
-        if isinstance(config_section, DictConfig):
-            branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
-
-        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
-
-    rich.print(tree)
 
 
 def setup_safe_env():

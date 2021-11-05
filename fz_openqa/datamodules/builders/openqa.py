@@ -30,7 +30,7 @@ from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
-from fz_openqa.datamodules.pipes.search import FeatchDocuments
+from fz_openqa.datamodules.pipes.search import FetchDocuments
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -271,7 +271,7 @@ class OpenQaBuilder(DatasetBuilder):
 
     def get_fetch_documents_pipe(self, corpus_builder: CorpusBuilder) -> Optional[Pipe]:
         return ApplyAsFlatten(
-            FeatchDocuments(
+            FetchDocuments(
                 corpus_dataset=corpus_builder(),
                 collate_pipe=corpus_builder.get_collate_pipe(),
             ),

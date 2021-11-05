@@ -48,7 +48,7 @@ def trial(args, checkpoint_dir=None, **kwargs):
 
 def run_tune_with_config(config: DictConfig):
     # todo: error: SystemError 1: debug by runnning simple code in `trial`...
-    if fz_openqa.utils.config.print_config:
+    if config.get("print_config", True):
         print_config(config, resolve=True)
 
     log.info("Initializing Ray")

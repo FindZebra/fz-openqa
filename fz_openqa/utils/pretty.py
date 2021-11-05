@@ -50,6 +50,8 @@ def pprint_batch(batch: Batch, header=None):
         v = batch[k]
         if isinstance(v, Tensor):
             u += f"\n   - {k}: {v.shape} <{v.dtype}> ({v.device})"
+        elif isinstance(v, np.ndarray):
+            u += f"\n   - {k}: {v.shape} <{v.dtype}>"
         elif isinstance(v, list):
             if isinstance(v[0], str):
                 lens = [len(vv) for vv in v]

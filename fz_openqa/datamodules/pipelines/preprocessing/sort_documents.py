@@ -24,7 +24,7 @@ class SortDocuments(Sequential):
                             "document.is_positive",
                             "document.retrieval_score",
                         ],
-                        reversed=True,
+                        reverse=True,
                     ),
                     DropKeys(["document.is_positive"]),
                 ),
