@@ -15,7 +15,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import UpdateWith, Sequential, torch, Pipe
+from fz_openqa.datamodules.pipes import UpdateWith, Sequential, torch, Pipe, DropKeys
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
