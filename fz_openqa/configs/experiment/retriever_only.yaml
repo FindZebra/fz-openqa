@@ -9,16 +9,16 @@ base:
   target_mode: max
 
 trainer:
-  gpus: 4
+  gpus: 8
   accelerator: dp
   min_epochs: 1
   max_epochs: 1000
-  accumulate_grad_batches: 4
-  val_check_interval: 300
+  accumulate_grad_batches: 2
+  # val_check_interval: 300
 
 datamodule:
-  train_batch_size: 8
-  valid_batch_size: 16
+  train_batch_size: 16
+  valid_batch_size: 32
   num_workers: 8
   n_documents:
     train: 20

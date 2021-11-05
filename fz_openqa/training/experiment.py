@@ -26,6 +26,10 @@ def run_experiment_with_config(config: DictConfig):
     # You can safely get rid of this line if you don't want those
     train_utils.extras(config)
 
+    # save config to file
+    with open("config.yaml", "w") as f:
+        f.write(OmegaConf.to_yaml(config))
+
     # Pretty print config using Rich library
     if config.get("print_config"):
         train_utils.print_config(config, resolve=False)

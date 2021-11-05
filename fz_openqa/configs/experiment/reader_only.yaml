@@ -11,8 +11,8 @@ base:
 
 
 trainer:
-  gpus: 1
-  accelerator: ddp
+  gpus: 8
+  accelerator: dp
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
@@ -21,8 +21,8 @@ trainer:
 
 
 datamodule:
-  train_batch_size: 1
-  eval_batch_size: 1
+  train_batch_size: 8
+  eval_batch_size: 16
   n_documents: 10
   max_pos_docs: 1
 

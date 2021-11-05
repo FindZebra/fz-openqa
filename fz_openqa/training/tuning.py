@@ -1,6 +1,4 @@
-import json
 import os
-from typing import Optional
 
 import hydra
 import ray
@@ -12,7 +10,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from ray import tune
-from ray.tune import CLIReporter
 
 import fz_openqa.utils.config
 import fz_openqa.utils.config_utils
@@ -37,12 +34,6 @@ def format_key(k, globals=DEFAULT_GLOBALS):
 def trial(args, checkpoint_dir=None, **kwargs):
     if not GlobalHydra.instance().is_initialized():
         initialize(config_path="../configs/")
-
-    import rich
-
-    rich.print("[magenta] TRIAL")
-    rich.print(kwargs)
-    rich.print(args)
 
     overrides = [f"{format_key(k)}={v}" for k, v in kwargs.items()]
     overrides += [f"{format_key(k)}={v}" for k, v in args.items()]
