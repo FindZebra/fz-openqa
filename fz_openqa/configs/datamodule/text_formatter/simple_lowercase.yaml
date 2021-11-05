@@ -1,0 +1,6 @@
+_target_: fz_openqa.datamodules.pipes.TextFormatter
+
+remove_linebreaks: True
+remove_ref: True
+lowercase: True
+aggressive_cleaning: False

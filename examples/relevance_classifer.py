@@ -82,9 +82,7 @@ b4 = {
 b5 = {
     "question.text": "a junior orthopaedic surgery resident is completing a carpal tunnel repair with the department chairman as the attending physician during the case the resident inadvertently cuts a flexor tendon the tendon is repaired without complication the attending tells the resident that the patient will do fine and there is no need to report this minor complication that will not harm the patient as he does not want to make the patient worry unnecessarily he tells the resident to leave this complication out of the operative report which of the following is the correct next action for the resident to take",  # noqa: E501
     "answer.target": 0,
-    "answer.text": [
-        "Tell the attending that he cannot fail to disclose this mistake"
-    ],
+    "answer.text": ["Tell the attending that he cannot fail to disclose this mistake"],
     "answer.synonyms": [
         "error",
         "failed",
@@ -109,9 +107,7 @@ b5 = {
 b6 = {
     "question.text": "a year old man is being treated by his female family medicine physician for chronic depression recently he has been scheduling more frequent office visits he does not report any symptoms or problems with his ssri medication during these visits upon further questioning the patient confesses that he is attracted to her and says you are the only one in the world who understands me the physician also manages his hypertension which of the following is the most appropriate next step in management",  # noqa: E501
     "answer.target": 0,
-    "answer.text": [
-        "Ask closed-ended questions and use a chaperone for future visits"
-    ],
+    "answer.text": ["Ask closed-ended questions and use a chaperone for future visits"],
     "answer.synonyms": [
         "Molecular Chaperones",
         "Future",
@@ -156,9 +152,7 @@ b8 = {
 b9 = {
     "question.text": "a junior orthopaedic surgery resident is completing a carpal tunnel repair with the department chairman as the attending physician during the case the resident inadvertently cuts a flexor tendon the tendon is repaired without complication the attending tells the resident that the patient will do fine and there is no need to report this minor complication that will not harm the patient as he does not want to make the patient worry unnecessarily he tells the resident to leave this complication out of the operative report which of the following is the correct next action for the resident to take",  # noqa: E501
     "answer.target": 0,
-    "answer.text": [
-        "Tell the attending that he cannot fail to disclose this mistake"
-    ],
+    "answer.text": ["Tell the attending that he cannot fail to disclose this mistake"],
     "answer.synonyms": [],  # noqa: E501
     "document.text": [
         "professional norms of medicine (the Hippocratic oath, respect to patients and colleagues, ethical conduct, personal accountability, empathy, and altruism) are modeled in every personal encounter. It is imperative that all resident and attending surgeons under-stand that the medical students are observing them closely. When resident and attending surgeons model professional behavior, the hidden curriculum becomes a useful tool for professional devel-opment.147-150 This consistent modeling of professional behavior is one necessary component of leadership.During their clinical years, medical students experience both an exponential growth in knowledge and a measurable decline in empathy towards their patients. Initially, medical stu-dents are filled with excitement and wonder during their first patient encounters. The rapid pace of clinical work, acquisition of knowledge, and intense experiences create stress for the stu-dent, both positively and negatively. Scrubbing into the operat-ing room, witn"  # noqa: E501
@@ -186,9 +180,7 @@ for i, eg in enumerate(exs):
     rich.print(f"[red]Answer: {eg['answer.text'][eg['answer.target']]}")
     rich.print(f"[white]Document: {eg['document.text'][0]}")
     for c, b in output.items():
-        _match_on = (
-            b["document.match_on"][i][0] if "document.match_on" in b else None
-        )
+        _match_on = b["document.match_on"][i][0] if "document.match_on" in b else None
         rich.print(
             f"> {type(c).__name__}: match_score={b['document.match_score'][i][0]}, "
             f"match_on={_match_on}"

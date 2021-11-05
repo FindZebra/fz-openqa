@@ -7,9 +7,7 @@ from transformers import PreTrainedTokenizerFast
 
 
 class SampleLanguageModel(Callback):
-    def on_epoch_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
+    def on_epoch_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         tokenizer: PreTrainedTokenizerFast = pl_module.tokenizer
         input_ids = pl_module.generate()
 

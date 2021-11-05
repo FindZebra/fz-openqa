@@ -1,2 +1,5 @@
+defaults:
+  - base
+
 cache_dir: /scratch/${whoami:}/cache/
 work_dir: /scratch/${whoami:}/fz-openqa/

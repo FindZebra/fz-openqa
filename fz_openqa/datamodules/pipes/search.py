@@ -1,5 +1,5 @@
 from copy import deepcopy
-from functools import partial
+from dataclasses import dataclass
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -8,14 +8,52 @@ from typing import Optional
 from typing import Union
 
 import dill
-import rich
 import torch
 from datasets import Dataset
 
 from . import Collate
 from . import Nest
+from . import Sequential
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
+
+
+@dataclass
+class SearchResult:
+    score: List[List[float]]
+    index: List[List[int]]
+    tokens: List[List[str]]
+
+
+class FakeIndex:
+    """A small class to test Search corpus without using a proper index"""
+
+    index_name = "<name>"
+
+    def search(self, *, query: Batch, k: int, **kwargs) -> SearchResult:
+        values = query["question.text"]
+        return SearchResult(
+            index=[[0 for _ in range(k)] for _ in values],
+            score=[[1.0 for _ in range(k)] for _ in values],
+        )
+
+    def dill_inspect(self) -> bool:
+        """check if the module can be pickled."""
+        return dill.pickles(self)
+
+
+class FakeDataset:
+    """A small class to test Search corpus without using a proper index"""
+
+    def __init__(self):
+        self.data = {"document.text": "<text>", "document.row_idx": 0}
+
+    def __getitem__(self, idx):
+        """check if the module can be pickled."""
+        if isinstance(idx, str):
+            return [deepcopy(self.data)]
+        else:
+            return deepcopy(self.data)
 
 
 class SearchCorpus(Pipe):
@@ -23,51 +61,41 @@ class SearchCorpus(Pipe):
 
     def __init__(
         self,
-        corpus,
+        corpus_index,
         *,
         k: Optional[int] = None,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
         index_output_key: str = "document.row_idx",
         score_output_key: str = "document.retrieval_score",
+        analyzed_output_key: str = "document.analyzed_tokens",
         **kwargs,
     ):
         super(SearchCorpus, self).__init__(**kwargs)
-        assert corpus is not None, "corpus must be set."
-        self.index = corpus._index
-        self.dataset = corpus.dataset
-        msg = (
-            "Corpus.dataset is None, you probably need to "
-            "`run corpus.setup()` before initializing this pipe"
-        )
-        assert self.dataset is not None, msg
+        self.index = corpus_index
         self.index_output_key = index_output_key
         self.score_output_key = score_output_key
+        self.analyzed_output_key = analyzed_output_key
         self.k = k
         self.model = model
+        self.collate_pipe = Sequential(Collate(), Nest(stride=k))
 
     def __repr__(self):
-        return self.as_fingerprintable().__repr__()
+        return {
+            "__type__": type(self),
+            "k": self.k,
+            "es_index": self.index.index_name,
+        }.__repr__()
 
-    def dill_inspect(self) -> Dict[str, Any]:
+    def dill_inspect(self, **kwargs) -> Dict[str, Any]:
         return {
             "__all__": dill.pickles(self),
             "index": self.index.dill_inspect(),
-            "dataset": dill.pickles(self.dataset),
         }
 
     def fingerprint(self) -> Dict[str, Any]:
         return {
             "__all__": self._fingerprint(self),
             "index": self._fingerprint(self.index),
-            "dataset": self._fingerprint(self.dataset),
-        }
-
-    def as_fingerprintable(self) -> Optional:
-        return {
-            "__type__": type(self),
-            "k": self.k,
-            "dataset": self.dataset._fingerprint,
-            "es_index": self.index.index_name,
         }
 
     def __call__(
@@ -79,27 +107,28 @@ class SearchCorpus(Pipe):
         simple_collate: Optional[bool] = None,
         **kwargs,
     ):
-
         # update args
         k = k or self.k
         model = model or self.model
 
         # query the index
-        search_result = self.index.search(
-            query=query, k=k, model=model, **kwargs
-        )
+        search_result = self.index.search(query=query, k=k, model=model, **kwargs)
 
         # retrieve the examples from the dataset (flat list)
         flat_indexes = (idx for sub in search_result.index for idx in sub)
         flat_scores = (score for sub in search_result.score for score in sub)
+        flat_tokens = (token for sub in search_result.tokens for token in sub)
         examples = [
-            {self.index_output_key: idx, self.score_output_key: score}
-            for idx, score in zip(flat_indexes, flat_scores)
+            {
+                self.index_output_key: idx,
+                self.score_output_key: score,
+                self.analyzed_output_key: analyze,
+            }
+            for idx, score, analyze in zip(flat_indexes, flat_scores, flat_tokens)
         ]
-
         # nest the examples:
         # [eg for eg in examples] -> [[eg_q for eg_q in results[q] for q in query]
-        return Nest(stride=k)(Collate()(examples))
+        return self.collate_pipe(examples, stride=k)
 
 
 class FeatchDocuments(Pipe):
@@ -110,45 +139,56 @@ class FeatchDocuments(Pipe):
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = Collate(),
         index_key: str = "document.row_idx",
+        output_format: str = "dict",
+        id: str = "fetch-documents-pipe",
         **kwargs,
     ):
-        super(FeatchDocuments, self).__init__(**kwargs)
+        super(FeatchDocuments, self).__init__(id=id)
+        if keys is not None:
+            keys = set(keys).union([index_key])
+            # make sure to sort the keys to ensure deterministic fingerprinting
+            cols_to_drop = list(sorted(set(corpus_dataset.column_names) - keys))
+            corpus_dataset = corpus_dataset.remove_columns(cols_to_drop)
+
         self.corpus_dataset = corpus_dataset
         self.keys = keys
         self.collate_pipe = collate_pipe
         self.index_key = index_key
+        self.output_format = output_format
+
+    def fingerprint(self) -> Dict[str, Any]:
+        return {
+            "__all__": self._fingerprint(self),
+            "corpus_dataset": self._fingerprint(self.corpus_dataset),
+            "corpus_dataset_fingerprint": self.corpus_dataset._fingerprint,
+            "self.collate_pipe": self._fingerprint(self.collate_pipe),
+        }
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        features = self.corpus_dataset.column_names
-        return list(
-            self._filter_row(
-                {c: None for c in features}, keys=self.keys
-            ).values()
-        )
-
-    @staticmethod
-    def _filter_row(
-        row: Dict[str, Any], *, keys: Optional[List[str]]
-    ) -> Dict[str, Any]:
-        return {k: v for k, v in row.items() if keys is None or k in keys}
+        return self.corpus_dataset.column_names
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
-        # todo: check dataset fingerprint
+        # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes
-        indexes = (int(idx) for idx in batch[self.index_key])
+        indexes = [int(idx) for idx in batch[self.index_key]]
 
-        if self.keys is not None and len(self.keys) == 1:
-            key = self.keys[0]
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset[key].__getitem__, indexes)
-            retrieved_docs = [{key: x} for x in retrieved_docs]
+        err_msg = (
+            "There is a mismatch between the query indexes and the retrieved indexes, "
+            "make sure you are using the same dataset."
+        )
+
+        # fetch documents
+        table = self.corpus_dataset.select(indexes, keep_in_memory=True)
+
+        if self.output_format == "list":
+            rows: List[Batch] = [dict(row) for row in table]
+            assert indexes[0] == rows[0][self.index_key], err_msg
+        elif self.output_format == "dict":
+            rows: Batch = table[None:None]
+            assert indexes[0] == rows[self.index_key][0], err_msg
         else:
-            # fetch documents
-            retrieved_docs = map(self.corpus_dataset.__getitem__, indexes)
-            # filter keys
-            retrieved_docs = list(
-                self._filter_row(x, keys=self.keys) for x in retrieved_docs
-            )
+            raise ValueError(f"Unknown output format: {self.output_format}")
+
         # collate and return
-        return self.collate_pipe(retrieved_docs)
+        return self.collate_pipe(rows)

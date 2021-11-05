@@ -12,7 +12,7 @@ from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.__saved_models.multiple_choice_qa_reader import (
     MultipleChoiceQAReader,
 )
@@ -61,9 +61,7 @@ class MultipleChoiceQA(Module):
         end_to_end_evaluation: bool = False,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert
-        )
+        super().__init__(**kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert)
 
         # instantiate the reader
         self.reader: MultipleChoiceQAReader = instantiate(
@@ -94,9 +92,7 @@ class MultipleChoiceQA(Module):
     ) -> Batch:
 
         if batch.pop("_mode_", None) == "indexing":
-            return self.retriever.predict_step(
-                batch, batch_idx, dataloader_idx
-            )
+            return self.retriever.predict_step(batch, batch_idx, dataloader_idx)
 
         # supervised step (retriever+reader)
         output = self._supervised_step(batch, batch_idx, dataloader_idx, split)
@@ -116,31 +112,23 @@ class MultipleChoiceQA(Module):
         kwargs = {"log_data": False, "split": split}
 
         # forward pass for the retriever model
-        retriever_data = self.retriever._step(
-            batch, batch_idx, dataloader_idx, **kwargs
-        )
+        retriever_data = self.retriever._step(batch, batch_idx, dataloader_idx, **kwargs)
         output.update(add_prefix(retriever_data, "retriever/"))
 
         # forward pass for the reader model
-        reader_data = self.reader._step(
-            batch, batch_idx, dataloader_idx, **kwargs
-        )
+        reader_data = self.reader._step(batch, batch_idx, dataloader_idx, **kwargs)
         output.update(add_prefix(reader_data, "reader/"))
 
         return output
 
-    def predict_step(
-        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
-    ) -> Any:
+    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None) -> Any:
         # compute contextualized representations
         mode = batch.pop("mode", None)
         assert (
             mode is not None
         ), f"A `mode` argument must be provided, batch.keys()={list(batch.keys())}"
         if mode == "indexing":
-            return self.retriever.predict_step(
-                batch, batch_idx, dataloader_idx
-            )
+            return self.retriever.predict_step(batch, batch_idx, dataloader_idx)
         else:
             raise NotImplementedError
 
@@ -173,9 +161,7 @@ class MultipleChoiceQA(Module):
 
         # merge and compute the main loss
         output = {**reader_output, **retriever_output, **end2end_output}
-        output["loss"] = output.get("reader/loss", 0) + output.get(
-            "retriever/loss", 0
-        )
+        output["loss"] = output.get("reader/loss", 0) + output.get("retriever/loss", 0)
 
         # log the data for both the reader and the retriever
         if log_data:
@@ -184,9 +170,7 @@ class MultipleChoiceQA(Module):
         return output
 
     def _step_end_reader(self, output, **kwargs):
-        reader_output = self.reader._step_end(
-            filter_prefix(output, "reader/"), **kwargs
-        )
+        reader_output = self.reader._step_end(filter_prefix(output, "reader/"), **kwargs)
         reader_output = add_prefix(reader_output, "reader/")
         return reader_output
 
@@ -226,11 +210,7 @@ class MultipleChoiceQA(Module):
         """
 
         def filtered_params(model: nn.Module, pattern="^bert."):
-            return (
-                p
-                for k, p in model.named_parameters()
-                if not re.findall(pattern, k)
-            )
+            return (p for k, p in model.named_parameters() if not re.findall(pattern, k))
 
         return AdamW(
             [

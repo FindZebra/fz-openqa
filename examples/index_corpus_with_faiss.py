@@ -5,16 +5,14 @@ import torch
 
 from examples.utils import display_search_results
 from examples.utils import gen_example_query
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import FzCorpusDataModule
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 datasets.set_caching_enabled(False)
 print(f">> {sys.version}")
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
 query = gen_example_query(tokenizer)
 

@@ -49,9 +49,7 @@ class MultipleChoiceQAReader(Module):
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert
-        )
+        super().__init__(**kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert)
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
@@ -121,9 +119,7 @@ class MultipleChoiceQAReader(Module):
 
         # answer-question final representation
         heq = self.qd_head(self.dropout(heq))  # [bs * n_doc, h]
-        ha = self.a_head(self.dropout(ha)).view(
-            bs, N_a, self.hparams.hidden_size
-        )
+        ha = self.a_head(self.dropout(ha)).view(bs, N_a, self.hparams.hidden_size)
         # dot-product model S(qd, a)
         heq = heq.view(bs, n_docs, *heq.shape[1:])
         S_eqa = torch.einsum("bdh, bah -> bda", heq, ha)

@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import Callback
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 
 
 class AcceleratorWrapper:
@@ -21,9 +21,7 @@ class IndexCorpus(Callback):
     #     super().__init__(write_interval)
 
     @torch.no_grad()
-    def on_validation_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
+    def on_validation_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         """
         Compute the corpus vectors using the model.
         """

@@ -26,15 +26,19 @@ class Collate(Pipe):
         self.keys = keys
         self.key_op = key_op
 
-    def __call__(self, examples: Iterable[Batch]) -> Batch:
+    def __call__(self, examples: Union[Batch, Iterable[Batch]], **kwargs) -> Batch:
         # cast, filter keys and check type and keys consistency
-        examples = list(examples)
-        first_eg = examples[0]
-        keys = self.get_keys_form_eg(first_eg)
-        self.check_consistency(examples, keys)
+        if isinstance(examples, dict):
+            keys = self.get_keys_form_eg(examples)
+            batch = {key: examples[key] for key in keys}
+        else:
+            examples = list(examples)
+            first_eg = examples[0]
+            keys = self.get_keys_form_eg(first_eg)
+            self.check_consistency(examples, keys)
 
-        # build a batch: {key: [values]}
-        batch = {key: [eg[key] for eg in examples] for key in keys}
+            # build a batch: {key: [values]}
+            batch = {key: [eg[key] for eg in examples] for key in keys}
 
         # apply the operator
         if self.key_op is not None:
@@ -63,13 +67,11 @@ class Collate(Pipe):
 
 
 class DeCollate(Pipe):
-    def __call__(self, batch: Batch) -> List[Dict[str, Any]]:
+    def __call__(self, batch: Batch, **kwargs) -> List[Dict[str, Any]]:
         keys = list(batch.keys())
         length = len(batch[keys[0]])
         lengths = {k: len(v) for k, v in batch.items()}
-        assert all(
-            length == eg_l for eg_l in lengths.values()
-        ), f"un-equal lengths: {lengths}"
+        assert all(length == eg_l for eg_l in lengths.values()), f"un-equal lengths: {lengths}"
         return [{k: batch[k][i] for k in keys} for i in range(length)]
 
 

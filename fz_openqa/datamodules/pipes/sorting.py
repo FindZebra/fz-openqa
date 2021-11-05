@@ -49,18 +49,12 @@ class Sort(Pipe):
             i, v = u
             return v
 
-        indexed_values = sorted(
-            indexed_values, key=_key, reverse=self.reversed
-        )
+        indexed_values = sorted(indexed_values, key=_key, reverse=self.reversed)
         index = [i for i, _ in indexed_values]
 
-        batch.update(
-            {k: reindex(v, index) for k, v in batch.items() if self.filter(k)}
-        )
+        batch.update({k: reindex(v, index) for k, v in batch.items() if self.filter(k)})
         return batch
 
     def _check_input_keys(self, batch):
         for key in self.keys:
-            assert (
-                key in batch.keys()
-            ), f"key={key} not in batch with keys={list(batch.keys())}"
+            assert key in batch.keys(), f"key={key} not in batch with keys={list(batch.keys())}"

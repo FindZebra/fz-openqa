@@ -31,15 +31,18 @@ class RetrieverSupervised(Module):
     ]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "retrieval"
+    task_id: Optional[str] = "retriever"
 
     # metrics to display in the progress bar
     pbar_metrics = [
-        "train/retrieval/Accuracy",
-        "validation/retrieval/Accuracy",
-        "validation/retrieval/top10_Accuracy",
-        "validation/retrieval/n_options",
+        "train/retriever/Accuracy",
+        "validation/retriever/Accuracy",
+        "validation/retriever/top10_Accuracy",
+        "validation/retriever/n_options",
     ]
+
+    # require heads
+    _required_heads = ["question", "document"]
 
     def __init__(
         self,
@@ -59,35 +62,26 @@ class RetrieverSupervised(Module):
         def init_metric():
             """generate a collection of topk accuracies."""
             return SafeMetricCollection(
-                {
-                    _name(k): Accuracy(top_k=k, **metric_kwargs)
-                    for k in [None, 5, 10, 20, 50, 100]
-                },
+                {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in [None, 5, 10, 20, 50, 100]},
                 prefix=prefix,
             )
 
         self.metrics = SplitMetrics(init_metric)
 
-    def _forward(
-        self, batch: Batch, _compute_similarity: bool = True, **kwargs
-    ) -> Batch:
+    def _forward(self, batch: Batch, _compute_similarity: bool = True, **kwargs) -> Batch:
         # flatten documents as [batch_size x n_documents]
-        batch = flatten_first_dims(
-            batch,
-            n_dims=2,
-            keys=["document.input_ids", "document.attention_mask"],
+        batch.update(
+            flatten_first_dims(
+                batch,
+                n_dims=2,
+                keys=["document.input_ids", "document.attention_mask"],
+            )
         )
 
         # shape: [bs, h]
-        hq = self.backbone(
-            batch["question.input_ids"],
-            attention_mask=batch["question.attention_mask"],
-        )
+        hq = self._backbone(batch, prefix="question", head="question")
         # shape: # [bs * n_docs, h]
-        hd = self.backbone(
-            batch["document.input_ids"],
-            attention_mask=batch["document.attention_mask"],
-        )
+        hd = self._backbone(batch, prefix="document", head="document")
 
         output = {"_hq_": hq, "_hd_": hd}
 
@@ -133,9 +127,7 @@ class RetrieverSupervised(Module):
 
         return output
 
-    def _generate_targets(
-        self, batch_size, *, n_docs: int, device: torch.device
-    ):
+    def _generate_targets(self, batch_size, *, n_docs: int, device: torch.device):
         """Generate targets. Assuming the target document is the first
         of each group, the targets are:
           * 0*n_docs for the first `n_docs` items

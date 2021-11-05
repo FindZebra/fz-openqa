@@ -9,9 +9,7 @@ class CleanableCheckpoint(ModelCheckpoint):
         super().__init__(*args, **kwargs)
         self.cleanup_threshold = cleanup_threshold
 
-    def on_test_epoch_end(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
+    def on_test_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         super().on_test_end(trainer, pl_module)
         # retrieve the checkpoint callback
         if self.best_model_score is not None:

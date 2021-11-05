@@ -14,15 +14,23 @@ def pretty_decode(
     tokens: Union[Tensor, List[int], np.ndarray],
     *,
     tokenizer: PreTrainedTokenizerFast,
+    style: str = "deep_sky_blue3",
+    only_text: bool = False,
     **kwargs,
 ):
     """Pretty print an encoded chunk of text"""
+    if style != "":
+        style_in = f"[{style}]"
+        style_out = f"[/{style}]"
+    else:
+        style_in = style_out = ""
     n_pad_tokens = list(tokens).count(tokenizer.pad_token_id)
     txt = tokenizer.decode(tokens, **kwargs)
-    return (
-        f"length={len(tokens)}, padding={n_pad_tokens}, "
-        f"text: [deep_sky_blue3]`{txt.replace('[PAD]', '').strip()}`"
-    )
+    txt = f"{style_in}`{txt.replace('[PAD]', '').strip()}`{style_out}"
+    if only_text:
+        return txt
+    else:
+        return f"length={len(tokens)}, padding={n_pad_tokens}, " f"text: {txt}"
 
 
 def get_separator(char="\u2500"):

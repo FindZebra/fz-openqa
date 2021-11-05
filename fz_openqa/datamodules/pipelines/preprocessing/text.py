@@ -12,9 +12,9 @@ from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.nesting import flatten_nested
 from fz_openqa.datamodules.pipes.nesting import nested_list
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 
 
@@ -64,8 +64,6 @@ class FormatAndTokenize(Sequential):
                 add_special_tokens=add_special_tokens,
                 return_offsets_mapping=return_offsets_mapping,
             ),
-            ApplyToAll(partial(nested_list, stride=stride))
-            if stride
-            else None,
+            ApplyToAll(partial(nested_list, stride=stride)) if stride else None,
             AddPrefix(prefix),
         )

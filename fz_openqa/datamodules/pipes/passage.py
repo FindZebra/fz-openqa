@@ -25,7 +25,9 @@ class GeneratePassages(Pipe):
         end_tokens: List[int],
         pad_token_id: int,
         verbose: bool = True,
+        **kwargs,
     ):
+        super(GeneratePassages, self).__init__(**kwargs)
 
         self.verbose = verbose
         base_args = {"size": size, "stride": stride}
@@ -53,7 +55,7 @@ class GeneratePassages(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys + ["idx", "passage_idx", "passage_mask"]
 
-    def __call__(self, batch: Batch) -> Batch:
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
         indexes, output = self.generate_passages_for_all_keys(
             batch,
@@ -72,8 +74,7 @@ class GeneratePassages(Pipe):
     def _check_input_keys(self, batch):
         for key in self.required_keys:
             assert key in batch.keys(), (
-                f"key={key} must be provided. "
-                f"Found batch.keys={list(batch.keys())}."
+                f"key={key} must be provided. " f"Found batch.keys={list(batch.keys())}."
             )
 
     @staticmethod
@@ -105,9 +106,7 @@ class GeneratePassages(Pipe):
         first_key, *other_keys = keys
         output = defaultdict(list)
         indexes = []
-        for idx, (doc_idx, example) in enumerate(
-            zip(examples["idx"], examples[first_key])
-        ):
+        for idx, (doc_idx, example) in enumerate(zip(examples["idx"], examples[first_key])):
 
             # do a first pass to compute the passage masks
             for pas_idx, (passage, passage_mask) in enumerate(
@@ -122,9 +121,7 @@ class GeneratePassages(Pipe):
             # do another pass to generate the passages for each remaining attribute
         for key in other_keys:
             for example in examples[key]:
-                passages = gen_passages(
-                    example, **args[key], return_mask=False
-                )
+                passages = gen_passages(example, **args[key], return_mask=False)
                 for i, passage in enumerate(passages):
                     output[key].append(passage)
 
@@ -134,16 +131,12 @@ class GeneratePassages(Pipe):
         return indexes, output
 
     @staticmethod
-    def extract_passage_text_from_doc(
-        document: str, offset_mapping: List[Tuple[int, int]]
-    ) -> str:
+    def extract_passage_text_from_doc(document: str, offset_mapping: List[Tuple[int, int]]) -> str:
         """
         Extract the text passage from the original document
         given the offset mapping of the passage
         """
-        indexes = [
-            x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0
-        ]
+        indexes = [x for idxes_tok in offset_mapping for x in idxes_tok if x >= 0]
         return document[min(indexes) : max(indexes)]
 
 

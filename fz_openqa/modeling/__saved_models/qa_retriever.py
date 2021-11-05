@@ -10,7 +10,7 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule
 from fz_openqa.modeling.layers.heads import cls_head
 from fz_openqa.modeling.model import Module
 from fz_openqa.utils.functional import maybe_instantiate
@@ -48,9 +48,7 @@ class QaRetriever(Module):
         dropout: float = 0,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert
-        )
+        super().__init__(**kwargs, evaluator=evaluator, tokenizer=tokenizer, bert=bert)
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
@@ -98,9 +96,7 @@ class QaRetriever(Module):
         h = self.dropout(h)
         return {"document": self.e_proj, "question": self.q_proj}[model_key](h)
 
-    def predict_step(
-        self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None
-    ) -> Any:
+    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: Optional[int] = None) -> Any:
         # compute contextualized representations
         h = self.bert(
             batch["document.input_ids"],
@@ -109,9 +105,7 @@ class QaRetriever(Module):
 
         # global representations
         h = self.dropout(h)
-        return {"document": self.e_proj, "question": self.q_proj}["document"](
-            h
-        )
+        return {"document": self.e_proj, "question": self.q_proj}["document"](h)
 
     def check_input_features_with_key(self, batch, key):
         for f in self._required_feature_names:

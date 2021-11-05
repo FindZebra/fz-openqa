@@ -9,13 +9,11 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from fz_openqa.datamodules.corpus_dm import FzCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import FzCorpusDataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
 corpus = FzCorpusDataModule(
     tokenizer=tokenizer,

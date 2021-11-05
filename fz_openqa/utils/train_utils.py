@@ -91,7 +91,8 @@ def log_hyperparameters(
             for k, v in config.items()
             if k
             in (
-                "base" "trainer",
+                "base",
+                "trainer",
                 "model",
                 "datamodule",
                 "tokenizer",
@@ -144,30 +145,7 @@ def extras(config: DictConfig) -> None:
     if config.get("debug"):
         log.info("Running in debug mode! <config.debug=True>")
         config.trainer.fast_dev_run = True
-
-    # force debugger friendly configuration if <config.trainer.fast_dev_run=True>
-    if config.trainer.get("fast_dev_run"):
-        log.info(
-            "Forcing debugger friendly configuration! <config.trainer.fast_dev_run=True>"
-        )
-        # Debuggers don't like GPUs or multiprocessing
-        if config.trainer.get("gpus"):
-            config.trainer.gpus = 0
-        if config.datamodule.get("pin_memory"):
-            config.datamodule.pin_memory = False
-        if config.datamodule.get("num_workers"):
-            config.datamodule.num_workers = 0
-
-    # force multi-gpu friendly configuration if <config.trainer.accelerator=ddp>
-    accelerator = config.trainer.get("accelerator")
-    if accelerator in ["ddp", "ddp_spawn", "dp", "ddp2"]:
-        log.info(
-            f"Forcing ddp friendly configuration! <config.trainer.accelerator={accelerator}>"
-        )
-        if config.datamodule.get("num_workers"):
-            config.datamodule.num_workers = 0
-        if config.datamodule.get("pin_memory"):
-            config.datamodule.pin_memory = False
+        # todo add debug args
 
     # disable adding new keys to config
     OmegaConf.set_struct(config, True)
@@ -178,10 +156,8 @@ def print_config(
     config: DictConfig,
     fields: Sequence[str] = (
         "trainer",
-        "tokenizer",
         "model",
         "datamodule",
-        "corpus",
         "callbacks",
         "logger",
         "base",
@@ -207,11 +183,7 @@ def print_config(
         if isinstance(config_section, DictConfig):
             branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
 
-        branch.add(
-            rich.syntax.Syntax(
-                branch_content, "yaml", indent_guides=True, word_wrap=True
-            )
-        )
+        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
 
     rich.print(tree)
 
@@ -223,4 +195,7 @@ def setup_safe_env():
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
         import multiprocessing
 
-        multiprocessing.set_start_method("fork")
+        try:
+            multiprocessing.set_start_method("fork")
+        except Exception:
+            pass

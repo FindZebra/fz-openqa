@@ -1,14 +1,11 @@
-import rich
 from datasets import Dataset
 
-from fz_openqa.datamodules.corpus_dm import CorpusDataModule
-from fz_openqa.datamodules.pipes import AsFlatten
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import UpdateWith
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.search import FeatchDocuments
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
 
 
 class ClassifyDocuments(Sequential):
@@ -29,26 +26,18 @@ class ClassifyDocuments(Sequential):
             "answer.text",
             "answer.target",
         ]
-        # Whole pipe
+
         super().__init__(
             FilterKeys(KeyIn(input_keys)),
-            UpdateWith(
-                Sequential(
-                    FilterKeys(KeyIn(["document.row_idx"])),
-                    AsFlatten(
-                        FeatchDocuments(
-                            corpus_dataset=corpus_dataset,
-                            keys=["document.text"],
-                        )
-                    ),
-                )
+            ApplyAsFlatten(
+                FeatchDocuments(
+                    corpus_dataset=corpus_dataset,
+                    keys=["document.text"],
+                ),
+                filter=KeyIn(["document.row_idx"]),
+                update=True,
             ),
             FilterKeys(KeyIn(classifier_input_keys)),
             relevance_classifier,
             id="classify-documents",
         )
-
-    # def __call__(self, *args, **kwargs):
-    #     out = super().__call__(*args, **kwargs)
-    #     rich.print("=== here ===")
-    #     return out

@@ -21,9 +21,9 @@ class FaissIndex(Index):
     dataset: Dataset = None
     model: Callable = None
 
-    def __init__(self, *, batch_size: int = 32, **kwargs):
-        super(FaissIndex, self).__init__(**kwargs)
+    def __init__(self, dataset: Dataset, *, batch_size: int = 32, **kwargs):
         self.batch_size = batch_size
+        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
     def build(
         self,
@@ -47,9 +47,7 @@ class FaissIndex(Index):
         )
 
         # add the dense index
-        self.dataset.add_faiss_index(
-            column=self.vectors_column_name, device=None
-        )
+        self.dataset.add_faiss_index(column=self.vectors_column_name, device=None)
 
         # set status
         self.is_indexed = True
@@ -79,9 +77,7 @@ class FaissIndex(Index):
             index=[r["idx"] for r in results.total_examples],
         )
 
-    def get_batch_processing_pipe(
-        self, model: Union[Callable, Module]
-    ) -> Pipe:
+    def get_batch_processing_pipe(self, model: Union[Callable, Module]) -> Pipe:
         """returns a pipe that allows processing a batch of data using the model."""
         return Sequential(
             Forward(model=model, output_key=self.vectors_column_name),

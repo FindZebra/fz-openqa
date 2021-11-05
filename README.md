@@ -8,6 +8,8 @@
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
 
+
+[![unit testing](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml/badge.svg)](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml)
 [![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
 
 ## Setup
@@ -169,6 +171,12 @@ poetry run fzqa +experiment=quick_test
 
 The ´environ´ configuration adjust the experiment to the environment (e.g. cache location).
 
+Config groups selected using `@` (i.e. corpus_builder) can be overrided using command line with:
+```shell
+poetry run python run.py +experiment=preprocessing +environ=titan +datamodule/builder@datamodule.builder.corpus_builder=wikipedia_corpus.yaml
+```
+
+
 </details>
 
 <details>
@@ -212,23 +220,23 @@ HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
 
 ## Documentation
 
-### Container design
+### HfDatasetBuilder design
 
 # todo: update this section
 
-All modules should inherit from `Container`, which in turn inherits from `pl.LightningModule`.
-Each Container features one `Module` which role is to compute the loss and the metrics.
+All modules should inherit from `HfDatasetBuilder`, which in turn inherits from `pl.LightningModule`.
+Each HfDatasetBuilder features one `Module` which role is to compute the loss and the metrics.
 metrics are computed using `torchmetrics` (see the section `Data flow for multiple GPUs` for more details).
 
 <details>
 <summary>Data flow within the <b>BaseModels</b> (multi-GPUs)</summary>
 
-The main computation should be implemented in the `_step()` and `_step_end()` methods of the `Container`.
+The main computation should be implemented in the `_step()` and `_step_end()` methods of the `HfDatasetBuilder`.
 The `_step()` method runs independently on each device whereas the `_step_end()` method runs on
 a single device: this is where the final aggregated loss should be implemented (see the diagram below).
 The metrics must be implemented in the `_step_end` method in order to avoid errors with mutli-GPU training.
 
-![Lightning Container data flow](.assets/lighning_steps.png)
+![Lightning HfDatasetBuilder data flow](.assets/lighning_steps.png)
 
 </details>
 
@@ -237,7 +245,7 @@ The metrics must be implemented in the `_step_end` method in order to avoid erro
 The evaluator handles computing the loss and the metrics. Two methods must be implemented:
 
 1. The `forward` method that calls the Module and compute logits or potentially a pre-loss term.
-This method is called in the `Container._step()` method
+This method is called in the `HfDatasetBuilder._step()` method
 2. The `post_forward` method that implements the final computation of the loss given the aggregated outputs of the
 `Module.foward()` method from each device.
 </details>
@@ -253,7 +261,7 @@ This class can be instantiated using pretrained components or the components can
 The `_step` and `_step_end` both rely on the methods of the retriever and components (each with their distinct evaluators).
 However, a third evaluator class (`EndToEndMultipleChoiceQaMaximumLikelihood`) is added to evaluate the end-to-end reader accuracy.
 
-During evaluation, data from each component is managed separately (so each Container send and receive its own data between `_step` and `_step_end`).
+During evaluation, data from each component is managed separately (so each HfDatasetBuilder send and receive its own data between `_step` and `_step_end`).
 We do so by prefixing the output data of the reader, the retriever and of the end-to-end evaluator
 using the keys [`retriever/`, `reader/`, `end2end/`].
 </details>
@@ -370,7 +378,7 @@ screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/v
 </details>
 
 <details>
-<summary>Deleting ElasticSearch indexes</summary>
+<summary>ElastiSearch tips and tricks/summary>
 
 ```bash
 # check indexes
@@ -378,6 +386,9 @@ curl 'localhost:9200/_cat/indices?v'
 
 # delete all
 curl -X DELETE 'http://localhost:9200/_all'
+
+# start elastic search with limited heap size (16 GB)
+ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 ```
 </details>
 

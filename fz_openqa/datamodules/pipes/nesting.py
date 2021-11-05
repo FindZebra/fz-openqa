@@ -6,15 +6,14 @@ from typing import Type
 from typing import Union
 
 import numpy as np
-import rich
 import torch
 from torch import Tensor
 
 from fz_openqa.datamodules.pipes.base import always_true
 from fz_openqa.datamodules.pipes.base import ApplyToAll
+from fz_openqa.datamodules.pipes.base import FilterKeys
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 STRIDE_SYMBOL = "__stride__"
 
@@ -55,9 +54,7 @@ def reconcat(values: List[Any], original_type: Type):
     elif original_type == list:
         pass
     else:
-        raise ValueError(
-            f"Cannot reconstruct values of original type={original_type}"
-        )
+        raise ValueError(f"Cannot reconstruct values of original type={original_type}")
     return values
 
 
@@ -66,12 +63,34 @@ class Flatten(ApplyToAll):
         super().__init__(flatten_nested, element_wise=False)
 
 
-class Nested(Pipe):
-    """Process nested examples using a pipe."""
+class Nest(ApplyToAll):
+    """Nest a flattened batch:
+    {key: [values]} -> {key: [[group] for group in groups]}"""
 
-    def __init__(
-        self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs
+    def __init__(self, stride: Optional[int]):
+        super(Nest, self).__init__(element_wise=False, op=self.nest, allow_kwargs=True)
+        self.stride = stride
+
+    def nest(
+        self,
+        x: Union[Tensor, List[Any]],
+        stride: Optional[int] = None,
+        **kwargs,
     ):
+        stride = stride or self.stride
+        if isinstance(x, Tensor):
+            return x.view(-1, stride, *x.shape[1:])
+        else:
+            return [x[i : i + stride] for i in range(0, len(x), stride)]
+
+
+class Nested(Pipe):
+    """
+    Apply a pipe to each nested value.
+    This can be use to modify the nested field inplace  (i.e. sorting, deleting).
+    """
+
+    def __init__(self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs):
         super().__init__(**kwargs)
         self.pipe = pipe
         self.filter = filter or always_true
@@ -94,31 +113,52 @@ class Nested(Pipe):
         return batch
 
 
-class Nest(ApplyToAll):
-    """Nest a flattened batch:
-    {key: [values]} -> {key: [[group] for group in groups]}"""
+class ApplyAsFlatten(Pipe):
+    """Flatten nested field an apply a pipe to the flatten fields.
 
-    def __init__(self, stride: int):
-        super(Nest, self).__init__(element_wise=False, op=self.flatten)
-        self.stride = stride
+    Warning: Do not use this pipe if the inner pipe modify the order of the batch elements!"""
 
-    def flatten(self, x: Union[Tensor, List[Any]]):
-        if isinstance(x, Tensor):
-            return x.view(-1, self.stride, *x.shape[1:])
-        else:
-            return [
-                x[i : i + self.stride] for i in range(0, len(x), self.stride)
-            ]
-
-
-class AsFlatten(Pipe):
-    def __init__(self, pipe: Pipe, **kwargs):
-        super(AsFlatten, self).__init__(**kwargs)
+    def __init__(
+        self,
+        pipe: Pipe,
+        filter: Optional[Callable] = None,
+        update: bool = False,
+        **kwargs,
+    ):
+        super(ApplyAsFlatten, self).__init__(**kwargs)
         self.pipe = pipe
+        self.update = update
         self.flatten = Flatten()
+        self.nest = Nest(stride=None)
+        self.filter = FilterKeys(filter)
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
+        output = self._filter_and_apply(batch, **kwargs)
+        if self.update:
+            batch.update(output)
+            return batch
+        else:
+            return output
+
+    def _filter_and_apply(self, batch: Batch, **kwargs) -> Batch:
+        batch = self.filter(batch)
+        batch_size = infer_batch_size(batch)
         stride = infer_stride(batch)
         batch = self.flatten(batch)
         batch = self.pipe(batch, **kwargs)
-        return Nest(stride=stride)(batch)
+        output = self.nest(batch, stride=stride)
+
+        new_batch_size = infer_batch_size(output)
+        new_stride = infer_stride(output)
+        assert batch_size == new_batch_size
+        assert new_stride == stride
+
+        return output
+
+    def fingerprint(self):
+        return {
+            "filter": self.filter.fingerprint(),
+            "flatten": self.flatten.fingerprint(),
+            "nest": self.nest.fingerprint(),
+            type(self.pipe).__name__: self.pipe.fingerprint(),
+        }

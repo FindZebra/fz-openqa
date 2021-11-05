@@ -1,4 +1,3 @@
-from typing import Any
 from typing import List
 from typing import Optional
 
@@ -8,15 +7,14 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import ApplyToAll
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Flatten
+from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Nest
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import UpdateWith
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import IsInstance
 
 
 class CollateAsTensor(Sequential):
@@ -45,7 +43,9 @@ class CollateTokens(Sequential):
             Collate(keys=[f"{prefix}input_ids", f"{prefix}attention_mask"]),
             ReplaceInKeys(prefix, ""),
             Flatten() if stride else None,
-            Lambda(tokenizer.pad),
+            UpdateWith(
+                Gate(IsInstance(list), pipe=Lambda(tokenizer.pad, id=f"collate:pad:{prefix}"))
+            ),
             Nest(stride=stride) if stride else None,
             AddPrefix(prefix),
             id=id or f"Collate-tokens-{prefix.replace('.', '')}",

@@ -1,42 +1,54 @@
+import logging
+import os
+from pathlib import Path
+
 import datasets
+import hydra
 import rich
+from omegaconf import DictConfig
+from rich.logging import RichHandler
 
-from fz_openqa.datamodules.meqa_dm import MedQaDataModule
-from fz_openqa.datamodules.pipes import Pipe
+import fz_openqa
+from fz_openqa import configs
+from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-from fz_openqa.utils.pretty import get_separator
 
-datasets.set_caching_enabled(False)
+logger = logging.getLogger(__name__)
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
+
+@hydra.main(
+    config_path=str(Path(configs.__file__).parent),
+    config_name="script_config.yaml",
 )
+def run(config: DictConfig) -> None:
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    datasets.set_caching_enabled(True)
 
-dm = MedQaDataModule(
-    tokenizer=tokenizer,
-    num_proc=1,
-    use_subset=True,
-    verbose=True,
-    n_retrieved_documents=0,
-)
+    # define the default cache location
+    default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
-dm.prepare_data()
-dm.setup()
+    # initialize the tokenizer
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
-
-print(get_separator())
-rich.print(dm.dataset)
-print(get_separator())
-
-
-batch = next(iter(dm.train_dataloader()))
-
-
-for idx in range(3):
-    print(get_separator("-"))
-    eg = Pipe.get_eg(batch, idx=idx)
-    rich.print(
-        f"Example #{1+idx}: \n"
-        f" * answer=[magenta]{eg['answer.text'][eg['answer.target']]}[/magenta]\n"
-        f" * question=[cyan]{eg['question.text']}[/cyan]\n"
+    # initialize the data module
+    builder = MedQABuilder(
+        tokenizer=tokenizer,
+        use_subset=config.get("use_subset", True),
+        cache_dir=config.get("cache_dir", default_cache_dir),
+        num_proc=2,
     )
+    dm = DataModule(builder=builder)
+    dm.prepare_data()
+    dm.setup()
+    dm.display_samples()
+
+    # access dataset
+    rich.print(dm.dataset)
+
+    # sample a batch
+    _ = next(iter(dm.train_dataloader()))
+
+
+if __name__ == "__main__":
+    run()

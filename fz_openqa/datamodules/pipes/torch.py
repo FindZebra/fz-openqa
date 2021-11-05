@@ -29,7 +29,7 @@ class Itemize(Pipe):
         if isinstance(values, Tensor) and values.dim() > 0:
             return [self.itemize(x) for x in values]
         elif isinstance(values, Tensor):
-            return values.item()
+            return values.detach().item()
         else:
             return values
 
@@ -40,9 +40,7 @@ class Itemize(Pipe):
 class Forward(Pipe):
     """Process a batch of data using a model: output[key] = model(batch)"""
 
-    def __init__(
-        self, *, model: Union[Callable, torch.nn.Module], output_key: str
-    ):
+    def __init__(self, *, model: Union[Callable, torch.nn.Module], output_key: str):
         self.model = model
         self.output_key = output_key
 

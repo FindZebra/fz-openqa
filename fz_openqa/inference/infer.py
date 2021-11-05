@@ -95,15 +95,9 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
 def encode_data(data, tokenizer):
     """Encode the data retrieve form a .json file"""
     # tokenize
-    batch = FZxMedQADataModule.tokenize_examples(
-        data, tokenizer=tokenizer, max_length=None
-    )
+    batch = FZxMedQADataModule.tokenize_examples(data, tokenizer=tokenizer, max_length=None)
     batch.update(
-        **{
-            k: v
-            for k, v in data.items()
-            if k in ["answer.target", "rank", "idx", "match_score"]
-        }
+        **{k: v for k, v in data.items() if k in ["answer.target", "rank", "idx", "match_score"]}
     )
     [batch.pop(k) for k in list(batch.keys()) if ".text" in k]
 

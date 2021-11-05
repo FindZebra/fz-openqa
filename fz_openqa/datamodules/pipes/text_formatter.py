@@ -1,4 +1,5 @@
 import re
+from typing import Any
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -19,6 +20,7 @@ class TextFormatter(Pipe):
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
+        remove_symbols: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -27,6 +29,7 @@ class TextFormatter(Pipe):
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
+        self.remove_symbols = remove_symbols
 
     def clean(self, text: str) -> str:
 
@@ -35,6 +38,9 @@ class TextFormatter(Pipe):
 
         if self.remove_linebreaks:
             text = re.sub(r"[\n]", "", text)
+
+        if self.remove_symbols:
+            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
 
         if self.aggressive_cleaning:
             # quick and dirty fix (trying to solve issue #80), doesn't fix it
@@ -60,9 +66,7 @@ class TextFormatter(Pipe):
         else:
             ValueError(f"Cannot handle type {type(x).__name__}.")
 
-    def __call__(
-        self, batch: Batch, text_key: Optional[str] = None, **kwargs
-    ) -> Batch:
+    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
         text_key = text_key or self.text_key
         assert text_key is not None, "attribute `text_key` must be set."
         batch[text_key] = self._apply_to_leaves(batch[text_key], self.clean)

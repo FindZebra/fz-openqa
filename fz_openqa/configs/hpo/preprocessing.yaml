@@ -1,0 +1,32 @@
+# @package _global_
+
+defaults:
+  - override /sys: hpo-titan.yaml
+  - override /space: search_preprocessing.yaml
+  - override /runner: default.yaml
+
+base:
+  name: preprocessing
+  target_metric: null
+  target_mode: null
+  # resources
+  gpus: 0
+  cpus: 8
+
+ray:
+  local_mode: True
+  configure_logging: True
+  logging_level: info
+
+experiment:
+  experiment: preprocessing.yaml
+  sys: titan.yaml
+  sys.cache_dir: ${sys.cache_dir}
+  base.target_metric: ${base.target_metric}
+  base.target_mode: ${base.target_mode}
+  base.seed: null
+  print_config: True
+  verbose: True
+  ignore_warnings: False
+  datamodule.num_proc: 4
+  datamodule.use_subset: False

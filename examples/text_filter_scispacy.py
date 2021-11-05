@@ -1,13 +1,11 @@
 import en_core_sci_scibert
 import rich
 
-from fz_openqa.datamodules.corpus_dm import MedQaCorpusDataModule
+from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.pipes.text_filtering import SciSpacyFilter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
-tokenizer = init_pretrained_tokenizer(
-    pretrained_model_name_or_path="bert-base-cased"
-)
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
 corpus = MedQaCorpusDataModule(
     tokenizer=tokenizer,

@@ -8,13 +8,13 @@
 
 defaults:
   - override /sys: hpo-titan.yaml
-  - override /space: search_3.yaml
-  - override /runner: default.yaml
+  - override /space: search_preprocessing.yaml
+  - override /runner: hyperopt_asha.yaml
 
 base:
   name: search_retriever
-  target_metric: validation/retriever/loss
-  target_mode: min
+  target_metric: validation/retriever/top10_Accuracy
+  target_mode: max
   # resources
   gpus: 4
   cpus: 16
@@ -25,38 +25,27 @@ ray:
 
 experiment:
   experiment: retriever_only.yaml
-  corpus: none.yaml
   sys: titan.yaml
-  cache_dir: ${sys.cache_dir}
+  sys.cache_dir: ${sys.cache_dir}
   base.target_metric: ${base.target_metric}
   base.target_mode: ${base.target_mode}
-  seed: null
+  base.seed: null
   print_config: False
   verbose: False
-  ignore_warnings: True
-  trainer.progress_bar_refresh_rate: 0
+  # ignore_warnings: True
+  # trainer.progress_bar_refresh_rate: 0
   trainer.checkpoint_callback: True
   logger.wandb.group: ${base.name}
   callbacks: tune.yaml
-  callbacks.model_checkpoint.cleanup_threshold: 5.0
-  datamodule.train_batch_size: 8
-  datamodule.eval_batch_size: 128
   datamodule.num_workers: ${base.cpus}
+  datamodule.num_proc: 1 # todo
+  datamodule.use_subset: False
   trainer.max_epochs: 300
   trainer.gpus: ${base.gpus}
   trainer.accelerator: dp
 
 
 runner:
-  # scheduler: null # todo necessary here because different effective batch sizes are sued because of train_sampler.n_neg
-  search_alg:
-    points_to_evaluate:
-      - model.hidden_size: 64
-        model.lr: 0.00001
-        model.weight_decay: 0.001
-        model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
-        model.bert.hidden_dropout_prob: 0
-        model.bert.attention_probs_dropout_prob: 0.3
-        seed: 14
-        datamodule.train_sampler.n_neg: 0
-        datamodule.add_encoding_tokens: True
+  fail_fast: True
+  raise_on_failed_trial: True
+  search_alg: null

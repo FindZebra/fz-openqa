@@ -80,11 +80,7 @@ class SafeMetricCollection(MetricCollection):
     def update(self, *args: Any, **kwargs: Any) -> None:
         for _, m in self.items(keep_base=True):
             preds, targets = args
-            if (
-                isinstance(m, Accuracy)
-                and m.top_k is not None
-                and preds.shape[-1] <= m.top_k
-            ):
+            if isinstance(m, Accuracy) and m.top_k is not None and preds.shape[-1] <= m.top_k:
                 pass
             else:
                 m_kwargs = m._filter_kwargs(**kwargs)

@@ -1,19 +1,20 @@
+from typing import Dict
 from typing import Optional
+from typing import Union
 
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Nested
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.documents import ARE_DOCS_SELECTED_KEY
-from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.utils.condition import Not
-from fz_openqa.datamodules.utils.condition import Reduce
-from fz_openqa.datamodules.utils.condition import Static
-from fz_openqa.datamodules.utils.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import Not
+from fz_openqa.datamodules.pipes.control.condition import Reduce
+from fz_openqa.datamodules.pipes.control.condition import Static
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 
 
 class PostprocessPipe(BlockSequential):
@@ -22,7 +23,7 @@ class PostprocessPipe(BlockSequential):
         relevance_classifier: RelevanceClassifier,
         *,
         n_retrieved_documents: int,
-        n_select_documents: Optional[int],
+        n_select_documents: Optional[Union[int, Dict]],
         max_select_pos_docs: Optional[int],
         **kwargs
     ):
@@ -32,10 +33,8 @@ class PostprocessPipe(BlockSequential):
             super().__init__([("identity", Identity())])
         else:
             # sort the documents based on score and `match_score`
-            sorter = Nested(
-                Sort(
-                    keys=["document.match_score", "document.retrieval_score"]
-                ),
+            sorter = ApplyAsFlatten(
+                Sort(keys=["document.match_score", "document.retrieval_score"]),
                 filter=KeyWithPrefix("document."),
             )
 
@@ -58,12 +57,7 @@ class PostprocessPipe(BlockSequential):
                 max_pos_docs=max_select_pos_docs,
                 strict=False,
             )
-            activate_selector = Reduce(
-                HasKeyWithPrefix("document.match_score"),
-                Not(HasKeyWithPrefix(ARE_DOCS_SELECTED_KEY)),
-                reduce_op=all,
-            )
-            selector = Gate(activate_selector, selector)
+            selector = Gate(HasKeyWithPrefix("document.match_score"), pipe=selector)
 
             super().__init__(
                 [

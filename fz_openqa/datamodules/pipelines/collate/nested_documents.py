@@ -2,8 +2,8 @@ import torch
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ApplyToAll
-from fz_openqa.datamodules.pipes import AsFlatten
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import FirstEg
@@ -12,8 +12,8 @@ from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.utils.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.utils.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 
 
 class MaybeCollateDocuments(Gate):
@@ -25,9 +25,7 @@ class MaybeCollateDocuments(Gate):
 
     def __init__(self, tokenizer: PreTrainedTokenizerFast, **kwargs):
         # get the raw text
-        raw_text_pipe = FilterKeys(
-            KeyIn(["document.text", "document.match_on"])
-        )
+        raw_text_pipe = FilterKeys(KeyIn(["document.text", "document.match_on"]))
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
@@ -48,10 +46,8 @@ class MaybeCollateDocuments(Gate):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         tokens_pipe = Gate(
             HasKeyWithPrefix("document.input_ids"),
-            Sequential(
-                FilterKeys(
-                    KeyIn(["document.input_ids", "document.attention_mask"])
-                ),
+            pipe=Sequential(
+                FilterKeys(KeyIn(["document.input_ids", "document.attention_mask"])),
                 ReplaceInKeys("document.", ""),
                 Lambda(tokenizer.pad),
                 AddPrefix("document."),
@@ -73,11 +69,9 @@ class MaybeCollateDocuments(Gate):
                     "document.text",
                 ]
             ),
-            AsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
+            ApplyAsFlatten(Parallel(raw_text_pipe, simple_attr_pipe, tokens_pipe)),
         )
 
         condition = Sequential(FirstEg(), HasKeyWithPrefix("document."))
 
-        super(MaybeCollateDocuments, self).__init__(
-            condition, doc_collate_pipe, **kwargs
-        )
+        super(MaybeCollateDocuments, self).__init__(condition, doc_collate_pipe, **kwargs)
