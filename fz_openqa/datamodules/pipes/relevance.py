@@ -21,11 +21,13 @@ from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
+from spacy.tokens.span import Span
 
 from .nesting import nested_list
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
+from fz_openqa.datamodules.pipes.utils.static import STOP_WORDS
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -203,6 +205,10 @@ class ExactMatch(RelevanceClassifier):
         doc_text = pair.document["document.text"]
         answer_index = pair.answer["answer.target"]
         answer_text = pair.answer["answer.text"][answer_index]
+        answer_text = " ".join(
+            [word for word in answer_text.split() if word.lower() not in STOP_WORDS]
+        )
+
         return find_all(doc_text, [answer_text])
 
     # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
@@ -218,6 +224,7 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def __init__(
         self,
+        filter_tui: Optional[bool] = True,
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         linker_name: str = "umls",
@@ -226,6 +233,7 @@ class AliasBasedMatch(RelevanceClassifier):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.filter_tui: filter_tui
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
         self.linker_name = linker_name
@@ -289,9 +297,8 @@ class AliasBasedMatch(RelevanceClassifier):
         model.add_pipe(
             "scispacy_linker",
             config={
+                "threshold": 0.65,
                 "linker_name": linker_name,
-                "max_entities_per_mention": 3,
-                "threshold": 0.95,
             },
         )
         return model
@@ -328,12 +335,13 @@ class AliasBasedMatch(RelevanceClassifier):
         for entity in doc.ents:
             linked_entities = self.get_linked_entities(entity)
 
+            # if self.filter_tui:
             # filter irrelevant entities based on TUIs
             _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-            filtered_entities = filter(_filter, linked_entities)
+            linked_entities = filter(_filter, linked_entities)
 
-            for linked_entity in filtered_entities:
-                if self.filter_acronyms:
+            for linked_entity in linked_entities:
+                if not self.filter_acronyms:
                     yield linked_entity.entity.lower()
                 elif self.detect_acronym(linked_entity.entity):
                     pass
@@ -342,11 +350,12 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def extract_aliases(self, linked_entities: Iterable[LinkedEntity]) -> Iterable[str]:
         # get the TUIs of linked entities to filter irrelevant ones
+        # if self.filter_tuis:
         # filter irrelevant entities based on TUIs
         _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-        filtered_entities = filter(_filter, linked_entities)
+        linked_entities = filter(_filter, linked_entities)
 
-        for linked_entity in filtered_entities:
+        for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
                 if not self.filter_acronyms:
                     yield alias.lower()
@@ -382,7 +391,12 @@ class MetaMapMatch(AliasBasedMatch):
                     e_aliases = set(self.extract_aliases(linked_entities))
                     answer_aliases = set.union(answer_aliases, e_aliases)
 
-            answer_aliases = [str(answer)] + sorted(answer_aliases, key=len)
+            # remove stopwords
+            answer_string = " ".join(
+                [word for word in answer.split() if word.lower() not in STOP_WORDS]
+            )
+
+            answer_aliases = [answer_string] + sorted(answer_aliases, key=len)
             # update the pair and return
             pair.answer["answer.aliases"] = list(answer_aliases)
             yield pair
@@ -407,14 +421,16 @@ class ScispaCyMatch(AliasBasedMatch):
 
         # join the aliases
         for pair, answer_doc, synonym_doc in zip_longest(pairs, answer_docs, synonym_docs):
-            answer_synonyms = set(self.extract_and_filters_entities(synonym_doc))
-            answer_aliases = set(answer_synonyms)
-            for ent in answer_doc.ents:
-                linked_entities = self.get_linked_entities(ent)
-                e_aliases = set(self.extract_aliases(linked_entities))
-                answer_aliases = set.union(answer_aliases, e_aliases)
+            answer_doc.ents = [Span(answer_doc, 0, len(answer_doc), label="Entity")]
+            linked_entities = self.get_linked_entities(answer_doc.ents[0])
+            e_aliases = set(self.extract_aliases(linked_entities))
 
-            answer_aliases = [str(answer_doc)] + sorted(answer_aliases, key=len)
+            # remove stopwords
+            answer_string = " ".join(
+                [word for word in str(answer_doc).split() if word.lower() not in STOP_WORDS]
+            )
+
+            answer_aliases = [answer_string] + sorted(e_aliases, key=len)
 
             # update the pair and return
             pair.answer["answer.aliases"] = list(answer_aliases)

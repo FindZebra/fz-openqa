@@ -3,8 +3,6 @@ import os
 from typing import List
 from typing import Optional
 
-from rich.progress import track
-
 import datasets
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -13,17 +11,20 @@ from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
+from rich.progress import track
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import UpdateWith, Sequential, torch, Pipe, DropKeys
+from fz_openqa.datamodules.pipes import DropKeys
+from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import torch
+from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = train_utils.get_logger(__name__)
-
-
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -82,10 +83,10 @@ def train(config: DictConfig) -> Optional[float]:
 
         for split, dataloader in dataloaders.items():
             with open(
-                    os.path.join(trial_path, f"{corpus_name}-{cls_name}-{split}.jsonl"), mode="w"
+                os.path.join(trial_path, f"{corpus_name}-{cls_name}-{split}.jsonl"), mode="w"
             ) as fp:
                 for batch in track(
-                        dataloader, description=f"Iterating through the {split} dataset..."
+                    dataloader, description=f"Iterating through the {split} dataset..."
                 ):
 
                     batch = pipe(batch)
