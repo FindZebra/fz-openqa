@@ -10,9 +10,9 @@ from typing import Optional
 from typing import Union
 
 import dill
-from datasets.fingerprint import Hasher
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 
 
 def _filter_null_id(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -72,9 +72,7 @@ class Pipe(ABC):
     @staticmethod
     def _fingerprint(x):
         """Return the fingerprint of an object."""
-        hash = Hasher()
-        hash.update(x)
-        return hash.hexdigest()
+        return get_fingerprint(x)
 
     def copy(self, **kwargs):
         """Copy the pipe and replace attributes using kwargs"""

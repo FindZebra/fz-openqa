@@ -21,11 +21,12 @@ import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.dense import fingerprint_model
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sort
+from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
@@ -33,6 +34,7 @@ from fz_openqa.datamodules.pipes.search import FetchDocuments
 from fz_openqa.modeling import Model
 from fz_openqa.tokenizers.pretrained import PreTrainedTokenizerFast
 from fz_openqa.utils.config import print_config
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
@@ -111,17 +113,15 @@ class CheckpointLoader:
     config_name="script_config.yaml",
 )
 def run(config: DictConfig) -> None:
+    # todo: init trainer to index using accelerator
     seed_everything(1, workers=True)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     datasets.set_caching_enabled(True)
     loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
     # loader.pprint()
     model = loader.load_model(last=config.get("last", False))
-    # todo: check if model is properly loaded
-
-    raw_bert = loader.load_bert()
-    check_bert(model.module.bert, "model.module.bert")
-    check_bert(raw_bert, "load_bert")
+    model.eval()
+    model.freeze()
 
     logger.info(f"Initialize corpus <{MedQaCorpusBuilder.__name__}>")
     corpus_builder = MedQaCorpusBuilder(
@@ -131,29 +131,30 @@ def run(config: DictConfig) -> None:
         cache_dir=config.get("sys.cache_dir", default_cache_dir),
         num_proc=2,
     )
-    corpus = corpus_builder().select(range(100))
+    corpus = corpus_builder().select(range(10))
     rich.print(corpus)
 
     logger.info(f"Initialize index <{FaissIndex.__name__}>")
-    rich.print(f">> model.fingerprint={fingerprint_model(model.module.bert)}")
+    rich.print(f">> model.fingerprint={get_fingerprint(model.module.bert)}")
     index = FaissIndex(
         dataset=corpus,
         model=model,
         batch_size=10,
         model_output_keys=["_hd_", "_hq_"],
         cache_dir=tempfile.tempdir,
+        collate_pipe=corpus_builder.get_collate_pipe(),
     )
     rich.print(index)
 
     # setup search pipe
-    search = SearchCorpus(index, k=3, model=model)
+    search = SearchCorpus(index, k=10, model=model)
     sorter = ApplyAsFlatten(
         Sort(keys=["document.retrieval_score"]),
         filter=KeyWithPrefix("document."),
     )
     fetcher = ApplyAsFlatten(
         FetchDocuments(
-            corpus_dataset=corpus_builder(),
+            corpus_dataset=corpus,
             collate_pipe=corpus_builder.get_collate_pipe(),
         ),
         filter=KeyIn(["document.row_idx"]),
@@ -162,15 +163,16 @@ def run(config: DictConfig) -> None:
 
     # query
     query = corpus[:2]
-    query = {str(k).replace("document.", "question."): v for k, v in query.items()}
+    # todo: reverse the two following lines
     output = sorter(search(query))
+    query = {str(k).replace("document.", "question."): v for k, v in query.items()}
     pprint_batch(output, "query output")
     output = {**query, **fetcher(output)}
     pprint_batch(output, "query output + all fields")
     for i in range(infer_batch_size(query)):
         eg = Pipe.get_eg(output, idx=i)
         rich.print(get_separator())
-        rich.print(f"query: [white]{eg['question.text']}")
+        rich.print(f"query: [cyan]{eg['question.text']}")
         for j in range(len(eg["document.text"])):
             rich.print(get_separator("."))
             txt = eg["document.text"][j]
@@ -180,7 +182,7 @@ def run(config: DictConfig) -> None:
 
 def check_bert(bert, header=""):
     params = list(sorted(bert.named_parameters(), key=lambda x: x[0]))
-    rich.print(f"[green]=== {header} : n_params={len(params)} :hash={fingerprint_model(bert)} ===")
+    rich.print(f"[green]=== {header} : n_params={len(params)} :hash={get_fingerprint(bert)} ===")
 
 
 if __name__ == "__main__":

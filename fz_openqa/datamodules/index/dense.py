@@ -1,14 +1,12 @@
-import io
 import logging
 from typing import Callable
+from typing import Dict
 from typing import List
 from typing import Union
 
+import dill
 import faiss
 import numpy as np
-import rich
-import torch
-import xxhash
 from datasets import Dataset
 from faiss.swigfaiss import Index as FaissSwigIndex
 from rich.progress import track
@@ -26,23 +24,9 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import ToNumpy
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 
 logger = logging.getLogger(__name__)
-
-
-def fingerprint_model(model):
-    hasher = xxhash.xxh64()
-    state = model.state_dict()
-    for (k, v) in sorted(state.items(), key=lambda x: x[0]):
-        # it did not work without hashing the tensor
-        hasher.update(k)
-        buff = io.BytesIO()
-        torch.save(v, buff)
-        buff.seek(0)
-        hasher.update(buff.read())
-
-    return hasher.hexdigest()
 
 
 class FaissIndex(Index):
@@ -65,15 +49,22 @@ class FaissIndex(Index):
         metric_type: str = faiss.METRIC_INNER_PRODUCT,
         **kwargs,
     ):
+
+        #  save fingerprints
+        self._model_fingerprint = get_fingerprint(model)
+        self._datadset_fingerprint = dataset._fingerprint
+
+        # model and params
         self.model = model
-        self._model_fingerprint = fingerprint_model(model)
         self.nlist = nlist
+        self.metric_type = metric_type
         self.batch_size = batch_size
         self.index_key = index_key
         self.model_output_keys = model_output_keys
+
+        # Pipes
         self.collate = collate_pipe
         self.process = self.get_batch_processing_pipe(model)
-        self.metric_type = metric_type
 
         super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
@@ -82,9 +73,10 @@ class FaissIndex(Index):
 
         # todo: refactor to apply the preprocessing pipe on the fly.
         #  So caching the new dataset can be avoided.
-        # get rid of dataset, use a dataloader / check compatibility
-        # with lightning: potentially solves all the issues
-        # with slow loading of the batches on device!
+        # todo: get rid of dataset, use a dataloader / check compatibility
+        #  with lightning: potentially solves all the issues
+        #  with slow loading of the batches on device!
+        # todo: safe pickle and multiprocessing (save index to file)
         # cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
         # dataset = dataset.remove_columns(cols_to_drop)
         loader = DataLoader(
@@ -99,18 +91,15 @@ class FaissIndex(Index):
         # init faiss index
         batch = next(it)
         batch = self.process(batch)
-        vectors = batch[self.vectors_column_name]
-        assert len(vectors.shape) == 2
-        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
-        self._index.add(np.ascontiguousarray(vectors))
+        self._init_index(batch)
+        self._add_batch_to_index(batch)
 
         # iterate through batches
         while True:
             try:
                 batch = next(it)
                 batch = self.process(batch)
-                vectors = batch[self.vectors_column_name]
-                self._index.add(np.ascontiguousarray(vectors))
+                self._add_batch_to_index(batch)
             except Exception:
                 break
 
@@ -119,35 +108,49 @@ class FaissIndex(Index):
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
 
+    def dill_inspect(self) -> Dict[str, bool]:
+        """check if the module can be pickled."""
+        return {
+            "__all__": dill.pickles(self),
+            **{k: dill.pickles(v) for k, v in self.__getstate__().items()},
+        }
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_index"] = faiss.serialize_index(state["_index"])
+        return state
+
+    def __setstate__(self, state):
+        state["_index"] = faiss.deserialize_index(state["_index"])
+        self.__dict__.update(state)
+
+    def _init_index(self, batch):
+        vectors = batch[self.vectors_column_name]
+        assert len(vectors.shape) == 2
+        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+
+    def _add_batch_to_index(self, batch: Batch):
+        vectors = batch[self.vectors_column_name]
+        self._index.add(np.ascontiguousarray(vectors))
+
     @property
     def is_indexed(self):
         return self._index is None or self._index.is_trained
-
-    # def __getstate__(self):
 
     def search(
         self,
         query: Batch,
         *,
         k: int = 1,
-        model: Union[Callable, Module] = None,
         **kwargs,
     ) -> SearchResult:
         """Search the index using the `query` and
         return the index of the results within the original dataset."""
-        assert self.dataset is not None
-        model = model or self.model
-        assert model is not None
-
-        query = self.get_batch_processing_pipe(model=model)(query)
-
-        results = self.dataset.get_nearest_examples_batch(
-            self.vectors_column_name, query[self.vectors_column_name], k=k
-        )
-
-        return SearchResult(
-            score=results.total_scores, index=[r[self.index_key] for r in results.total_examples]
-        )
+        query = self.process(query)
+        vectors = query[self.vectors_column_name]
+        vectors = np.ascontiguousarray(vectors)
+        score, indices = self._index.search(vectors, k)
+        return SearchResult(score=score, index=indices)
 
     def get_batch_processing_pipe(self, model: Union[Callable, Module]) -> Pipe:
         """returns a pipe that allows processing a batch of data using the model."""

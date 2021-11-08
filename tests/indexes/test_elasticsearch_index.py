@@ -1,10 +1,10 @@
-import os
+import unittest
 
-from datasets import Dataset
 from torch import nn
 from transformers import BertPreTrainedModel, AutoModel
 
-from fz_openqa.datamodules.index import Index, FaissIndex
+from fz_openqa.datamodules.index import Index, ElasticSearchIndex
+from fz_openqa.datamodules.index.utils.es_engine import ping_es
 from fz_openqa.utils.datastruct import Batch
 from tests.indexes.test_base_index import TestIndex
 
@@ -26,26 +26,14 @@ class ClsModel(nn.Module):
         return {'vector': output.last_hidden_state[:, 0]}
 
 
-class TestDenseIndex(TestIndex):
-    cls: Index.__class__ = FaissIndex
+@unittest.skipIf(not ping_es(), "Elastic Search is not reachable.")
+class TestElasticSearchIndex(TestIndex):
+    cls: Index.__class__ = ElasticSearchIndex
 
     def setUp(self) -> None:
         super().setUp()
         self.model = ClsModel(AutoModel.from_pretrained(self._bert_id))
         self.model.eval()
-
-        # limit the number of threads for faiss
-        os.environ['OMP_NUM_THREADS'] = str(2)
-
-    @staticmethod
-    def __init_index(*, corpus: Dataset, model=None, collate=None) -> Index:
-        if model is None:
-            model = ClsModel(AutoModel.from_pretrained(TestIndex._bert_id))
-        return FaissIndex(dataset=corpus, model=model, batch_size=2, model_output_keys=['vector'],
-                          collate_pipe=collate)
-
-    def _init_index(self) -> Index:
-        return self.__init_index(corpus=self.corpus, model=self.model, collate=self.corpus_collate)
 
     def test_dill_inspect(self):
         self._test_dill_inspect()
