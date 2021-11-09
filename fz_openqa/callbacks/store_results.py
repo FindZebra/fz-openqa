@@ -1,6 +1,4 @@
 import tempfile
-from typing import Any
-from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
@@ -13,18 +11,13 @@ from pytorch_lightning import Callback
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import cast_values_to_numpy
-from fz_openqa.utils.functional import get_batch_eg
-from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.utils.functional import iter_batch_rows
 
 
-def iter_batch_rows(batch: Batch) -> Iterable[Dict]:
-    batch_size = infer_batch_size(batch)
-    for i in range(batch_size):
-        yield get_batch_eg(batch, idx=i)
+class StorePredictionsCallback(Callback):
+    """Allows storing the output of each `prediction_step` into a `pyarrow` table.
+    The Table can be access using the attribute `data` or using the method `iter_batches()`"""
 
-
-class StoreResultCallback(Callback):
     _table: Optional[pa.Table] = None
     _writer: Optional[pq.ParquetWriter] = None
 
@@ -35,14 +28,13 @@ class StoreResultCallback(Callback):
         self.store_fields = store_fields
         self._reset()
 
-    def _reset(self):
-        self.cache = tempfile.TemporaryFile(dir=self.cache_dir)
+    def on_predict_epoch_end(self, *args, **kwargs) -> None:
         self._close_writer()
 
-    def on_predict_epoch_end(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: List[Any]
+    def on_predict_epoch_start(
+        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
     ) -> None:
-        self._close_writer()
+        self._reset()
 
     def on_predict_batch_end(
         self,
@@ -53,36 +45,42 @@ class StoreResultCallback(Callback):
         batch_idx: int,
         dataloader_idx: int,
     ) -> None:
+        """store the outputs of the prediction step to the cache"""
         batch = {k: v for k, v in batch.items() if k in self.store_fields}
-        self._append_rows_cached_table({**batch, **outputs})
+        self._append_batch_to_cache({**batch, **outputs})
+
+    def _reset(self):
+        """get a new temporary cache file and close any existing writer."""
+        self._close_writer()
+        self.cache = tempfile.TemporaryFile(dir=self.cache_dir)
 
     def _close_writer(self):
+        """close any existing writer"""
         if self._writer is not None:
             self._writer.close()
             self._writer = None
 
-    def on_predict_epoch_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
-    ) -> None:
-        self._reset()
-
-    def append_table_to_cache(self, table: pa.Table) -> None:
+    def _append_table_to_cache(self, table: pa.Table) -> None:
+        """write a table to file."""
         if self._writer is None:
             self._writer = pq.ParquetWriter(self.cache, table.schema)
         self._writer.write_table(table)
 
-    def _append_rows_cached_table(self, batch: Batch) -> None:
+    def _append_batch_to_cache(self, batch: Batch) -> None:
+        """Append the batch to the cached `pyarrow.Table`"""
         batch = cast_values_to_numpy(batch, as_contiguous=False)
         df = pd.DataFrame(iter_batch_rows(batch))
         # Convert from pandas to Arrow
         table = pa.Table.from_pandas(df)
         # write to the cache file
-        self.append_table_to_cache(table)
+        self._append_table_to_cache(table)
 
     @property
     def data(self) -> pa.Table:
+        """Returns the cached `pyarrow.Table`"""
         return pq.read_table(self.cache)
 
     def iter_batches(self, batch_size=1000) -> Iterable[Batch]:
+        """Returns an iterator over the cached batches"""
         for batch in self.data.to_batches(max_chunksize=batch_size):
             yield cast_values_to_numpy(batch.to_pydict())

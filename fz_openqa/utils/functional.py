@@ -92,3 +92,10 @@ def check_equal_arrays(x, y):
     x = cast_to_numpy(x)
     y = cast_to_numpy(y)
     return (x == y).all()
+
+
+def iter_batch_rows(batch: Batch) -> Iterable[Dict]:
+    """iterate through each batch example"""
+    batch_size = infer_batch_size(batch)
+    for i in range(batch_size):
+        yield get_batch_eg(batch, idx=i)

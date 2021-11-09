@@ -16,7 +16,7 @@ from pytorch_lightning import Trainer
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.callbacks.store_results import StoreResultCallback
+from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
@@ -88,7 +88,7 @@ def run(config: DictConfig) -> None:
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
     trainer: Optional[Trainer] = instantiate(
-        config.trainer, callbacks=[StoreResultCallback(store_fields=["document.row_idx"])]
+        config.trainer, callbacks=[StorePredictionsCallback(store_fields=["document.row_idx"])]
     )
     if isinstance(trainer, (dict, DictConfig)):
         logger.info("No Trainer was provided. PyTorch Lightning acceleration cannot be used.")

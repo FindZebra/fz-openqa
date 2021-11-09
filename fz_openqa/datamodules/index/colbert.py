@@ -15,7 +15,7 @@ from pytorch_lightning import Trainer
 from rich.progress import track
 from torch.utils.data import DataLoader
 
-from fz_openqa.callbacks.store_results import StoreResultCallback
+from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import SearchResult
