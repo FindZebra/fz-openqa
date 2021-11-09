@@ -9,7 +9,7 @@ import numpy as np
 import rich
 from torch import Tensor
 
-from .base import always_true
+from ...utils.functional import always_true
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 

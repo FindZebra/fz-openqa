@@ -170,6 +170,11 @@ class CorpusBuilder(HfDatasetBuilder):
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
+        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
+        # flatten and return
+        # todo: consumes too much memory
+        # dataset = dataset.flatten_indices()
+
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
@@ -178,9 +183,8 @@ class CorpusBuilder(HfDatasetBuilder):
             with_indices=True,
             desc="Indexing documents",
         )
-        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
-        # flatten and return
-        return dataset.flatten_indices()
+
+        return dataset
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""

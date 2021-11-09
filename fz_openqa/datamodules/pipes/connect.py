@@ -15,6 +15,7 @@ from fz_openqa.datamodules.pipes.utils import reduce_dict_values
 from fz_openqa.datamodules.pipes.utils import safe_fingerprint
 from fz_openqa.datamodules.pipes.utils import safe_todict
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import check_equal_arrays
 
 
 def safe_dill_inspect(p):
@@ -81,15 +82,26 @@ class Parallel(Sequential):
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
 
-        output = {}
+        outputs = {}
         for pipe in self.pipes:
             pipe_out = pipe(batch, **kwargs)
-            assert all(
-                k not in output.keys() for k in pipe_out.keys()
-            ), "There is a conflict between pipes."
-            output.update(**pipe_out)
 
-        return output
+            # check conflict between pipes
+            o_keys = set(outputs.keys())
+            pipe_o_keys = set(pipe_out.keys())
+            intersection = o_keys.intersection(pipe_o_keys)
+            for key in intersection:
+                msg = (
+                    f"There is a conflict between pipes on key={key}\n"
+                    f"- outputs: {outputs[key]}\n"
+                    f"- pipe output: {pipe_out[key]}"
+                )
+                assert check_equal_arrays(outputs[key], pipe_out[key]), msg
+
+            # update output
+            outputs.update(**pipe_out)
+
+        return outputs
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         output_keys = []

@@ -18,8 +18,9 @@ from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipelines.collate import MaybeCollateDocuments
+from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
+from fz_openqa.datamodules.pipelines.index import SearchDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
-from fz_openqa.datamodules.pipelines.preprocessing import SearchDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import BlockSequential
@@ -240,7 +241,10 @@ class OpenQaBuilder(DatasetBuilder):
         )
 
         # D. fetch documents attributes (input_ids)
-        fetch_documents = self.get_fetch_documents_pipe(self.corpus_builder)
+        fetch_documents = FetchNestedDocuments(
+            corpus_dataset=self.corpus_builder(),
+            collate_pipe=self.corpus_builder.get_collate_pipe(),
+        )
 
         return BlockSequential(
             [
@@ -267,16 +271,6 @@ class OpenQaBuilder(DatasetBuilder):
             pos_select_mode="first",
             neg_select_mode="first",
             strict=False,
-        )
-
-    def get_fetch_documents_pipe(self, corpus_builder: CorpusBuilder) -> Optional[Pipe]:
-        return ApplyAsFlatten(
-            FetchDocuments(
-                corpus_dataset=corpus_builder(),
-                collate_pipe=corpus_builder.get_collate_pipe(),
-            ),
-            filter=KeyIn(["document.row_idx"]),
-            update=True,
         )
 
     def get_qa_collate_pipe(self):

@@ -34,7 +34,7 @@ class ClassifyDocuments(Sequential):
                     corpus_dataset=corpus_dataset,
                     keys=["document.text"],
                 ),
-                filter=KeyIn(["document.row_idx"]),
+                input_filter=KeyIn(["document.row_idx"]),
                 update=True,
             ),
             FilterKeys(KeyIn(classifier_input_keys)),

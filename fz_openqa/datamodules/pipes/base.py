@@ -13,14 +13,11 @@ import dill
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import get_batch_eg
 
 
 def _filter_null_id(data: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in data.items() if not (k == "id" and v is None)}
-
-
-def always_true(*args, **kwargs):
-    return True
 
 
 class Pipe(ABC):
@@ -42,8 +39,7 @@ class Pipe(ABC):
     @staticmethod
     def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
         """Extract example `idx` from a batch, potentially filter the keys"""
-        filter_op = filter_op or always_true
-        return {k: v[idx] for k, v in batch.items() if filter_op(k)}
+        return get_batch_eg(batch=batch, idx=idx, filter_op=filter_op)
 
     def batch_size(self, batch: Batch) -> int:
         return len(next(iter(batch.values())))

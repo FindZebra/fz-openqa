@@ -6,6 +6,7 @@ import torch
 from pytorch_lightning.utilities import move_data_to_device
 from torch import Tensor
 
+from ...utils.functional import cast_values_to_numpy
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -13,11 +14,12 @@ from fz_openqa.utils.datastruct import Batch
 class ToNumpy(Pipe):
     """Move Tensors to the CPU and cast to numpy arrays."""
 
-    def __call__(self, batch: Batch) -> Batch:
-        return {
-            k: v.to(device="cpu").numpy() if isinstance(v, torch.Tensor) else v
-            for k, v in batch.items()
-        }
+    def __init__(self, as_contiguous: bool = True, **kwargs):
+        super(ToNumpy, self).__init__(**kwargs)
+        self.as_contiguous = as_contiguous
+
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        return cast_values_to_numpy(batch, as_contiguous=self.as_contiguous)
 
 
 class Itemize(Pipe):
@@ -38,10 +40,9 @@ class Itemize(Pipe):
 class Forward(Pipe):
     """Process a batch of data using a model: output[key] = model(batch)"""
 
-    def __init__(self, *, model: Union[Callable, torch.nn.Module], output_key: str, **kwargs):
+    def __init__(self, *, model: Union[Callable, torch.nn.Module], **kwargs):
         super(Forward, self).__init__()
         self.model = model
-        self.output_key = output_key
 
     @torch.no_grad()
     def __call__(self, batch: Batch, **kwargs) -> Batch:

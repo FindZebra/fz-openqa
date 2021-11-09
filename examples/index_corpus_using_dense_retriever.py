@@ -1,46 +1,37 @@
-import io
 import logging
 import os
-import tempfile
 from pathlib import Path
 from typing import Optional
-from typing import Union
 
 import datasets
 import hydra
 import rich
 import torch
-import xxhash
-from hydra._internal.instantiate._instantiate2 import _resolve_target
+import transformers
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
+from pytorch_lightning import Trainer
 
 import fz_openqa
 from fz_openqa import configs
+from fz_openqa.callbacks.store_results import StoreResultCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import Gate
+from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
-from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
-from fz_openqa.datamodules.pipes.nesting import infer_batch_size
-from fz_openqa.datamodules.pipes.search import FetchDocuments
-from fz_openqa.modeling import Model
-from fz_openqa.tokenizers.pretrained import PreTrainedTokenizerFast
-from fz_openqa.utils.config import print_config
+from fz_openqa.inference.checkpoint import CheckpointLoader
+from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CKPT = "/Users/valv/Documents/Research/remote_data/12-35-00"
+DEFAULT_CKPT = "https://drive.google.com/file/d/17XDASu1JYGndCFWNW3zCZGKD2woJuDIg/view?usp=sharing"
 # define the default cache location
 default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
@@ -48,63 +39,14 @@ OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
-class CheckpointLoader:
-    _tokenizer: Optional[PreTrainedTokenizerFast] = None
+class ModelWrapper:
+    def __init__(self, trainer: Trainer):
+        self.trainer = trainer
 
-    def __init__(self, checkpoint_dir: str, override=Optional[OmegaConf]):
-        self.checkpoint_dir = Path(checkpoint_dir)
-        self.config = OmegaConf.load(self.checkpoint_dir / "config.yaml")
-        if override is not None:
-            self.config.update(override)
-
-    def pprint(self):
-        print_config(self.config, resolve=False)
-
-    def model_checkpoint(self, last=False) -> Union[None, Path]:
-        checkpoints = (self.checkpoint_dir / "checkpoints").iterdir()
-        checkpoints = filter(lambda x: x.suffix == ".ckpt", checkpoints)
-        if last:
-            checkpoints = filter(lambda x: "last" in x.name, checkpoints)
-        else:
-            checkpoints = filter(lambda x: "last" not in x.name, checkpoints)
-
-        try:
-            return next(iter(checkpoints))
-        except StopIteration:
-            return None
-
-    def load_tokenizer(self):
-        return instantiate(self.config.datamodule.tokenizer)
-
-    @property
-    def tokenizer(self) -> PreTrainedTokenizerFast:
-        if self._tokenizer is None:
-            self._tokenizer = self.load_tokenizer()
-        return self._tokenizer
-
-    def load_bert(self):
-        return instantiate(self.config.model.bert)
-
-    def load_model(self, last=False) -> Model:
-
-        logger.info(f"Instantiating model <{self.config.model._target_}>")
-
-        path = self.model_checkpoint(last=last)
-        if path is not None:
-            logger.info(f"Loading model from checkpoint: {path}")
-            # need to override the saved `tokenizer` and `bert` hyperparameters
-            # so `sys.cache_dir` can be overridden
-            cls = _resolve_target(self.config.model._target_)
-            model = cls.load_from_checkpoint(
-                path,
-                tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
-                bert=OmegaConf.to_object(self.config.model.bert),
-            )
-        else:
-            logger.warning("No checkpoint found. Initializing model without checkpoint.")
-            model = instantiate(self.config.model, _recursive_=False)
-
-        return model
+    def __call__(self, batch: Batch, **kwargs) -> Batch:
+        args = {k: type(v) for k, v in kwargs.items()}
+        logger.info(f">> wrapper: batch={type(batch)}, {', '.join(args)}")
+        return self.trainer.accelerator.predict_step(batch)
 
 
 @torch.no_grad()
@@ -113,76 +55,104 @@ class CheckpointLoader:
     config_name="script_config.yaml",
 )
 def run(config: DictConfig) -> None:
-    # todo: init trainer to index using accelerator
-    seed_everything(1, workers=True)
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    """
+    Load a corpus and index it using Faiss.
+    Then query the corpus using the 3 first corpus documents.
+
+    PytorchLightning's Trainer can be used to accelerate indexing.
+    Example, to index the whole corpus (~5min on `rhea`):
+    ```bash
+    poetry run python examples/index_corpus_using_dense_retriever.py \
+    trainer.strategy=dp trainer.gpus=8 +batch_size=2000 +num_workers=16
+    +n_samples=null +use_subset=False +num_proc=4
+
+    ```
+    """
+    # set the context
     datasets.set_caching_enabled(True)
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    transformers.logging.set_verbosity(transformers.logging.CRITICAL)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    seed_everything(1, workers=True)
+
+    # load model
     loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
-    # loader.pprint()
+    if config.get("verbose", False):
+        loader.print_config()
     model = loader.load_model(last=config.get("last", False))
     model.eval()
     model.freeze()
+    logger.info(f"Model {type(model)} loaded")
+    logger.info(f"Model fingerprint: {get_fingerprint(model.module.bert)}")
 
+    # Init Lightning trainer
+    logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
+    trainer: Optional[Trainer] = instantiate(
+        config.trainer, callbacks=[StoreResultCallback(store_fields=["document.row_idx"])]
+    )
+    if isinstance(trainer, (dict, DictConfig)):
+        logger.info("No Trainer was provided. PyTorch Lightning acceleration cannot be used.")
+        trainer = None
+
+    # set up the corpus builder
     logger.info(f"Initialize corpus <{MedQaCorpusBuilder.__name__}>")
     corpus_builder = MedQaCorpusBuilder(
         tokenizer=loader.tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("sys.cache_dir", default_cache_dir),
-        num_proc=2,
+        num_proc=config.get("num_proc", 2),
     )
-    corpus = corpus_builder().select(range(10))
+
+    # build the corpus and take a subset
+    corpus = corpus_builder()
+    n_samples = config.get("n_samples", 10)
+    if n_samples is not None and n_samples > 0:
+        n_samples = min(n_samples, len(corpus))
+        corpus = corpus.select(range(n_samples))
     rich.print(corpus)
 
+    # init the index
     logger.info(f"Initialize index <{FaissIndex.__name__}>")
-    rich.print(f">> model.fingerprint={get_fingerprint(model.module.bert)}")
     index = FaissIndex(
         dataset=corpus,
         model=model,
-        batch_size=10,
+        trainer=trainer,
+        batch_size=config.get("batch_size", 2),
+        num_workers=config.get("num_workers", 1),
         model_output_keys=["_hd_", "_hq_"],
-        cache_dir=tempfile.tempdir,
         collate_pipe=corpus_builder.get_collate_pipe(),
     )
-    rich.print(index)
 
-    # setup search pipe
-    search = SearchCorpus(index, k=10, model=model)
-    sorter = ApplyAsFlatten(
-        Sort(keys=["document.retrieval_score"]),
-        filter=KeyWithPrefix("document."),
-    )
-    fetcher = ApplyAsFlatten(
-        FetchDocuments(
-            corpus_dataset=corpus,
-            collate_pipe=corpus_builder.get_collate_pipe(),
-        ),
-        filter=KeyIn(["document.row_idx"]),
-        update=True,
+    # setup search pipe (query the indexes from the corpus)
+    search = SearchCorpus(index, k=3, model=model)
+    # setup the fetch pipe (fetch all the other fields from the corpus)
+    fetcher = FetchNestedDocuments(
+        corpus_dataset=corpus_builder(), collate_pipe=corpus_builder.get_collate_pipe()
     )
 
-    # query
-    query = corpus[:2]
-    # todo: reverse the two following lines
-    output = sorter(search(query))
-    query = {str(k).replace("document.", "question."): v for k, v in query.items()}
+    # get the query from the corpus
+    query = corpus_builder.get_collate_pipe()([corpus[i] for i in range(3)])
+
+    # search the index (for this example, we use the document.input_ids
+    # to make sure that the same BERT head is used)
+    # however the field is renamed afterwards, for display purposes
+    output = search(query)
+    query: Batch = {str(k).replace("document.", "question."): v for k, v in query.items()}
+
+    # format the output
     pprint_batch(output, "query output")
     output = {**query, **fetcher(output)}
     pprint_batch(output, "query output + all fields")
     for i in range(infer_batch_size(query)):
         eg = Pipe.get_eg(output, idx=i)
         rich.print(get_separator())
-        rich.print(f"query: [cyan]{eg['question.text']}")
+        rich.print(f"query #{i + 1}: [cyan]{eg['question.text']}")
         for j in range(len(eg["document.text"])):
             rich.print(get_separator("."))
             txt = eg["document.text"][j]
             score = eg["document.retrieval_score"][j]
-            rich.print(f"doc: score={score} [white]{txt}")
-
-
-def check_bert(bert, header=""):
-    params = list(sorted(bert.named_parameters(), key=lambda x: x[0]))
-    rich.print(f"[green]=== {header} : n_params={len(params)} :hash={get_fingerprint(bert)} ===")
+            rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
 
 if __name__ == "__main__":

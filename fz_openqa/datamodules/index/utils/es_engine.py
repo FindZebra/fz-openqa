@@ -3,6 +3,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.client.indices import IndicesClient
@@ -117,7 +118,7 @@ class ElasticSearchEngine:
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
-                "query": {"match": {"text": queries[i]}},
+                "query": {"match": {"text": {"query": queries[i], "zero_terms_query": "all"}}},
                 "from": 0,
                 "size": k,
             }

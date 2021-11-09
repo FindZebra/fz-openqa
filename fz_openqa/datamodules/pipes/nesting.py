@@ -9,30 +9,15 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from fz_openqa.datamodules.pipes.base import always_true
 from fz_openqa.datamodules.pipes.base import ApplyToAll
 from fz_openqa.datamodules.pipes.base import FilterKeys
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import always_true
+from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.functional import infer_stride
 
 STRIDE_SYMBOL = "__stride__"
-
-
-def infer_batch_size(batch: Batch) -> int:
-    def _cond(k):
-        return not k.startswith("__") and not k.endswith("__")
-
-    return next(iter((len(v) for k, v in batch.items() if _cond(k))))
-
-
-def infer_stride(batch: Batch) -> int:
-    def _cond(k):
-        return not k.startswith("__") and not k.endswith("__")
-
-    x = next(iter(v for k, v in batch.items() if _cond(k)))
-    stride = len(next(iter(x)))
-    assert all(stride == len(y) for y in x)
-    return stride
 
 
 def flatten_nested(values: List[List[Any]]) -> List[Any]:
@@ -121,7 +106,7 @@ class ApplyAsFlatten(Pipe):
     def __init__(
         self,
         pipe: Pipe,
-        filter: Optional[Callable] = None,
+        input_filter: Optional[Callable] = None,
         update: bool = False,
         **kwargs,
     ):
@@ -130,7 +115,7 @@ class ApplyAsFlatten(Pipe):
         self.update = update
         self.flatten = Flatten()
         self.nest = Nest(stride=None)
-        self.filter = FilterKeys(filter)
+        self.filter = FilterKeys(input_filter)
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
         output = self._filter_and_apply(batch, **kwargs)
