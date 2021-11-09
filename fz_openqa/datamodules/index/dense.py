@@ -178,11 +178,18 @@ class FaissIndex(Index):
         self.__dict__.update(state)
 
     def _init_index(self, batch):
+        """
+        Initialize the Index
+        # todo: @idariis : You can modify this method to add more advanced indexes (e.g. IVF)
+        """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
         self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
+        """
+        Add one batch of data to the index
+        """
         # check indexes
         indexes = batch[self.index_key]
         msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"

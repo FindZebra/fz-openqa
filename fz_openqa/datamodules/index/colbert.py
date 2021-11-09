@@ -1,25 +1,28 @@
 import logging
 from typing import Callable
 from typing import Dict
+from typing import Iterable
 from typing import List
 from typing import Optional
-from typing import Union
 
 import dill
 import faiss
 import numpy as np
+import pytorch_lightning
 from datasets import Dataset
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
-from torch.nn import Module
 from torch.utils.data import DataLoader
 
+from fz_openqa.callbacks.store_results import StoreResultCallback
+from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import SearchResult
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Forward
+from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
@@ -30,86 +33,17 @@ from fz_openqa.utils.fingerprint import get_fingerprint
 
 logger = logging.getLogger(__name__)
 
+DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 
-class ColbertIndex(Index):
-    """Dense indexing using faiss"""
 
-    vectors_column_name = "__vectors__"
-    _index: FaissSwigIndex = None
-    model: Callable = None
-
-    def __init__(
-        self,
-        dataset: Dataset,
-        *,
-        model: Callable,
-        trainer: Optional[Trainer] = None,
-        nlist: int = 10,
-        index_key: str = "document.row_idx",
-        model_output_keys: List[str],
-        batch_size: int = 10,
-        collate_pipe: Pipe = Collate(),
-        metric_type: str = faiss.METRIC_INNER_PRODUCT,
-        **kwargs,
-    ):
-
-        #  save fingerprints
-        self._model_fingerprint = get_fingerprint(model)
-        self._datadset_fingerprint = dataset._fingerprint
-
-        # model and params
-        self.model = model
-        self.nlist = nlist
-        self.metric_type = metric_type
-        self.batch_size = batch_size
-        self.index_key = index_key
-        self.model_output_keys = model_output_keys
-
-        # Pipes
-        self.collate = collate_pipe
-        self.process = self.get_batch_processing_pipe(model)
-
-        super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
-
-    def build(self, dataset: Dataset, **kwargs):
-        """Index a dataset."""
-
-        # todo: refactor to apply the preprocessing pipe on the fly.
-        #  So caching the new dataset can be avoided.
-        # todo: get rid of dataset, use a dataloader / check compatibility
-        #  with lightning: potentially solves all the issues
-        #  with slow loading of the batches on device!
-        # todo: safe pickle and multiprocessing (save index to file)
-        # cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
-        # dataset = dataset.remove_columns(cols_to_drop)
-        loader = DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            num_workers=1,
-            collate_fn=self.collate,
-            shuffle=False,
-        )
-        it = track(iter(loader), description="Indexing dataset")
-
-        # init faiss index
-        batch = next(it)
-        batch = self.process(batch)
-        self._init_index(batch)
-        self._add_batch_to_index(batch)
-
-        # iterate through batches
-        while True:
-            try:
-                batch = next(it)
-                batch = self.process(batch)
-                self._add_batch_to_index(batch)
-            except Exception:
-                break
-
-        logger.info(
-            f"Index is_trained={self._index.is_trained}, "
-            f"size={self._index.ntotal}, type={type(self._index)}"
-        )
+class ColbertIndex(FaissIndex):
+    def __init__(self, dataset: Dataset, **kwargs):
+        """
+        todo: @idariis : this needs to be adapted for Colbert
+        the init should mostly reuse the one from the parent class (FaissIndex)
+        you might need to init the token index (to store the index of the original document)
+        """
+        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
     def dill_inspect(self) -> Dict[str, bool]:
         """check if the module can be pickled."""
@@ -118,27 +52,36 @@ class ColbertIndex(Index):
             **{k: dill.pickles(v) for k, v in self.__getstate__().items()},
         }
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["_index"] = faiss.serialize_index(state["_index"])
-        return state
-
-    def __setstate__(self, state):
-        state["_index"] = faiss.deserialize_index(state["_index"])
-        self.__dict__.update(state)
-
     def _init_index(self, batch):
+        """
+        Initialize the index
+         # todo: @idariis : this needs to be adapted for Colbert
+        """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
         self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
 
-    def _add_batch_to_index(self, batch: Batch):
-        vectors = batch[self.vectors_column_name]
-        self._index.add(np.ascontiguousarray(vectors))
+    def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
+        """
+        Add one batch of data to the index
+         # todo: @idariis : this needs to be adapted for Colbert
+        """
+        # check indexes
+        indexes = batch[self.index_key]
+        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
+        assert all(indexes[:-1] + 1 == indexes[1:]), msg
+        msg = (
+            f"The stored index and the indexes are not contiguous, "
+            f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"
+        )
+        assert self._index.ntotal == indexes[0], msg
 
-    @property
-    def is_indexed(self):
-        return self._index is None or self._index.is_trained
+        # add the vectors
+        vector: np.ndarray = batch[self.vectors_column_name]
+        assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
+        assert len(vector.shape) == 2, f"{vector} is not a 2D array"
+        vector = vector.astype(dtype)
+        self._index.add(vector)
 
     def search(
         self,
@@ -147,19 +90,13 @@ class ColbertIndex(Index):
         k: int = 1,
         **kwargs,
     ) -> SearchResult:
-        """Search the index using the `query` and
-        return the index of the results within the original dataset."""
+        """
+        Search the index using the `query` and
+        return the index of the results within the original dataset.
+        # todo: @idariis : this needs to be adapted for Colbert
+        """
         query = self.process(query)
+        query = self.postprocess(query)
         vectors = query[self.vectors_column_name]
-        vectors = np.ascontiguousarray(vectors)
         score, indices = self._index.search(vectors, k)
         return SearchResult(score=score, index=indices)
-
-    def get_batch_processing_pipe(self, model: Union[Callable, Module]) -> Pipe:
-        """returns a pipe that allows processing a batch of data using the model."""
-        return Sequential(
-            Forward(model=model, output_key=self.vectors_column_name),
-            RenameKeys({key: self.vectors_column_name for key in self.model_output_keys}),
-            FilterKeys(KeyIn([self.vectors_column_name])),
-            ToNumpy(),
-        )

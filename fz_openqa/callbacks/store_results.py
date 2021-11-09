@@ -72,7 +72,7 @@ class StoreResultCallback(Callback):
         self._writer.write_table(table)
 
     def _append_rows_cached_table(self, batch: Batch) -> None:
-        batch = cast_values_to_numpy(batch)
+        batch = cast_values_to_numpy(batch, as_contiguous=False)
         df = pd.DataFrame(iter_batch_rows(batch))
         # Convert from pandas to Arrow
         table = pa.Table.from_pandas(df)
