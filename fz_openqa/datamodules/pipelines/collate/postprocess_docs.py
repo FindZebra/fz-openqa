@@ -35,7 +35,7 @@ class PostprocessPipe(BlockSequential):
             # sort the documents based on score and `match_score`
             sorter = ApplyAsFlatten(
                 Sort(keys=["document.match_score", "document.retrieval_score"]),
-                filter=KeyWithPrefix("document."),
+                input_filter=KeyWithPrefix("document."),
             )
 
             # condition to activate the relevance classifier

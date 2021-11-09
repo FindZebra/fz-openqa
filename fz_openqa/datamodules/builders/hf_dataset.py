@@ -17,6 +17,7 @@ from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def cache_hf_dataset(func):
             if self._cache_dir is not None:
                 # get fingerprint
                 if isinstance(dataset, DatasetDict):
-                    fingerprint = Pipe._fingerprint({k: d._fingerprint for k, d in dataset.items()})
+                    fingerprint = get_fingerprint({k: d._fingerprint for k, d in dataset.items()})
                 else:
                     fingerprint = dataset._fingerprint
 

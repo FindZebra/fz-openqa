@@ -15,6 +15,7 @@ from fz_openqa.datamodules.pipes.utils import reduce_dict_values
 from fz_openqa.datamodules.pipes.utils import safe_fingerprint
 from fz_openqa.datamodules.pipes.utils import safe_todict
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import check_equal_arrays
 
 
 def safe_dill_inspect(p):
@@ -81,15 +82,26 @@ class Parallel(Sequential):
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
 
-        output = {}
+        outputs = {}
         for pipe in self.pipes:
             pipe_out = pipe(batch, **kwargs)
-            assert all(
-                k not in output.keys() for k in pipe_out.keys()
-            ), "There is a conflict between pipes."
-            output.update(**pipe_out)
 
-        return output
+            # check conflict between pipes
+            o_keys = set(outputs.keys())
+            pipe_o_keys = set(pipe_out.keys())
+            intersection = o_keys.intersection(pipe_o_keys)
+            for key in intersection:
+                msg = (
+                    f"There is a conflict between pipes on key={key}\n"
+                    f"- outputs: {outputs[key]}\n"
+                    f"- pipe output: {pipe_out[key]}"
+                )
+                assert check_equal_arrays(outputs[key], pipe_out[key]), msg
+
+            # update output
+            outputs.update(**pipe_out)
+
+        return outputs
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         output_keys = []
@@ -132,48 +144,83 @@ class UpdateWith(Pipe):
 
 
 class Gate(Pipe):
-    """Execute the pipe if the condition is valid, else return {}"""
+    """Execute the pipe if the condition is valid, else execute alt."""
 
     def __init__(
         self,
         condition: Union[bool, Callable],
         pipe: Optional[Pipe],
+        alt: Optional[Pipe] = None,
         id: Optional[str] = None,
+        update: bool = False,
     ):
         super().__init__(id=id)
 
+        self.update = update
         self.condition = condition
         if isinstance(condition, bool) and condition is False:
             self.pipe = None
+            self.alt = alt
+        elif isinstance(condition, bool) and condition is True:
+            self.pipe = pipe
+            self.alt = None
         else:
             self.pipe = pipe
+            self.alt = alt
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
-        if self.condition({k: None for k in input_keys}):
-            return self.pipe.output_keys(input_keys)
+
+        batch = {k: None for k in input_keys}
+        switched_on = self.is_switched_on(batch)
+        if switched_on:
+            output = self.pipe.output_keys(input_keys)
+        elif self.alt is not None:
+            output = self.alt.output_keys(input_keys)
         else:
-            return []
+            output = []
+
+        if self.update:
+            output = list(set(input_keys + output))
+
+        return output
 
     @property
     def id(self):
         return str(type(self.pipe).__name__)
 
     def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
-        """Call the pipes sequentially."""
+        output = self._call(batch, **kwargs)
+        if self.update:
+            batch.update(output)
+            output = batch
+        return output
 
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+
+        switched_on = self.is_switched_on(batch)
+
+        if switched_on:
+            if self.pipe is not None:
+                return self.pipe(batch, **kwargs)
+            else:
+                return {}
+        else:
+            if self.alt is not None:
+                return self.alt(batch, **kwargs)
+            else:
+                return {}
+
+    def is_switched_on(self, batch):
         if isinstance(self.condition, (bool, int)):
             switched_on = self.condition
         else:
             switched_on = self.condition(batch)
-
-        if switched_on and self.pipe is not None:
-            return self.pipe(batch, **kwargs)
-        else:
-            return {}
+        return switched_on
 
     def todict(self) -> Dict:
         d = super().todict()
         d["pipe"] = safe_todict(self.pipe)
+        d["alt"] = safe_todict(self.alt)
         return d
 
     def dill_inspect(self, reduce: bool = False) -> Any:
@@ -186,6 +233,7 @@ class Gate(Pipe):
         data = self.todict()
         data["condition"] = str(data["condition"])
         data["pipe"] = self.pipe.todict()
+        data["alt"] = self.alt.todict()
         return json.dumps(data, indent=4)
 
 

@@ -16,12 +16,12 @@ class TestAsFlatten(TestCase):
 
     def test_identity(self):
         # with update
-        pipe = ApplyAsFlatten(Identity(), update=True, filter=KeyWithPrefix("document."))
+        pipe = ApplyAsFlatten(Identity(), update=True, input_filter=KeyWithPrefix("document."))
         output = pipe(self.data)
         self.assertEqual(output, self.data)
 
         # no update
-        pipe = ApplyAsFlatten(Identity(), update=False, filter=KeyWithPrefix("document."))
+        pipe = ApplyAsFlatten(Identity(), update=False, input_filter=KeyWithPrefix("document."))
         output = pipe(self.data)
         data = self.data
         data.pop('question')

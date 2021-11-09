@@ -9,7 +9,7 @@ import numpy as np
 import rich
 from torch import Tensor
 
-from .base import always_true
+from ...utils.functional import always_true
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -30,11 +30,11 @@ class Sort(Pipe):
         self,
         keys: List[str],
         *,
-        reversed: bool = True,
+        reverse: bool = True,
         filter: Optional[Callable] = None,
     ):
         self.keys = keys
-        self.reversed = reversed
+        self.reverse = reverse
         self.filter = filter or always_true
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -49,7 +49,7 @@ class Sort(Pipe):
             i, v = u
             return v
 
-        indexed_values = sorted(indexed_values, key=_key, reverse=self.reversed)
+        indexed_values = sorted(indexed_values, key=_key, reverse=self.reverse)
         index = [i for i, _ in indexed_values]
 
         batch.update({k: reindex(v, index) for k, v in batch.items() if self.filter(k)})

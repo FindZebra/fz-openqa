@@ -80,11 +80,14 @@ class ElasticSearchIndex(Index):
             filter_pipe = None
 
         # text cleaning and filtering
-        self.preprocesing_pipe = Sequential(
-            CopyBatch(),
-            filter_pipe,
-            text_cleaner,
-        )
+        if filter_pipe is not None and text_cleaner is not None:
+            self.preprocesing_pipe = Sequential(
+                CopyBatch(),
+                filter_pipe,
+                text_cleaner,
+            )
+        else:
+            self.preprocesing_pipe = None
 
         # important
         super(ElasticSearchIndex, self).__init__(dataset=dataset, **kwargs)
@@ -100,12 +103,10 @@ class ElasticSearchIndex(Index):
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
         We make sure a unique index is created for each dataset"""
-
+        rich.print(f"\n build: {dataset}")
         # preprocess the dataset
-        unused_columns = [
-            c for c in dataset.column_names if c not in [self.index_key, self.text_key]
-        ]
-        dataset = dataset.remove_columns(unused_columns)
+        cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
+        dataset = dataset.remove_columns(cols_to_drop)
         dataset = self.preprocess_text(dataset)
 
         # init the index
@@ -149,15 +150,18 @@ class ElasticSearchIndex(Index):
 
         Filter the incoming batch using the same pipe as the one
         used to build the index."""
-        query = self.preprocesing_pipe(query, text_key=self.query_key)
+        if self.preprocesing_pipe is not None:
+            query = self.preprocesing_pipe(query, text_key=self.query_key)
 
         scores, indexes, contents = self.engine.es_search_bulk(
             self.index_name, query[self.query_key], k=k
         )
 
-        analyzed_tokens = np.full(shape=(len(scores), k), fill_value=str([]))
         if self.analyze:
             analyzed_tokens = self.engine.es_analyze_text(self.index_name, contents)
+        else:
+            analyzed_tokens = None
+
         return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
 
     def search_one(
@@ -181,6 +185,9 @@ class ElasticSearchIndex(Index):
     def preprocess_text(self, dataset: Dataset) -> Dataset:
 
         # process the dataset using the filtering pipe
+        if self.preprocesing_pipe is None:
+            return dataset
+
         return dataset.map(
             self.preprocesing_pipe,
             batched=True,

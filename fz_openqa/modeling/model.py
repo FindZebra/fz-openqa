@@ -58,9 +58,9 @@ class Model(LightningModule):
     def __init__(
         self,
         *,
-        tokenizer: PreTrainedTokenizerFast,
+        tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
-        module: DictConfig,
+        module: Union[DictConfig, Module],
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -70,7 +70,7 @@ class Model(LightningModule):
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters(ignore=["tokenizer", "model", "bert"])
+        self.save_hyperparameters()
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
 
@@ -88,6 +88,12 @@ class Model(LightningModule):
             k.replace("head_", ""): v for k, v in kwargs.items() if str(k).startswith("head_")
         }
         return heads_cfgs
+
+    def forward(self, batch: Batch, **kwargs) -> Batch:
+        return self.module.forward(batch, **kwargs)
+
+    def predict(self, batch: Batch, **kwargs) -> Batch:
+        return self.module.predict(batch, **kwargs)
 
     def _step(
         self,

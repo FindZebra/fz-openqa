@@ -42,7 +42,7 @@ experiment:
   datamodule.use_subset: False
   trainer.max_epochs: 300
   trainer.gpus: ${base.gpus}
-  trainer.accelerator: dp
+  trainer.strategy: dp
 
 
 runner:

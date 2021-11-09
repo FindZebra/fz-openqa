@@ -15,7 +15,6 @@ class TestReaderMultipleChoice(TestModel):
         self.model = ReaderMultipleChoice(bert=self.bert, tokenizer=self.tokenizer, heads=heads)
         self.model.eval()
 
-    @torch.no_grad()
     def test_step(self):
         """Test that logits match the targets"""
         output = self.model.step(self.batch)
@@ -31,7 +30,6 @@ class TestReaderMultipleChoice(TestModel):
         self.assertEqual(output["_relevance_logits_"].shape,
                          (self.batch_size, self.n_documents,))
 
-    @torch.no_grad()
     def test_forward(self):
         """Test the shape of tensors return by `forward`"""
         output = self.model.forward(self.batch)

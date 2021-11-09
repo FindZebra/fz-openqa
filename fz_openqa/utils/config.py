@@ -1,6 +1,7 @@
 import os
 import re
 from typing import List
+from typing import Optional
 from typing import Sequence
 
 import omegaconf
@@ -24,18 +25,9 @@ def resolve_config_paths(config: DictConfig, path: str = "", excludes: List[str]
 
 
 @rank_zero_only
-def print_training_config(
+def print_config(
     config: DictConfig,
-    fields: Sequence[str] = (
-        "trainer",
-        "tokenizer",
-        "model",
-        "datamodule",
-        "corpus",
-        "callbacks",
-        "logger",
-        "seed",
-    ),
+    fields: Optional[Sequence[str]] = None,
     resolve: bool = True,
 ) -> None:
     """Prints content of DictConfig using Rich library and its tree structure.
@@ -49,26 +41,8 @@ def print_training_config(
     style = "dim"
     tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
 
+    fields = fields or config.keys()
     for field in fields:
-        branch = tree.add(field, style=style, guide_style=style)
-
-        config_section = config.get(field)
-        branch_content = str(config_section)
-        if isinstance(config_section, DictConfig):
-            branch_content = OmegaConf.to_yaml(config_section, resolve=resolve)
-
-        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
-
-    rich.print(tree)
-
-
-@rank_zero_only
-def print_config(config, resolve: bool = True):
-    """print YAML configuration"""
-    style = "dim"
-    tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
-
-    for field in config.keys():
         branch = tree.add(field, style=style, guide_style=style)
 
         config_section = config.get(field)
@@ -79,6 +53,6 @@ def print_config(config, resolve: bool = True):
             except Exception:
                 pass
 
-        branch.add(rich.syntax.Syntax(branch_content, "yaml"))
+        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
 
     rich.print(tree)

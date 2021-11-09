@@ -12,17 +12,19 @@ from datasets import Dataset
 from rich.progress import track
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 
 
 @dataclass
 class SearchResult:
     score: List[List[float]]
     index: List[List[int]]
-    tokens: List[List[str]]
+    tokens: Optional[List[List[str]]] = None
 
 
 class Index(ABC):
-    """Keep an index of a Dataset and search using queries."""
+    """Keep an index of a Dataset and search u
+    sing queries."""
 
     index_name: Optional[str] = None
     is_indexed: bool = False
@@ -40,6 +42,9 @@ class Index(ABC):
         """check if the module can be pickled."""
         return dill.pickles(self)
 
+    def _fingerprint(self) -> str:
+        return get_fingerprint(self)
+
     @abstractmethod
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
@@ -47,7 +52,7 @@ class Index(ABC):
 
     def search_one(
         self, query: Dict[str, Any], *, k: int = 1, **kwargs
-    ) -> Tuple[List[float], List[int]]:
+    ) -> Tuple[List[float], List[int], Optional[List[int]]]:
         """Search the index using one `query`"""
         raise NotImplementedError
 
@@ -59,21 +64,22 @@ class Index(ABC):
         The default method search for each example sequentially.
         """
         batch_size = len(next(iter(query.values())))
-        scores, indexes, contents = [], [], []
+        scores, indexes, tokens = [], [], []
         _iter = range(batch_size)
         if self.verbose:
             _iter = track(
                 _iter,
-                description=f"Searching {self.__class__.__name__} for batch..",
+                description=f"Searching {self.__name__} for batch..",
             )
         for i in _iter:
             eg = self.get_example(query, i)
-            scores_i, indexes_i, contents_i = self.search_one(eg, k=k, **kwargs)
+            scores_i, indexes_i, tokens_i = self.search_one(eg, k=k, **kwargs)
             scores += [scores_i]
             indexes += [indexes_i]
-            contents += [contents_i]
-
-        return SearchResult(index=indexes, score=scores, content=contents)
+            if tokens_i is not None:
+                tokens += [tokens_i]
+        tokens = None if len(tokens) == 0 else tokens
+        return SearchResult(index=indexes, score=scores, tokens=tokens)
 
     def get_example(self, query: Batch, index: int) -> Dict[str, Any]:
         return {k: v[index] for k, v in query.items()}
