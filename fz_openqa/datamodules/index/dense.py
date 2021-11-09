@@ -32,6 +32,8 @@ from fz_openqa.utils.fingerprint import get_fingerprint
 
 logger = logging.getLogger(__name__)
 
+DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
+
 
 class FaissIndex(Index):
     """Dense indexing using faiss"""
@@ -49,8 +51,7 @@ class FaissIndex(Index):
         nlist: int = 10,
         index_key: str = "document.row_idx",
         model_output_keys: List[str],
-        batch_size: int = 10,
-        num_workers: int = 0,
+        loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = Collate(),
         metric_type: str = faiss.METRIC_INNER_PRODUCT,
         **kwargs,
@@ -70,8 +71,7 @@ class FaissIndex(Index):
 
         # trainer and dataloader
         self.trainer = trainer
-        self.batch_size = batch_size
-        self.num_workers = num_workers
+        self.loader_kwargs = loader_kwargs or DEF_LOADER_KWARGS
 
         # collate pipe use to convert dataset rows into a batch
         self.collate = collate_pipe
@@ -93,13 +93,7 @@ class FaissIndex(Index):
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
 
-        loader = DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            collate_fn=self.collate,
-            shuffle=False,
-        )
+        loader = DataLoader(dataset, collate_fn=self.collate, shuffle=False, **self.loader_kwargs)
 
         # process batches
         processed_batches = self._process_batches(loader, trainer=self.trainer)

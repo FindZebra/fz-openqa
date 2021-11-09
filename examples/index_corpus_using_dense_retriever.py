@@ -118,8 +118,11 @@ def run(config: DictConfig) -> None:
         dataset=corpus,
         model=model,
         trainer=trainer,
-        batch_size=config.get("batch_size", 2),
-        num_workers=config.get("num_workers", 1),
+        loader_kwargs={
+            "batch_size": config.get("batch_size", 2),
+            "num_workers": config.get("num_workers", 1),
+            "pin_memory": config.get("pin_memory", True),
+        },
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder.get_collate_pipe(),
     )

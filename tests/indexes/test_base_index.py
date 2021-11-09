@@ -64,7 +64,7 @@ class TestIndex(TestCase, ABC):
         self.corpus = Dataset.from_dict(documents)
         self.corpus.set_format("torch", output_all_columns=True,
                                columns=[f"document.{attr}" for attr in self.pt_cols])
-        self.corpus_collate = Parallel(Collate(['document.text']),
+        self.corpus_collate = Parallel(Collate(['document.text', 'document.row_idx']),
                                        CollateTokens(tokenizer=self.tokenizer, prefix='document.'))
 
         # define targets
