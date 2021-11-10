@@ -9,6 +9,7 @@ import dill
 import faiss
 import numpy as np
 import pytorch_lightning
+import rich
 from datasets import Dataset
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
@@ -67,21 +68,21 @@ class ColbertIndex(FaissIndex):
         assert len(vectors.shape) == 2
         dim = vectors.shape[-1]
         quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, self.partitions, 16, 8, self.metric_type)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, self.partitions, 2, 2, self.metric_type)
 
     def train(self, vector, dtype=np.float32):
         """
         Train index on data
         """
         if self._index.is_trained is False:
-            return print(f"Index is trained={self._index.is_trained}")
-        else:
             print("#> Training index")
             self._index.train(vector)
             logger.info(
                 f"Index is_trained={self._index.is_trained}, "
                 f"size={self._index.ntotal}, type={type(self._index)}"
             )
+        else:
+            return print(f"Index is trained={self._index.is_trained}")
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """
