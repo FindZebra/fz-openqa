@@ -12,6 +12,7 @@ from typing import List
 from typing import Optional
 from typing import Sequence
 from typing import Tuple
+import rich
 
 import dill
 import numpy as np
@@ -233,7 +234,7 @@ class AliasBasedMatch(RelevanceClassifier):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.filter_tui: filter_tui
+        self.filter_tui= filter_tui
         self.filter_acronyms = filter_acronyms
         self.model_name = model_name
         self.linker_name = linker_name
@@ -339,10 +340,9 @@ class AliasBasedMatch(RelevanceClassifier):
         for entity in doc.ents:
             linked_entities = self.get_linked_entities(entity)
 
-            # if self.filter_tui:
-            # filter irrelevant entities based on TUIs
-            _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-            linked_entities = filter(_filter, linked_entities)
+            if self.filter_tui:
+                _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
+                linked_entities = filter(_filter, linked_entities)
 
             for linked_entity in linked_entities:
                 if not self.filter_acronyms:
@@ -354,10 +354,10 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def extract_aliases(self, linked_entities: Iterable[LinkedEntity]) -> Iterable[str]:
         # get the TUIs of linked entities to filter irrelevant ones
-        # if self.filter_tuis:
         # filter irrelevant entities based on TUIs
-        _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
-        linked_entities = filter(_filter, linked_entities)
+        if self.filter_tui:
+            _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
+            linked_entities = filter(_filter, linked_entities)
 
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
@@ -379,27 +379,16 @@ class MetaMapMatch(AliasBasedMatch):
 
         # extract the answer and synonym texts from each Pair
         answer_texts = map(self._extract_answer_text, pairs)
-        synonym_texts = map(self._extract_synonym_text, pairs)
-
-        # batch processing of texts
-        synonym_docs: List[Doc] = self.model.pipe(synonym_texts, **self.spacy_kwargs)
 
         # join the aliases
-        for pair, answer, synonym_doc in zip_longest(pairs, answer_texts, synonym_docs):
+        for pair, answer in zip_longest(pairs, answer_texts):
             answer_cuis = pair.answer.get("answer.cui", [])
-            filtered_synonyms = self.extract_and_filters_entities(synonym_doc)
-            answer_aliases = set(filtered_synonyms)
+            e_aliases = set()
             if len(answer_cuis) > 0:
                 linked_entities = self.get_linked_entities(answer_cuis)
                 e_aliases = set(self.extract_aliases(linked_entities))
-                answer_aliases = set.union(answer_aliases, e_aliases)
 
-            # remove stopwords
-            answer_string = " ".join(
-                [word for word in answer.split() if word.lower() not in STOP_WORDS]
-            )
-
-            answer_aliases = [answer_string] + sorted(answer_aliases, key=len)
+            answer_aliases = [str(answer)] + sorted(e_aliases, key=len)
             # update the pair and return
             pair.answer["answer.aliases"] = list(answer_aliases)
             yield pair
@@ -428,12 +417,7 @@ class ScispaCyMatch(AliasBasedMatch):
             linked_entities = self.get_linked_entities(answer_doc.ents[0])
             e_aliases = set(self.extract_aliases(linked_entities))
 
-            # remove stopwords
-            answer_string = " ".join(
-                [word for word in str(answer_doc).split() if word.lower() not in STOP_WORDS]
-            )
-
-            answer_aliases = [answer_string] + sorted(e_aliases, key=len)
+            answer_aliases = [str(answer_doc)] + sorted(e_aliases, key=len)
 
             # update the pair and return
             pair.answer["answer.aliases"] = list(answer_aliases)

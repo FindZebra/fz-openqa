@@ -16,8 +16,9 @@ class TextFormatter(Pipe):
         self,
         text_key: Optional[str] = None,
         *,
-        remove_linebreaks: bool = True,
+        remove_breaks: bool = True,
         remove_ref: bool = True,
+        remove_hex: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
@@ -25,8 +26,9 @@ class TextFormatter(Pipe):
     ):
         super().__init__(**kwargs)
         self.text_key = text_key
-        self.remove_linebreaks = remove_linebreaks
+        self.remove_breaks = remove_breaks
         self.remove_ref = remove_ref
+        self.remove_hex = remove_hex
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
         self.remove_symbols = remove_symbols
@@ -35,12 +37,6 @@ class TextFormatter(Pipe):
 
         if self.lowercase:
             text = text.lower()
-
-        if self.remove_linebreaks:
-            text = re.sub(r"[\n]", "", text)
-
-        if self.remove_symbols:
-            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
 
         if self.aggressive_cleaning:
             # quick and dirty fix (trying to solve issue #80), doesn't fix it
@@ -53,7 +49,22 @@ class TextFormatter(Pipe):
             text = re.sub(" +", " ", text)
 
         if self.remove_ref:
-            text = re.sub(r"\u2003", " ", text)
+            # remove "\u" followed by 4 characters
+            text = re.sub(r"\\u[0-9a-fA-F]{4}", "", text)
+            # remove scientific citations (e.g. (Smith, J. et al., 2014) )
+            text = re.sub(r"\((?:[\w \.&]+\, )+[0-9]{4}\)", "", text)
+            # remove figure and table references (e.g. (figure 7\xe2\x80\x9377) )
+            text = re.sub(r'\s*\(\s*(?:table|figure)[^()]*\)', '', text)
+
+        if self.remove_hex:
+            # remove hex characters (e.g. \xe2\x80\x94\xe2\x80\x89)
+            text = re.sub(r"[^\x00-\x7f]+", " ", text)
+
+        if self.remove_breaks:
+            text = re.sub(r'[\n\r\t]+'," ", text)
+
+        if self.remove_symbols:
+            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text)
 
         return text
 
