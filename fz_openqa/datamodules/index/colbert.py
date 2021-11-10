@@ -38,7 +38,7 @@ DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 
 
 class ColbertIndex(FaissIndex):
-    def __init__(self, dataset: Dataset, partitions, collate_pipe: Pipe = Collate(), **kwargs):
+    def __init__(self, dataset: Dataset, partitions: int, **kwargs):
         """
         todo: @idariis : this needs to be adapted for Colbert
         the init should mostly reuse the one from the parent class (FaissIndex)
@@ -47,9 +47,9 @@ class ColbertIndex(FaissIndex):
         # initializing parameters for faiss index
         # self.dim = dim
         self.partitions = partitions
-        self.collate = collate_pipe
 
-        super(FaissIndex, self).__init__(dataset=dataset, collate_pipe=self.collate, **kwargs)
+        # call the super: build the index
+        super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
     def dill_inspect(self) -> Dict[str, bool]:
         """check if the module can be pickled."""
@@ -69,17 +69,13 @@ class ColbertIndex(FaissIndex):
         quantizer = faiss.IndexFlatL2(dim)
         self._index = faiss.IndexIVFPQ(quantizer, dim, self.partitions, 16, 8, self.metric_type)
 
-    def train(self, batch: Batch, dtype=np.float32):
+    def train(self, vector, dtype=np.float32):
         """
         Train index on data
         """
         if self._index.is_trained is False:
             return print(f"Index is trained={self._index.is_trained}")
         else:
-            vector: np.ndarray = batch[self.vectors_column_name]
-            assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
-            assert len(vector.shape) == 2, f"{vector} is not a 2D array"
-            vector = vector.astype(dtype)
             print("#> Training index")
             self._index.train(vector)
             logger.info(
@@ -107,7 +103,9 @@ class ColbertIndex(FaissIndex):
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
         vector = vector.astype(dtype)
-        self._index.add(vector)
+        self.train(vector=vector)
+        if self._index.is_trained is True:
+            self._index.add(vector)
 
     def search(
         self,
