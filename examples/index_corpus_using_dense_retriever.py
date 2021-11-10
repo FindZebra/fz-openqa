@@ -19,6 +19,7 @@ from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
+from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
@@ -113,8 +114,8 @@ def run(config: DictConfig) -> None:
     rich.print(corpus)
 
     # init the index
-    logger.info(f"Initialize index <{FaissIndex.__name__}>")
-    index = FaissIndex(
+    logger.info(f"Initialize index <{ColbertIndex.__name__}>")
+    index = ColbertIndex(
         dataset=corpus,
         model=model,
         trainer=trainer,
@@ -125,6 +126,7 @@ def run(config: DictConfig) -> None:
         },
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder.get_collate_pipe(),
+        partitions=6,
     )
 
     # setup search pipe (query the indexes from the corpus)

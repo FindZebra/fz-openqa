@@ -13,12 +13,13 @@ from datasets import Dataset
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
+from torch.utils import data
 from torch.utils.data import DataLoader
 
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
-from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import SearchResult
+from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Forward
@@ -37,13 +38,18 @@ DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 
 
 class ColbertIndex(FaissIndex):
-    def __init__(self, dataset: Dataset, **kwargs):
+    def __init__(self, dataset: Dataset, partitions, collate_pipe: Pipe = Collate(), **kwargs):
         """
         todo: @idariis : this needs to be adapted for Colbert
         the init should mostly reuse the one from the parent class (FaissIndex)
         you might need to init the token index (to store the index of the original document)
         """
-        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
+        # initializing parameters for faiss index
+        # self.dim = dim
+        self.partitions = partitions
+        self.collate = collate_pipe
+
+        super(FaissIndex, self).__init__(dataset=dataset, collate_pipe=self.collate, **kwargs)
 
     def dill_inspect(self) -> Dict[str, bool]:
         """check if the module can be pickled."""
@@ -59,7 +65,27 @@ class ColbertIndex(FaissIndex):
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
-        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+        dim = vectors.shape[-1]
+        quantizer = faiss.IndexFlatL2(dim)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, self.partitions, 16, 8, self.metric_type)
+
+    def train(self, batch: Batch, dtype=np.float32):
+        """
+        Train index on data
+        """
+        if self._index.is_trained is False:
+            return print(f"Index is trained={self._index.is_trained}")
+        else:
+            vector: np.ndarray = batch[self.vectors_column_name]
+            assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
+            assert len(vector.shape) == 2, f"{vector} is not a 2D array"
+            vector = vector.astype(dtype)
+            print("#> Training index")
+            self._index.train(vector)
+            logger.info(
+                f"Index is_trained={self._index.is_trained}, "
+                f"size={self._index.ntotal}, type={type(self._index)}"
+            )
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """
