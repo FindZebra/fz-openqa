@@ -101,7 +101,7 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
-        output = index.search(query=query, k=self.k)
+        output = index.search(query, k=self.k)
 
         # check the output type
         self.assertIsInstance(output, SearchResult)
@@ -117,9 +117,7 @@ class TestIndex(TestCase, ABC):
 
         # check the top-1 scores
         for target, scores, idx in zip(self.retrieval_targets, output.score, output.index):
-            print(target, scores, idx)
             pred = np.argmax(scores, axis=-1)
             self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
-
             # check if output values are sorted
             self.assertTrue(np.all(scores[:-1] >= scores[1:]), "scores are not properly sorted")

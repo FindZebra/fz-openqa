@@ -6,10 +6,10 @@ authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-torch = "^1.8.1"
+torch = "^1.10"
 rich = "^10.2.2"
 wandb = "^0.10.30"
-pytorch-lightning = {version="^1.4", allow-prereleases = true}
+pytorch-lightning = {version="^1.5", allow-prereleases = true}
 torchmetrics = {version="^0.5", allow-prereleases = true}
 transformers = "^4.6.0"
 tokenizers = "^0.10.2"

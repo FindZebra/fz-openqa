@@ -23,6 +23,8 @@ class Collate(Pipe):
         keys: Optional[Union[str, List[str], Callable]] = None,
         key_op: Optional[Callable] = None,
     ):
+        if isinstance(keys, str):
+            keys = [keys]
         self.keys = keys
         self.key_op = key_op
 
@@ -56,8 +58,10 @@ class Collate(Pipe):
         if self.keys is not None:
             if isinstance(self.keys, (list, set, tuple)):
                 _keys = set(self.keys)
-            else:
+            elif isinstance(self.keys, Callable):
                 _keys = set(filter(self.keys, keys))
+            else:
+                raise TypeError(f"keys must be a list, set or callable, not {type(self.keys)}")
 
             keys = set.intersection(keys, _keys)
         return keys

@@ -1,20 +1,28 @@
 import logging
+from functools import singledispatchmethod
 from typing import Callable
 from typing import Dict
 from typing import Iterable
+from typing import Iterator
 from typing import List
 from typing import Optional
+from typing import Sized
 
 import dill
 import faiss
 import numpy as np
-import pytorch_lightning
 from datasets import Dataset
+from datasets import DatasetDict
+from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
+from pytorch_lightning import LightningModule
 from pytorch_lightning import Trainer
 from rich.progress import track
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset as TorchDataset
+from torch.utils.data import SequentialSampler
 
+from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import SearchResult
@@ -35,10 +43,28 @@ logger = logging.getLogger(__name__)
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 
 
+class AddRowIdx(TorchDataset):
+    """This class is used to add the column `IDX_COL` to the batch"""
+
+    def __init__(self, dataset: Sized):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item) -> Batch:
+        batch = self.dataset[item]
+        batch[IDX_COL] = item
+        return batch
+
+
 class FaissIndex(Index):
     """Dense indexing using faiss"""
 
+    # todo: remove need to store the `document.row_idx`
+
     vectors_column_name = "__vectors__"
+    _dtype: np.dtype = np.float32
     _index: FaissSwigIndex = None
     model: Callable = None
 
@@ -79,7 +105,7 @@ class FaissIndex(Index):
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer
         self.process = Sequential(
-            Parallel(Forward(model=model), FilterKeys(KeyIn([self.index_key]))), ToNumpy()
+            Parallel(Forward(model=model), FilterKeys(KeyIn([IDX_COL]))), ToNumpy()
         )
 
         # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
@@ -98,11 +124,11 @@ class FaissIndex(Index):
         """Index a dataset."""
 
         # instantiate the base data loader
-        loader = DataLoader(dataset, collate_fn=self.collate, shuffle=False, **self.loader_kwargs)
+        loader = self._init_loader(dataset)
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
-        processed_batches = self._process_batches(loader, trainer=self.trainer)
+        processed_batches = self._process_batches(loader, trainer=self.trainer, key="document")
 
         # build an iterator over the processed batches
         it = iter(processed_batches)
@@ -125,6 +151,42 @@ class FaissIndex(Index):
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
 
+    def _init_index(self, batch):
+        """
+        Initialize the Index
+        # todo: @idariis : You can modify this method to add more advanced indexes (e.g. IVF)
+        """
+        vectors = batch[self.vectors_column_name]
+        assert len(vectors.shape) == 2
+        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+
+    def _add_batch_to_index(self, batch: Batch):
+        """
+        Add one batch of data to the index
+        """
+        # check the ordering of the indexes
+        indexes = batch[IDX_COL]
+        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
+        assert all(indexes[:-1] + 1 == indexes[1:]), msg
+        msg = (
+            f"The stored index and the indexes are not contiguous, "
+            f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"
+        )
+        assert self._index.ntotal == indexes[0], msg
+
+        # add the vectors to the index
+        vector = self._get_vector_from_batch(batch)
+        assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
+        assert len(vector.shape) == 2, f"{vector} is not a 2D array"
+        self._index.add(vector)
+
+    def _query_index(self, query: Batch, *, k: int) -> SearchResult:
+        """Query the index given a batch of data"""
+        vector = self._get_vector_from_batch(query)
+        score, indices = self._index.search(vector, k)
+        return SearchResult(score=score, index=indices)
+
+    @singledispatchmethod
     def search(
         self,
         query: Batch,
@@ -136,42 +198,47 @@ class FaissIndex(Index):
         return the index of the results within the original dataset."""
         query = self.process(query)
         query = self.postprocess(query)
-        vectors = query[self.vectors_column_name]
-        score, indices = self._index.search(vectors, k)
-        return SearchResult(score=score, index=indices)
+        return self._query_index(query, k=k)
 
-    def _init_index(self, batch):
-        """
-        Initialize the Index
-        # todo: @idariis : You can modify this method to add more advanced indexes (e.g. IVF)
-        """
-        vectors = batch[self.vectors_column_name]
-        assert len(vectors.shape) == 2
-        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+    @search.register(DataLoader)
+    def _(self, query: DataLoader, *, k: int = 1, **kwargs) -> Iterator[SearchResult]:
+        """This method is called if `query` is of type DataLoader"""
+        processed_batches = self._process_batches(query, trainer=self.trainer, key="question")
+        for batch in processed_batches:
+            yield self._query_index(batch, k=k)
 
-    def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
-        """
-        Add one batch of data to the index
-        """
-        # check the ordering of the indexes
-        indexes = batch[self.index_key]
-        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
-        assert all(indexes[:-1] + 1 == indexes[1:]), msg
-        msg = (
-            f"The stored index and the indexes are not contiguous, "
-            f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"
-        )
-        assert self._index.ntotal == indexes[0], msg
+    @search.register(Dataset)
+    def _(self, query: Dataset, *, k: int = 1, **kwargs) -> Iterator[SearchResult]:
+        """This method is called if `query` is of type Dataset"""
+        loader = self._init_loader(query)
+        return self.search(loader, k=k, **kwargs)
 
-        # add the vectors to the index
+    @search.register(DatasetDict)
+    def _(self, query: DatasetDict, *, k: int = 1, **kwargs) -> Dict[Split, Iterator[SearchResult]]:
+        """This method is called if `query` is of type DatasetDict"""
+        return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
+
+    def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
+        """Get and cast the vector from the batch"""
         vector: np.ndarray = batch[self.vectors_column_name]
-        assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
-        assert len(vector.shape) == 2, f"{vector} is not a 2D array"
-        vector = vector.astype(dtype)
-        self._index.add(vector)
+        vector = vector.astype(self._dtype)
+        return vector
+
+    def _init_loader(self, dataset):
+        loader = DataLoader(
+            self._wrap_dataset(dataset),
+            collate_fn=self._wrap_collate_fn(self.collate),
+            shuffle=False,
+            **self.loader_kwargs,
+        )
+        return loader
 
     def _process_batches(
-        self, loader: DataLoader, trainer: Optional[Trainer] = None, progress_bar: bool = True
+        self,
+        loader: DataLoader,
+        trainer: Optional[Trainer] = None,
+        progress_bar: bool = True,
+        key: str = "document",
     ) -> Iterable[Batch]:
 
         """
@@ -182,13 +249,24 @@ class FaissIndex(Index):
         This function processes batches as they are loaded from the dataloader.
         """
 
-        if trainer is not None and isinstance(self.model, pytorch_lightning.LightningModule):
+        # modify the dataloader to return __idx__ aside from the original data
+        loader = self._wrap_dataloader(loader)
+        assert isinstance(
+            loader.sampler, SequentialSampler
+        ), "Cannot handle DataLoader with shuffle=True."
+
+        if trainer is not None and isinstance(self.model, LightningModule):
             # retrieve the callback used to store the results
-            store_results_callback = self._get_store_predictions_callback(self.trainer)
+            store_results_callback = self._get_store_predictions_callback(self.trainer, key=key)
 
             # run the trainer predict method, model.forward() is called
             # for each batch and store into the callback cache
-            trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
+            if store_results_callback.is_written:
+                logger.info(
+                    f"Loading pre-computed vectors from {store_results_callback.cache_file}"
+                )
+            else:
+                trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
 
             # return an iterator over the cached batches
             output_batches = store_results_callback.iter_batches()
@@ -203,20 +281,28 @@ class FaissIndex(Index):
         for batch in final_outputs:
             yield batch
 
-    def _get_store_predictions_callback(self, trainer: Trainer):
-        store_results_callback = [
-            c for c in trainer.callbacks if isinstance(c, StorePredictionsCallback)
-        ]
+    def _get_store_predictions_callback(
+        self, trainer: Trainer, *, key: str
+    ) -> StorePredictionsCallback:
+        store_results_callbacks = list(
+            filter(lambda c: isinstance(c, StorePredictionsCallback), trainer.callbacks)
+        )
         msg = f"Callback of type {type(StorePredictionsCallback)} must be provided."
-        assert len(store_results_callback) == 1, msg
-        store_results_callback = store_results_callback[0]
+        assert len(store_results_callbacks) > 0, msg
+        if len(store_results_callbacks) == 1:
+            store_results_callback = store_results_callbacks[0]
+        else:
+            store_results_callbacks = list(filter(lambda s: s.name == key, store_results_callbacks))
+            "One and only one StorePredictionsCallback must be provided with name=='document'"
+            assert len(store_results_callbacks) == 1, msg
+            store_results_callback = store_results_callbacks[0]
         return store_results_callback
 
     def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:
         """Format the output of the model"""
         return Sequential(
             RenameKeys({key: output for key in inputs}),
-            FilterKeys(KeyIn([output, self.index_key])),
+            FilterKeys(KeyIn([output, IDX_COL])),
         )
 
     def dill_inspect(self) -> Dict[str, bool]:
@@ -234,3 +320,30 @@ class FaissIndex(Index):
     def __setstate__(self, state):
         state["_index"] = faiss.deserialize_index(state["_index"])
         self.__dict__.update(state)
+
+    def _wrap_dataloader(self, loader: DataLoader) -> DataLoader:
+        """
+        Return a copy of the original dataset such that the `dataset` and `collate_fn` are
+        updated such as to return the field `__idx__` along the original data.
+        """
+        if isinstance(loader.dataset, AddRowIdx):
+            return loader
+
+        def exclude(k):
+            excluded_values = ["dataset", "collate_fn", "sampler", "batch_sampler"]
+            return k in excluded_values or k.startswith("_")
+
+        args = {k: v for k, v in loader.__dict__.items() if not exclude(k)}
+        return DataLoader(
+            dataset=self._wrap_dataset(loader.dataset),
+            collate_fn=self._wrap_collate_fn(loader.collate_fn),
+            **args,
+        )
+
+    def _wrap_collate_fn(self, collate_fn: Callable) -> Pipe:
+        """Wrap the collate_fn to return IDX_COL along the batch values"""
+        return Parallel(collate_fn, Collate(IDX_COL))
+
+    def _wrap_dataset(self, dataset: Dataset) -> TorchDataset:
+        """Wrap the dataset to return IDX_COL along the batch values"""
+        return AddRowIdx(dataset)

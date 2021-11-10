@@ -109,7 +109,7 @@ class SearchCorpus(Pipe):
         model = model or self.model
 
         # query the index
-        search_result = self.index.search(query=query, k=k, model=model, **kwargs)
+        search_result = self.index.search(query, k=k, model=model, **kwargs)
 
         # store as a dictionary and return
         output = {
