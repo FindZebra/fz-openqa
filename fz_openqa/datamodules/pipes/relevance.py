@@ -299,13 +299,17 @@ class AliasBasedMatch(RelevanceClassifier):
             config={
                 "threshold": 0.65,
                 "linker_name": linker_name,
+                "max_entities_per_mention": 3,
             },
         )
         return model
 
-    def get_linked_entities(self, entity: Entity) -> Iterable[LinkedEntity]:
-        for cui in entity._.kb_ents:
-            cui_str, _ = cui  # ent: (str, score)
+    def get_linked_entities(self, entity: [List, Entity]) -> Iterable[LinkedEntity]:
+        if not isinstance(entity, List):
+            entity = [cui_str for (cui_str, _) in entity._.kb_ents]
+
+        for cui_str in entity:
+            # cui_str, _ = cui  # ent: (str, score)
             tuis = self.linker.kb.cui_to_entity[cui_str].types
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
@@ -386,10 +390,9 @@ class MetaMapMatch(AliasBasedMatch):
             filtered_synonyms = self.extract_and_filters_entities(synonym_doc)
             answer_aliases = set(filtered_synonyms)
             if len(answer_cuis) > 0:
-                for cui in answer_cuis:
-                    linked_entities = self.linker.kb.cui_to_entity[cui]
-                    e_aliases = set(self.extract_aliases(linked_entities))
-                    answer_aliases = set.union(answer_aliases, e_aliases)
+                linked_entities = self.get_linked_entities(answer_cuis)
+                e_aliases = set(self.extract_aliases(linked_entities))
+                answer_aliases = set.union(answer_aliases, e_aliases)
 
             # remove stopwords
             answer_string = " ".join(

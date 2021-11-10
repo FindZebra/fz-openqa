@@ -117,7 +117,7 @@ class ElasticSearchEngine:
         req_head = [{"index": index_name}] * len(queries)
         req_body = [
             {
-                "query": {"match": {"text": queries[i]}},
+                "query": {"match": {"text": {"query": queries[i], "zero_terms_query": "all"}}},
                 "from": 0,
                 "size": k,
             }

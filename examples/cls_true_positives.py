@@ -159,6 +159,86 @@ b9 = {
     ],
 }  # noqa: E501
 
+b10 = {"question.text": "An 82-year-old woman comes to the physician because of difficulty sleeping and increasing fatigue. Over the past 3 months she has been waking up early and having trouble falling asleep at night. During this period, she has had a decreased appetite and a 3.2-kg (7-lb) weight loss. Since the death of her husband one year ago, she has been living with her son and his wife. She is worried and feels guilty because she does not want to impose on them. She has stopped going to meetings at the senior center because she does not enjoy them anymore and also because she feels uncomfortable asking her son to give her a ride, especially since her son has had a great deal of stress lately. She is 155 cm (5 ft 1 in) tall and weighs 51 kg (110 lb); BMI is 21 kg/m2. Vital signs are within normal limits. Physical examination shows no abnormalities. On mental status examination, she is tired and has a flattened affect. Cognition is intact. Which of the following is the most appropriateinitial step in management?",
+       "answer.target": 0,
+       "answer.text": ["Assess for suicidal ideation"],
+       "answer.synonyms": [],
+       "document.text": [
+           "to the 19th centurywestern medical science\'s understanding and construction of postpartum depression has evolved over the centuries. ideas surrounding women\xe2\x80\x99s moods and states have been around for a long time, typically recorded by men. in 460 b.c., hippocrates wrote about puerperal fever, agitation, delirium, and mania experienced by women after child birth. hippocrates\' ideas stilllinger in how postpartum depression is seen today.a woman who lived in the 14th century, margery kempe, was a christian mystic. she was a pilgrim known as "madwoman"after having a tough labor and delivery. there was a long physical recovery period during which she started descending into "madness" and became suicidal. based on her descriptions of visions of demons and conversations she wrote about that she had withreligious figures like god and the virgin mary, historians have identified what margery"
+       ]}
+
+b11 = {"question.text": "A 52-year-old man presents his primary care physician for follow-up. 3 months ago, he was diagnosed with type 2 diabetes mellitus and metformin was started. Today, his HbA1C is 7.9%. The physician decides to add pioglitazone for better control of hyperglycemia. Which of the following is a contraindication to pioglitazone therapy?",
+       "answer.target": 0,
+       "answer.text": ["History of bladder cancer"],
+       "answer.synonyms": [],
+       "document.text": [
+           "de. his antihyperten-sive therapy was optimized and his urine albumin excretion declined to 1569 mg/g creatinine. this case illustrates the importance of weight loss in controlling glucose levels in the obese patient with type 2 diabetes. it also shows that simply increasing the insulin dose is not always effective. combin-ing metformin with other oral agents and non-insulin inject-ables may be a better option.daniel d. bikle, md, phda 65-year-old man is referred to you from his primary care physician (pcp) for evaluation and management of pos-sible osteoporosis. he saw his pcp for evaluation of low back pain. x-rays of the spine showed some degenerativechanges in the lumbar spine plus several wedge deformities in the thoracic spine. thepati"
+       ]}
+
+b12 = {"question.text": "A 70-year-old man is brought to the emergency department with complaints of chest pain for the last 2 hours. He had been discharged from the hospital 10 days ago when he was admitted for acute myocardial infarction. It was successfully treated withpercutaneous coronary intervention. During the physicalexam, the patient prefers to hunch forwards as this decreases his chest pain. He says the pain is in the middle of the chest and radiates to his back. Despite feeling unwell, the patient denies any palpitations or shortness of breath. Vitals signs include: pulse 90/min, respiratory rate 20/min, blood pressure 134/82 mm Hg, and temperature 36.8°C (98.2°F). The patient is visibly distressed and is taking shallow breaths because deeper breaths worsen his chest pain. An ECG shows diffuse ST elevations. Which of the following should be administered to this patient?",
+       "answer.target": 0,
+       "answer.text": ["Ibuprofen"],
+       "answer.synonyms": [],
+       "document.text": [
+           "welling had diminished and there was a noted improvement in range of motion of the third metacarpophalangeal joint.unnamed 16-year old malea 16-year old teenage male was seen for sudden pain in his right metacarpophalangeal joints. though there was no history of trauma, the patient was a manual laborer.range of motion was slightly limited and joint was mildly swollen and tender when palpated. patient was originally treated with splinting and ibuprofen, but this further worsened his condition. patient was then treated with physical therapy, but symptoms persisted. finally, patient was treated with bone grafting surgeryand splinted for three weeks. after surgery followed byphysical therapy, full range of motion was restored within eight weeks.unnamed 36-year old malea 36-year old male electrician with no past history of trauma presented with a painful right middle finger metacarpophalangeal joint. rang"
+       ]}
+
+b13 = {"question.text": "A 7-year-old boy is brought to the pediatrician by his parents for concern of general fatigue and recurrent abdominal pain. You learn that his medical history is otherwise unremarkable and that these symptoms started about 3 months ago after they moved to a different house. Based on clinical suspicionlabs are obtained that reveal a microcytic anemia with high-normal levels of ferritin. Examination of a peripheral blood smear shows findings that are demonstrated in the figure provided. Which of the following is the most likely mechanism responsible for the anemia in this patient?",
+       "answer.target": 0,
+       "answer.text": ["Inhibition of ALA dehydratase and ferrochelatase"],
+       "answer.synonyms": [],
+       "document.text": [
+           "testinal problems. the parents report that the boy has been listless for the last few weeks. lab tests reveal a microcytic, hypochromic anemia. blood lead levels are elevated. which of the enzymes listed below is most likely to have higher-than-normal activity in the liver of this child?a. \xce\xb4-aminolevulinic acid synthaseb. bilirubin udp glucuronosyltransferasec. ferrochelatased. heme oxygenasee. porphobilinogen synthasecorrect answer = a.this child has the acquired porphyria of lead poisoning. lead inhibits both \xce\xb4-aminolevulinic acid dehydratase and ferrochelatase and, consequently, heme synthesis. the decrease in heme derepresses \xce\xb4aminolevulinic acid synthase-1 (the h"
+       ]}
+
+b14 = {"question.text": "A 36-year-old G2-P1 woman in week 33 of gestation presents to the emergency department in acuterespiratory distress. She works as a secretary for a local law firm, and she informs you that she recently returned from a trip to the beach. She currently smokeshalf-a-pack of cigarettes/day, drinks 1 glass of red wine/day, and she endorses a past history of injection drug use but currently denies any illicit drug use. Thevital signs include: temperature 36.7°C (98.0°F), bloodpressure 126/74 mm Hg, heart rate 87/min, and respiratory rate 23/min. Her physical examination showsminimal bibasilar rales, but otherwise clear lungs on auscultation, grade 2/6 holosystolic murmur, and a gravid uterus with no obvious abnormalities. A D-dimer is found to be elevated, and her V/Q scan reveals a high probability of pulmonary embolism (PE). Her medical history is significant for uterine fibroids, preeclampsia, hypercholesterolemia, diabetes mellitus type 1, and significant for heparin-induced thrombocytopenia. Which of the following is the most appropriate choice of management for her post-acute care?",
+       "answer.target": 0,
+       "answer.text": ["Consult IR for IVC filter placement"],
+       "answer.synonyms": [],
+       "document.text": [
+           "one such family has been reported. clinical features habib et al. (2019) reported a 66-year-old caucasian woman with a lifelong history of insensitivity to pain,even after surgery, including hip replacement and shoulder surgery for osteoarthritis. she did not require analgesia for varicose vein and dental procedures and reported numerous burns and cuts withoutpain, which she stated healed quickly with little or noresidual scarring. she could tolerate eating hot peppers with a short-lasting 'pleasant glow' in her mouth, but no discomfort. she described sweating normally in warm conditions. she also scored very low on tests for anxiety and reported never panicking in dangerous or fearful situations, although she had a long history of short memory lapses, such as forgettingwords or location of keys. physical examination showed multiple scars on the arms and on the back of her hands, and sensory testing demonstrated hyposensitivi"
+       ]}
+
+b15 = {"question.text": "ou have been asked to deliver a lecture to medical students about the effects of various body hormones and neurotransmitters on the metabolism of glucose. Which of the following statements best describes the effects of sympathetic stimulation on glucose metabolism?",
+       "answer.target": 0,
+       "answer.text": ["Epinephrine increases liver glycogenolysis"],
+       "answer.synonyms": [],
+       "document.text": [
+           "oms that are rapidly resolved by the administration of glucose. insulin-induced, postprandial, and fasting hypoglycemia result in release of glucagon and epinephrine. the rise in nicotinamide adenine dinucleotide (nadh) that accompanies ethanolmetabolism inhibits gluconeogenesis, leading to hypoglycemia in individuals with depleted stores. alcohol consumption also increases the risk for hypoglycemia in patients using insulin. chronic alcohol consumption can cause fatty liver disease.choose the one best answer.3.1. which of the following statements is true for insulin but not for glucagon?a. it is a peptide hormone secreted by pancreatic cells.b. its actions are mediated by binding to a receptor found on the cell membrane of liver cells.c. its effects include alterations in gene expression.d. its secretion i"
+       ]}
+
+b16 = {"question.text": "A 45-year-old man presents to his primary care physician for a general checkup.The patient has no complaints, but is overweight by 20 lbs. The physician orders outpatient labs which come back with an elevated total bilirubin. Concerned, the PCP orders further labs which show: total bilirubin: 2.4, direct bilirubin 0.6, indirect bilirubin 1.8. Which of the following are true about this patient's condition?",
+       "answer.target": 0,
+       "answer.text": ["Diagnosis is readily made with characteristic metabolic response to rifampin"],
+       "answer.synonyms": [],
+       "document.text": [
+           "bert's syndrome can be classed as a minor inborn error of metabolism.diagnosispeople with gs predominantly have elevated unconjugated bilirubin, while conjugated bilirubin is usually within the normal range and is less than 20% of the total. levels of bilirubin in gs patients are reported to be from 20 \xce\xbcm to 90 \xce\xbcm (1.2 to 5.3\xc2\xa0mg/dl) compared to the normal amount of &lt; 20 \xce\xbcm. gspatients have a ratio of unconjugated/conjugated (indirect/direct) bilirubin commensurately higher than those without gs.the level of total bilirubin is often further increased if the blood sample is taken after fasting for two days, and a fast can, therefore, be useful diagnostically. a further conceptual step that is rarely necessary orappropriate is to give a low"
+       ]}
+
+b17 = {"question.text": "A 3-month-old girl is brought to the emergency department by her parents after she appeared to have a seizure at home. On presentation, she no longer has convulsions though she is still noted to be lethargic. She was born through uncomplicated vaginal delivery and was not noted to have any abnormalities at the time of birth. Since then, shehas been noted by her pediatrician to be falling behind in height and weight compared to similarly aged infants. Physical exam reveals an enlarged liver, and laboratory tests reveal a glucose of 38 mg/dL. Advanced testing shows that a storage molecule present in the cells of this patient has abnormally short outer chains. Which of the following enzymes is most likely defective in this patient?",
+       "answer.target": 0,
+       "answer.text": ["Debranching enzyme"],
+       "answer.synonyms": [],
+       "document.text": [
+           "atal period with signs of an increased bleeding tendency.  huybrechts et al. (2012) reported a 27-month-old girl, born of consanguineous moroccan parents, with cdg2l. at birth, she was noted to have dysmorphic features, including microcephaly, postaxial polydactyly, broad palpebral fissures, retrognathia, and anal anteposition. during the first months of life, she had recurrent infections, diarrhea, and failure to thrive, and was found to have a primary combined immunodeficiency with hypogammaglobulinemia and defective cellular immunity without lymphopenia. granulocyte function was also abnormal. she later developed multisystem abnormalities, including hepatomegaly, abnormal liver enzymes, micronodular cirrho"
+       ]}
+
+b18 = {"question.text": "An 11-year-old boy is brought to the emergency department by his parents with a2-day history of fever, malaise, and productive cough. On presentation, he is found to be very weak and is having difficulty breathing. His past medical history is significant for multiple prior infections requiring hospitalization including otitis media, upper respiratory infections, pneumonia, and sinusitis. His family history is also significant for a maternal uncle who died of an infection as a child. Lab findings include decreased levels of IgG, IgM, IgA, and plasma cells with normal levels of CD4 positive cells. The protein that is most likely defective in this patient has which of the following functions?",
+       "answer.target": 0,
+       "answer.text": ["Protein phosphorylation"],
+       "answer.synonyms": [],
+       "document.text": [
+           ""
+       ]}
+
+b19 = {"question.text": "",
+       "answer.target": 0,
+       "answer.text": [""],
+       "answer.synonyms": [],
+       "document.text": [
+           ""
+       ]}
+
 
 exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9]
 batch = Collate()(exs)
