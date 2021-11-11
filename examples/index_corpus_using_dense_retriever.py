@@ -107,15 +107,15 @@ def run(config: DictConfig) -> None:
 
     # build the corpus and take a subset
     corpus = corpus_builder()
-    n_samples = config.get("n_samples", 10)
+    n_samples = config.get("n_samples", 100)
     if n_samples is not None and n_samples > 0:
         n_samples = min(n_samples, len(corpus))
         corpus = corpus.select(range(n_samples))
     rich.print(corpus)
 
     # init the index
-    logger.info(f"Initialize index <{ColbertIndex.__name__}>")
-    index = ColbertIndex(
+    logger.info(f"Initialize index <{FaissIndex.__name__}>")
+    index = FaissIndex(
         dataset=corpus,
         model=model,
         trainer=trainer,

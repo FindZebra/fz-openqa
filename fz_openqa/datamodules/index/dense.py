@@ -163,6 +163,7 @@ class FaissIndex(Index):
         print("#> Training index")
         self._index.train(vector)
         assert self._index.is_trained is True, "Index is not trained"
+        print("Done training!")
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """
