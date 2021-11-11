@@ -54,14 +54,14 @@ class TextFormatter(Pipe):
             # remove scientific citations (e.g. (Smith, J. et al., 2014) )
             text = re.sub(r"\((?:[\w \.&]+\, )+[0-9]{4}\)", "", text)
             # remove figure and table references (e.g. (figure 7\xe2\x80\x9377) )
-            text = re.sub(r'\s*\(\s*(?:table|figure)[^()]*\)', '', text)
+            text = re.sub(r"\s*\(\s*(?:table|figure)[^()]*\)", "", text)
 
         if self.remove_hex:
             # remove hex characters (e.g. \xe2\x80\x94\xe2\x80\x89)
             text = re.sub(r"[^\x00-\x7f]+", " ", text)
 
         if self.remove_breaks:
-            text = re.sub(r'[\n\r\t]+'," ", text)
+            text = re.sub(r"[\n\r\t]+", " ", text)
 
         if self.remove_symbols:
             text = re.sub(r"([^a-zA-Z0-9\.])", " ", text)
