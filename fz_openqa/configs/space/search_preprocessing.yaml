@@ -1,7 +1,7 @@
 datamodule.relevance_classifier._target_:
   _target_: ray.tune.grid_search
   values:
-    #- fz_openqa.datamodules.pipes.ExactMatch
+    - fz_openqa.datamodules.pipes.ExactMatch
     #- fz_openqa.datamodules.pipes.ScispaCyMatch
     - fz_openqa.datamodules.pipes.MetaMapMatch
 
