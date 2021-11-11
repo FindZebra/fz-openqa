@@ -140,14 +140,29 @@ class FaissIndex(Index):
         score, indices = self._index.search(vectors, k)
         return SearchResult(score=score, index=indices)
 
-    def _init_index(self, batch):
+    def _init_index(self, batch, partitions: int = 2, bits: int = 2, m: int = 2):
         """
-        Initialize the Index
-        # todo: @idariis : You can modify this method to add more advanced indexes (e.g. IVF)
+        Initialize the index
+
+        @param partitions: the number of clusters for each sub-vector set
+        @param bits: number of bits in each centroid
+        @param m: number of centroid ids in final compressed vector.
+        Must be a divisor of the dimension (dim)
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
-        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+        dim = vectors.shape[-1]
+        assert dim % m == 0
+        quantizer = faiss.IndexFlatL2(dim)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, partitions, bits, m, self.metric_type)
+
+    def _train(self, vector):
+        """
+        Train index on data
+        """
+        print("#> Training index")
+        self._index.train(vector)
+        assert self._index.is_trained is True, "Index is not trained"
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """
@@ -168,6 +183,7 @@ class FaissIndex(Index):
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
         vector = vector.astype(dtype)
+        self._train(vector)
         self._index.add(vector)
 
     def _process_batches(
