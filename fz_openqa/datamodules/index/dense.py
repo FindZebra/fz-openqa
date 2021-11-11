@@ -154,7 +154,7 @@ class FaissIndex(Index):
         dim = vectors.shape[-1]
         assert dim % m == 0
         quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, partitions, bits, m, self.metric_type)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, partitions, m, bits, self.metric_type)
 
     def _train(self, vector):
         """
