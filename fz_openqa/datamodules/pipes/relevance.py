@@ -47,16 +47,13 @@ class Pair:
     answer: Dict[str, Any]
 
 
-def find_one(text: str, queries: Sequence[Any], sort_by: Optional[Callable] = None) -> bool:
+def find_one(text: str, queries: Sequence[List], sort_by: Optional[Callable] = None) -> bool:
     """check if one of the queries is in the input text"""
     assert isinstance(text, str)
     if len(queries) == 0:
         return False
     if len(text) == 0:
         return False
-
-    if sort_by is not None:
-        queries = sorted(queries, key=sort_by)
 
     # re.search: Scan through string looking for a location where
     # the regular expression pattern produces a match, and return a
@@ -70,7 +67,7 @@ def find_one(text: str, queries: Sequence[Any], sort_by: Optional[Callable] = No
     return bool(
         re.search(
             re.compile(
-                "|".join(re.escape(x) for x in queries),
+                "|".join(x for x in queries),
                 re.IGNORECASE,
             ),
             text,
@@ -78,7 +75,7 @@ def find_one(text: str, queries: Sequence[Any], sort_by: Optional[Callable] = No
     )
 
 
-def find_all(text: str, queries: Sequence[Any], lower_case_queries: bool = True) -> List:
+def find_all(text: str, queries: Sequence[List]) -> List:
     """Find all matching queries in the document.
     There are one returned item per match in the document."""
     assert isinstance(text, str)
@@ -87,21 +84,9 @@ def find_all(text: str, queries: Sequence[Any], lower_case_queries: bool = True)
     if len(text) == 0:
         return []
 
-    if lower_case_queries:
-        queries = {q.lower() for q in queries}
-
-    # re.search: Scan through string looking for a location where
-    # the regular expression pattern produces a match, and return a
-    # corresponding MatchObject instance. Return None if no position
-    # in the string matches the pattern; note that this is different
-    # from finding a zero-length match at some point in the string.
-    # re.escape: Return string with all non-alphanumerics backslashed;
-    # this is useful if you want to match an arbitrary literal string
-    # that may have regular expression metacharacters in it.
-    # re.IGNORECASE: Perform case-insensitive matching
     return re.findall(
         re.compile(
-            "|".join(re.escape(x) for x in queries),
+            "(?=(" + "|".join(map(re.escape, queries)) + "))",
             re.IGNORECASE,
         ),
         text,
@@ -207,7 +192,6 @@ class ExactMatch(RelevanceClassifier):
         answer_index = pair.answer["answer.target"]
         answer_text = pair.answer["answer.text"][answer_index]
 
-        rich.print(f"[red] {answer_text}")
         return find_all(doc_text, [answer_text])
 
     # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
@@ -246,6 +230,7 @@ class AliasBasedMatch(RelevanceClassifier):
     def _get_matches(pair: Pair) -> List[str]:
         doc_text = pair.document["document.text"]
         answer_aliases = pair.answer["answer.aliases"]
+
         return find_all(doc_text, answer_aliases)
 
     def __call__(self, batch: Batch, **kwargs) -> Batch:
@@ -273,11 +258,7 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def _setup_models(self):
         if self.model is None:
-            self.model = self._load_spacy_model(
-                self.model_name,
-                self.linker_name, 
-                self.threshold
-            )
+            self.model = self._load_spacy_model(self.model_name, self.linker_name, self.threshold)
         if self.linker is None:
             self.linker = self._setup_linker(self.model)
 
@@ -288,11 +269,7 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _load_spacy_model(
-            model_name: str,
-            linker_name: str = "umls",
-            threshold: float = 0.65
-    ):
+    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.65):
         model = spacy.load(
             model_name,
             disable=[
@@ -319,9 +296,12 @@ class AliasBasedMatch(RelevanceClassifier):
 
         for cui_str in entity:
             # cui_str, _ = cui  # ent: (str, score)
-            tuis = self.linker.kb.cui_to_entity[cui_str].types
-            aliases = self.linker.kb.cui_to_entity[cui_str].aliases
-            yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
+            try:
+                tuis = self.linker.kb.cui_to_entity[cui_str].types
+                aliases = self.linker.kb.cui_to_entity[cui_str].aliases
+                yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
+            except KeyError:
+                pass
 
     @staticmethod
     def _extract_answer_text(pair: Pair) -> str:
@@ -395,10 +375,9 @@ class MetaMapMatch(AliasBasedMatch):
                 linked_entities = self.get_linked_entities(answer_cuis)
                 e_aliases = set(self.extract_aliases(linked_entities))
 
-            answer_aliases = [str(answer)] + sorted(e_aliases, key=len)
+            answer_aliases = [answer] + list(e_aliases)
             # update the pair and return
-            rich.print(f"[blue] {answer_aliases}")
-            pair.answer["answer.aliases"] = list(answer_aliases)
+            pair.answer["answer.aliases"] = answer_aliases
             yield pair
 
 
@@ -406,26 +385,33 @@ class ScispaCyMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+    @staticmethod
+    def _combine_entities(doc: Doc) -> str:
+        return " ".join(ent.text for ent in doc.ents)
+
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         pairs = list(pairs)
-        n = len(pairs)
 
         # extract the answer and synonyms texts from each Pair
         answer_texts = map(self._extract_answer_text, pairs)
 
         # batch processing of texts
-        docs = list(self.model.pipe(answer_texts), **self.spacy_kwargs)
-        answer_docs = docs[:n]
+        docs = list(self.model.pipe(answer_texts, **self.spacy_kwargs))
+        combined_entities = map(self._combine_entities, docs)
+        filtered_docs = list(self.model.pipe(combined_entities, **self.spacy_kwargs))
 
         # join the aliases
-        for pair, answer_doc, answer_str in zip_longest(pairs, answer_docs, answer_texts):
+        for pair, answer_str, answer_doc in zip_longest(pairs, docs, filtered_docs):
             answer_doc.ents = [Span(answer_doc, 0, len(answer_doc), label="Entity")]
-            linked_entities = self.get_linked_entities(answer_doc.ents[0])
-            e_aliases = set(self.extract_aliases(linked_entities))
-            answer_aliases = [str(answer_str), str(answer_doc)] + sorted(e_aliases, key=len)
+            for ent in answer_doc.ents:
+                linked_entities = self.get_linked_entities(ent)
+                e_aliases = set(self.extract_aliases(linked_entities))
+
+            answer_aliases = [answer_str.text] + list(e_aliases)
+            if answer_doc.text and answer_str.text != answer_doc.text:
+                answer_aliases = [answer_str.text, answer_doc.text] + list(e_aliases)
 
             # update the pair and return
-            rich.print(f"[green] {answer_aliases}")
-            pair.answer["answer.aliases"] = list(answer_aliases)
+            pair.answer["answer.aliases"] = answer_aliases
             yield pair
