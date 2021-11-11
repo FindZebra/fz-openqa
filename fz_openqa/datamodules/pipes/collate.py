@@ -6,8 +6,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-from . import Pipe
 from ...utils.datastruct import Batch
+from .base import Pipe
 
 
 class Collate(Pipe):
@@ -28,7 +28,7 @@ class Collate(Pipe):
         self.keys = keys
         self.key_op = key_op
 
-    def __call__(self, examples: Union[Batch, Iterable[Batch]], **kwargs) -> Batch:
+    def _call(self, examples: Union[Batch, Iterable[Batch]], **kwargs) -> Batch:
         # cast, filter keys and check type and keys consistency
         if isinstance(examples, dict):
             keys = self.get_keys_form_eg(examples)
@@ -71,7 +71,7 @@ class Collate(Pipe):
 
 
 class DeCollate(Pipe):
-    def __call__(self, batch: Batch, **kwargs) -> List[Dict[str, Any]]:
+    def _call(self, batch: Batch, **kwargs) -> List[Dict[str, Any]]:
         keys = list(batch.keys())
         length = len(batch[keys[0]])
         lengths = {k: len(v) for k, v in batch.items()}
@@ -80,7 +80,7 @@ class DeCollate(Pipe):
 
 
 class FirstEg(Pipe):
-    def __call__(self, examples: List[Batch]) -> Batch:
+    def _call(self, examples: List[Batch]) -> Batch:
         return examples[0]
 
 
@@ -88,6 +88,6 @@ class ApplyToEachExample(Pipe):
     def __init__(self, pipe: Pipe):
         self.pipe = pipe
 
-    def __call__(self, examples: Iterable[Batch]) -> Iterable[Batch]:
+    def _call(self, examples: Iterable[Batch]) -> Iterable[Batch]:
         for eg in examples:
             yield self.pipe(eg)

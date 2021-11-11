@@ -10,7 +10,7 @@ from typing import Union
 
 import dill
 
-from fz_openqa.datamodules.pipes.base import Pipe
+from .base import Pipe
 from fz_openqa.datamodules.pipes.utils import reduce_dict_values
 from fz_openqa.datamodules.pipes.utils import safe_fingerprint
 from fz_openqa.datamodules.pipes.utils import safe_todict
@@ -32,7 +32,7 @@ class Sequential(Pipe):
         super(Sequential, self).__init__(id=id)
         self.pipes = [pipe for pipe in pipes if pipe is not None]
 
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
         for pipe in self.pipes:
             batch = pipe(batch, **kwargs)
@@ -79,7 +79,7 @@ class Sequential(Pipe):
 class Parallel(Sequential):
     """Execute pipes in parallel and merge."""
 
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
 
         outputs = {}
@@ -117,7 +117,7 @@ class UpdateWith(Pipe):
         super(UpdateWith, self).__init__(**kwargs)
         self.pipe = pipe
 
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
 
         batch.update(self.pipe(batch, **kwargs))
@@ -188,14 +188,14 @@ class Gate(Pipe):
     def id(self):
         return str(type(self.pipe).__name__)
 
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
-        output = self._call(batch, **kwargs)
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+        output = self._call_(batch, **kwargs)
         if self.update:
             batch.update(output)
             output = batch
         return output
 
-    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+    def _call_(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
 
         switched_on = self.is_switched_on(batch)
 
@@ -245,7 +245,7 @@ class BlockSequential(Pipe):
         blocks = [(k, b) for k, b in blocks if b is not None]
         self.blocks: OrderedDict[str, Pipe] = OrderedDict(blocks)
 
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
+    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
         for block in self.blocks.values():
             batch = block(batch, **kwargs)

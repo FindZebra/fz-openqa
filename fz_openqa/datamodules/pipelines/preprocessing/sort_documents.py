@@ -8,7 +8,7 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class GenIsPositive(Pipe):
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         batch["document.is_positive"] = [x > 0 for x in batch["document.match_score"]]
         return batch
 

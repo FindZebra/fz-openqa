@@ -78,7 +78,7 @@ class FaissIndex(Index):
         index_key: str = "document.row_idx",
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
-        collate_pipe: Pipe = Collate(),
+        collate_pipe: Pipe = None,
         metric_type: str = faiss.METRIC_INNER_PRODUCT,
         **kwargs,
     ):
@@ -100,7 +100,7 @@ class FaissIndex(Index):
         self.loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
 
         # collate pipe use to convert dataset rows into a batch
-        self.collate = collate_pipe
+        self.collate = collate_pipe or Collate()
 
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer

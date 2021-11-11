@@ -11,8 +11,8 @@ import dill
 import torch
 from datasets import Dataset
 
-from . import Collate
 from .base import Pipe
+from .collate import Collate
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -95,7 +95,7 @@ class SearchCorpus(Pipe):
             "index": self._fingerprint(self.index),
         }
 
-    def __call__(
+    def _call(
         self,
         query: Batch,
         *,
@@ -129,7 +129,7 @@ class FetchDocuments(Pipe):
         *,
         corpus_dataset: Dataset,
         keys: Optional[List[str]] = None,
-        collate_pipe: Pipe = Collate(),
+        collate_pipe: Pipe = None,
         index_key: str = "document.row_idx",
         output_format: str = "dict",
         id: str = "fetch-documents-pipe",
@@ -144,7 +144,7 @@ class FetchDocuments(Pipe):
 
         self.corpus_dataset = corpus_dataset
         self.keys = keys
-        self.collate_pipe = collate_pipe
+        self.collate_pipe = collate_pipe or Collate()
         self.index_key = index_key
         self.output_format = output_format
 
@@ -159,7 +159,7 @@ class FetchDocuments(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes

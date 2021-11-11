@@ -39,7 +39,7 @@ class TokenizerPipe(Pipe):
             input_keys += ["offset_mapping"]
         return input_keys
 
-    def __call__(self, batch: TorchBatch, **kwargs) -> TorchBatch:
+    def _call(self, batch: TorchBatch, **kwargs) -> TorchBatch:
         tokenizer_input = {field: batch[field] for field in self.fields}
 
         batch_encoding = self.tokenizer(*tokenizer_input.values(), **self.args, **kwargs)
@@ -61,7 +61,7 @@ class CleanupPadTokens(Pipe):
     def __init__(self, tokenizer: PreTrainedTokenizerFast):
         self.pad_tok = tokenizer.pad_token_id
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         for k in batch.keys():
             if str(k).endswith(".input_ids"):
                 all_tokens = batch[k]

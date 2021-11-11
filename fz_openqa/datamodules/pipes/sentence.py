@@ -4,7 +4,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from fz_openqa.datamodules.pipes import Pipe
+from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -23,7 +23,7 @@ class GenerateSentences(Pipe):
         self.delimiter = delimiter
         self.required_keys = required_keys
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         return self.generate_sentences(
             batch, required_keys=self.required_keys, delimiter=self.delimiter
         )

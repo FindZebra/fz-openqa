@@ -9,9 +9,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from fz_openqa.datamodules.pipes.base import ApplyToAll
-from fz_openqa.datamodules.pipes.base import FilterKeys
-from fz_openqa.datamodules.pipes.base import Pipe
+from .base import Pipe
+from fz_openqa.datamodules.pipes.basic import ApplyToAll
+from fz_openqa.datamodules.pipes.basic import FilterKeys
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import always_true
 from fz_openqa.utils.functional import infer_batch_size
@@ -80,7 +80,7 @@ class Nested(Pipe):
         self.pipe = pipe
         self.filter = filter or always_true
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
 
         exs = []
         for i in range(self.batch_size(batch)):
@@ -117,7 +117,7 @@ class ApplyAsFlatten(Pipe):
         self.nest = Nest(stride=None)
         self.filter = FilterKeys(input_filter)
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         output = self._filter_and_apply(batch, **kwargs)
         if self.update:
             batch.update(output)

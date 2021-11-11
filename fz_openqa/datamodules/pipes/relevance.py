@@ -22,8 +22,8 @@ from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 
+from .base import Pipe
 from .nesting import nested_list
-from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
@@ -154,7 +154,7 @@ class RelevanceClassifier(Pipe):
         assert all(length == len(y) for y in x)
         return length
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         output = {}
         n_documents = self._infer_n_docs(batch)
         batch_size = self._infer_batch_size(batch)
@@ -239,11 +239,11 @@ class AliasBasedMatch(RelevanceClassifier):
         answer_aliases = pair.answer["answer.aliases"]
         return find_all(doc_text, answer_aliases)
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         """Super-charge the __call__ method to load the spaCy models
         if they are not already loaded."""
         self._setup_models()
-        return super().__call__(batch, **kwargs)
+        return super()._call(batch, **kwargs)
 
     def __getstate__(self):
         """this method is called when attempting pickling"""

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fz_openqa.datamodules.pipes import Pipe
+from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -14,7 +14,7 @@ class PrintBatch(Pipe):
     def __init__(self, header: Optional[str] = None):
         self.header = header
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         pprint_batch(batch, header=self.header)
 
@@ -36,7 +36,7 @@ class PrintText(Pipe):
         self.limit = limit
         self.header = header
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         txts = batch.get(self.text_key, None)
         if self.limit:

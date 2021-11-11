@@ -63,7 +63,7 @@ class SelectDocsOneEg(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
 
-    def __call__(self, batch: Batch, split: Optional[Split] = None, **kwargs) -> Batch:
+    def _call(self, batch: Batch, split: Optional[Split] = None, **kwargs) -> Batch:
         total = self.total
         if isinstance(total, (dict, DictConfig)):
             total = total[str(split)]

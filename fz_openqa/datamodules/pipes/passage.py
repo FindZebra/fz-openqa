@@ -55,7 +55,7 @@ class GeneratePassages(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys + ["idx", "passage_idx", "passage_mask"]
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
         indexes, output = self.generate_passages_for_all_keys(
             batch,

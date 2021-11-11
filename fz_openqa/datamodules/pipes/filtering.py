@@ -11,7 +11,7 @@ class FilterExamples(Pipe):
     def __init__(self, condition: Callable):
         self.condition = condition
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call(self, batch: Batch, **kwargs) -> Batch:
 
         exs = []
         for i in range(self.batch_size(batch)):

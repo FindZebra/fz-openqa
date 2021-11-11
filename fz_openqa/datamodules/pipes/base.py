@@ -1,7 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
-from copy import copy
 from copy import deepcopy
+from functools import singledispatchmethod
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -11,284 +11,310 @@ from typing import Union
 
 import dill
 
+from fz_openqa.datamodules.pipes.control.filter_keys import FilterKey
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import Eg
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import get_batch_eg
 
 
-def _filter_null_id(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: v for k, v in data.items() if not (k == "id" and v is None)}
+def _filter_null_id(attrs: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Filter out null id.
+
+    Parameters
+    ----------
+    attrs
+        Dictionary of attributes
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary of attributes without null id.
+    """
+    return {k: v for k, v in attrs.items() if not (k == "id" and v is None)}
 
 
 class Pipe(ABC):
     """
     A pipe is a small unit of computation that ingests,
     modify and returns a batch of data.
+
+    ----------
+    Attributes
+    id
+       An identifier for the pipe.
+    input_filter
+        Filter used to filter keys in the input data.
+    update
+        If set to True, output the input batch with the output batch.
+    requires_keys
+       A list of keys that the pipe requires to be present in the data.
     """
 
     id: Optional[str] = None
+    input_filter: Optional[FilterKey] = None
     requires_keys: Optional[List[str]] = None
 
-    def __init__(self, *, id: Optional[str] = None):
+    def __init__(
+        self,
+        *,
+        id: Optional[str] = None,
+        input_filter: Optional[FilterKey] = None,
+        update: bool = False,
+    ):
         if id is not None:
             self.id = id
+        if input_filter is not None:
+            self.input_filter = input_filter
+        self.update = update
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
+        """
+        Return the list of keys that the pipe will output.
+        Parameters
+        ----------
+        input_keys
+           The list of keys that the pipe expects as input.
+
+        Returns
+        -------
+        List[str]
+           The list of keys that the pipe will output
+        """
         return input_keys
 
     @staticmethod
-    def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None):
-        """Extract example `idx` from a batch, potentially filter the keys"""
+    def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None) -> Dict[str, Any]:
+        """
+        Extract example `idx` from a batch, potentially filter the keys
+
+        Parameters
+        ----------
+        batch
+           Input batch
+        idx
+           Index of the example to extract
+        filter_op
+           A function that used to filter the keys
+
+        Returns
+        -------
+        Dict[str, Any]
+           The example of rank `idx`
+        """
         return get_batch_eg(batch=batch, idx=idx, filter_op=filter_op)
 
-    def batch_size(self, batch: Batch) -> int:
-        return len(next(iter(batch.values())))
+    @singledispatchmethod
+    def __call__(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        """
+        Apply the pipe to a batch of data. Potentially
+
+        Parameters
+        ----------
+        batch
+            batch to apply the pipe to
+        idx
+            indexes of the batch examples
+        kwargs
+            additional arguments
+
+        Returns
+        -------
+        Batch
+            The output batch
+        """
+
+        # filter some input keys
+        _batch = self._filter_batch(batch)
+
+        # process the batch
+        output = self._call_batch(_batch, idx=idx, **kwargs)
+
+        # update the input batch with the output if update is set to True
+        if self.update:
+            output = {**batch, **output}
+
+        return output
+
+    def _filter_batch(self, batch: Batch) -> Batch:
+        """
+        Filter the batch using the input_filter.
+
+        Parameters
+        ----------
+        batch
+            batch to filter
+
+        Returns
+        -------
+        Batch
+            Filtered batch
+        """
+        if self.input_filter is None:
+            return batch
+
+        return {k: v for k, v in batch.items() if self.input_filter(k)}
+
+    @__call__.register(list)
+    def _(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        """
+        Apply the pipe to a list of examples. Typically to concatenate examples.
+
+        Parameters
+        ----------
+        examples
+            batch of examples to apply the pipe to
+        idx
+            indexes of the examples
+        kwargs
+            additional arguments
+
+        Returns
+        -------
+        Batch
+            The output batch
+        """
+        if not all(isinstance(eg, dict) for eg in examples):
+            raise TypeError(f"examples must be a list of dicts, got {type(examples[0])}")
+
+        if self.update is True:
+            raise AttributeError("Pipe.update is set to True, cannot update a list of examples")
+
+        # filter some input keys
+        _egs = list(map(self._filter_batch, examples))
+
+        # process the batch
+        return self._call_egs(_egs, idx=idx, **kwargs)
 
     @abstractmethod
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
-        """The call of the pipeline process"""
+    def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        """
+        Main operation applied to the batch.
+
+        Parameters
+        ----------
+        batch
+            batch to apply the pipe to
+        idx
+            indexes of the batch examples
+        kwargs
+            additional arguments
+
+        Returns
+        -------
+        Batch
+            The output batch
+        """
         raise NotImplementedError
 
-    def dill_inspect(self, reduce=True) -> bool:
-        """Returns True if the module can be pickled."""
+    @abstractmethod
+    def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        """
+        Main Operation applied to a list of examples (Egs). Typically to concatenate examples.
+
+        Parameters
+        ----------
+        examples
+            List of examples
+        idx
+            indexes of the examples
+        kwargs
+            additional arguments
+
+        Returns
+        -------
+        Batch
+            The output batch
+        """
+        raise NotImplementedError
+
+    def dill_inspect(self, reduce=True) -> Union[bool, Dict[str, bool]]:
+        """
+        Inspect the dill representation of the object.
+
+        Parameters
+        ----------
+        reduce
+            Collapse all the dill representations of the object into a single booleans
+
+        Returns
+        -------
+        Union[bool, Dict[str, Any]
+            The dill representation of the object,
+            allows both a boolean and a dictionary of booleans.
+            If `reduce` is True, the dictionary is collapsed into a single boolean.
+        """
         return dill.pickles(self)
 
-    def fingerprint(self) -> str:
-        """return the fingerprint of this object"""
+    @staticmethod
+    def _fingerprint(x: Any) -> str:
+        """
+        Return a fingerprint of the object.
+
+        Parameters
+        ----------
+        x
+            object to fingerprint
+
+        Returns
+        -------
+        str
+            fingerprint (hex-digested hash of the object)
+        """
+        return get_fingerprint(x)
+
+    @property
+    def fingerprint(self) -> Union[str, Dict[str, Any]]:
+        """
+        Return a fingerprint(s) of the object.
+
+        Returns
+        -------
+        Union[str, Dict[str, Any]]
+            fingerprint(s) (hex-digested hash of the object),
+            allows both a string and a nested structure of strings.
+        """
         return self._fingerprint(self)
 
     def todict(self) -> Dict[str, Any]:
-        """Return a dictionary representation of the object"""
+        """
+        Return a dictionary representation of the object.
+
+        Returns
+        -------
+        Dictionary[str, Any]
+            Dictionary representation of the object
+        """
         data = {"__type__": type(self).__name__, **vars(self)}
         return _filter_null_id(data)
 
     def __repr__(self) -> str:
+        """
+        Return a string representation of the object.
+
+        Returns
+        -------
+        str
+            String representation of the object
+        """
         return type(self).__name__
 
-    @staticmethod
-    def _fingerprint(x):
-        """Return the fingerprint of an object."""
-        return get_fingerprint(x)
-
     def copy(self, **kwargs):
-        """Copy the pipe and replace attributes using kwargs"""
+        """
+        Return a copy of the object and override the attributes using kwargs.
+
+        Parameters
+        ----------
+        kwargs
+            Attributes to override
+
+        Returns
+        -------
+        Pipe
+            Copy of the object with overridden attributes
+        """
         obj = deepcopy(self)
         for k, v in kwargs.items():
             setattr(obj, k, v)
         return obj
-
-
-class Identity(Pipe):
-    """
-    A pipe that passes a batch without modifying it.
-    """
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        return batch
-
-
-class Lambda(Pipe):
-    """
-    Apply a lambda function to the batch.
-    """
-
-    def __init__(
-        self,
-        op: Callable,
-        output_keys: Optional[List[str]] = None,
-        allow_kwargs: bool = False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.op = op
-        self._output_keys = output_keys
-        self.allow_kwargs = allow_kwargs
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        return self.op(batch)
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return self._output_keys or super().output_keys(input_keys)
-
-
-class GetKey(Pipe):
-    def __init__(self, key: str, **kwargs):
-        super().__init__(**kwargs)
-        self.key = key
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        return {self.key: batch[self.key]}
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [self.key]
-
-
-class FilterKeys(Pipe):
-    """
-    Filter the keys in the batch.
-    """
-
-    def __init__(self, condition: Optional[Callable], **kwargs):
-        super().__init__(**kwargs)
-        self.condition = condition
-
-    def __call__(self, batch: Union[List[Batch], Batch], **kwargs) -> Union[List[Batch], Batch]:
-        """The call of the pipeline process"""
-        if self.condition is None:
-            return batch
-        return self.filter(batch)
-
-    def filter(self, batch):
-        return {k: v for k, v in batch.items() if self.condition(k)}
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [k for k in input_keys if self.condition(k)]
-
-
-class DropKeys(Pipe):
-    """
-    Filter the keys in the batch.
-    """
-
-    def __init__(self, keys: List[str], **kwargs):
-        super().__init__(**kwargs)
-        self.keys = keys
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        for key in self.keys:
-            batch.pop(key)
-        return batch
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        for key in self.keys:
-            input_keys.remove(key)
-        return input_keys
-
-
-class AddPrefix(Pipe):
-    """
-    Append the keys with a prefix.
-    """
-
-    def __init__(self, prefix: str, **kwargs):
-        super().__init__(**kwargs)
-        self.prefix = prefix
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        return {f"{self.prefix}{k}": v for k, v in batch.items()}
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [f"{self.prefix}{k}" for k in input_keys]
-
-
-class ReplaceInKeys(Pipe):
-    """
-    Remove a the prefix in each key.
-    """
-
-    def __init__(self, a: str, b: str, **kwargs):
-        super().__init__(**kwargs)
-        self.a = a
-        self.b = b
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        return {k.replace(self.a, self.b): v for k, v in batch.items()}
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [k.replace(self.a, self.b) for k in input_keys]
-
-
-class RenameKeys(Pipe):
-    """
-    Rename a set of keys
-    """
-
-    def __init__(self, keys: Dict[str, str], **kwargs):
-        super().__init__(**kwargs)
-        self.keys = keys
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        for old_key, new_key in self.keys.items():
-            if old_key in batch:
-                value = batch.pop(old_key)
-                batch[new_key] = value
-
-        return batch
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [self.keys.get(k, k) for k in input_keys]
-
-
-class Apply(Pipe):
-    """
-    Transform the values in a batch for all transformations
-    registered in `ops`: key, transformation`.
-    The argument `element_wise` allows to process each value in the batch element wise.
-    """
-
-    def __init__(self, ops: Dict[str, Callable], element_wise: bool = False, **kwargs):
-        super().__init__(**kwargs)
-        self.ops = ops
-        self.element_wise = element_wise
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        for key, op in self.ops.items():
-            values = batch[key]
-            if self.element_wise:
-                batch[key] = [op(x) for x in values]
-            else:
-                batch[key] = op(values)
-
-        return batch
-
-
-class ApplyToAll(Pipe):
-    """
-    Transform the values in a batch for all transformations
-    registered in `ops`: key, transformation`.
-    The argument `element_wise` allows to process each value in the batch element wise.
-    """
-
-    def __init__(
-        self,
-        op: Callable,
-        element_wise: bool = False,
-        allow_kwargs: bool = False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.op = op
-        self.element_wise = element_wise
-        self.allow_kwargs = allow_kwargs
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
-        if not self.allow_kwargs:
-            kwargs = {}
-        for key, values in batch.items():
-            if self.element_wise:
-                batch[key] = [self.op(x, **kwargs) for x in values]
-            else:
-                batch[key] = self.op(values, **kwargs)
-
-        return batch
-
-
-class CopyBatch(Pipe):
-    def __init__(self, *, deep: bool = False, **kwargs):
-        super().__init__(**kwargs)
-        self.deep = deep
-
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
-        if self.deep:
-            return deepcopy(batch)
-        else:
-            return copy(batch)

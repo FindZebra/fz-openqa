@@ -9,7 +9,7 @@ class Batchify(Pipe):
     """Convert an example into a batch"""
 
     @staticmethod
-    def __call__(batch: Dict[str, Any], **kwargs) -> Batch:
+    def _call(batch: Dict[str, Any], **kwargs) -> Batch:
         return {k: [v] for k, v in batch.items()}
 
 
@@ -17,7 +17,7 @@ class DeBatchify(Pipe):
     """Convert a one-element batch into am example"""
 
     @staticmethod
-    def __call__(batch: Batch, **kwargs) -> Dict[str, Any]:
+    def _call(batch: Batch, **kwargs) -> Dict[str, Any]:
         for v in batch.values():
             assert len(v) == 1
         return {k: v[0] for k, v in batch.items()}
@@ -28,7 +28,7 @@ class AsBatch(Pipe):
         super(AsBatch, self).__init__(**kwargs)
         self.pipe = pipe
 
-    def __call__(self, eg: Dict[str, Any], **kwargs) -> Batch:
-        batch = Batchify.__call__(eg, **kwargs)
+    def _call(self, eg: Dict[str, Any], **kwargs) -> Batch:
+        batch = Batchify._call(eg, **kwargs)
         batch = self.pipe(batch, **kwargs)
-        return DeBatchify.__call__(batch, **kwargs)
+        return DeBatchify._call(batch, **kwargs)
