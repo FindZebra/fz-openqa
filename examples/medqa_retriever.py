@@ -1,5 +1,3 @@
-from pprint import pprint
-
 import datasets
 import numpy as np
 import rich
@@ -15,7 +13,6 @@ from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.concat_answer_options import (
     ConcatQuestionAnswerOption,
 )
@@ -27,7 +24,6 @@ datasets.set_caching_enabled(True)
 setup_safe_env()
 
 tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
-
 
 # load the corpus object
 corpus = MedQaCorpusBuilder(
@@ -74,7 +70,7 @@ select_fields = FilterKeys(lambda key: key == "question.metamap")
 search_index = SearchCorpus(corpus_index=corpus._index, k=25)
 flatten_and_search = ApplyAsFlatten(search_index)
 
-pipe = UpdateWith(Sequential(concat_pipe, select_fields, flatten_and_search))
+pipe = Sequential(concat_pipe, select_fields, flatten_and_search, update=True)
 printer = PrintBatch()
 
 

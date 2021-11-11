@@ -1,17 +1,80 @@
+from typing import Any
 from typing import Callable
+from typing import List
 
 from fz_openqa.utils.datastruct import Batch
 
 
 class Condition:
-    def __call__(self, batch: Batch) -> bool:
+    """
+    This class implements a condition for the control pipe.
+    """
+
+    def __call__(self, x: Any) -> bool:
+        """
+        Returns True if the input matches the condition.
+
+        Parameters
+        ----------
+        x
+            object to be tested.
+
+        Returns
+        -------
+        bool
+            True if the input matches the condition.
+        """
         raise NotImplementedError
 
+    def todict(self) -> dict:
+        """
+        Returns a dictionary representation of the condition.
+
+        Returns
+        -------
+        Dict
+            Dictionary representation of the condition.
+        """
+        return {"__type__": type(self).__name__, **vars(self)}
+
     def __repr__(self):
-        return self.__class__.__name__
+        """
+        Returns a string representation of the condition.
+
+        Returns
+        -------
+        str
+            String representation of the condition.
+        """
+        args = [f"{k}={v}" for k, v in self.todict().items()]
+        return self.__class__.__name__ + "(" + ", ".join(args) + ")"
+
+
+class In(Condition):
+    """check if the key is in the set of `allowed_keys`"""
+
+    def __init__(self, allowed_values: List[str]):
+        self.allowed_keys = set(allowed_values)
+
+    def __call__(self, x: Any) -> bool:
+        return x in self.allowed_keys
+
+
+class WithPrefix(Condition):
+    """check if the key starts with a given prefix"""
+
+    def __init__(self, prefix: str):
+        self.prefix = prefix
+
+    def __call__(self, key: Any) -> bool:
+        return str(key).startswith(self.prefix)
 
 
 class Reduce(Condition):
+    """
+    Reduce multiple conditions into outcome.
+    """
+
     def __init__(self, *conditions: Condition, reduce_op: Callable = all):
         self.reduce_op = reduce_op
         self.conditions = list(conditions)
@@ -23,29 +86,9 @@ class Reduce(Condition):
         return f"{self.__class__.__name__}(conditions={list(self.conditions)}, op={self.reduce_op})"
 
 
-class HasKeyWithPrefix(Condition):
-    def __init__(self, prefix: str):
-        self.prefix = prefix
-
-    def __call__(self, batch: Batch) -> bool:
-        return any(str(k).startswith(self.prefix) for k in batch.keys())
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.prefix})"
-
-
-class IsInstance(Condition):
-    def __init__(self, cls: type):
-        self.cls = cls
-
-    def __call__(self, batch: Batch) -> bool:
-        return all(isinstance(v, self.cls) for v in batch.values())
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.cls.__name__})"
-
-
 class Not(Condition):
+    """`not` Operator for a condition."""
+
     def __init__(self, condition: Condition):
         self.condition = condition
 
@@ -57,7 +100,7 @@ class Not(Condition):
 
 
 class Static(Condition):
-    """check if the key is in the allowed_keys"""
+    """Condition with a static boolean outcome."""
 
     def __init__(self, cond: bool):
         self.cond = cond

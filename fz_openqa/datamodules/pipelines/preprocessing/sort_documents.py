@@ -2,7 +2,7 @@ from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import WithPrefix
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.utils.datastruct import Batch
 
@@ -28,7 +28,7 @@ class SortDocuments(Sequential):
                     ),
                     DropKeys(["document.is_positive"]),
                 ),
-                filter=KeyWithPrefix("document."),
+                filter=WithPrefix("document."),
             ),
             id="sort-documents",
         )

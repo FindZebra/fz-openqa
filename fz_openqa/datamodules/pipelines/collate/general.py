@@ -13,8 +13,7 @@ from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Nest
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import UpdateWith
-from fz_openqa.datamodules.pipes.control.condition import IsInstance
+from fz_openqa.datamodules.pipes.control.batch_condition import AllValuesOfType
 
 
 class CollateAsTensor(Sequential):
@@ -43,8 +42,10 @@ class CollateTokens(Sequential):
             Collate(keys=[f"{prefix}input_ids", f"{prefix}attention_mask"]),
             ReplaceInKeys(prefix, ""),
             Flatten() if stride else None,
-            UpdateWith(
-                Gate(IsInstance(list), pipe=Lambda(tokenizer.pad, id=f"collate:pad:{prefix}"))
+            Gate(
+                AllValuesOfType(list),
+                pipe=Lambda(tokenizer.pad, id=f"collate:pad:{prefix}"),
+                update=True,
             ),
             Nest(stride=stride) if stride else None,
             AddPrefix(prefix),

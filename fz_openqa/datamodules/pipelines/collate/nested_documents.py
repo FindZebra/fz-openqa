@@ -12,8 +12,8 @@ from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.batch_condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
 
 
 class MaybeCollateDocuments(Gate):
@@ -25,12 +25,12 @@ class MaybeCollateDocuments(Gate):
 
     def __init__(self, tokenizer: PreTrainedTokenizerFast, **kwargs):
         # get the raw text
-        raw_text_pipe = FilterKeys(KeyIn(["document.text", "document.match_on"]))
+        raw_text_pipe = FilterKeys(In(["document.text", "document.match_on"]))
 
         # Get the simple attribute and cast to tensor
         simple_attr_pipe = Sequential(
             FilterKeys(
-                KeyIn(
+                In(
                     [
                         "document.row_idx",
                         "document.idx",
@@ -47,7 +47,7 @@ class MaybeCollateDocuments(Gate):
         tokens_pipe = Gate(
             HasKeyWithPrefix("document.input_ids"),
             pipe=Sequential(
-                FilterKeys(KeyIn(["document.input_ids", "document.attention_mask"])),
+                FilterKeys(In(["document.input_ids", "document.attention_mask"])),
                 ReplaceInKeys("document.", ""),
                 Lambda(tokenizer.pad),
                 AddPrefix("document."),

@@ -76,26 +76,7 @@ class SearchCorpus(Pipe):
         self.k = k
         self.model = model
 
-    def __repr__(self):
-        return {
-            "__type__": type(self),
-            "k": self.k,
-            "es_index": self.index.index_name,
-        }.__repr__()
-
-    def dill_inspect(self, **kwargs) -> Dict[str, Any]:
-        return {
-            "__all__": dill.pickles(self),
-            "index": self.index.dill_inspect(),
-        }
-
-    def fingerprint(self) -> Dict[str, Any]:
-        return {
-            "__all__": self._fingerprint(self),
-            "index": self._fingerprint(self.index),
-        }
-
-    def _call(
+    def _call_batch(
         self,
         query: Batch,
         *,
@@ -148,18 +129,10 @@ class FetchDocuments(Pipe):
         self.index_key = index_key
         self.output_format = output_format
 
-    def fingerprint(self) -> Dict[str, Any]:
-        return {
-            "__all__": self._fingerprint(self),
-            "corpus_dataset": self._fingerprint(self.corpus_dataset),
-            "corpus_dataset_fingerprint": self.corpus_dataset._fingerprint,
-            "self.collate_pipe": self._fingerprint(self.collate_pipe),
-        }
-
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes

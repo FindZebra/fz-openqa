@@ -27,7 +27,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import ToNumpy
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 

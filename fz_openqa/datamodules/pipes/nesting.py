@@ -1,15 +1,17 @@
+from functools import partial
 from typing import Any
 from typing import Callable
 from typing import List
 from typing import Optional
-from typing import Type
 from typing import Union
 
 import numpy as np
-import torch
 from torch import Tensor
 
 from .base import Pipe
+from .utils.nesting import flatten_nested
+from .utils.nesting import nested_list
+from .utils.nesting import reconcat
 from fz_openqa.datamodules.pipes.basic import ApplyToAll
 from fz_openqa.datamodules.pipes.basic import FilterKeys
 from fz_openqa.utils.datastruct import Batch
@@ -20,59 +22,60 @@ from fz_openqa.utils.functional import infer_stride
 STRIDE_SYMBOL = "__stride__"
 
 
-def flatten_nested(values: List[List[Any]]) -> List[Any]:
-    return [sub_x for x in values for sub_x in x]
-
-
-def nested_list(values: List[Any], *, stride: int) -> List[List[Any]]:
-    output = []
-    for i in range(0, len(values), stride):
-        output += [[values[j] for j in range(i, i + stride)]]
-    return output
-
-
-def reconcat(values: List[Any], original_type: Type):
-    if original_type == Tensor:
-        values = torch.cat([t[None] for t in values], dim=0)
-    elif original_type == np.ndarray:
-        values = np.concatenate([t[None] for t in values], dim=0)
-    elif original_type == list:
-        pass
-    else:
-        raise ValueError(f"Cannot reconstruct values of original type={original_type}")
-    return values
-
-
 class Flatten(ApplyToAll):
-    def __init__(self):
-        super().__init__(flatten_nested, element_wise=False)
+    """
+    Flatten a nested batch up to dimension=`level`.
+    For instance a batch of shape (x, 3, 4, ...) with level=2 will be flattened to (x *3 * 4, ...)
+    """
+
+    def __init__(self, level: int = 1, **kwargs):
+        """
+        Parameters
+        ----------
+        level
+            The level to flatten to.
+        kwargs
+            Keyword arguments passed to `ApplyToAll`.
+        """
+        fn = partial(flatten_nested, level=level)
+        super().__init__(fn, element_wise=False, **kwargs)
 
 
 class Nest(ApplyToAll):
-    """Nest a flattened batch:
-    {key: [values]} -> {key: [[group] for group in groups]}"""
+    """
+    Nest a flat batch. This is equivalent to calling np.reshape to all values,
+    except that this method can handle np.ndarray, Tensors and lists
+    """
 
-    def __init__(self, stride: Optional[int]):
-        super(Nest, self).__init__(element_wise=False, op=self.nest, allow_kwargs=True)
-        self.stride = stride
+    def __init__(self, shape: List[int], **kwargs):
+        """
+        Parameters
+        ----------
+        shape
+            Target shape of the nested batch (e.g. [-1, 2, 4])
+        kwargs
+            Forwarded to ApplyToAll
+        """
+        nest_fn = partial(self.nest, shape=shape)
+        super(Nest, self).__init__(element_wise=False, op=nest_fn, allow_kwargs=False, **kwargs)
 
-    def nest(
-        self,
-        x: Union[Tensor, List[Any]],
-        stride: Optional[int] = None,
-        **kwargs,
-    ):
-        stride = stride or self.stride
+    @staticmethod
+    def nest(x: Union[Tensor, List[Any]], *, shape: List[int]):
         if isinstance(x, Tensor):
-            return x.view(-1, stride, *x.shape[1:])
+            return x.view(*shape, *x.shape[1:])
+        elif isinstance(x, np.ndarray):
+            return x.reshape((*shape, *x.shape[1:]))
+        elif isinstance(x, list):
+            return nested_list(x, shape=shape)
         else:
-            return [x[i : i + stride] for i in range(0, len(x), stride)]
+            raise TypeError(f"Unsupported type: {type(x)}")
 
 
 class Nested(Pipe):
     """
     Apply a pipe to each nested value.
     This can be use to modify the nested field inplace  (i.e. sorting, deleting).
+    # todo: stopping here, continue tomorrow
     """
 
     def __init__(self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs):
@@ -80,7 +83,7 @@ class Nested(Pipe):
         self.pipe = pipe
         self.filter = filter or always_true
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
 
         exs = []
         for i in range(self.batch_size(batch)):
@@ -101,7 +104,10 @@ class Nested(Pipe):
 class ApplyAsFlatten(Pipe):
     """Flatten nested field an apply a pipe to the flatten fields.
 
-    Warning: Do not use this pipe if the inner pipe modify the order of the batch elements!"""
+    Warning: Do not use this pipe if the inner pipe modify the order of the batch elements!
+
+     # todo: stopping here, continue tomorrow
+    """
 
     def __init__(
         self,
@@ -117,7 +123,7 @@ class ApplyAsFlatten(Pipe):
         self.nest = Nest(stride=None)
         self.filter = FilterKeys(input_filter)
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         output = self._filter_and_apply(batch, **kwargs)
         if self.update:
             batch.update(output)
@@ -139,11 +145,3 @@ class ApplyAsFlatten(Pipe):
         assert new_stride == stride
 
         return output
-
-    def fingerprint(self):
-        return {
-            "filter": self.filter.fingerprint(),
-            "flatten": self.flatten.fingerprint(),
-            "nest": self.nest.fingerprint(),
-            type(self.pipe).__name__: self.pipe.fingerprint(),
-        }

@@ -37,7 +37,7 @@ class Sort(Pipe):
         self.reverse = reverse
         self.filter = filter or always_true
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
 
         # get values and index

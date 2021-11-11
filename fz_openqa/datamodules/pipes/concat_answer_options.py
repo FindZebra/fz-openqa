@@ -16,7 +16,7 @@ class ConcatQuestionAnswerOption(Pipe):
         self.question_key = question_key
         self.answer_key = answer_key
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         questions = batch[self.question_key]  # [bs,]
         answers = batch[self.answer_key]  # [bs, n_options]
 

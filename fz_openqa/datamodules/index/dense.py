@@ -34,7 +34,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import ToNumpy
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 
@@ -105,7 +105,7 @@ class FaissIndex(Index):
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer
         self.process = Sequential(
-            Parallel(Forward(model=model), FilterKeys(KeyIn([IDX_COL]))), ToNumpy()
+            Parallel(Forward(model=model), FilterKeys(In([IDX_COL]))), ToNumpy()
         )
 
         # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
@@ -302,7 +302,7 @@ class FaissIndex(Index):
         """Format the output of the model"""
         return Sequential(
             RenameKeys({key: output for key in inputs}),
-            FilterKeys(KeyIn([output, IDX_COL])),
+            FilterKeys(In([output, IDX_COL])),
         )
 
     def dill_inspect(self) -> Dict[str, bool]:

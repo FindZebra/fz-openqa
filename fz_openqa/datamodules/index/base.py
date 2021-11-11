@@ -1,4 +1,5 @@
 from abc import ABC
+from abc import ABCMeta
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -22,10 +23,11 @@ class SearchResult:
     tokens: Optional[List[List[str]]] = None
 
 
-class Index(ABC):
+class Index:
     """Keep an index of a Dataset and search u
     sing queries."""
 
+    __metaclass__ = ABCMeta
     index_name: Optional[str] = None
     is_indexed: bool = False
 

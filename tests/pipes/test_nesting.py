@@ -2,7 +2,7 @@ from copy import deepcopy
 from unittest import TestCase
 
 from fz_openqa.datamodules.pipes import ApplyAsFlatten, Identity
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import WithPrefix
 
 
 class TestAsFlatten(TestCase):
@@ -16,12 +16,12 @@ class TestAsFlatten(TestCase):
 
     def test_identity(self):
         # with update
-        pipe = ApplyAsFlatten(Identity(), update=True, input_filter=KeyWithPrefix("document."))
+        pipe = ApplyAsFlatten(Identity(), update=True, input_filter=WithPrefix("document."))
         output = pipe(self.data)
         self.assertEqual(output, self.data)
 
         # no update
-        pipe = ApplyAsFlatten(Identity(), update=False, input_filter=KeyWithPrefix("document."))
+        pipe = ApplyAsFlatten(Identity(), update=False, input_filter=WithPrefix("document."))
         output = pipe(self.data)
         data = self.data
         data.pop('question')

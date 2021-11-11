@@ -22,7 +22,6 @@ from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
 from fz_openqa.datamodules.pipelines.index import SearchDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
@@ -30,8 +29,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
-from fz_openqa.datamodules.pipes.search import FetchDocuments
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names

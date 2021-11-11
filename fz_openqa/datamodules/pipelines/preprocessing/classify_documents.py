@@ -4,7 +4,7 @@ from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.search import FetchDocuments
 
 
@@ -28,16 +28,16 @@ class ClassifyDocuments(Sequential):
         ]
 
         super().__init__(
-            FilterKeys(KeyIn(input_keys)),
+            FilterKeys(In(input_keys)),
             ApplyAsFlatten(
                 FetchDocuments(
                     corpus_dataset=corpus_dataset,
                     keys=["document.text"],
                 ),
-                input_filter=KeyIn(["document.row_idx"]),
+                input_filter=In(["document.row_idx"]),
                 update=True,
             ),
-            FilterKeys(KeyIn(classifier_input_keys)),
+            FilterKeys(In(classifier_input_keys)),
             relevance_classifier,
             id="classify-documents",
         )

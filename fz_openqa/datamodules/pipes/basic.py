@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 from .base import Pipe
+from .control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -15,19 +16,12 @@ class Identity(Pipe):
     A pipe that passes a batch without modifying it.
     """
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
-        """
-        Returns the batch without modifying it.
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        """Returns the batch without modifying it."""
+        return batch
 
-        Parameters
-        ----------
-        batch
-        kwargs
-
-        Returns
-        -------
-
-        """
+    def _call_egs(self, batch: Batch, **kwargs) -> Batch:
+        """Returns the batch without modifying it."""
         return batch
 
 
@@ -48,20 +42,26 @@ class Lambda(Pipe):
         self._output_keys = output_keys
         self.allow_kwargs = allow_kwargs
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
-        return self.op(batch)
+        if not self.allow_kwargs:
+            kwargs = {}
+        return self.op(batch, **kwargs)
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self._output_keys or super().output_keys(input_keys)
 
 
 class GetKey(Pipe):
+    """
+    Returns a batch containing only the target key.
+    """
+
     def __init__(self, key: str, **kwargs):
         super().__init__(**kwargs)
         self.key = key
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         return {self.key: batch[self.key]}
 
@@ -69,38 +69,31 @@ class GetKey(Pipe):
         return [self.key]
 
 
-class FilterKeys(Pipe):
+class FilterKeys(Identity):
     """
-    Filter the keys in the batch.
+    Filter the keys in the batch given the `Condition` object.
     """
 
-    def __init__(self, condition: Optional[Callable], **kwargs):
-        super().__init__(**kwargs)
-        self.condition = condition
+    _allows_update = False
 
-    def _call(self, batch: Union[List[Batch], Batch], **kwargs) -> Union[List[Batch], Batch]:
-        """The call of the pipeline process"""
-        if self.condition is None:
-            return batch
-        return self.filter(batch)
-
-    def filter(self, batch):
-        return {k: v for k, v in batch.items() if self.condition(k)}
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return [k for k in input_keys if self.condition(k)]
+    def __init__(self, condition: Optional[Condition], **kwargs):
+        assert kwargs.get("input_filter", None) is None, "input_filter is not allowed"
+        super().__init__(input_filter=condition, **kwargs)
 
 
 class DropKeys(Pipe):
     """
-    Filter the keys in the batch.
+    Drop the keys in the current batch.
     """
+
+    _allows_update = False
+    _allows_input_filter = False
 
     def __init__(self, keys: List[str], **kwargs):
         super().__init__(**kwargs)
         self.keys = keys
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         for key in self.keys:
             batch.pop(key)
@@ -117,12 +110,13 @@ class AddPrefix(Pipe):
     Append the keys with a prefix.
     """
 
+    _allows_update = False
+
     def __init__(self, prefix: str, **kwargs):
         super().__init__(**kwargs)
         self.prefix = prefix
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
-        """The call of the pipeline process"""
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return {f"{self.prefix}{k}": v for k, v in batch.items()}
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
@@ -131,15 +125,27 @@ class AddPrefix(Pipe):
 
 class ReplaceInKeys(Pipe):
     """
-    Remove a the prefix in each key.
+    Remove a pattern `a` with `b` in all keys
     """
 
+    _allows_update = False
+
     def __init__(self, a: str, b: str, **kwargs):
+        """
+        Parameters
+        ----------
+        a
+            pattern to be replaced
+        b
+            pattern to replace with
+        kwargs
+            Other Parameters
+        """
         super().__init__(**kwargs)
         self.a = a
         self.b = b
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         return {k.replace(self.a, self.b): v for k, v in batch.items()}
 
@@ -149,14 +155,24 @@ class ReplaceInKeys(Pipe):
 
 class RenameKeys(Pipe):
     """
-    Rename a set of keys
+    Rename a set of keys using a dictionary
     """
 
+    _allows_update = False
+
     def __init__(self, keys: Dict[str, str], **kwargs):
+        """
+        Parameters
+        ----------
+        keys
+            A dictionary mapping old keys to new keys.
+        kwargs
+            Other Parameters
+        """
         super().__init__(**kwargs)
         self.keys = keys
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         for old_key, new_key in self.keys.items():
             if old_key in batch:
@@ -171,17 +187,31 @@ class RenameKeys(Pipe):
 
 class Apply(Pipe):
     """
-    Transform the values in a batch for all transformations
+    Transform the values in a batch using the transformations registered in `ops`
     registered in `ops`: key, transformation`.
     The argument `element_wise` allows to process each value in the batch element wise.
+
     """
 
+    _allows_update = False
+
     def __init__(self, ops: Dict[str, Callable], element_wise: bool = False, **kwargs):
+        """
+
+        Parameters
+        ----------
+        ops
+            A dictionary mapping keys to transformation functions applied
+        element_wise
+            If True, apply the transformation to each element in the batch.
+        kwargs
+            Other Parameters
+        """
         super().__init__(**kwargs)
         self.ops = ops
         self.element_wise = element_wise
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         for key, op in self.ops.items():
             values = batch[key]
@@ -195,10 +225,12 @@ class Apply(Pipe):
 
 class ApplyToAll(Pipe):
     """
-    Transform the values in a batch for all transformations
+    Apply a transformation
     registered in `ops`: key, transformation`.
     The argument `element_wise` allows to process each value in the batch element wise.
     """
+
+    _allows_update = False
 
     def __init__(
         self,
@@ -207,12 +239,24 @@ class ApplyToAll(Pipe):
         allow_kwargs: bool = False,
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+        op
+            The transformation function applied to each batch value
+        element_wise
+            If True, apply the transformation to each element in the batch.
+        allow_kwargs
+            If True, the transformation function can take keyword arguments.
+        kwargs
+            Other Parameters
+        """
         super().__init__(**kwargs)
         self.op = op
         self.element_wise = element_wise
         self.allow_kwargs = allow_kwargs
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         if not self.allow_kwargs:
             kwargs = {}
@@ -226,11 +270,25 @@ class ApplyToAll(Pipe):
 
 
 class CopyBatch(Pipe):
+    """Copy an input batch"""
+
+    _allows_update = False
+    _allows_input_filter = False
+
     def __init__(self, *, deep: bool = False, **kwargs):
+        """
+
+        Parameters
+        ----------
+        deep
+            If True, copy the input batch recursively (deepcopy)
+        kwargs
+            Other Parameters
+        """
         super().__init__(**kwargs)
         self.deep = deep
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         if self.deep:
             return deepcopy(batch)
         else:

@@ -12,9 +12,9 @@ from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
-from fz_openqa.datamodules.pipes.nesting import flatten_nested
-from fz_openqa.datamodules.pipes.nesting import nested_list
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested
+from fz_openqa.datamodules.pipes.utils.nesting import nested_list
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 
 
@@ -51,7 +51,7 @@ class FormatAndTokenize(Sequential):
             add_spec_tokens = None
 
         super().__init__(
-            FilterKeys(KeyIn([f"{prefix}text"])),
+            FilterKeys(In([f"{prefix}text"])),
             ReplaceInKeys(prefix, ""),
             text_formatter.copy(text_key="text"),
             ApplyToAll(flatten_nested, element_wise=False) if stride else None,

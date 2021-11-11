@@ -15,6 +15,7 @@ class GeneratePassages(Pipe):
     """A pipe to Extract passages from a batch of documents."""
 
     required_keys = ["input_ids", "attention_mask", "offset_mapping"]
+    _allows_update = False
 
     def __init__(
         self,
@@ -55,7 +56,7 @@ class GeneratePassages(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys + ["idx", "passage_idx", "passage_mask"]
 
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
         indexes, output = self.generate_passages_for_all_keys(
             batch,
