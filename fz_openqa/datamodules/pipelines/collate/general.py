@@ -5,12 +5,11 @@ import torch
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ApplyToAll
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Lambda
-from fz_openqa.datamodules.pipes import Nest
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.batch_condition import AllValuesOfType
@@ -35,19 +34,22 @@ class CollateTokens(Sequential):
         prefix: str,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        stride: Optional[int] = None,
+        shape: Optional[List[int]] = None,
         id: Optional[str] = None,
     ):
+        if shape is None:
+            shape = [-1]
         super().__init__(
             Collate(keys=[f"{prefix}input_ids", f"{prefix}attention_mask"]),
             ReplaceInKeys(prefix, ""),
-            Flatten() if stride else None,
-            Gate(
-                AllValuesOfType(list),
-                pipe=Lambda(tokenizer.pad, id=f"collate:pad:{prefix}"),
-                update=True,
+            ApplyAsFlatten(
+                Gate(
+                    AllValuesOfType(list),
+                    pipe=Lambda(tokenizer.pad, id=f"collate:pad:{prefix}"),
+                    update=True,
+                ),
+                level=len(shape) - 1,
             ),
-            Nest(stride=stride) if stride else None,
             AddPrefix(prefix),
             id=id or f"Collate-tokens-{prefix.replace('.', '')}",
         )

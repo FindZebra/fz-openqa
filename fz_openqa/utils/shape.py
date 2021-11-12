@@ -15,6 +15,7 @@ from fz_openqa.utils.datastruct import Batch
 class LeafType:
     """
     A utility class to represent the type of leaves in a nested list.
+    Used to returns types in `infer_shape_nested_list_`.
 
     Warning: Hacky implementation, for debugging purposes.
     """
@@ -37,6 +38,8 @@ class LeafType:
                     self.types += leaf.types
                     self.lengths += [len(leaf.types)]
 
+            # if all lengths are equal, we don't consider it as a subtype since this
+            # will appear as a dimension in the shape of the batch
             if len(set(self.lengths)) == 1:
                 self.is_subtype = False
         else:
@@ -80,6 +83,10 @@ def infer_shape_nested_list_(x, level=0) -> Tuple[List[int], Optional[LeafType]]
     sub_shapes = []
     leaf_types = []
     leaf_level = False
+
+    if len(x) == 0:
+        return [], LeafType(x)
+
     for y in x:
         if isinstance(y, list):
             sub_shape_y, leaf_type = infer_shape_nested_list_(y, level=level + 1)
@@ -90,12 +97,17 @@ def infer_shape_nested_list_(x, level=0) -> Tuple[List[int], Optional[LeafType]]
             break
 
     if leaf_level:
-        return [len(x)], LeafType(x)
+        level_shape = [len(x)]
+        level_leaf_type = LeafType(x)
     elif not all(sub_shapes[0] == s for s in sub_shapes):
         # in this case this is a leaf level, but we must transmit shared sub_shapes
-        return [len(x), *longest_sublist(sub_shapes)], LeafType(leaf_types)
+        level_shape = [len(x), *longest_sublist(sub_shapes)]
+        level_leaf_type = LeafType(leaf_types)
     else:
-        return [len(sub_shapes), *sub_shapes[0]], LeafType(leaf_types)
+        level_shape = [len(sub_shapes), *sub_shapes[0]]
+        level_leaf_type = LeafType(leaf_types)
+
+    return level_shape, level_leaf_type
 
 
 def infer_shape_nested_list(
@@ -131,13 +143,14 @@ def infer_shape(
     if isinstance(x, Tensor):
         shape = list(x.shape)
         if return_leaf_type:
-            return shape, f"{type(x)} (dtype={x.dtype}, device={x.device})"
+            _dtype = str(x.dtype).replace("torch.", "")
+            return shape, f"{type(x)} (dtype={_dtype}, device={x.device})"
         else:
             return shape
     elif isinstance(x, np.ndarray):
         shape = list(x.shape)
         if return_leaf_type:
-            return shape, f"{type(x)} (dtype=np.{x.dtype})"
+            return shape, f"{type(x)} (dtype={x.dtype})"
         else:
             return shape
     elif isinstance(x, (Number, str)) or x is None:

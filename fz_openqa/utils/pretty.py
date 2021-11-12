@@ -1,5 +1,7 @@
+import logging
 import shutil
 from collections import defaultdict
+from typing import Dict
 from typing import List
 from typing import Union
 
@@ -12,6 +14,8 @@ from transformers import PreTrainedTokenizerFast
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.shape import infer_batch_shape
 from fz_openqa.utils.shape import infer_shape
+
+logger = logging.getLogger(__name__)
 
 
 def pretty_decode(
@@ -43,6 +47,12 @@ def get_separator(char="\u2500"):
 
 
 def pprint_batch(batch: Batch, header=None):
+    exceptions = _pprint_batch(batch, header)
+    for key, e in exceptions.items():
+        logger.warning(f"Couldn't pretty print key={key}\nException={e}")
+
+
+def _pprint_batch(batch: Batch, header=None) -> Dict[str, Exception]:
     u = get_separator() + "\n"
     if header is not None:
         u += f"=== {header} ===\n"
@@ -51,8 +61,12 @@ def pprint_batch(batch: Batch, header=None):
     u += f"Batch (shape={infer_batch_shape(batch)}):\n"
 
     data = []
+    exceptions = {}
     for k in sorted(batch.keys()):
-        shape, leaf_type = infer_shape(batch[k], return_leaf_type=True)
+        try:
+            shape, leaf_type = infer_shape(batch[k], return_leaf_type=True)
+        except Exception as e:
+            exceptions[k] = e
         data += [{"key": k, "shape": str(shape), "leaf_type": str(leaf_type)}]
 
     keys = list(data[0].keys())
@@ -80,3 +94,8 @@ def pprint_batch(batch: Batch, header=None):
 
     u += _row_sep
     rich.print(u)
+    if len(exceptions):
+        rich.print(
+            f"couldn't pretty print keys={list(exceptions.keys())}. See log for further details."
+        )
+    return exceptions

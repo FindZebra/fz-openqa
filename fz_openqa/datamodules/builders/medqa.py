@@ -100,7 +100,7 @@ class MedQABuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             spec_tokens=ANS_TOKEN,
-            stride=self.n_options,
+            shape=[-1, self.n_options],
         )
 
     def get_question_tokenizer_pipe(self):
@@ -112,7 +112,7 @@ class MedQABuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             spec_tokens=QUERY_TOKEN,
-            stride=None,
+            shape=None,
         )
 
     def get_collate_pipe(self):
@@ -138,7 +138,7 @@ class MedQABuilder(HfDatasetBuilder):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
         # collate answer options
-        answer_pipe = CollateTokens("answer.", tokenizer=self.tokenizer, stride=self.n_options)
+        answer_pipe = CollateTokens("answer.", tokenizer=self.tokenizer, shape=[-1, self.n_options])
         # the full pipe to collate question and answer fields
         base_qa_collate_pipe = Parallel(
             raw_text_pipe,
