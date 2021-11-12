@@ -118,9 +118,9 @@ class FetchDocuments(Pipe):
     ):
         super(FetchDocuments, self).__init__(id=id)
         if keys is not None:
-            keys = set(keys).union([index_key])
+            keys.append(index_key)
             # make sure to sort the keys to ensure deterministic fingerprinting
-            cols_to_drop = list(sorted(set(corpus_dataset.column_names) - keys))
+            cols_to_drop = list(sorted(set(corpus_dataset.column_names) - set(keys)))
             corpus_dataset = corpus_dataset.remove_columns(cols_to_drop)
 
         self.corpus_dataset = corpus_dataset

@@ -14,21 +14,7 @@ class ClassifyDocuments(Sequential):
         corpus_dataset: Dataset,
         relevance_classifier: RelevanceClassifier,
     ):
-        # define the input keys
-        input_keys = [
-            "document.row_idx",
-            "answer.text",
-            "answer.target",
-        ]
-        # define the output keys
-        classifier_input_keys = [
-            "document.text",
-            "answer.text",
-            "answer.target",
-        ]
-
         super().__init__(
-            FilterKeys(In(input_keys)),
             ApplyAsFlatten(
                 FetchDocuments(
                     corpus_dataset=corpus_dataset,
@@ -37,7 +23,13 @@ class ClassifyDocuments(Sequential):
                 input_filter=In(["document.row_idx"]),
                 update=True,
             ),
-            FilterKeys(In(classifier_input_keys)),
             relevance_classifier,
+            input_filter=In(
+                [
+                    "document.row_idx",
+                    "answer.text",
+                    "answer.target",
+                ]
+            ),
             id="classify-documents",
         )

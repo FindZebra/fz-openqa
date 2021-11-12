@@ -65,7 +65,7 @@ def run(config):
         max_pos_docs=1,
         filter_unmatched=True,
         num_proc=2,
-        batch_size=10,
+        batch_size=50,
     )
 
     # define the data module

@@ -64,7 +64,7 @@ class In(Condition):
     """check if the key is in the set of `allowed_keys`"""
 
     def __init__(self, allowed_values: List[str]):
-        self.allowed_keys = set(allowed_values)
+        self.allowed_keys = allowed_values
 
     def __call__(self, x: Any, **kwargs) -> bool:
         return x in self.allowed_keys

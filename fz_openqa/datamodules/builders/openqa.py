@@ -154,6 +154,7 @@ class OpenQaBuilder(DatasetBuilder):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
+
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
             [
@@ -220,13 +221,13 @@ class OpenQaBuilder(DatasetBuilder):
             self.dataset_builder.get_collate_pipe(),
         )
 
-        # B. select documents
+        # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
             self.n_documents,
             max_pos_docs=self.max_pos_docs,
         )
 
-        # C. fetch documents attributes from `self.corpus` (input_ids)
+        # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(),
             collate_pipe=self.corpus_builder.get_collate_pipe(),

@@ -25,6 +25,17 @@ from fz_openqa.utils.json_struct import reduce_json_struct
 logger = logging.getLogger(__name__)
 
 
+def leaf_to_json_struct(v: Any) -> Union[Dict, List]:
+    if isinstance(v, Pipe):
+        return v.to_json_struct()
+    elif isinstance(v, list):
+        return [leaf_to_json_struct(x) for x in v]
+    elif isinstance(v, dict):
+        return {k: leaf_to_json_struct(x) for k, x in v.items()}
+    else:
+        return v
+
+
 class Pipe:
     """
     A pipe is a small unit of computation that ingests,
@@ -338,7 +349,7 @@ class Pipe:
         """
         data = {"__type__": type(self).__name__, **vars(self)}
         data = {k: v for k, v in data.items() if not (k == "id" and v is None)}
-        data = {k: v.to_json_struct() if isinstance(v, Pipe) else v for k, v in data.items()}
+        data = {k: leaf_to_json_struct(v) for k, v in data.items()}
         return data
 
     def __repr__(self) -> str:
