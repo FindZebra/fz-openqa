@@ -6,8 +6,10 @@ from typing import T
 from typing import Union
 
 import numpy as np
+import rich
 from torch import Tensor
 
+from ...utils.shape import infer_batch_shape
 from .base import Pipe
 from .utils.nesting import flatten_nested
 from .utils.nesting import nested_list
@@ -15,6 +17,7 @@ from .utils.nesting import reconcat
 from fz_openqa.datamodules.pipes.basic import ApplyToAll
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import always_true
+from fz_openqa.utils.functional import infer_batch_size
 
 
 class Flatten(ApplyToAll):
@@ -97,8 +100,15 @@ class Nest(ApplyToAll):
 
 
 class ApplyAsFlatten(Pipe):
-    """Flatten nested field an apply a pipe to the flattened batch.
-    This is equivalent to:
+    """Flattens the first `level+1` batch dimensions and
+    applies the pipe to the flattened batch.
+
+    Warning: Do not use this pipe if the inner pipe drops nested values
+    or modifies the order of the batch elements!
+
+    Notes
+    -------
+    This pipe is equivalent to:
 
     ```python
     # example data
@@ -111,50 +121,92 @@ class ApplyAsFlatten(Pipe):
     batch = pipe(batch)
     batch = batch.reshape(*nested_shape, *h)
     ```
-
-    Warning: Do not use this pipe if the inner pipe modify the order of the batch elements!
     """
 
     def __init__(
         self,
         pipe: Pipe,
-        flatten_level: int = 1,
+        level: int = 1,
         **kwargs,
     ):
         super(ApplyAsFlatten, self).__init__(**kwargs)
         self.pipe = pipe
-        self.flatten = Flatten(level=flatten_level)
-        self.nest = Nest(shape=None)
+        self.level = level
+        if level > 0:
+            self.flatten = Flatten(level=level)
+            self.nest = Nest(shape=None)
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-        raise NotImplementedError
+        if self.level == 0:
+            return self.pipe(batch, **kwargs)
+
+        # infer the original shape of the batch
+        input_shape = infer_batch_shape(batch)[: self.flatten.level + 1]
+        batch = self.flatten(batch)
+        # apply the batch to the flattened batch
+        batch = self.pipe(batch, **kwargs)
+        # reshape back to the input_shape
+        output = self.nest(batch, shape=input_shape)
+
+        # check output and return
+        new_shape = infer_batch_shape(output)[: self.flatten.level + 1]
+        explain = "Applying a pipe that changes the batch size might have caused this issue."
+        assert new_shape == input_shape, f"{new_shape} != {input_shape}. {explain}"
+        return output
 
 
-class Nested(Pipe):
+class NestedLevel1(Pipe):
     """
-    Apply a pipe to each nested value.
+    Apply a pipe to each nested value, handling each nested field as a separate batch.
     This can be use to modify the nested field inplace  (i.e. sorting, deleting).
-    # todo: stopping here, continue tomorrow
+    However the all pipe output must have the same batch size.
     """
 
-    def __init__(self, pipe: Pipe, filter: Optional[Callable] = None, **kwargs):
+    def __init__(self, pipe: Pipe, **kwargs):
         super().__init__(**kwargs)
         self.pipe = pipe
-        self.filter = filter or always_true
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        # get initial parameters
+        keys = list(batch.keys())
+        batch_size = infer_batch_size(batch)
+        types = {k: type(v) for k, v in batch.items()}
 
-        exs = []
-        for i in range(self.batch_size(batch)):
-            eg = self.get_eg(batch, i, filter_op=self.filter)
-            eg = self.pipe(eg, **kwargs)
-            exs += [eg]
+        # process each Eg separately
+        egs = (self.get_eg(batch, idx=i) for i in range(batch_size))
+        egs = [self.pipe(eg, **kwargs) for eg in egs]
 
-        types = {k: type(v) for k, v in batch.items() if self.filter(k)}
-        for key in filter(self.filter, batch.keys()):
-            values = [eg[key] for eg in exs]
-            values = reconcat(values, types[key])
+        # check shape consistency before re-concatenating
+        batch_sizes = [infer_batch_size(eg) for eg in egs]
+        bs = batch_sizes[0]
+        if not all(bs == b for b in batch_sizes):
+            raise ValueError(
+                f"Batch sizes are inconsistent. "
+                f"Make sure the pipe {type(self.pipe)} returns "
+                f"the same batch size for all nested examples."
+            )
 
-            batch[key] = values
+        # concatenate and return
+        return {key: reconcat([eg[key] for eg in egs], types[key]) for key in keys}
 
-        return batch
+
+class Nested(ApplyAsFlatten):
+    """
+    Apply a pipe to each nested value up to dimension `level`.
+    This can be use to modify the nested field inplace  (i.e. sorting, deleting).
+    However the all pipe output must have the same batch size.
+    """
+
+    def __init__(self, pipe: Pipe, level=1, **kwargs):
+        """
+        Parameters
+        ----------
+        pipe
+            The pipe to apply to each nested batch.
+        level
+            The level of nesting to apply the pipe to.
+        kwargs
+            Additional keyword arguments passed to `ApplyAsFlatten`.
+        """
+        pipe = NestedLevel1(pipe)
+        super().__init__(pipe=pipe, level=level - 1, **kwargs)

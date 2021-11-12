@@ -71,10 +71,15 @@ def get_batch_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None) -
 
 
 def infer_batch_size(batch: Batch) -> int:
-    def _cond(k):
-        return not k.startswith("__") and not k.endswith("__")
-
-    return next(iter((len(v) for k, v in batch.items() if _cond(k))))
+    batch = {k: v for k, v in batch.items() if v is not None and not isinstance(v, (Number, str))}
+    bss = [len(v) for v in batch.values()]
+    bs = bss[0]
+    if not all(bs == bs_ for bs_ in bss):
+        lengths = ", ".join([f"{k}={len(v)}" for k, v in batch.items()])
+        raise ValueError(
+            f"Fields are not of the same length. Cannot infer batch size. Lengths=({lengths})"
+        )
+    return bs
 
 
 def infer_stride(batch: Batch) -> int:

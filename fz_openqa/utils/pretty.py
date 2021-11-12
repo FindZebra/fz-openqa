@@ -10,7 +10,7 @@ from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.shape import infer_min_shape
+from fz_openqa.utils.shape import infer_batch_shape
 from fz_openqa.utils.shape import infer_shape
 
 
@@ -48,7 +48,7 @@ def pprint_batch(batch: Batch, header=None):
         u += f"=== {header} ===\n"
         u += get_separator("-") + "\n"
 
-    u += f"Batch (shape={infer_min_shape(batch)}):\n"
+    u += f"Batch (shape={infer_batch_shape(batch)}):\n"
 
     data = []
     for k in sorted(batch.keys()):

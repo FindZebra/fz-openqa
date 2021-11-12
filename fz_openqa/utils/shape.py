@@ -1,5 +1,4 @@
 from numbers import Number
-from operator import itemgetter
 from typing import Any
 from typing import List
 from typing import Optional
@@ -8,7 +7,6 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
-import torch
 from torch import Tensor
 
 from fz_openqa.utils.datastruct import Batch
@@ -16,7 +14,7 @@ from fz_openqa.utils.datastruct import Batch
 
 class LeafType:
     """
-    A class to represent the type of leaves in a nested list.
+    A utility class to represent the type of leaves in a nested list.
 
     Warning: Hacky implementation, for debugging purposes.
     """
@@ -33,14 +31,14 @@ class LeafType:
                 for leaf in leaves:
                     self.types += leaf.types
                     self.lengths += leaf.lengths
-
-                if len(set(self.lengths)) == 1:
-                    self.is_subtype = False
             else:
                 self.is_subtype = True
                 for leaf in leaves:
                     self.types += leaf.types
                     self.lengths += [len(leaf.types)]
+
+            if len(set(self.lengths)) == 1:
+                self.is_subtype = False
         else:
             for leaf in leaves:
                 self.types.append(type(leaf))
@@ -48,7 +46,7 @@ class LeafType:
     def __repr__(self):
         if self.is_subtype:
             return (
-                f"{type(list())}, {min(self.lengths)} to {max(self.lengths)} items, "
+                f"{type(list())} {min(self.lengths)} to {max(self.lengths)} items, "
                 f"value_types={self._repr_types(self.types)}"
             )
         else:
@@ -56,18 +54,15 @@ class LeafType:
 
     def _repr_types(self, types: List[type]):
         unique_types = set(types)
-        if len(unique_types) == 1:
-            return str(types[0])
-        else:
-            type_strs = ", ".join(str(t) for t in unique_types)
-            return f"MixedTypes({type_strs})"
+        return ", ".join(str(t) for t in unique_types)
 
 
 def longest_sublist(lists: List[List[T]]) -> List[T]:
     """Returns the longest common sequence, starting from the start."""
     output = []
+    ref = lists[0]
     for i in range(min(len(le) for le in lists)):
-        x = lists[0][i]
+        x = ref[i]
         if all(le[i] == x for le in lists):
             output += [x]
         else:
@@ -136,29 +131,29 @@ def infer_shape(
     if isinstance(x, Tensor):
         shape = list(x.shape)
         if return_leaf_type:
-            return shape, f"<dtype={x.dtype}, device={x.device}>"
+            return shape, f"{type(x)} (dtype={x.dtype}, device={x.device})"
         else:
             return shape
     elif isinstance(x, np.ndarray):
         shape = list(x.shape)
         if return_leaf_type:
-            return shape, f"<dtype=np.{x.dtype}>"
+            return shape, f"{type(x)} (dtype=np.{x.dtype})"
         else:
             return shape
     elif isinstance(x, (Number, str)) or x is None:
         if return_leaf_type:
-            return None, str(type(x))
+            return [], str(type(x))
         else:
-            return None
+            return []
     elif isinstance(x, list):
         return infer_shape_nested_list(x, return_leaf_type=return_leaf_type)
     else:
         raise TypeError(f"Unsupported type {type(x)}")
 
 
-def infer_min_shape(batch: Batch) -> List[int]:
+def infer_batch_shape(batch: Batch) -> List[int]:
     """
-    Infer minimum shape from nested fields in a batch.
+    Infer the batch shape, which is the longest common shape of all the fields.
     Parameters
     ----------
     batch
@@ -170,6 +165,38 @@ def infer_min_shape(batch: Batch) -> List[int]:
         Shape of the batch (minimum of all values)
     """
     shapes = [infer_shape(b) for b in batch.values()]
-    shapes = filter(None, shapes)
-    min_dim, shape = min([(len(s), s) for s in shapes], key=itemgetter(0))
+    shapes = [s for s in shapes if s is not None and len(s) > 0]
+    return longest_sublist(shapes)
+
+
+def infer_missing_dims(n_elements: int, *, shape: List[int]) -> List[int]:
+    """
+    Infer the missing dimensions in a shape.
+
+    Parameters
+    ----------
+    n_elements
+        The total number of elements
+    shape
+        Partial shape (e.g. (-1, 8, 6))
+
+    Returns
+    -------
+    List[int]
+        The inferred shape (e.g. (10, 8, 6))
+    """
+    assert all(y != 0 for y in shape)
+    if all(y > 0 for y in shape):
+        return shape
+    else:
+        neg_idx = [i for i, y in enumerate(shape) if y < 0]
+        assert len(neg_idx) == 1, "Only one dimension can be negative"
+        neg_idx = neg_idx[0]
+        known_dims = [y for y in shape if y > 0]
+
+        p = np.prod(known_dims)
+        assert n_elements % p == 0, "n_elements must be divisible by product of known dimensions"
+        missing_dim = n_elements // p
+        shape[neg_idx] = missing_dim
+
     return shape

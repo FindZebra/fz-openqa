@@ -9,8 +9,22 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from fz_openqa.utils.shape import infer_missing_dims
 
-def flatten_nested(values: List[List], level=1, current_level=0) -> Iterable[Any]:
+
+def flatten_nested_(values: List[List], level=1, current_level=0) -> Iterable[Any]:
+    """
+    Flatten a nested list of lists. See `flatten_nested` for more details.
+    """
+    for x in values:
+        if isinstance(x, list) and current_level < level:
+            for y in flatten_nested_(x, level, current_level + 1):
+                yield y
+        else:
+            yield x
+
+
+def flatten_nested(values: List[List], level=1) -> List[Any]:
     """
     Flatten a nested list of lists.
 
@@ -29,45 +43,7 @@ def flatten_nested(values: List[List], level=1, current_level=0) -> Iterable[Any
         flatten list of values.
 
     """
-    for x in values:
-        if isinstance(x, list) and current_level < level:
-            for y in flatten_nested(x, level, current_level + 1):
-                yield y
-        else:
-            yield x
-
-
-def infer_missing_dims(n_elements: int, *, shape: List[int]) -> List[int]:
-    """
-    Infer the missing dimensions in a shape.
-
-    Parameters
-    ----------
-    n_elements
-        The total number of elements
-    shape
-        Partial shape (e.g. (-1, 8, 6))
-
-    Returns
-    -------
-    List[int]
-        The inferred shape (e.g. (10, 8, 6))
-    """
-    assert all(y != 0 for y in shape)
-    if all(y > 0 for y in shape):
-        return shape
-    else:
-        neg_idx = [i for i, y in enumerate(shape) if y < 0]
-        assert len(neg_idx) == 1, "Only one dimension can be negative"
-        neg_idx = neg_idx[0]
-        known_dims = [y for y in shape if y > 0]
-
-        p = np.prod(known_dims)
-        assert n_elements % p == 0, "n_elements must be divisible by product of known dimensions"
-        missing_dim = n_elements // p
-        shape[neg_idx] = missing_dim
-
-    return shape
+    return list(flatten_nested_(values, level=level))
 
 
 def nested_list(values: List[Any], *, shape: Union[Tuple[int], List[int]], level=0) -> List[Any]:
