@@ -25,23 +25,6 @@ from fz_openqa.utils.json_struct import reduce_json_struct
 logger = logging.getLogger(__name__)
 
 
-def _filter_null_id(attrs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Filter out null id.
-
-    Parameters
-    ----------
-    attrs
-        Dictionary of attributes
-
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary of attributes without null id.
-    """
-    return {k: v for k, v in attrs.items() if not (k == "id" and v is None)}
-
-
 class Pipe:
     """
     A pipe is a small unit of computation that ingests,
@@ -52,7 +35,7 @@ class Pipe:
     id
        An identifier for the pipe.
     input_filter
-        Filter used to filter keys in the input data.
+        Condition used to filter keys in the input data.
     update
         If set to True, output the input batch with the output batch.
     requires_keys
@@ -73,6 +56,17 @@ class Pipe:
         input_filter: Optional[Condition] = None,
         update: bool = False,
     ):
+        """
+        Parameters
+        ----------
+        id
+           An identifier for the pipe.
+        input_filter
+            a condition used to filter keys in the input data
+            (keys that do not satisfy the condition are removed)
+        update
+            If set to True, output the input batch updated with the output batch.
+        """
         if not self._allows_update and update:
             raise AttributeError(f"{type(self).__name__} does not allow using update=True")
 
@@ -110,7 +104,7 @@ class Pipe:
     @staticmethod
     def get_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None) -> Dict[str, Any]:
         """
-        Extract example `idx` from a batch, potentially filter the keys
+        Extract example `idx` from a batch, potentially filter keys.
 
         Parameters
         ----------
@@ -131,7 +125,9 @@ class Pipe:
     @singledispatchmethod
     def __call__(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         """
-        Apply the pipe to a batch of data. Potentially
+        Apply the pipe to a batch of data. Potentially filter the keys using the input_filter.
+        The output of `_call_batch()` is used to update the input batch (before filtering)
+        if update=True, else the raw output is returned.
 
         Parameters
         ----------
@@ -341,7 +337,7 @@ class Pipe:
             Dictionary representation of the object
         """
         data = {"__type__": type(self).__name__, **vars(self)}
-        data = _filter_null_id(data)
+        data = {k: v for k, v in data.items() if not (k == "id" and v is None)}
         data = {k: v.to_json_struct() if isinstance(v, Pipe) else v for k, v in data.items()}
         return data
 

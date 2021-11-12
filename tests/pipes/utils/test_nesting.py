@@ -1,12 +1,13 @@
 import json
+from unittest import TestCase
 
 import numpy as np
-import rich
 from parameterized import parameterized
-from unittest import TestCase
 
 from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested, infer_missing_dims, \
     nested_list
+from fz_openqa.utils.shape import infer_shape_nested_list, infer_min_shape
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class TestNested(TestCase):
@@ -20,9 +21,8 @@ class TestNested(TestCase):
         output = list(flatten_nested(values, level=level))
         self.assertEqual(json.dumps(output), json.dumps(expected))
 
-
     @parameterized.expand([
-        (64, [-1, 8], [8,8]),
+        (64, [-1, 8], [8, 8]),
         (64, [8, -1], [8, 8]),
         (128, [8, -1, 2], [8, 8, 2]),
         (128, [8, 2, -1], [8, 2, 8]),
@@ -42,4 +42,24 @@ class TestNested(TestCase):
     def test_nested_list(self, values, shape):
         expected = np.array(values).reshape(shape)
         output = np.array(nested_list(values, shape=shape))
-        self.assertTrue((expected==output).all())
+        self.assertTrue((expected == output).all())
+
+    @parameterized.expand([
+        ([1, 2, 3, 4],),
+        ([[1, 2, 3], [4, 5, 6]],),
+        ([[[1, 2], [3, 4]], [[4, 5], [6, 7]]],),
+        ([[1, 2, 3], [4, 5]],),
+        ([[[1], 2], [4, 5]],),
+    ])
+    def test_infer_nested_lengths(self, values):
+        shape = infer_shape_nested_list(values)
+        self.assertEqual(shape, list(np.array(values).shape))
+
+    @parameterized.expand([
+        ({'a': [1, 2], 'b': [[1, 2, 3], [1, 2]]}, [2]),
+        ({'a': [[[1, 1], [1, 1]], [[2, 2], [2, 2]]],
+          'b': [[[[1, 1], [1, 1]], [[1, 1], [1, 1]]], [[[2, 2], [2, 2]], [[2, 2], [2, 2]]]]}, [2,2]),
+    ])
+    def test_infer_min_shape(self, batch, expected_shape):
+        pprint_batch(batch)
+        self.assertEqual(infer_min_shape(batch), expected_shape)
