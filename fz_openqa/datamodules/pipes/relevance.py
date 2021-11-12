@@ -371,7 +371,8 @@ class MetaMapMatch(AliasBasedMatch):
         for pair, answer in zip_longest(pairs, answer_texts):
             answer_cuis = pair.answer.get("answer.cui", [])
             e_aliases = set()
-            if len(answer_cuis) > 0:
+            if answer_cuis:
+                del answer_cuis[3:]
                 linked_entities = self.get_linked_entities(answer_cuis)
                 e_aliases = set(self.extract_aliases(linked_entities))
 
