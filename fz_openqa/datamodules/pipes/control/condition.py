@@ -10,7 +10,7 @@ class Condition:
     This class implements a condition for the control pipe.
     """
 
-    def __call__(self, x: Any) -> bool:
+    def __call__(self, x: Any, **kwargs) -> bool:
         """
         Returns True if the input matches the condition.
 
@@ -50,23 +50,33 @@ class Condition:
         return self.__class__.__name__ + "(" + ", ".join(args) + ")"
 
 
+class Contains(Condition):
+    """check if the key is in the set of `allowed_keys`"""
+
+    def __init__(self, pattern: str):
+        self.pattern = pattern
+
+    def __call__(self, x: Any, **kwargs) -> bool:
+        return self.pattern in x
+
+
 class In(Condition):
     """check if the key is in the set of `allowed_keys`"""
 
     def __init__(self, allowed_values: List[str]):
         self.allowed_keys = set(allowed_values)
 
-    def __call__(self, x: Any) -> bool:
+    def __call__(self, x: Any, **kwargs) -> bool:
         return x in self.allowed_keys
 
 
-class WithPrefix(Condition):
+class HasPrefix(Condition):
     """check if the key starts with a given prefix"""
 
     def __init__(self, prefix: str):
         self.prefix = prefix
 
-    def __call__(self, key: Any) -> bool:
+    def __call__(self, key: Any, **kwargs) -> bool:
         return str(key).startswith(self.prefix)
 
 
@@ -79,7 +89,7 @@ class Reduce(Condition):
         self.reduce_op = reduce_op
         self.conditions = list(conditions)
 
-    def __call__(self, batch: Batch) -> bool:
+    def __call__(self, batch: Batch, **kwargs) -> bool:
         return self.reduce_op(c(batch) for c in self.conditions)
 
     def __repr__(self):
@@ -92,7 +102,7 @@ class Not(Condition):
     def __init__(self, condition: Condition):
         self.condition = condition
 
-    def __call__(self, batch: Batch) -> bool:
+    def __call__(self, batch: Batch, **kwargs) -> bool:
         return not self.condition(batch)
 
     def __repr__(self):
@@ -105,7 +115,7 @@ class Static(Condition):
     def __init__(self, cond: bool):
         self.cond = cond
 
-    def __call__(self, batch: Batch) -> bool:
+    def __call__(self, batch: Batch, **kwargs) -> bool:
         return self.cond
 
     def __repr__(self):

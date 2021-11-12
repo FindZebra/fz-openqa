@@ -226,7 +226,7 @@ class Pipe:
         Batch
             The output batch
         """
-        raise NotImplementedError
+        raise NotImplementedError(f"_call_batch is not implemented for {type(self)}")
 
     @abstractmethod
     def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
@@ -247,7 +247,7 @@ class Pipe:
         Batch
             The output batch
         """
-        raise NotImplementedError
+        raise NotImplementedError(f"_call_egs is not implemented for {type(self)}")
 
     def dill_inspect(self, reduce=True) -> Union[bool, Dict[str, bool]]:
         """

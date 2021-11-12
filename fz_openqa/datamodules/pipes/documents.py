@@ -13,7 +13,7 @@ from omegaconf import DictConfig
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
-from fz_openqa.datamodules.pipes.control.condition import WithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -30,6 +30,7 @@ class SelectDocs(Nested):
         strict: bool = False,
         prefix="document.",
         id="select-docs",
+        **kwargs,
     ):
         pipe = SelectDocsOneEg(
             total=total,
@@ -39,7 +40,7 @@ class SelectDocs(Nested):
             strict=strict,
         )
 
-        super(SelectDocs, self).__init__(pipe=pipe, filter=WithPrefix(prefix), id=id)
+        super(SelectDocs, self).__init__(pipe=pipe, input_filter=HasPrefix(prefix), id=id, **kwargs)
 
 
 class SelectDocsOneEg(Pipe):

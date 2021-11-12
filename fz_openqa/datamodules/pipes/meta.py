@@ -1,4 +1,5 @@
 import abc
+import json
 from collections import OrderedDict
 from typing import Callable
 from typing import List
@@ -7,9 +8,51 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
+from ...utils.json_struct import apply_to_json_struct
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import check_equal_arrays
+
+
+class PipeProcessError(Exception):
+    """Base class for other exceptions"""
+
+    def __init__(self, meta_pipe: Pipe, pipe: Pipe, batch: Batch, **kwargs):
+        keys = _infer_keys(batch)
+        pipe_repr = apply_to_json_struct(pipe.to_json_struct(), str)
+        meta_pipe_repr = apply_to_json_struct(meta_pipe.to_json_struct(), str)
+        msg = (
+            f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)}\n"
+            f"- batch of type {type(batch)} with keys={keys}\n"
+            f"- kwargs={kwargs}.\n\n"
+            f"Full pipe:\n"
+            f"{json.dumps(pipe_repr, indent=2)}\n\n"
+            f"Full meta pipe:\n"
+            f"{json.dumps(meta_pipe_repr, indent=2)}"
+        )
+        super().__init__(msg)
+
+
+def _call_pipe_and_handle_exception(
+    pipe: Pipe, batch: Batch, meta_pipe: Pipe = None, **kwargs
+) -> Batch:
+    try:
+        return pipe(batch, **kwargs)
+    except PipeProcessError as e:
+        raise e
+    except Exception as e:
+        raise PipeProcessError(meta_pipe, pipe, batch, **kwargs).with_traceback(e.__traceback__)
+
+
+def _infer_keys(batch):
+    if isinstance(batch, dict):
+        keys = list(batch.keys())
+    elif isinstance(batch, list):
+        eg = batch[0]
+        keys = _infer_keys(eg)
+    else:
+        keys = [f"<couldn't infer keys, leaf type={type(batch)}>"]
+    return keys
 
 
 class MetaPipe(Pipe):
@@ -43,7 +86,7 @@ class Sequential(MetaPipe):
     def _call_all_types(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
         for pipe in self.pipes:
-            batch = pipe(batch, **kwargs)
+            batch = _call_pipe_and_handle_exception(pipe, batch, **kwargs, meta_pipe=self)
 
         return batch
 
@@ -61,7 +104,7 @@ class Parallel(Sequential):
 
         outputs = {}
         for pipe in self.pipes:
-            pipe_out = pipe(batch, **kwargs)
+            pipe_out = _call_pipe_and_handle_exception(pipe, batch, **kwargs, meta_pipe=self)
 
             # check conflict between pipes
             o_keys = set(outputs.keys())
@@ -133,12 +176,12 @@ class Gate(MetaPipe):
 
         if switched_on:
             if self.pipe is not None:
-                return self.pipe(batch, **kwargs)
+                return _call_pipe_and_handle_exception(self.pipe, batch, **kwargs, meta_pipe=self)
             else:
                 return {}
         else:
             if self.alt is not None:
-                return self.alt(batch, **kwargs)
+                return _call_pipe_and_handle_exception(self.alt, batch, **kwargs, meta_pipe=self)
             else:
                 return {}
 
@@ -161,7 +204,7 @@ class BlockSequential(MetaPipe):
     def _call_all_types(self, batch: Union[List[Batch], Batch], **kwargs) -> Batch:
         """Call the pipes sequentially."""
         for block in self.blocks.values():
-            batch = block(batch, **kwargs)
+            batch = _call_pipe_and_handle_exception(block, batch, **kwargs, meta_pipe=self)
 
         return batch
 

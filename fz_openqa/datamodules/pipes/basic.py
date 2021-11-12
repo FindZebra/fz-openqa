@@ -6,6 +6,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
+
 from .base import Pipe
 from .control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
@@ -265,7 +267,6 @@ class ApplyToAll(Pipe):
                 batch[key] = [self.op(x, **kwargs) for x in values]
             else:
                 batch[key] = self.op(values, **kwargs)
-
         return batch
 
 

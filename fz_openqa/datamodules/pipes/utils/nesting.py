@@ -17,7 +17,7 @@ def flatten_nested_(values: List[List], level=1, current_level=0) -> Iterable[An
     Flatten a nested list of lists. See `flatten_nested` for more details.
     """
     for x in values:
-        if isinstance(x, list) and current_level < level:
+        if isinstance(x, (list, np.ndarray, Tensor)) and current_level < level:
             for y in flatten_nested_(x, level, current_level + 1):
                 yield y
         else:

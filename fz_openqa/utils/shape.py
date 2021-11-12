@@ -88,7 +88,7 @@ def infer_shape_nested_list_(x, level=0) -> Tuple[List[int], Optional[LeafType]]
         return [], LeafType(x)
 
     for y in x:
-        if isinstance(y, list):
+        if isinstance(y, (list)) or isinstance(y, (np.ndarray, Tensor)) and len(y.shape) > 0:
             sub_shape_y, leaf_type = infer_shape_nested_list_(y, level=level + 1)
             sub_shapes.append(sub_shape_y)
             leaf_types.append(leaf_type)

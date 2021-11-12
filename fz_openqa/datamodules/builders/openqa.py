@@ -15,20 +15,16 @@ from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQABuilder
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
-from fz_openqa.datamodules.pipelines.collate import CollateTokens
-from fz_openqa.datamodules.pipelines.collate import MaybeCollateDocuments
+from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
 from fz_openqa.datamodules.pipelines.index import SearchDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
-from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -218,26 +214,19 @@ class OpenQaBuilder(DatasetBuilder):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
-        # collate questions and couments
-        base_qa_collate_pipe = self.get_qa_collate_pipe()
-
-        # merge Q&A + documents (collate if available, else search)
-        collate_qad = Sequential(
-            Parallel(
-                # A. pipe to collate documents if already stored (compiled dataset)
-                MaybeCollateDocuments(self.tokenizer),
-                # B. this one collate the question and answer fields
-                base_qa_collate_pipe,
-            ),
+        # A. Collate all attributes stored in `self.dataset`
+        collate_qad = Parallel(
+            CollateField("document", tokenizer=self.tokenizer, level=1),
+            self.dataset_builder.get_collate_pipe(),
         )
 
-        # C. select documents
+        # B. select documents
         select_documents = self.get_select_documents_pipe(
             self.n_documents,
             max_pos_docs=self.max_pos_docs,
         )
 
-        # D. fetch documents attributes (input_ids)
+        # C. fetch documents attributes from `self.corpus` (input_ids)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(),
             collate_pipe=self.corpus_builder.get_collate_pipe(),
@@ -245,11 +234,8 @@ class OpenQaBuilder(DatasetBuilder):
 
         return BlockSequential(
             [
-                # A, B: collate QA fields
                 ("Collate Q&A + document indexes", collate_qad),
-                # C: select documents
                 ("Select documents", select_documents),
-                # D: Fetch all document fields
                 ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
@@ -268,45 +254,8 @@ class OpenQaBuilder(DatasetBuilder):
             pos_select_mode="first",
             neg_select_mode="first",
             strict=False,
+            update=True,
         )
-
-    def get_qa_collate_pipe(self):
-        # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(
-            keys=[
-                "answer.text",
-                "question.text",
-                "answer.synonyms",
-                "answer.cui",
-                "question.metamap",
-            ]
-        )
-        # collate simple attributes
-        simple_attr_pipe = CollateAsTensor(
-            keys=[
-                "question.row_idx",
-                "question.idx",
-                "answer.target",
-                "answer.n_options",
-            ]
-        )
-        # collate the questions attributes (question.input_ids, question.idx, ...)
-        question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
-        # collate answer options
-        answer_pipe = CollateTokens(
-            "answer.",
-            tokenizer=self.tokenizer,
-            stride=self.dataset_builder.n_options,
-        )
-        # the full pipe to collate question and answer fields
-        base_qa_collate_pipe = Parallel(
-            raw_text_pipe,
-            simple_attr_pipe,
-            question_pipe,
-            answer_pipe,
-            id="base-qa-collate",
-        )
-        return base_qa_collate_pipe
 
     def format_row(self, row: Dict[str, Any]) -> str:
         decode_kwargs = {

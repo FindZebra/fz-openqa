@@ -2,13 +2,13 @@ from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.condition import WithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.utils.datastruct import Batch
 
 
 class GenIsPositive(Pipe):
-    def _call(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         batch["document.is_positive"] = [x > 0 for x in batch["document.match_score"]]
         return batch
 
@@ -27,8 +27,8 @@ class SortDocuments(Sequential):
                         reverse=True,
                     ),
                     DropKeys(["document.is_positive"]),
-                ),
-                filter=WithPrefix("document."),
+                )
             ),
+            input_filter=HasPrefix("document."),
             id="sort-documents",
         )

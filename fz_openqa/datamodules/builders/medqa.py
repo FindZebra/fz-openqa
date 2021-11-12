@@ -7,6 +7,7 @@ import dill  # type: ignore
 from datasets import DatasetDict
 from datasets import load_dataset
 
+from ..pipelines.collate.field import CollateField
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.collate import CollateAsTensor
@@ -14,6 +15,7 @@ from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
@@ -117,37 +119,16 @@ class MedQABuilder(HfDatasetBuilder):
 
     def get_collate_pipe(self):
         # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(
-            keys=[
-                "answer.text",
-                "question.text",
-                "answer.synonyms",
-                "answer.cui",
-                "question.metamap",
-            ]
+        return Parallel(
+            CollateField("question", tokenizer=self.tokenizer, level=0),
+            CollateField("answer", level=0, exclude=["input_ids", "attention_mask"]),
+            CollateField(
+                "answer",
+                tokenizer=self.tokenizer,
+                level=1,
+                exclude=["synonyms", "target", "cui", "synonyms", "text"],
+            ),
         )
-        # collate simple attributes
-        simple_attr_pipe = CollateAsTensor(
-            keys=[
-                "question.row_idx",
-                "question.idx",
-                "answer.target",
-                "answer.n_options",
-            ]
-        )
-        # collate the questions attributes (question.input_ids, question.idx, ...)
-        question_pipe = CollateTokens("question.", tokenizer=self.tokenizer)
-        # collate answer options
-        answer_pipe = CollateTokens("answer.", tokenizer=self.tokenizer, shape=[-1, self.n_options])
-        # the full pipe to collate question and answer fields
-        base_qa_collate_pipe = Parallel(
-            raw_text_pipe,
-            simple_attr_pipe,
-            question_pipe,
-            answer_pipe,
-            id="base-qa-collate",
-        )
-        return base_qa_collate_pipe
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Decode and print one row from the batch"""

@@ -61,8 +61,8 @@ def run(config):
         index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(interpretable=True),
         n_retrieved_documents=1000,
-        n_documents=100,
-        max_pos_docs=10,
+        n_documents=10,
+        max_pos_docs=1,
         filter_unmatched=True,
         num_proc=2,
         batch_size=10,
@@ -74,13 +74,13 @@ def run(config):
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=10)
+    dm.display_samples(n_samples=3)
 
     # access dataset
     rich.print(dm.dataset)
 
     # sample a batch
-    _ = next(iter(dm.train_dataloader()))
+    # _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":

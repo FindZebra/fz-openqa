@@ -24,7 +24,7 @@ from spacy.tokens import Doc
 
 from .base import Pipe
 from .utils.nesting import nested_list
-from fz_openqa.datamodules.pipes.control.condition import WithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
@@ -169,19 +169,19 @@ class RelevanceClassifier(Pipe):
         if self.interpretable:
             all_results = zip(*map(self.classify_and_interpret, pairs))
             results, interpretations = map(list, all_results)
-            output[self.interpretation_key] = nested_list(interpretations, stride=n_documents)
+            output[self.interpretation_key] = nested_list(interpretations, shape=[-1, n_documents])
         else:
             results = list(map(self.classify, pairs))
 
         # reshape as [batch_size, n_documents] and cast as Tensor
-        output[self.output_key] = nested_list(results, stride=n_documents)
+        output[self.output_key] = nested_list(results, shape=[-1, n_documents])
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:
         batch_size = batch_size or self._infer_batch_size(batch)
         for i in range(batch_size):
-            a_data_i = self.get_eg(batch, i, filter_op=WithPrefix(self.answer_prefix))
-            d_data_i = self.get_eg(batch, i, filter_op=WithPrefix(self.document_prefix))
+            a_data_i = self.get_eg(batch, i, filter_op=HasPrefix(self.answer_prefix))
+            d_data_i = self.get_eg(batch, i, filter_op=HasPrefix(self.document_prefix))
 
             # iterate through each document
             n_docs = len(next(iter(d_data_i.values())))

@@ -24,18 +24,18 @@ def reindex(x: Any, index: Union[np.ndarray, List[int]]) -> Any:
 
 
 class Sort(Pipe):
-    """Sort a batch according to some values"""
+    """Sort a batch according to some key values"""
 
     def __init__(
         self,
         keys: List[str],
         *,
         reverse: bool = True,
-        filter: Optional[Callable] = None,
+        **kwargs,
     ):
+        super(Sort, self).__init__()
         self.keys = keys
         self.reverse = reverse
-        self.filter = filter or always_true
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         self._check_input_keys(batch)
@@ -52,8 +52,7 @@ class Sort(Pipe):
         indexed_values = sorted(indexed_values, key=_key, reverse=self.reverse)
         index = [i for i, _ in indexed_values]
 
-        batch.update({k: reindex(v, index) for k, v in batch.items() if self.filter(k)})
-        return batch
+        return {k: reindex(v, index) for k, v in batch.items()}
 
     def _check_input_keys(self, batch):
         for key in self.keys:

@@ -6,11 +6,12 @@ import rich
 from parameterized import parameterized
 
 from fz_openqa.datamodules.pipes import ApplyAsFlatten, Identity, Lambda
-from fz_openqa.datamodules.pipes.control.condition import WithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.utils.datastruct import Batch
 
 
+# todo: mixed types: list | np.array | Tensor
 class TestAsFlatten(TestCase):
     cls = ApplyAsFlatten
 
@@ -21,14 +22,14 @@ class TestAsFlatten(TestCase):
     def test_identity(self, data, level):
         """This process a batch using the Idenity on nested fields"""
         # with update
-        pipe = self.cls(Identity(), update=True, input_filter=WithPrefix("document."), level=level)
+        pipe = self.cls(Identity(), update=True, input_filter=HasPrefix("document."), level=level)
         output = pipe(data)
         self.assertEqual(output, data)
 
         # no update
         ref = deepcopy(data)
         ref.pop('question')
-        pipe = self.cls(Identity(), update=False, input_filter=WithPrefix("document."), level=level)
+        pipe = self.cls(Identity(), update=False, input_filter=HasPrefix("document."), level=level)
         output = pipe(data)
         self.assertEqual(output, ref)
 

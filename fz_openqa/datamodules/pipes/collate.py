@@ -19,11 +19,12 @@ class Collate(Pipe):
     _allows_update = False
 
     def __init__(self, keys: Optional[List[str]] = None, **kwargs):
-        assert kwargs.get("input_filter", None) is None, "input_filter is not allowed"
         if keys is not None:
+            msg = "input_filter is not allowed when keys are explicitely set"
+            assert kwargs.get("input_filter", None) is None, msg
             input_filter = In(keys)
         else:
-            input_filter = None
+            input_filter = kwargs.pop("input_filter", None)
         super().__init__(**kwargs, input_filter=input_filter)
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
