@@ -15,17 +15,9 @@ class ClassifyDocuments(Sequential):
         relevance_classifier: RelevanceClassifier,
     ):
         # define the input keys
-        input_keys = [
-            "document.row_idx",
-            "answer.text",
-            "answer.target",
-        ]
+        input_keys = ["document.row_idx", "answer.text", "answer.target", "answer.cui"]
         # define the output keys
-        classifier_input_keys = [
-            "document.text",
-            "answer.text",
-            "answer.target",
-        ]
+        classifier_input_keys = ["document.text", "answer.text", "answer.target", "answer.cui"]
 
         super().__init__(
             FilterKeys(KeyIn(input_keys)),

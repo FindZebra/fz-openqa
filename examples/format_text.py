@@ -11,8 +11,8 @@ formatter = TextFormatter(
 )
 
 text = [
-    "(figure 7\xe2\x80\x9377) (figures 6\xe2\x80\x9328 and 6\xe2\x80\x9329) small nucleolar rna (snorna) ursor rrna. (table 6\xe2\x80\x931",
-    "\t\t\t\t\t\t\t\tesophageal web stenosis in barium swallow examination lateral view.\t\t\t\t\t\t\t\t\t\t\t\t\tweb ",
+    "(figure 7\xe2\x80\x9377) (figures 6\xe2\x80\x9328 and 6\xe2\x80\x9329) small nucleolar rna (snorna) ursor rrna. (table 6\xe2\x80\x931",  # noqa: E501
+    "\t\t\t\t\t\t\t\tesophageal web stenosis in barium swallow examination lateral view.\t\t\t\t\t\t\t\t\t\t\t\t\tweb ",  # noqa: E501
     "some text \n nice shf aodfbks",
     "why\nisgfdks",
     "previously discussed methods (Smith, J. et al., 2014) ",

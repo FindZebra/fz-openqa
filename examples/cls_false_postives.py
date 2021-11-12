@@ -146,7 +146,7 @@ b10 = {
 }
 
 b11 = {
-    "question.text": "ou have been asked to deliver a lecture to medical students about the effects of various body hormones and neurotransmitters on the metabolism of glucose. Which of the following statements best describes the effects of sympathetic stimulation on glucose metabolism?",
+    "question.text": "ou have been asked to deliver a lecture to medical students about the effects of various body hormones and neurotransmitters on the metabolism of glucose. Which of the following statements best describes the effects of sympathetic stimulation on glucose metabolism?",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Epinephrine increases liver glycogenolysis"],
     "answer.synonyms": [],
@@ -156,7 +156,7 @@ b11 = {
 }
 
 b12 = {
-    "question.text": "A 45-year-old man presents to his primary care physician for a general checkup.The patient has no complaints, but is overweight by 20 lbs. The physician orders outpatient labs which come back with an elevated total bilirubin. Concerned, the PCP orders further labs which show: total bilirubin: 2.4, direct bilirubin 0.6, indirect bilirubin 1.8. Which of the following are true about this patient's condition?",
+    "question.text": "A 45-year-old man presents to his primary care physician for a general checkup.The patient has no complaints, but is overweight by 20 lbs. The physician orders outpatient labs which come back with an elevated total bilirubin. Concerned, the PCP orders further labs which show: total bilirubin: 2.4, direct bilirubin 0.6, indirect bilirubin 1.8. Which of the following are true about this patient's condition?",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Diagnosis is readily made with characteristic metabolic response to rifampin"],
     "answer.synonyms": [],

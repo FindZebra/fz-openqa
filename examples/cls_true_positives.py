@@ -100,7 +100,7 @@ b3 = {
         wife, parents, siblings, and grandparents, are informed about the patient’s condition. The patient has no
         living will and there is no durable power of attorney. The patient must be put in an inducedcoma for an
         undetermined period of time. Which of the following is responsible for making medical decisions for the
-        incapacitated patient?""",
+        incapacitated patient?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["The spouse"],
     "answer.cui": [],
@@ -113,7 +113,7 @@ b3 = {
         dpoa, the spouse chips in for the person: spouse, children, parent, sibling, friend, personal physician.
         dnr/dni orders do not mean \xe2\x80\x9cdo not treat.\xe2\x80\x9dpatients cannot demand futile treatment
         from their physicians.a patient\xe2\x80\x99s family cannot require that a doctor withhold information from
-        the patient.withdrawal of carepatients and their decision makers have the right to forgo or w"""
+        the patient.withdrawal of carepatients and their decision makers have the right to forgo or w"""  # noqa: E501
     ],
 }
 
@@ -124,7 +124,7 @@ b4 = {
     lithium and a daily multivitamin. His vital signs are within normal limits.Physical examination shows no
     abnormalities. Laboratorystudies show:SerumSodium 146 mEq/LPotassium 3.7 mEq/LCalcium 11.2 mg/dLMagnesium
     2.3 mEq/LPTH 610 pg/mLAlbumin 4.2 g/dL24-hour urineCalcium 23 mgWhich of the following is the most likely
-    cause of thispatient’s findings?""",
+    cause of thispatient’s findings?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Abnormal calcium sensing receptors"],
     "answer.cui": [],
@@ -136,7 +136,7 @@ b4 = {
         ionized calcium levels are influenced by various hormone systems.parathyroid hormone.\xe2\x80\x82the
         parathyroid cells rely on a h-protein\xe2\x80\x93coupled membrane receptor, designated the calcium-sensing
         receptor (casr), to regulate pth secretion by sensing extracellular calciumlevels69 (fig. 38-28). pth
-        secretion also is stimulatedby low levels of 1,25-dihydroxy vit"""
+        secretion also is stimulatedby low levels of 1,25-dihydroxy vit"""  # noqa: E501
     ],
 }
 
@@ -144,7 +144,7 @@ b5 = {
     "question.text": """Twenty minutes after delivery of a newborn infant, a 22-year-old woman starts breastfeeding.
     Initially, the expressed milk is thick and yellowish. Three days later, themother's breasts swell and the
     expressed milk becomes thinner and whiter. A decrease in maternal serum concentration of which of the following
-    is most likely responsible for the observed changes in milk production?""",
+    is most likely responsible for the observed changes in milk production?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Progesterone"],
     "answer.cui": [],
@@ -157,7 +157,7 @@ b5 = {
         lactation and \xc2\x90 reproductive function. oxytocin\xe2\x80\x94assists in milk letdown; also promotes
         uterine contractions. breast milk is the ideal nutrition for infants < 6 months old. contains maternal
         immunoglobulins (conferring passive immunity; mostly iga), macrophages, lymphocytes. breast milk reduces
-        infant infections and is associated with \xc2\x90 risk for chil"""
+        infant infections and is associated with \xc2\x90 risk for chil"""  # noqa: E501
     ],
 }
 
@@ -167,7 +167,7 @@ b6 = {
         morning. He has not had a bowel movement or passed any gas for the past 3 days. He has a past medical history
         of ventral hernia repair 5 years ago. His heart rate is 110/min, respiratory rate is 24/min, temperature is
         38.0°C (100.4°F), and blood pressure is 120/90 mm Hg. The abdomen is distended and mildly tender to deep
-        palpation. Bowel sounds are high-pitched and tinkling.Which of the following is the most likely cause?""",
+        palpation. Bowel sounds are high-pitched and tinkling.Which of the following is the most likely cause?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Small bowel obstruction"],
     "answer.cui": [],
@@ -179,7 +179,7 @@ b6 = {
         of vomitus; bowel ischemia or perforation from prolonged distension or pressurefrom a foreign body.in small
         bowel obstruction, the pain tends to be colicky (cramping andintermittent) in nature, with spasms lasting a
         few minutes. the pain tends to be central and mid-abdominal. vomiting may occur before constipation.in large
-        bowel obstruction, the pain is felt lower in the abdo"""
+        bowel obstruction, the pain is felt lower in the abdo"""  # noqa: E501
     ],
 }
 
@@ -189,7 +189,7 @@ b7 = {
         and does not use condoms. Physical examination shows a tender, palpable swelling on the upper pole of the
         right testicle; lifting the testicle relieves the pain. A Gram stain of urethral secretions shows
         numerouspolymorphonuclear leukocytes but no organisms. Which of the following is the most likely causal
-        pathogen of this patient's symptoms?""",
+        pathogen of this patient's symptoms?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Chlamydia trachomatis"],
     "answer.cui": [],
@@ -201,7 +201,7 @@ b7 = {
         several weeks after infection. symptoms in women may include vaginal discharge or burning with urination.
         symptoms in men may include discharge from the penis, burning with urination, or pain and swelling of one
         or both testicles. the infection can spread to the upper genital tract in women, causing pelvic inflammatory
-        disease, which may result in future infertility or ectopic pregnancy. rep"""
+        disease, which may result in future infertility or ectopic pregnancy. rep"""  # noqa: E501
     ],
 }
 
@@ -212,7 +212,7 @@ b8 = {
         temperature is 37.1°C (98.8°F).Physical examination shows painless, chalky nodules on the metatarsophalangeal
         joint of his right foot. Laboratory studies show: Serum Creatinine 1.0 mg/dL Uric acid 11.6 mg/dL Cholesterol
         278 mg/dL Urine Uric acid 245 mg/24 h (N = 240-755)Based on the urine findings, this patient would most likely
-        benefit from treatment with which of the following drugs to prevent future gout attacks?""",
+        benefit from treatment with which of the following drugs to prevent future gout attacks?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Probenecid"],
     "answer.cui": [],
@@ -224,7 +224,7 @@ b8 = {
         renal function who underexcrete uric acid, with <600 mg in a 24-h urine sample. urine volume should be
         maintained by ingestion of 1500 ml of water every day. probenecid can be started at a dose of 250 mg twice
         daily and increased gradually as needed up to 3 g per day to achieve and maintain a serum uric acid level
-        of less than 6 mg/dl. probenecid is generally not effe"""
+        of less than 6 mg/dl. probenecid is generally not effe"""  # noqa: E501
     ],
 }
 
@@ -236,7 +236,7 @@ b9 = {
         periods of time without eating. She works as a stock market trader and received a promotion 5 months ago.
         She regularly attends yoga classes on the weekends with her friends. On mental status examination, she has
         a blunted affect. She denies suicidal thoughts and illicit drug use. Which of the following is the most
-        likely diagnosis?""",
+        likely diagnosis?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Cyclothymic disorder"],
     "answer.cui": [],
@@ -249,14 +249,14 @@ b9 = {
         symptoms is experienced on more days than not and to a clinically significant degree and has persisted for
         at least 12 months after the death in the case ofbereaved adults and 6 months for bereaved children: 1.
         persistent yearning/ionging for thedeceased. in young children, yearning may be expressed in play and behavior,
-        including behaviors that reflect being separated from, and"""
+        including behaviors that reflect being separated from, and"""  # noqa: E501
     ],
 }
 
 b10 = {
     "question.text": """The incidence of a relatively benign autosomal recessive disease, X, is 1 in 25 in the population.
         Assuming that the conditions for Hardy Weinberg Equilibrium are met, what is the probability that a
-        male and female, who are carriers, will have a child expressing the disease?""",
+        male and female, who are carriers, will have a child expressing the disease?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["1/4"],
     "answer.cui": [],
@@ -268,7 +268,7 @@ b10 = {
         carrier of a recessivecondition is only at risk to have afected children if his or her partner is
         heterozygous or homozygous for the disease. genes for rare autosomal recessive conditions have low
         prevalence in the general population. thus, the likelihood that a partner will be a gene carrier is small,
-        unless there is consanguinity or the part"""
+        unless there is consanguinity or the part"""  # noqa: E501
     ],
 }
 
@@ -278,7 +278,7 @@ b11 = {
         in the distal third of the esophagus. Histological examination of a biopsy specimen shows a well-differentiated
         adenocarcinoma. The patient is scheduled for surgical resection of the tumor. During the procedure, the surgeon
          damages a structure that passes through the diaphragm along with the esophagus at the level of the tenth
-         thoracic vertebra (T10). Which of the following structures was mostlikely damaged?""",
+         thoracic vertebra (T10). Which of the following structures was mostlikely damaged?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Vagus nerve"],
     "answer.cui": [],
@@ -290,7 +290,7 @@ b11 = {
         posteriorattachment of the diaphragm at vertebral level txii.the thoracic duct passes behind the diaphragm
         with the aorta.the azygos and hemiazygos veins may also pass through the aortic hiatus or through the crura
         of the diaphragm.other structures outside the posterior attachments of the diaphragm lateral to the aortic
-        hiatus incl"""
+        hiatus incl"""  # noqa: E501
     ],
 }
 
@@ -310,7 +310,7 @@ b12 = {
         mm/hr\nC-reactive protein 84 mg/dL\nSodium 144 mEq/L\nPotassium 4.1 mEq/L\nCalcium 9.7 mEq/L\nA contrast
         MRI of the spine reveals a peripherally enhancing dorsal epidural process compressing the thecal sac and
         causing a mild leftwards displacement. Which of the following is the most likely risk factor for this
-        patient\xe2\x80\x99s condition?""",
+        patient\xe2\x80\x99s condition?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Intravenous drug use"],
     "answer.cui": ["C0699778"],
@@ -322,7 +322,7 @@ b12 = {
         tenderness over the involved spine segment, and an elevated esr are the most common findings in vertebral
         osteomyelitis. fever or an elevated white blood cell count is found in a minority of patients. mri and ct
         are sensitive and specific for early detection of osteomyelitis; ct may be more readily available in
-        emergency settings and better tolerated by some patients with severe back pain. the intervertebral d"""
+        emergency settings and better tolerated by some patients with severe back pain. the intervertebral d"""  # noqa: E501
     ],
 }
 
@@ -334,7 +334,7 @@ b13 = {
         gastric mucosa with signs of mild inflammation and a small hemorrhagic ulcer in the antrum. A gastric biopsy
         shows active inflammation, and the specimen stains positive with Warthin\xe2\x80\x93Starry stain, revealing
         Helicobacter pylori. Which of the following is the next, best step in the management of this patient
-        \xe2\x80\x99s condition?""",
+        \xe2\x80\x99s condition?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Give amoxicillin, clarithromycin, and omeprazole"],
     "answer.cui": ["C0002645", "C4077730", "C0028978", "C0055856", "C1947971"],
@@ -345,7 +345,7 @@ b13 = {
         infection can be detected by urease breath test, serum igg antibodies (which indicate exposure, not current
         infection), h. pylori stoolantigen, or endoscopic biopsy.\xe2\x96\xa0\xe2\x86\x93 intake of offending agents.
         antacids, sucralfate, h2 blockers, and/or ppis may help.triple therapy (amoxicillin, clarithromycin,
-        omeprazole) to treat h. pylori infection.give prophylactic h2 b"""
+        omeprazole) to treat h. pylori infection.give prophylactic h2 b"""  # noqa: E501
     ],
 }
 
@@ -356,7 +356,7 @@ b14 = {
         sitting blood pressure is 133/91 mm Hg. Additionally, his supine blood pressure is 134/92 mm Hg and standing
         blood pressure is 127/88 mm Hg. These are similar to his baseline blood pressure measured during previous
         visits. An ECG rhythm strip is obtained in the office. Of the following, what isthe likely cause of his
-        presyncope?""",
+        presyncope?""",  # noqa: E501
     "answer.target": 0,
     "answer.text": ["Right bundle branch block"],
     "answer.cui": ["C0344421", "C0085615"],
@@ -368,7 +368,7 @@ b14 = {
         there is suspicion of syncope due to an arrhythmia or underlying cardiac disease. relevant electrocardiographic
          abnormalities include bradyarrhythmias or tachyarrhythmias,av block, ischemia, old myocardial infarction,
          long qt syndrome, and right bundle branch block. this initial assessment will lead to the identification
-         of a causeof syncope in approximately 50% of patients and also allows stratification of pati""",
+         of a causeof syncope in approximately 50% of patients and also allows stratification of pati""",  # noqa: E501
     ],
 }
 

@@ -1,9 +1,9 @@
 defaults:
   - builder: openqa
-  - text_formatter: simple_lowercase
+  - text_formatter: simple
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: exact_match
+  - relevance_classifier: metamap_match
 
 _target_: fz_openqa.datamodules.DataModule
 

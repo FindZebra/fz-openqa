@@ -22,6 +22,7 @@ from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = train_utils.get_logger(__name__)
@@ -90,6 +91,8 @@ def train(config: DictConfig) -> Optional[float]:
                 ):
 
                     batch = pipe(batch)
+                    pprint_batch(batch)
+                    exit()
 
                     for i in range(infer_batch_size(batch)):
                         row = Pipe.get_eg(batch, idx=i)
