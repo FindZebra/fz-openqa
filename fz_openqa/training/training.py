@@ -91,8 +91,6 @@ def train(config: DictConfig) -> Optional[float]:
                 ):
 
                     batch = pipe(batch)
-                    pprint_batch(batch)
-                    exit()
 
                     for i in range(infer_batch_size(batch)):
                         row = Pipe.get_eg(batch, idx=i)

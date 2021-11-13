@@ -390,6 +390,23 @@ class ScispaCyMatch(AliasBasedMatch):
     def _combine_entities(doc: Doc) -> str:
         return " ".join(ent.text for ent in doc.ents)
 
+    def _customize_doc_object(self, doc: Doc) -> Doc:
+        # extract entities from Doc
+        ents = [str(ent) for ent in doc.ents]
+        # list of bools indicating whether each word has a subsequent space.
+        # Must have the same length as words
+        spaces = [True] * len(ents)
+        spaces[-1] = False
+        # list of bools, of the same length as words, to assign as token.is_sent_start.
+        sent_starts = [False] * len(ents)
+        sent_starts[0] = True
+
+        doc = Doc(vocab=self.model.vocab, words=ents, spaces=spaces, sent_starts=sent_starts)
+
+        for name, component in self.model.pipeline:
+            doc = component(doc)
+        return doc
+
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         pairs = list(pairs)
@@ -399,20 +416,23 @@ class ScispaCyMatch(AliasBasedMatch):
 
         # batch processing of texts
         docs = list(self.model.pipe(answer_texts, **self.spacy_kwargs))
-        combined_entities = map(self._combine_entities, docs)
-        filtered_docs = list(self.model.pipe(combined_entities, **self.spacy_kwargs))
+        # combined_entities = map(self._combine_entities, docs)
+        # filtered_docs = list(self.model.pipe(combined_entities, **self.spacy_kwargs))
 
         # join the aliases
-        for pair, answer_str, answer_doc in zip_longest(pairs, docs, filtered_docs):
-            answer_doc.ents = [Span(answer_doc, 0, len(answer_doc), label="Entity")]
+        for pair, answer_doc in zip_longest(pairs, docs):
+            answer_str = answer_doc.text
             e_aliases = set()
-            for ent in answer_doc.ents:
-                linked_entities = self.get_linked_entities(ent)
-                e_aliases = set(self.extract_aliases(linked_entities))
 
-            answer_aliases = [answer_str.text] + list(e_aliases)
+            if answer_doc.ents:
+                answer_doc = self._customize_doc_object(answer_doc)
+                for ent in answer_doc.ents:
+                    linked_entities = self.get_linked_entities(ent)
+                    e_aliases = set(self.extract_aliases(linked_entities))
+
+            answer_aliases = [answer_str] + list(e_aliases)
             if answer_doc.text:
-                answer_aliases = list(set([answer_str.text, answer_doc.text])) + list(e_aliases)
+                answer_aliases = list(set([answer_str, answer_doc.text])) + list(e_aliases)
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
