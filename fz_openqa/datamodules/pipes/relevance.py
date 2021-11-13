@@ -417,10 +417,3 @@ class ScispaCyMatch(AliasBasedMatch):
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
-
-answer = "answer"
-answer_text = None
-aliases = set(["1", "e2", "sdfadfsaee3"])
-
-answer_aliases = list(set([answer, answer_text]))+list(aliases)
-answer_aliases
