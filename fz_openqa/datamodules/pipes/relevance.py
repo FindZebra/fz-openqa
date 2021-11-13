@@ -405,14 +405,22 @@ class ScispaCyMatch(AliasBasedMatch):
         # join the aliases
         for pair, answer_str, answer_doc in zip_longest(pairs, docs, filtered_docs):
             answer_doc.ents = [Span(answer_doc, 0, len(answer_doc), label="Entity")]
+            e_aliases = set()
             for ent in answer_doc.ents:
                 linked_entities = self.get_linked_entities(ent)
                 e_aliases = set(self.extract_aliases(linked_entities))
 
             answer_aliases = [answer_str.text] + list(e_aliases)
-            if answer_doc.text and answer_str.text != answer_doc.text:
-                answer_aliases = [answer_str.text, answer_doc.text] + list(e_aliases)
+            if answer_doc.text:
+                answer_aliases = list(set([answer_str.text, answer_doc.text])) + list(e_aliases)
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
+
+answer = "answer"
+answer_text = None
+aliases = set(["1", "e2", "sdfadfsaee3"])
+
+answer_aliases = list(set([answer, answer_text]))+list(aliases)
+answer_aliases
