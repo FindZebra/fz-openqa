@@ -10,4 +10,5 @@ datamodule.builder.corpus_builder._target_:
   values:
     - fz_openqa.datamodules.builders.MedQaCorpusBuilder
     - fz_openqa.datamodules.builders.FzCorpusBuilder
-    - fz_openqa.datamodules.builders.FZxMedQaCorpusBuilder
+    - fz_openqa.datamodules.builders.WikipediaBuilder
+    - fz_openqa.datamodules.builders.FZxMedQaxWikiCorpusBuilder
