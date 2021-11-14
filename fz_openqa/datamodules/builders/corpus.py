@@ -14,7 +14,7 @@ from datasets import load_dataset
 
 from ..pipes.sentence import GenerateSentences
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import file_corpus
+from fz_openqa.datamodules.generators import file_corpus, wiki_corpus
 from fz_openqa.datamodules.generators import fz_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.pipelines import collate
@@ -264,11 +264,17 @@ class FzCorpusBuilder(CorpusBuilder):
     dset_script_path_or_id = fz_corpus.__file__
 
 
-class FZxMedQaCorpusBuilder(CorpusBuilder):
+class WikipediaCorpusBuilder(CorpusBuilder):
+    subset_size = [20]
+    dset_script_path_or_id = wiki_corpus.__file__
+
+
+class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
     subset_size = [3]
     dset_script_path_or_id: List = [
         fz_corpus.__file__,
         meqa_en_corpus.__file__,
+        wiki_corpus.__file__,
     ]
 
     def load_base_dataset(self) -> DatasetDict:
@@ -276,9 +282,3 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)
-
-
-class WikipediaCorpusBuilder(CorpusBuilder):
-    subset_size = [10]
-    dset_script_path_or_id = "wikipedia"
-    dset_name = "20200501.en"

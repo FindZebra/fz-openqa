@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders.corpus import WikipediaCorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -31,7 +31,7 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = MedQaCorpusBuilder(
+    builder = WikipediaCorpusBuilder(
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
