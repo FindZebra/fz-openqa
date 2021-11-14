@@ -61,7 +61,7 @@ class WikiCorpusGenerator(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, filepath: str):
         """Yields examples."""
 
-        with open(filepath, 'r') as json_file:
+        with open(filepath, "r") as json_file:
             json_list = list(json_file)
             for idx, val in enumerate(json_list):
                 article = json.loads(val)

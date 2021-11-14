@@ -792,7 +792,6 @@ DISCARD_TUIs = [
     "T080",
     "T077",
     "T082",
-
     "T185",
     "T077",
     "T102",
@@ -802,7 +801,6 @@ DISCARD_TUIs = [
     "T081",
     "T089",
     "T079"
-    
     # Activities & Behaviors
     "T052",
     "T057",

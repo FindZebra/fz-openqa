@@ -14,9 +14,10 @@ from datasets import load_dataset
 
 from ..pipes.sentence import GenerateSentences
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import file_corpus, wiki_corpus
+from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
+from fz_openqa.datamodules.generators import wiki_corpus
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import Apply
