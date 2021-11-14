@@ -20,9 +20,9 @@ import spacy
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
-from spacy import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span
+from spacy.language import Language
 
 from .nesting import nested_list
 from fz_openqa.datamodules.pipes import Pipe
@@ -211,7 +211,7 @@ class AliasBasedMatch(RelevanceClassifier):
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         linker_name: str = "umls",
-        threshold: float = 0.65,
+        threshold: float = 0.45,
         lazy_setup: bool = True,
         spacy_kwargs: Optional[Dict] = None,
         **kwargs,
@@ -269,7 +269,13 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.65):
+    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.45):
+
+        @Language.component("__combineEntities__")
+        def _combine_entities(doc: Doc) -> Doc:
+            doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
+            return doc
+
         model = spacy.load(
             model_name,
             disable=[
@@ -281,8 +287,13 @@ class AliasBasedMatch(RelevanceClassifier):
             ],
         )
         model.add_pipe(
+            "__combineEntities__",
+            first=True,
+        )
+        model.add_pipe(
             "scispacy_linker",
             config={
+                "k": 60,
                 "threshold": threshold,
                 "linker_name": linker_name,
                 "max_entities_per_mention": 3,
@@ -293,7 +304,6 @@ class AliasBasedMatch(RelevanceClassifier):
     def get_linked_entities(self, entity: [List, Entity]) -> Iterable[LinkedEntity]:
         if not isinstance(entity, List):
             entity = [cui_str for (cui_str, _) in entity._.kb_ents]
-
         for cui_str in entity:
             # cui_str, _ = cui  # ent: (str, score)
             try:
@@ -386,27 +396,6 @@ class ScispaCyMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _combine_entities(doc: Doc) -> str:
-        return " ".join(ent.text for ent in doc.ents)
-
-    def _customize_doc_object(self, doc: Doc) -> Doc:
-        # extract entities from Doc
-        ents = [str(ent) for ent in doc.ents]
-        # list of bools indicating whether each word has a subsequent space.
-        # Must have the same length as words
-        spaces = [True] * len(ents)
-        spaces[-1] = False
-        # list of bools, of the same length as words, to assign as token.is_sent_start.
-        sent_starts = [False] * len(ents)
-        sent_starts[0] = True
-
-        doc = Doc(vocab=self.model.vocab, words=ents, spaces=spaces, sent_starts=sent_starts)
-
-        for name, component in self.model.pipeline:
-            doc = component(doc)
-        return doc
-
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Generate the field `pair.answer["aliases"]`"""
         pairs = list(pairs)
@@ -416,24 +405,87 @@ class ScispaCyMatch(AliasBasedMatch):
 
         # batch processing of texts
         docs = list(self.model.pipe(answer_texts, **self.spacy_kwargs))
-        # combined_entities = map(self._combine_entities, docs)
-        # filtered_docs = list(self.model.pipe(combined_entities, **self.spacy_kwargs))
 
-        # join the aliases
         for pair, answer_doc in zip_longest(pairs, docs):
             answer_str = answer_doc.text
-            e_aliases = set()
 
-            if answer_doc.ents:
-                answer_doc = self._customize_doc_object(answer_doc)
-                for ent in answer_doc.ents:
-                    linked_entities = self.get_linked_entities(ent)
-                    e_aliases = set(self.extract_aliases(linked_entities))
+            for ent in answer_doc.ents:
+                linked_entities = self.get_linked_entities(ent)
+                e_aliases = set(self.extract_aliases(linked_entities))
 
             answer_aliases = [answer_str] + list(e_aliases)
-            if answer_doc.text:
-                answer_aliases = list(set([answer_str, answer_doc.text])) + list(e_aliases)
 
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
+
+"""
+import spacy
+from scispacy.linking import EntityLinker
+from spacy.tokens.span import Span
+from scispacy.linking_utils import Entity
+from spacy.tokens import Doc
+import re
+
+from spacy.language import Language
+
+
+def _combine_entities(doc: Doc) -> Doc:
+    doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
+    return doc
+
+
+Language.factory("_combine_entities", func=_combine_entities)
+
+model = "en_core_sci_sm"
+m1 = spacy.load(model)
+m1.add_pipe("_combine_entities", first=True)
+m1.add_pipe(
+    "scispacy_linker",
+    config={
+        "k": 50,
+        "threshold": 0.4,
+        "linker_name": "umls",
+        "max_entities_per_mention": 3,
+    },
+)
+linker = m1.get_pipe("scispacy_linker")
+
+for name, component in m1.pipeline:
+    print(name)
+
+"intravenous drug use"
+text = 'Give amoxicillin, clarithromycin, and omeprazole'
+doc = m1(text)
+doc.ents
+ent = doc.ents[0]
+ent._.kb_ents
+
+linker.kb.cui_to_entity["C0002645"]
+
+doc_new.ents = [Span(doc_new, 0, doc_new.__len__(), label="Entity")]
+
+for name, component in m1.pipeline:
+    doc_new = component(doc_new)
+
+for ent in doc_new.ents:
+    print(ent)
+    print(type(ent))
+    print(ent._.kb_ents)
+
+
+cui_list = [('C1947971', 0.9999999403953552), ('C1550718', 0.8016898036003113), ('C3244317', 0.8016898036003113)]
+for cui, score in cui_list:
+    print(linker.kb.cui_to_entity[cui])
+
+    #words = re.sub("[^\w]", " ", doc.text).split()
+    # list of bools indicating whether each word has a subsequent space.
+    # Must have the same length as words
+    #spaces = [True] * len(words)
+    #spaces[-1] = False
+    # list of bools, of the same length as words, to assign as token.is_sent_start.
+    #sent_starts = [False] * len(words)
+    #sent_starts[0] = True
+
+    #doc = Doc(vocab=doc.vocab, words=words, spaces=spaces, sent_starts=sent_starts)
+"""
