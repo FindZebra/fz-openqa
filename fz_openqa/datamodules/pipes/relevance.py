@@ -20,9 +20,9 @@ import spacy
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
+from spacy.language import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span
-from spacy.language import Language
 
 from .nesting import nested_list
 from fz_openqa.datamodules.pipes import Pipe
@@ -270,7 +270,6 @@ class AliasBasedMatch(RelevanceClassifier):
 
     @staticmethod
     def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.45):
-
         @Language.component("__combineEntities__")
         def _combine_entities(doc: Doc) -> Doc:
             doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
@@ -418,6 +417,7 @@ class ScispaCyMatch(AliasBasedMatch):
             # update the pair and return
             pair.answer["answer.aliases"] = answer_aliases
             yield pair
+
 
 """
 import spacy
