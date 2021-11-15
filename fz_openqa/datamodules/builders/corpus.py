@@ -29,7 +29,6 @@ from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.pipes import UpdateWith
@@ -269,6 +268,13 @@ class WikipediaCorpusBuilder(CorpusBuilder):
     subset_size = [20]
     dset_script_path_or_id = wiki_corpus.__file__
 
+
+class OriginalWikipediaCorpusBuilder(CorpusBuilder):
+    subset_size = [10]
+    dset_script_path_or_id = "wikipedia"
+    dset_name = "20200501.en"
+
+
 class FZxMedQaCorpusBuilder(CorpusBuilder):
     subset_size = [3]
     dset_script_path_or_id: List = [
@@ -281,6 +287,7 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)
+
 
 class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
     subset_size = [3]
