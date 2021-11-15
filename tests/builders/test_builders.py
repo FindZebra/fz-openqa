@@ -68,12 +68,12 @@ class TestBuilder(TestCase):
             self.assertTrue(set(self.builder.column_names).issubset(set(dset.column_names)))
 
     def test_collate(self):
-        pipe = self.builder.get_collate_pipe()
-        self.assertIsInstance(pipe, Pipe)
+        collate_fn = self.builder.get_collate_pipe()
+        self.assertIsInstance(collate_fn, Pipe)
 
         for dset in self.datasets:
             examples = [dset[i] for i in range(min(3, len(dset)))]
-            batch = pipe(examples)
+            batch = collate_fn(examples)
             self.assertIsInstance(batch, Dict)
             self.assertGreater(len(batch), 0)
             v = next(iter(batch.values()))
@@ -91,23 +91,19 @@ class TestMedQABuilder(TestBuilder):
         self.assertEqual(len(self._dataset[Split.TEST]), 1273)
 
 
-class TestCorpusBuilder(TestBuilder):
+class TestMedQaCorpusBuilder(TestBuilder):
     config_override = {'max_length': None, 'passage_length': 200, 'passage_stride': 200}
     cls = MedQaCorpusBuilder
 
 
-class TestMedQaCorpusBuilder(TestCorpusBuilder):
-    cls = MedQaCorpusBuilder
-
-
-class TestFzCorpusCorpusBuilder(TestCorpusBuilder):
+class TestFzCorpusCorpusBuilder(TestMedQaCorpusBuilder):
     cls = FzCorpusBuilder
 
 
-class TestFZxMedQaCorpusBuilder(TestCorpusBuilder):
+class TestFZxMedQaCorpusBuilder(TestMedQaCorpusBuilder):
     cls = FZxMedQaCorpusBuilder
 
-@unittest.skipIf(lambda : not ping_es(), "Elastic Search is not reachable.")
+@unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
 class TestOpenQaBuilder(TestBuilder):
     cls = OpenQaBuilder
 

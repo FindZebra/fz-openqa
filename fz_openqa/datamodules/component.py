@@ -31,14 +31,13 @@ def leaf_to_json_struct(v: Any) -> Union[Dict, List]:
 
 class Component:
     """
-    A Component is an object used to process data.
-    It supports a few methods so it can nicely be integrated into the data
-    processing pipeline (multiprocessing, caching).
-    A component must be safely and deterministically serializable using pickle.
+    A Component is an object used within the data processing pipeline.
+    Component implements a few method that helps integration with the rest of the framework,
+    such as safe serialization (pickle, multiprocessing) and deterministic caching (datasets).
 
     Functionalities:
-     - A component serialization can be inspected using `dill_inspect()`
-     - The hash of the object can be obtained using `fingerprint()`
+     - Serialization capability can be inspected using `dill_inspect()`
+     - The hash/fingerprint of the object and its attributes can be obtained using `fingerprint()`
      - The object can be reduced to a json-struct using `to_json_struct()`
      - The object can be copied using `copy()`
      - The object can be printed using `pprint()`
@@ -53,16 +52,14 @@ class Component:
     __metaclass__ = ABCMeta
     id: Optional[str] = None
 
-    def __init__(
-        self,
-        *,
-        id: Optional[str] = None,
-    ):
+    def __init__(self, *, id: Optional[str] = None, **kwargs):
         """
         Parameters
         ----------
         id
            An identifier for the pipe.
+        kwargs
+            Other attributes of the component. Ignored when passed to this class.
         """
         if id is not None:
             self.id = id

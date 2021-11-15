@@ -5,7 +5,7 @@ from fz_openqa.datamodules.index.utils.es_engine import ping_es
 from tests.indexes.test_base_index import TestIndex
 
 
-@unittest.skipIf(not ping_es(), "Elastic Search is not reachable.")
+@unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
 class TestElasticSearchIndex(TestIndex):
     cls: Index.__class__ = ElasticSearchIndex
 

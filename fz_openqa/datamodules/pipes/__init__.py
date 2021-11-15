@@ -21,6 +21,7 @@ from .documents import SelectDocs
 from .meta import BlockSequential
 from .meta import Gate
 from .meta import Parallel
+from .meta import ParallelbyField
 from .meta import Sequential
 from .nesting import ApplyAsFlatten
 from .nesting import Flatten

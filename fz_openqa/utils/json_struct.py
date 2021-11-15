@@ -1,7 +1,6 @@
 """
 Function to process json-like structures
 """
-from functools import reduce
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -28,9 +27,15 @@ def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Uni
     json-like structure
     """
     if isinstance(data, dict):
-        return {
-            key: apply_to_json_struct(value, fn, key=key, **kwargs) for key, value in data.items()
-        }
+        try:
+            output = {
+                key: apply_to_json_struct(value, fn, key=key, **kwargs)
+                for key, value in data.items()
+            }
+        except Exception:
+            output = {key: apply_to_json_struct(value, fn, **kwargs) for key, value in data.items()}
+
+        return output
     elif isinstance(data, list):
         return [apply_to_json_struct(value, fn, **kwargs) for value in data]
     else:

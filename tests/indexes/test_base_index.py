@@ -79,7 +79,7 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         dill_status = index.dill_inspect()
         if isinstance(dill_status, bool):
-            self.assertTrue(dill_status, f"Index {index.__name__} could not be pickled.")
+            self.assertTrue(dill_status, f"Index {type(index).__name__} could not be pickled.")
         elif isinstance(dill_status, dict):
             for k, v in dill_status.items():
                 self.assertTrue(v, f"Attribute {k} could not be pickled.")

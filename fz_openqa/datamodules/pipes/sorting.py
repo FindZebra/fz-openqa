@@ -33,7 +33,7 @@ class Sort(Pipe):
         reverse: bool = True,
         **kwargs,
     ):
-        super(Sort, self).__init__()
+        super(Sort, self).__init__(**kwargs)
         self.keys = keys
         self.reverse = reverse
 

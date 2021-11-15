@@ -2,6 +2,7 @@ import abc
 import json
 from collections import OrderedDict
 from typing import Callable
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import T
@@ -9,7 +10,9 @@ from typing import Tuple
 from typing import Union
 
 from ...utils.json_struct import apply_to_json_struct
+from ..component import Component
 from .base import Pipe
+from .control.condition import HasPrefix
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import check_equal_arrays
 
@@ -19,8 +22,14 @@ class PipeProcessError(Exception):
 
     def __init__(self, meta_pipe: Pipe, pipe: Pipe, batch: Batch, **kwargs):
         keys = _infer_keys(batch)
-        pipe_repr = apply_to_json_struct(pipe.to_json_struct(), str)
-        meta_pipe_repr = apply_to_json_struct(meta_pipe.to_json_struct(), str)
+        if isinstance(pipe, Component):
+            pipe_repr = apply_to_json_struct(pipe.to_json_struct(), str)
+        else:
+            pipe_repr = str(pipe)
+        if isinstance(pipe, Component):
+            meta_pipe_repr = apply_to_json_struct(meta_pipe.to_json_struct(), str)
+        else:
+            meta_pipe_repr = str(meta_pipe)
         msg = (
             f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)}\n"
             f"- batch of type {type(batch)} with keys={keys}\n"
@@ -212,3 +221,15 @@ class BlockSequential(MetaPipe):
         for _, p in self.blocks.items():
             input_keys = p.output_keys(input_keys)
         return input_keys
+
+
+class ParallelbyField(Parallel):
+    """Run a pipe for each field"""
+
+    def __init__(self, pipes: Dict[str, Pipe], **kwargs):
+        super(ParallelbyField, self).__init__(**kwargs)
+        self.pipes = {
+            field: Sequential(pipe, input_filter=HasPrefix(f"{field}."))
+            for field, pipe in pipes.items()
+            if pipe is not None
+        }

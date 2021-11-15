@@ -11,6 +11,7 @@ import rich
 from .base import Pipe
 from .control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import Eg
 
 
 class Identity(Pipe):
@@ -44,7 +45,13 @@ class Lambda(Pipe):
         self._output_keys = output_keys
         self.allow_kwargs = allow_kwargs
 
-    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        return self._call_all(batch, **kwargs)
+
+    def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        return self._call_all(examples, **kwargs)
+
+    def _call_all(self, batch: Union[List[Eg], Batch], **kwargs) -> Batch:
         """The call of the pipeline process"""
         if not self.allow_kwargs:
             kwargs = {}
