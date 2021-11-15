@@ -8,7 +8,6 @@ from typing import List
 from typing import Optional
 from typing import Sized
 
-import dill
 import faiss
 import numpy as np
 from datasets import Dataset
@@ -304,13 +303,6 @@ class FaissIndex(Index):
             RenameKeys({key: output for key in inputs}),
             FilterKeys(In([output, IDX_COL])),
         )
-
-    def dill_inspect(self) -> Dict[str, bool]:
-        """check if the module can be pickled."""
-        return {
-            "__all__": dill.pickles(self),
-            **{k: dill.pickles(v) for k, v in self.__getstate__().items()},
-        }
 
     def __getstate__(self):
         state = self.__dict__.copy()

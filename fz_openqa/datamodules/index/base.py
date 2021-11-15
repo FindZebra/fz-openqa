@@ -1,4 +1,3 @@
-from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -8,12 +7,11 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
-import dill
 from datasets import Dataset
 from rich.progress import track
 
+from fz_openqa.datamodules.component import Component
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 
 
 @dataclass
@@ -23,7 +21,7 @@ class SearchResult:
     tokens: Optional[List[List[str]]] = None
 
 
-class Index:
+class Index(Component):
     """Keep an index of a Dataset and search u
     sing queries."""
 
@@ -32,6 +30,7 @@ class Index:
     is_indexed: bool = False
 
     def __init__(self, dataset: Dataset, *, verbose: bool = False, **kwargs):
+        super(Index, self).__init__(**kwargs)
         self.verbose = verbose
         self.build(dataset=dataset, **kwargs)
 
@@ -39,13 +38,6 @@ class Index:
         params = {"is_indexed": self.is_indexed, "index_name": self.index_name}
         params = [f"{k}={v}" for k, v in params.items()]
         return f"{self.__class__.__name__}({', '.join(params)})"
-
-    def dill_inspect(self) -> bool:
-        """check if the module can be pickled."""
-        return dill.pickles(self)
-
-    def _fingerprint(self) -> str:
-        return get_fingerprint(self)
 
     @abstractmethod
     def build(self, dataset: Dataset, **kwargs):

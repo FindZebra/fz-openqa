@@ -44,6 +44,7 @@ def run(config):
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
+    dataset_builder.subset_size = [200, 50, 50]
 
     # define the corpus builder
     corpus_builder = MedQaCorpusBuilder(

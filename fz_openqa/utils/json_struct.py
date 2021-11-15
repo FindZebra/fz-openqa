@@ -11,7 +11,7 @@ from typing import T
 from typing import Union
 
 
-def apply_to_json_struct(data: Union[List, Dict], fn: Callable) -> Union[List, Dict]:
+def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Union[List, Dict]:
     """
     Apply a function to a json-like structure
     Parameters
@@ -20,16 +20,21 @@ def apply_to_json_struct(data: Union[List, Dict], fn: Callable) -> Union[List, D
         json-like structure
     fn
         function to apply
+    kwargs
+        keyword arguments to pass to fn
+
     Returns
     -------
     json-like structure
     """
     if isinstance(data, dict):
-        return {key: apply_to_json_struct(value, fn) for key, value in data.items()}
+        return {
+            key: apply_to_json_struct(value, fn, key=key, **kwargs) for key, value in data.items()
+        }
     elif isinstance(data, list):
-        return [apply_to_json_struct(value, fn) for value in data]
+        return [apply_to_json_struct(value, fn, **kwargs) for value in data]
     else:
-        return fn(data)
+        return fn(data, **kwargs)
 
 
 def flatten_json_struct(data: Union[List, Dict]) -> Iterable[Any]:

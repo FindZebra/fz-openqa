@@ -45,13 +45,6 @@ class ColbertIndex(FaissIndex):
         """
         super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
-    def dill_inspect(self) -> Dict[str, bool]:
-        """check if the module can be pickled."""
-        return {
-            "__all__": dill.pickles(self),
-            **{k: dill.pickles(v) for k, v in self.__getstate__().items()},
-        }
-
     def _init_index(self, batch):
         """
         Initialize the index

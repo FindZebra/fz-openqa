@@ -5,8 +5,6 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
-import dill
-import numpy as np
 import rich
 from datasets import Dataset
 from omegaconf import OmegaConf
@@ -27,7 +25,6 @@ from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
-
 
 # load the default es configuration
 DEFAULT_ES_BODY = OmegaConf.to_object(
@@ -91,14 +88,6 @@ class ElasticSearchIndex(Index):
 
         # important
         super(ElasticSearchIndex, self).__init__(dataset=dataset, **kwargs)
-
-    def dill_inspect(self) -> Dict[str, Any]:
-        output = {
-            "__all__": dill.pickles(self),
-            "engine": dill.pickles(self.engine),
-        }
-
-        return output
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
