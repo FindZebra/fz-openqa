@@ -1,8 +1,14 @@
+datamodule.index_builder.filter_mode:
+  _target_: ray.tune.grid_search
+  values:
+    - null
+    - "scispacy"
+
 datamodule.relevance_classifier._target_:
   _target_: ray.tune.grid_search
   values:
-    #- fz_openqa.datamodules.pipes.ExactMatch
-    #- fz_openqa.datamodules.pipes.MetaMapMatch
+    - fz_openqa.datamodules.pipes.ExactMatch
+    - fz_openqa.datamodules.pipes.MetaMapMatch
     - fz_openqa.datamodules.pipes.ScispaCyMatch
 
 datamodule.builder.corpus_builder._target_:
@@ -10,6 +16,6 @@ datamodule.builder.corpus_builder._target_:
   values:
     - fz_openqa.datamodules.builders.MedQaCorpusBuilder
     - fz_openqa.datamodules.builders.FzCorpusBuilder
+    - fz_openqa.datamodules.builders.WikipediaCorpusBuilder
     - fz_openqa.datamodules.builders.FZxMedQaCorpusBuilder
-    #- fz_openqa.datamodules.builders.WikipediaBuilder
-    #- fz_openqa.datamodules.builders.FZxMedQaxWikiCorpusBuilder
+    - fz_openqa.datamodules.builders.FZxMedQaxWikiCorpusBuilder
