@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Dict
 from typing import Iterable
@@ -8,10 +9,12 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import datasets
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
 from pytorch_lightning import Callback
 
 from fz_openqa.utils.datastruct import Batch
@@ -31,23 +34,25 @@ class StorePredictionsCallback(Callback):
     _writer: Optional[pq.ParquetWriter] = None
     is_written: bool = False
     cache_file: Optional[Union[str, Path]] = None
-    name: Optional[str]
 
     def __init__(
         self,
         cache_dir: Optional[str] = None,
         store_fields: Optional[List[str]] = None,
-        perstist_cache_name: Optional[str] = None,
-        name: Optional[str] = None,
+        cache_name: Optional[str] = None,
+        persist: bool = False,
     ):
         self.cache_dir = cache_dir
-        self.name = name
-        if perstist_cache_name is None:
+        if persist is False:
             self.cache_name = None
         else:
-            if name is not None:
-                perstist_cache_name = f"{perstist_cache_name}-{name}"
-            self.cache_name = f"{perstist_cache_name}.arrow"
+            if cache_name is None:
+                cache_name = uuid.uuid4().hex
+            self.cache_name = f"{cache_name}.arrow"
+            if self.cache_dir is None:
+                self.cache_dir = Path("~/.cache/fz-openqa/")
+                if not self.cache_dir.exists():
+                    self.cache_dir.mkdir(parents=True)
 
         if store_fields is None:
             store_fields = []
@@ -84,7 +89,6 @@ class StorePredictionsCallback(Callback):
         if self.cache_name is None:
             self.cache_file = tempfile.TemporaryFile(dir=self.cache_dir)
         else:
-            assert self.cache_dir is not None, "cache_dir must be set if cache_name is set"
             self.cache_file = os.path.join(self.cache_dir, self.cache_name)
             if os.path.exists(self.cache_file):
                 self.is_written = True

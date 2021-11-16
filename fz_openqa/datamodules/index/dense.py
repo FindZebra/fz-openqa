@@ -36,6 +36,7 @@ from fz_openqa.datamodules.pipes import ToNumpy
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import is_index_contiguous
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ class FaissIndex(Index):
         # check the ordering of the indexes
         indexes = batch[IDX_COL]
         msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
-        assert all(indexes[:-1] + 1 == indexes[1:]), msg
+        assert is_index_contiguous(indexes), msg
         msg = (
             f"The stored index and the indexes are not contiguous, "
             f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"

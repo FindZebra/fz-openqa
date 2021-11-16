@@ -1,0 +1,2 @@
+class TestPredict:
+    pass

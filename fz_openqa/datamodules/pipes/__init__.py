@@ -29,6 +29,7 @@ from .nesting import Nest
 from .passage import GeneratePassages
 from .pprint import PrintBatch
 from .pprint import PrintText
+from .predict import Predict
 from .relevance import ExactMatch
 from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier

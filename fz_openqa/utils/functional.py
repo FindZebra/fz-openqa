@@ -104,3 +104,8 @@ def iter_batch_rows(batch: Batch) -> Iterable[Dict]:
     batch_size = infer_batch_size(batch)
     for i in range(batch_size):
         yield get_batch_eg(batch, idx=i)
+
+
+def is_index_contiguous(indexes):
+    """Check if indexes are contiguous: i.e I[i+1] = I[i] + 1"""
+    return all(p + 1 == n for p, n in zip(indexes[:-1], indexes[1:]))
