@@ -12,7 +12,7 @@ from datasets import Split
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
@@ -54,7 +54,7 @@ class OpenQaDataset(DatasetDict):
 
 
 class OpenQaBuilder(DatasetBuilder):
-    column_names = MedQABuilder.column_names + [
+    column_names = MedQaBuilder.column_names + [
         "document.row_idx",
         "document.retrieval_score",
         "document.match_score",
@@ -63,7 +63,7 @@ class OpenQaBuilder(DatasetBuilder):
     def __init__(
         self,
         *,
-        dataset_builder: MedQABuilder,
+        dataset_builder: MedQaBuilder,
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,

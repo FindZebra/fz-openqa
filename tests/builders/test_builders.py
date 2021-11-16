@@ -7,7 +7,7 @@ from datasets import Dataset, DatasetDict, Split
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
@@ -80,9 +80,9 @@ class TestBuilder(TestCase):
             self.assertTrue(all(len(v) == len(x) for x in batch.values()))
 
 
-class TestMedQABuilder(TestBuilder):
+class TestMedQaBuilder(TestBuilder):
     config_override = {'use_subset': False}
-    cls = MedQABuilder
+    cls = MedQaBuilder
 
     def test_split_lengths(self):
         """Test the size of the splits"""
@@ -110,7 +110,7 @@ class TestOpenQaBuilder(TestBuilder):
     def get_default_config(self):
         # dataset builder
         dataset_config = get_default_config()
-        dataset_builder = MedQABuilder(**dataset_config)
+        dataset_builder = MedQaBuilder(**dataset_config)
 
         # corpus builder
         corpus_config = get_default_config()

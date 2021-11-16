@@ -26,7 +26,7 @@ from fz_openqa.utils.pretty import pretty_decode
 logger = logging.getLogger(__name__)
 
 
-class MedQABuilder(HfDatasetBuilder):
+class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = medqa.__file__
 

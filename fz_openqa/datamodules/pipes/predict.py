@@ -12,6 +12,7 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -125,17 +126,20 @@ class Predict(Pipe):
     _loaded_table: Optional[pa.Table] = None
     _loaded_split: Optional[Split] = None
 
-    def __init__(self, *, model: pl.LightningModule, **kwargs):
+    def __init__(self, model: pl.LightningModule, requires_cache: bool = False, **kwargs):
         """
         Parameters
         ----------
         model
             The model to use for predictions.
+        requires_cache
+            If True, the cache file must be set before calling `__call__`.
         kwargs
             Additional keyword arguments passed to `Pipe`.
         """
         super(Predict, self).__init__(**kwargs)
         self.model = model
+        self.requires_cache = requires_cache
 
     @functools.singledispatchmethod
     @torch.no_grad()
@@ -204,7 +208,6 @@ class Predict(Pipe):
                 collate_fn=collate_fn,
                 loader_kwargs=loader_kwargs,
             )
-            assert callback.is_written, "Callback is not written. Something went wrong."
 
         # Retrieve the cache file
         cache_file = callback.cache_file
@@ -250,7 +253,7 @@ class Predict(Pipe):
             ), "Split must be provided to access the table."
             if self._loaded_table is None:
                 self._loaded_table = pq.read_table(self.cache_file, **read_args)
-        elif split == self._loaded_split:
+        elif split == self._loaded_split and self._loaded_table is not None:
             pass
         else:
             cache = self.cache_file[split]
@@ -292,6 +295,11 @@ class Predict(Pipe):
         if use_cache:
             return self._process_batch_with_cache(batch, idx=idx, split=split)
         else:
+            if self.requires_cache:
+                raise ValueError(
+                    "This pipe explicitly requires calling "
+                    "`pipe.cache()` before subsequent uses."
+                )
             return self._process_batch_without_cache(batch, **kwargs)
 
     def _process_batch_with_cache(

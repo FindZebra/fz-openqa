@@ -3,7 +3,7 @@ import numpy as np
 import rich
 from rich.progress import track
 
-from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
@@ -44,7 +44,7 @@ corpus = MedQaCorpusBuilder(
 )
 
 # load the QA dataset
-dm = MedQABuilder(
+dm = MedQaBuilder(
     tokenizer=tokenizer,
     train_batch_size=100,
     num_proc=4,
