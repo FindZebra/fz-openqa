@@ -10,11 +10,11 @@ from typing import Sized
 
 import faiss
 import numpy as np
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
-from pytorch_lightning import LightningModule
 from pytorch_lightning import Trainer
 from rich.progress import track
 from torch.utils.data import DataLoader
@@ -22,20 +22,18 @@ from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
-from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import SearchResult
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Forward
-from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import ToNumpy
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
 
 logger = logging.getLogger(__name__)
@@ -104,9 +102,7 @@ class FaissIndex(Index):
 
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer
-        self.process = Sequential(
-            Parallel(Forward(model=model), FilterKeys(In([IDX_COL]))), ToNumpy()
-        )
+        self.predict_pipe = Predict(model=self.model)
 
         # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
         self.postprocess = self.get_rename_output_names_pipe(
@@ -123,12 +119,16 @@ class FaissIndex(Index):
     def build(self, dataset: Dataset, **kwargs):
         """Index a dataset."""
 
+        # if a trainer is available, use it to process and cache the whole dataset
+        if self.trainer is not None:
+            self._predict_and_cache(dataset)
+
         # instantiate the base data loader
         loader = self._init_loader(dataset)
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
-        processed_batches = self._process_batches(loader, trainer=self.trainer, key="document")
+        processed_batches = self._process_batches(loader)
 
         # build an iterator over the processed batches
         it = iter(processed_batches)
@@ -149,6 +149,16 @@ class FaissIndex(Index):
         logger.info(
             f"Index is_trained={self._index.is_trained}, "
             f"size={self._index.ntotal}, type={type(self._index)}"
+        )
+
+    def _predict_and_cache(self, dataset: Dataset):
+        self.predict_pipe.invalidate_cache()
+        self.predict_pipe.cache(
+            dataset,
+            trainer=self.trainer,
+            collate_fn=self.collate,
+            loader_kwargs=self.loader_kwargs,
+            persist=False,
         )
 
     def _init_index(self, batch):
@@ -196,20 +206,16 @@ class FaissIndex(Index):
     ) -> SearchResult:
         """Search the index using the `query` and
         return the index of the results within the original dataset."""
-        query = self.process(query)
+        query = self.predict_pipe(query)
         query = self.postprocess(query)
         return self._query_index(query, k=k)
-
-    @search.register(DataLoader)
-    def _(self, query: DataLoader, *, k: int = 1, **kwargs) -> Iterator[SearchResult]:
-        """This method is called if `query` is of type DataLoader"""
-        processed_batches = self._process_batches(query, trainer=self.trainer, key="question")
-        for batch in processed_batches:
-            yield self._query_index(batch, k=k)
 
     @search.register(Dataset)
     def _(self, query: Dataset, *, k: int = 1, **kwargs) -> Iterator[SearchResult]:
         """This method is called if `query` is of type Dataset"""
+        if self.trainer:
+            self._predict_and_cache(query)
+
         loader = self._init_loader(query)
         return self.search(loader, k=k, **kwargs)
 
@@ -226,8 +232,8 @@ class FaissIndex(Index):
 
     def _init_loader(self, dataset):
         loader = DataLoader(
-            self._wrap_dataset(dataset),
-            collate_fn=self._wrap_collate_fn(self.collate),
+            dataset,
+            collate_fn=self.collate,
             shuffle=False,
             **self.loader_kwargs,
         )
@@ -236,67 +242,33 @@ class FaissIndex(Index):
     def _process_batches(
         self,
         loader: DataLoader,
-        trainer: Optional[Trainer] = None,
         progress_bar: bool = True,
-        key: str = "document",
     ) -> Iterable[Batch]:
 
         """
         This method iterates over batches, which for each batch:
-        1. process the batch using the model
+        1. process the batch using the model (or load from cache)
         2. postprocess the output of the model (renaming keys, filtering keys, etc)
 
         This function processes batches as they are loaded from the dataloader.
         """
 
         # modify the dataloader to return __idx__ aside from the original data
-        loader = self._wrap_dataloader(loader)
         assert isinstance(
             loader.sampler, SequentialSampler
         ), "Cannot handle DataLoader with shuffle=True."
 
-        if trainer is not None and isinstance(self.model, LightningModule):
-            # retrieve the callback used to store the results
-            store_results_callback = self._get_store_predictions_callback(self.trainer, key=key)
+        if progress_bar:
+            loader = track(iter(loader), description="Processing dataset")
 
-            # run the trainer predict method, model.forward() is called
-            # for each batch and store into the callback cache
-            if store_results_callback.is_written:
-                logger.info(
-                    f"Loading pre-computed vectors from {store_results_callback.cache_file}"
-                )
-            else:
-                trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
-
-            # return an iterator over the cached batches
-            output_batches = store_results_callback.iter_batches()
-        else:
-            if progress_bar:
-                loader = track(iter(loader), description="Processing dataset")
-
-            # process each batch sequentially using `self.process`
-            output_batches = map(self.process, loader)
-
-        final_outputs = map(self.postprocess, output_batches)
-        for batch in final_outputs:
+        # process each batch sequentially using `self.process`
+        i = 0
+        for batch in loader:
+            bs = infer_batch_size(batch)
+            batch = self.predict_pipe(batch, idx=list(range(i, i + bs)))
+            batch = self.postprocess(batch)
+            i += bs
             yield batch
-
-    def _get_store_predictions_callback(
-        self, trainer: Trainer, *, key: str
-    ) -> StorePredictionsCallback:
-        store_results_callbacks = list(
-            filter(lambda c: isinstance(c, StorePredictionsCallback), trainer.callbacks)
-        )
-        msg = f"Callback of type {type(StorePredictionsCallback)} must be provided."
-        assert len(store_results_callbacks) > 0, msg
-        if len(store_results_callbacks) == 1:
-            store_results_callback = store_results_callbacks[0]
-        else:
-            store_results_callbacks = list(filter(lambda s: s.name == key, store_results_callbacks))
-            "One and only one StorePredictionsCallback must be provided with name=='document'"
-            assert len(store_results_callbacks) == 1, msg
-            store_results_callback = store_results_callbacks[0]
-        return store_results_callback
 
     def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:
         """Format the output of the model"""
@@ -313,30 +285,3 @@ class FaissIndex(Index):
     def __setstate__(self, state):
         state["_index"] = faiss.deserialize_index(state["_index"])
         self.__dict__.update(state)
-
-    def _wrap_dataloader(self, loader: DataLoader) -> DataLoader:
-        """
-        Return a copy of the original dataset such that the `dataset` and `collate_fn` are
-        updated such as to return the field `__idx__` along the original data.
-        """
-        if isinstance(loader.dataset, AddRowIdx):
-            return loader
-
-        def exclude(k):
-            excluded_values = ["dataset", "collate_fn", "sampler", "batch_sampler"]
-            return k in excluded_values or k.startswith("_")
-
-        args = {k: v for k, v in loader.__dict__.items() if not exclude(k)}
-        return DataLoader(
-            dataset=self._wrap_dataset(loader.dataset),
-            collate_fn=self._wrap_collate_fn(loader.collate_fn),
-            **args,
-        )
-
-    def _wrap_collate_fn(self, collate_fn: Callable) -> Pipe:
-        """Wrap the collate_fn to return IDX_COL along the batch values"""
-        return Parallel(collate_fn, Collate(IDX_COL))
-
-    def _wrap_dataset(self, dataset: Dataset) -> TorchDataset:
-        """Wrap the dataset to return IDX_COL along the batch values"""
-        return AddRowIdx(dataset)

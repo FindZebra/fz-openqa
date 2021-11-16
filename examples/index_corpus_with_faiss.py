@@ -75,26 +75,9 @@ def run(config: DictConfig) -> None:
     logger.info(f"Model {type(model)} loaded")
     logger.info(f"Model fingerprint: {get_fingerprint(model.module.bert)}")
 
-    # Init callbacks to store results
-    cache_name = get_fingerprint(OmegaConf.to_object(config))
-    if not config.get("persist", True):
-        cache_name = None
-    callbacks = [
-        StorePredictionsCallback(
-            cache_dir=config.get("sys.cache_dir", default_cache_dir),
-            perstist_cache_name=cache_name,
-            name="document",
-        ),
-        StorePredictionsCallback(
-            cache_dir=config.get("sys.cache_dir", default_cache_dir),
-            perstist_cache_name=cache_name,
-            name="question",
-        ),
-    ]
-
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
-    trainer: Optional[Trainer] = instantiate(config.trainer, callbacks=callbacks)
+    trainer: Optional[Trainer] = instantiate(config.trainer)
     if isinstance(trainer, (dict, DictConfig)):
         logger.info("No Trainer was provided. PyTorch Lightning acceleration cannot be used.")
         trainer = None

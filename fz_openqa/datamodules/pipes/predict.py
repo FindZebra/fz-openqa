@@ -141,6 +141,12 @@ class Predict(Pipe):
         self.model = model
         self.requires_cache = requires_cache
 
+    def invalidate_cache(self):
+        """Reset the cache"""
+        self._loaded_table = None
+        self.cache_file = None
+        self._loaded_split = None
+
     @functools.singledispatchmethod
     @torch.no_grad()
     def cache(

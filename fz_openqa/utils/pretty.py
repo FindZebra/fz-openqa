@@ -71,8 +71,8 @@ def _pprint_batch(batch: Batch, header=None) -> Dict[str, Exception]:
 
     keys = list(data[0].keys())
     maxs = {k: max([len(d[k]) for d in data]) for k in keys}
-    _s = "\t"
-    _sep = "  [white]|[/white]  "
+    _s = "  "
+    _sep = " [white]|[/white] "
     _row_sep = (
         f"{_s}[white]{'_'*maxs['key']}"
         f"{_sep}{'_'*maxs['shape']}"
