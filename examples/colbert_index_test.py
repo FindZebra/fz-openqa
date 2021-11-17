@@ -112,6 +112,7 @@ def run(config: DictConfig) -> None:
         n_samples = min(n_samples, len(corpus))
         corpus = corpus.select(range(n_samples))
     batch = corpus[:]
+    # rich.print(batch['document.row_idx'][0], batch['document.text'][0])
 
     # load the bert model model
     model = AutoModel.from_pretrained(bert_id)
@@ -149,16 +150,21 @@ def run(config: DictConfig) -> None:
     k = 3  # number of retrieved documents
     query = gen_example_query(loader.tokenizer)
     # todo: remove padding from tokenizer
+
     xq = model(query["question.input_ids"], query["question.attention_mask"]).last_hidden_state
     xq = np.ascontiguousarray(xq.numpy())
 
     # Perform search on index
     for i, eg in enumerate(xq):
         rich.print(query["question.text"][i])
-        distances, indices = index.search(eg, k)
+        _, indices = index.search(eg, k)
         doc_idxs = set(indices.flatten())
-        rich.print([f'{idx}: {corpus["document.text"][idx]}' for idx in doc_idxs])
-        # todo: use tok2doc list to find original document after search
+        # rich.print([f'{idx}: {corpus["document.text"][idx]}' for idx in doc_idxs])
+        rich.print([f"{idx}: {tok2doc[idx]}" for idx in doc_idxs])
+
+    # todo: use tok2doc list to retrieve the related documents and
+    # apply MaxSim to filter them further
+    print(tok2doc[999])
 
 
 if __name__ == "__main__":
