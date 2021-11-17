@@ -158,6 +158,7 @@ def run(config: DictConfig) -> None:
         distances, indices = index.search(eg, k)
         doc_idxs = set(indices.flatten())
         rich.print([f'{idx}: {corpus["document.text"][idx]}' for idx in doc_idxs])
+        # todo: use tok2doc list to find original document after search
 
 
 if __name__ == "__main__":
