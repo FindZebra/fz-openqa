@@ -164,7 +164,6 @@ def run(config: DictConfig) -> None:
 
     # todo: use tok2doc list to retrieve the related documents and
     # apply MaxSim to filter them further
-    print(tok2doc[999])
 
 
 if __name__ == "__main__":
