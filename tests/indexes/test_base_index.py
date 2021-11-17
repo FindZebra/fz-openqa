@@ -9,7 +9,7 @@ from datasets import Dataset
 from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.index import Index
-from fz_openqa.datamodules.index.base import SearchResult
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
 
@@ -18,7 +18,7 @@ class TestIndex(TestCase, ABC):
     # todo: test search_one
     _bert_id = "google/bert_uncased_L-2_H-128_A-2"
     cls: Index.__class__ = Index
-    k = 3
+    k = 100
     pt_cols = ["input_ids", "attention_mask"]
 
     def setUp(self) -> None:
@@ -105,6 +105,10 @@ class TestIndex(TestCase, ABC):
 
         # check the output type
         self.assertIsInstance(output, SearchResult)
+
+
+        self.assertTrue((np.array(output.index)>=0).all())
+        self.assertTrue((np.array(output.index)<len(self.corpus)).all())
 
         # check shape of the output
         expected_shape = (len(self.dataset), self.k)

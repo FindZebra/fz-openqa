@@ -6,11 +6,11 @@ from typing import Iterable
 from typing import Iterator
 from typing import List
 from typing import Optional
-from typing import Sized
+from typing import Union
 
 import faiss
 import numpy as np
-import rich
+import pytorch_lightning as pl
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -18,12 +18,11 @@ from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.base import SearchResult
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Pipe
@@ -37,23 +36,6 @@ from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
-
-
-class AddRowIdx(TorchDataset):
-    """This class is used to add the column `IDX_COL` to the batch"""
-
-    def __init__(self, dataset: Sized):
-        self.dataset = dataset
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, item) -> Batch:
-        batch = self.dataset[item]
-        batch[IDX_COL] = item
-        return batch
 
 
 class FaissIndex(Index):
@@ -70,7 +52,7 @@ class FaissIndex(Index):
         self,
         dataset: Dataset,
         *,
-        model: Callable,
+        model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
         nlist: int = 10,
         index_key: str = "document.row_idx",
@@ -78,6 +60,8 @@ class FaissIndex(Index):
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
         metric_type: str = faiss.METRIC_INNER_PRODUCT,
+        persist_cache: bool = False,
+        cache_dir: Optional[str] = None,
         **kwargs,
     ):
 
@@ -95,14 +79,17 @@ class FaissIndex(Index):
 
         # trainer and dataloader
         self.trainer = trainer
-        self.loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
+        self.loader_kwargs = loader_kwargs
 
         # collate pipe use to convert dataset rows into a batch
         self.collate = collate_pipe or Collate()
 
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer
-        self.predict_pipe = Predict(model=self.model)
+        self.persist_cache = persist_cache
+        self.cache_dir = cache_dir
+        self.predict_docs = Predict(model=self.model)
+        self.predict_queries = Predict(model=self.model)
 
         # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
         self.postprocess = self.get_rename_output_names_pipe(
@@ -120,15 +107,20 @@ class FaissIndex(Index):
         """Index a dataset."""
 
         # if a trainer is available, use it to process and cache the whole dataset
+        loader_args = {}
         if self.trainer is not None:
-            self._predict_and_cache(dataset)
+            self._predict_and_cache(dataset, predict=self.predict_docs, collate_fn=self.collate)
+            loader_args["batch_size"] = 1000
 
         # instantiate the base data loader
-        loader = self._init_loader(dataset)
+        loader = self._init_loader(dataset, **loader_args)
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
-        processed_batches = self._process_batches(loader)
+        desc = "Ingest Faiss index"
+        if self.trainer is not None:
+            desc += " (loading vectors from cache)"
+        processed_batches = self._process_batches(loader, predict=self.predict_docs, desc=desc)
 
         # build an iterator over the processed batches
         it = iter(processed_batches)
@@ -151,14 +143,17 @@ class FaissIndex(Index):
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
 
-    def _predict_and_cache(self, dataset: Dataset):
-        self.predict_pipe.invalidate_cache()
-        self.predict_pipe.cache(
+    def _predict_and_cache(
+        self, dataset: Union[Dataset, DatasetDict], *, predict: Predict, collate_fn: Callable
+    ):
+        predict.invalidate_cache()
+        predict.cache(
             dataset,
             trainer=self.trainer,
-            collate_fn=self.collate,
+            collate_fn=collate_fn,
             loader_kwargs=self.loader_kwargs,
-            persist=False,
+            persist=self.persist_cache,
+            cache_dir=self.cache_dir,
         )
 
     def _init_index(self, batch):
@@ -194,27 +189,31 @@ class FaissIndex(Index):
         """Query the index given a batch of data"""
         vector = self._get_vector_from_batch(query)
         score, indices = self._index.search(vector, k)
-        return SearchResult(score=score, index=indices)
+        return SearchResult(score=score, index=indices, dataset_size=self.dataset_size)
 
     @singledispatchmethod
     def search(
         self,
         query: Batch,
         *,
+        idx: Optional[List[int]] = None,
+        split: Optional[Split] = None,
         k: int = 1,
         **kwargs,
     ) -> SearchResult:
         """Search the index using the `query` and
         return the index of the results within the original dataset."""
-        query = self.predict_pipe(query)
+        query = self.predict_queries(query, idx=idx, split=split)
         query = self.postprocess(query)
         return self._query_index(query, k=k)
 
     @search.register(Dataset)
-    def _(self, query: Dataset, *, k: int = 1, **kwargs) -> Iterator[SearchResult]:
+    def _(
+        self, query: Dataset, *, k: int = 1, collate_fn: Callable, **kwargs
+    ) -> Iterator[SearchResult]:
         """This method is called if `query` is of type Dataset"""
         if self.trainer:
-            self._predict_and_cache(query)
+            self.cache_query_dataset(query, collate_fn=collate_fn)
 
         loader = self._init_loader(query)
         return self.search(loader, k=k, **kwargs)
@@ -224,24 +223,35 @@ class FaissIndex(Index):
         """This method is called if `query` is of type DatasetDict"""
         return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
 
+    def cache_query_dataset(
+        self, dataset: Union[Dataset, DatasetDict], *, collate_fn: Callable, **kwargs
+    ):
+        self._predict_and_cache(dataset, predict=self.predict_queries, collate_fn=collate_fn)
+
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""
         vector: np.ndarray = batch[self.vectors_column_name]
         vector = vector.astype(self._dtype)
         return vector
 
-    def _init_loader(self, dataset):
+    def _init_loader(self, dataset, **kwargs):
+        _kwargs = self.loader_kwargs.copy()
+        for k, v in kwargs.items():
+            _kwargs[k] = v
         loader = DataLoader(
             dataset,
             collate_fn=self.collate,
             shuffle=False,
-            **self.loader_kwargs,
+            **_kwargs,
         )
         return loader
 
     def _process_batches(
         self,
         loader: DataLoader,
+        *,
+        predict: Predict,
+        desc: str = "Processing dataset",
         progress_bar: bool = True,
     ) -> Iterable[Batch]:
 
@@ -259,13 +269,13 @@ class FaissIndex(Index):
         ), "Cannot handle DataLoader with shuffle=True."
 
         if progress_bar:
-            loader = track(iter(loader), description="Processing dataset")
+            loader = track(iter(loader), description=desc)
 
         # process each batch sequentially using `self.process`
         i = 0
         for batch in loader:
             bs = infer_batch_size(batch)
-            batch = self.predict_pipe(batch, idx=list(range(i, i + bs)))
+            batch = predict(batch, idx=list(range(i, i + bs)))
             batch = self.postprocess(batch)
             i += bs
             yield batch
@@ -279,6 +289,8 @@ class FaissIndex(Index):
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        # state["model"] = None # todo: check this
+        state["trainer"] = None
         state["_index"] = faiss.serialize_index(state["_index"])
         return state
 

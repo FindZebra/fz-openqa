@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
-from itertools import tee
 from itertools import zip_longest
 from typing import Any
 from typing import Callable
@@ -175,6 +174,7 @@ class RelevanceClassifier(Pipe):
 
         # reshape as [batch_size, n_documents] and cast as Tensor
         output[self.output_key] = nested_list(results, shape=[-1, n_documents])
+
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:

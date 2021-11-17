@@ -17,10 +17,10 @@ from fz_openqa.utils.json_struct import reduce_json_struct
 logger = logging.getLogger(__name__)
 
 
-def leaf_to_json_struct(v: Any) -> Union[Dict, List]:
+def leaf_to_json_struct(v: Any, append_self: bool = False) -> Union[Dict, List]:
     """Convert a leaf value into a json structure."""
     if isinstance(v, Component):
-        return v.to_json_struct()
+        return v.to_json_struct(append_self=append_self)
     elif isinstance(v, list):
         return [leaf_to_json_struct(x) for x in v]
     elif isinstance(v, dict):
@@ -80,11 +80,22 @@ class Component:
             allows both a boolean and a dictionary of booleans.
             If `reduce` is True, the dictionary is collapsed into a single boolean.
         """
-        attrs = {"__self__": self, **self._get_attributes()}
-        output = {k: dill.pickles(v) for k, v in attrs.items()}
         if reduce:
-            output = reduce_json_struct(output, all)
-        return output
+            return dill.pickles(self)
+        else:
+            data = self.to_json_struct()
+
+            def maybe_pickles(v: Any, key: str) -> str:
+                """apply `dill.pickles`, excepts if key==__name__"""
+                if key == "__name__":
+                    return v
+                else:
+                    try:
+                        return dill.pickles(v)
+                    except Exception:
+                        return "<ERROR>"
+
+            return apply_to_json_struct(data, maybe_pickles)
 
     @staticmethod
     def _fingerprint(x: Any) -> str:
@@ -123,21 +134,23 @@ class Component:
             fingerprint(s) (hex-digested hash of the object),
             allows both a string and a nested structure of strings.
         """
+        data = self.to_json_struct()
+
+        def maybe_get_fingerprint(v: Any, key: str) -> str:
+            """return the fingerprint, excepts if key==__name__"""
+            if key == "__name__":
+                return v
+            else:
+                return get_fingerprint(v)
+
+        fingerprints = apply_to_json_struct(data, maybe_get_fingerprint)
+
         if reduce:
-            return self._fingerprint(self)
-        else:
-            data = self.to_json_struct()
+            fingerprints = get_fingerprint(fingerprints)
 
-            def maybe_get_fingerprint(v: Any, key: str) -> str:
-                """return the fingerprint, excepts if key==__name__"""
-                if key == "__name__":
-                    return v
-                else:
-                    return get_fingerprint(v)
+        return fingerprints
 
-            return apply_to_json_struct(data, maybe_get_fingerprint)
-
-    def to_json_struct(self) -> Dict[str, Any]:
+    def to_json_struct(self, append_self: bool = False) -> Dict[str, Any]:
         """
         Return a dictionary representation of the object.
 
@@ -149,8 +162,10 @@ class Component:
         attributes = self._get_attributes()
 
         data = {"__name__": type(self).__name__, **attributes}
+        if append_self:
+            data["__self__"] = self
         data = {k: v for k, v in data.items() if not (k == "id" and v is None)}
-        data = {k: leaf_to_json_struct(v) for k, v in data.items()}
+        data = {k: leaf_to_json_struct(v, append_self=append_self) for k, v in data.items()}
         return data
 
     def _get_attributes(self) -> Dict:

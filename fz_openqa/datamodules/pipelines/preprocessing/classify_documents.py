@@ -1,7 +1,7 @@
 from datasets import Dataset
 
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -16,10 +16,7 @@ class ClassifyDocuments(Sequential):
     ):
         super().__init__(
             ApplyAsFlatten(
-                FetchDocuments(
-                    corpus_dataset=corpus_dataset,
-                    keys=["document.text"],
-                ),
+                Sequential(FetchDocuments(corpus_dataset=corpus_dataset, keys=["document.text"])),
                 input_filter=In(["document.row_idx"]),
                 update=True,
             ),

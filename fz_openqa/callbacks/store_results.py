@@ -9,7 +9,6 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import datasets
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -32,7 +31,6 @@ class StorePredictionsCallback(Callback):
 
     _table: Optional[pa.Table] = None
     _writer: Optional[pq.ParquetWriter] = None
-    is_written: bool = False
     cache_file: Optional[Union[str, Path]] = None
 
     def __init__(
@@ -42,23 +40,30 @@ class StorePredictionsCallback(Callback):
         cache_name: Optional[str] = None,
         persist: bool = False,
     ):
-        self.cache_dir = cache_dir
+        if cache_dir is None:
+            # todo: set proper default cache path
+            cache_dir = ".cache/fz-openqa/"
+
+        self.cache_dir = Path(cache_dir) / "predictions"
+
+        if not self.cache_dir.exists():
+            self.cache_dir.mkdir(parents=True)
+
         if persist is False:
-            self.cache_name = None
-        else:
-            if cache_name is None:
-                cache_name = uuid.uuid4().hex
-            self.cache_name = f"{cache_name}.arrow"
-            if self.cache_dir is None:
-                self.cache_dir = Path("~/.cache/fz-openqa/")
-                if not self.cache_dir.exists():
-                    self.cache_dir.mkdir(parents=True)
+            raise NotImplementedError
+            self.cache_dir = tempfile.TemporaryDirectory(dir=self.cache_dir)
+            rich.print(f">> cache_dir={self.cache_dir}")
+
+        if cache_name is None:
+            cache_name = uuid.uuid4().hex
+        self.cache_name = f"{cache_name}.arrow"
 
         if store_fields is None:
             store_fields = []
         self.store_fields = list(set(store_fields + [IDX_COL]))
         self._reset()
         logger.info(f"Storing predictions to {self.cache_file}")
+        logger.info(f"is_written={self.is_written}")
 
     def on_predict_epoch_end(self, *args, **kwargs) -> None:
         self._close_writer()
@@ -90,8 +95,13 @@ class StorePredictionsCallback(Callback):
             self.cache_file = tempfile.TemporaryFile(dir=self.cache_dir)
         else:
             self.cache_file = os.path.join(self.cache_dir, self.cache_name)
-            if os.path.exists(self.cache_file):
-                self.is_written = True
+
+    @property
+    def is_written(self):
+        if self.cache_name is None:
+            return False
+        else:
+            return os.path.exists(self.cache_file)
 
     def _close_writer(self):
         """close any existing writer"""

@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 from rich.status import Status
 
 from .base import Index
-from .base import SearchResult
+from .search_result import SearchResult
 from fz_openqa.configs.datamodule.index_builder import es_body
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import Batchify
@@ -92,7 +92,6 @@ class ElasticSearchIndex(Index):
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
         We make sure a unique index is created for each dataset"""
-        rich.print(f"\n build: {dataset}")
         # preprocess the dataset
         cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
         dataset = dataset.remove_columns(cols_to_drop)
@@ -151,7 +150,9 @@ class ElasticSearchIndex(Index):
         else:
             analyzed_tokens = None
 
-        return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
+        return SearchResult(
+            score=scores, index=indexes, tokens=analyzed_tokens, dataset_size=self.dataset_size
+        )
 
     def search_one(
         self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs

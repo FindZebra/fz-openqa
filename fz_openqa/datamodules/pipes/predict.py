@@ -1,6 +1,5 @@
 import functools
 import logging
-import tempfile
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -12,7 +11,6 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -38,7 +36,7 @@ from fz_openqa.utils.functional import is_index_contiguous
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
-CACHE_FILE = Union[Path, str, tempfile.TemporaryFile]
+CACHE_FILE = Union[Path, str]
 
 
 class AddRowIdx(TorchDataset):
@@ -121,10 +119,11 @@ class Predict(Pipe):
 
     """
 
+    model: Optional[pl.LightningModule] = None
     cache_file: Optional[Union[CACHE_FILE, Dict[Split, CACHE_FILE]]] = None
-    _fingerprint: Optional[str] = None
     _loaded_table: Optional[pa.Table] = None
     _loaded_split: Optional[Split] = None
+    _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
 
     def __init__(self, model: pl.LightningModule, requires_cache: bool = False, **kwargs):
         """
@@ -146,127 +145,6 @@ class Predict(Pipe):
         self._loaded_table = None
         self.cache_file = None
         self._loaded_split = None
-
-    @functools.singledispatchmethod
-    @torch.no_grad()
-    def cache(
-        self,
-        dataset: Dataset,
-        *,
-        trainer: Optional[Trainer] = None,
-        collate_fn: Optional[Pipe] = None,
-        loader_kwargs: Optional[Dict] = None,
-        cache_dir: Optional[str] = None,
-        split: Optional[Split] = None,
-        persist: bool = False,
-    ) -> CACHE_FILE:
-        """
-        Cache the predictions of the model on the dataset.
-
-        Parameters
-        ----------
-        dataset
-            The dataset to cache the predictions on.
-        trainer
-            The pytorch_lightning Trainer used to accelerate the prediction
-        collate_fn
-            The collate_fn used to process the dataset (e.g. builder.get_collate_pipe())
-        loader_kwargs
-            The keyword arguments passed to the DataLoader
-        cache_dir
-            The directory to store the cache file(s)
-        split
-            (Optional) The split to cache the predictions on. Leave to None when using a Dataset.
-        persist
-            (Optional) Whether to persist the cache file(s) for subsequent runs.
-            If set to False, the cache file is deleted when the session ends (tempfile).
-        Returns
-        Union[Path, str, tempfile.TemporaryFile]
-            The path to the cache file
-        -------
-
-        """
-        # check the setup of the model and trainer
-        assert trainer is not None, "Trainer must be provided to process batches."
-        msg = f"Model must be a LightningModule, got {type(self.model)}"
-        assert isinstance(self.model, LightningModule), msg
-
-        # define a unique fingerprint for the cache file
-        self._fingerprint = get_fingerprint(
-            {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
-        )
-
-        # init a callback to store predictions and add it to the Trainer
-        callback = StorePredictionsCallback(
-            cache_name=self._fingerprint, cache_dir=cache_dir, persist=persist
-        )
-
-        # define a collate_fn to process the dataset
-        if callback.is_written:
-            logger.info(f"Loading pre-computed vectors from {callback.cache_file}")
-
-        else:
-            # process the whole dataset using Trainer
-            self._process(
-                dataset,
-                callback=callback,
-                trainer=trainer,
-                collate_fn=collate_fn,
-                loader_kwargs=loader_kwargs,
-            )
-
-        # Retrieve the cache file
-        cache_file = callback.cache_file
-
-        # store the `cache_file` as an attribute
-        if split is None:
-            self.cache_file = cache_file
-        else:
-            if self.cache_file is None:
-                self.cache_file = {}
-            self.cache_file[split] = cache_file
-
-        return cache_file
-
-    @cache.register(DatasetDict)
-    def _(self, dataset: DatasetDict, **kwargs) -> Dict[Split, CACHE_FILE]:
-        """
-        Cache the predictions of the model for a DatasetDict.
-
-        Parameters
-        ----------
-        dataset
-            The DatasetDict to cache the predictions on.
-        kwargs
-            Additional keyword arguments passed to `cache`.
-        Returns
-        Dict[str, Union[Path, str, tempfile.TemporaryFile]]
-            The path to the cache file for each split
-        -------
-        """
-        return {split: self.cache(dset, split=split, **kwargs) for split, dset in dataset.items()}
-
-    def read_table(self, split: Optional[Split]) -> pa.Table:
-        """Returns the cached `pyarrow.Table` for the given split"""
-
-        if isinstance(self.cache_file, dict):
-            assert split is not None, "Split must be provided when using a dict of cache files."
-
-        read_args = {"memory_map": True}
-        if split is None:
-            assert not isinstance(
-                self.cache_file, dict
-            ), "Split must be provided to access the table."
-            if self._loaded_table is None:
-                self._loaded_table = pq.read_table(self.cache_file, **read_args)
-        elif split == self._loaded_split and self._loaded_table is not None:
-            pass
-        else:
-            cache = self.cache_file[split]
-            self._loaded_table = pq.read_table(cache, **read_args)
-            self._loaded_split = split
-
-        return self._loaded_table
 
     @torch.no_grad()
     def _call_batch(
@@ -331,6 +209,157 @@ class Predict(Pipe):
         output = self.model(batch, **kwargs)
         return cast_values_to_numpy(output)
 
+    @functools.singledispatchmethod
+    @torch.no_grad()
+    def cache(
+        self,
+        dataset: Dataset,
+        *,
+        trainer: Optional[Trainer] = None,
+        collate_fn: Optional[Pipe] = None,
+        loader_kwargs: Optional[Dict] = None,
+        cache_dir: Optional[str] = None,
+        split: Optional[Split] = None,
+        persist: bool = False,
+    ) -> CACHE_FILE:
+        """
+        Cache the predictions of the model on the dataset.
+
+        Parameters
+        ----------
+        dataset
+            The dataset to cache the predictions on.
+        trainer
+            The pytorch_lightning Trainer used to accelerate the prediction
+        collate_fn
+            The collate_fn used to process the dataset (e.g. builder.get_collate_pipe())
+        loader_kwargs
+            The keyword arguments passed to the DataLoader
+        cache_dir
+            The directory to store the cache file(s)
+        split
+            (Optional) The split to cache the predictions on. Leave to None when using a Dataset.
+        persist
+            (Optional) Whether to persist the cache file(s) for subsequent runs.
+            If set to False, the cache file is deleted when the session ends (tempfile).
+        Returns
+        Union[Path, str, tempfile.TemporaryFile]
+            The path to the cache file
+        -------
+
+        """
+        # check the setup of the model and trainer
+        assert trainer is not None, "Trainer must be provided to process batches."
+        msg = f"Model must be a LightningModule, got {type(self.model)}"
+        assert isinstance(self.model, LightningModule), msg
+
+        # define a unique fingerprint for the cache file
+        fingerprint = get_fingerprint(
+            {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
+        )
+
+        # init a callback to store predictions and add it to the Trainer
+        callback = StorePredictionsCallback(
+            cache_name=fingerprint, cache_dir=cache_dir, persist=persist
+        )
+
+        # define a collate_fn to process the dataset
+        if callback.is_written:
+            logger.info(f"Loading pre-computed vectors from {callback.cache_file}")
+        else:
+            # process the whole dataset using Trainer
+            self._process(
+                dataset,
+                callback=callback,
+                trainer=trainer,
+                collate_fn=collate_fn,
+                loader_kwargs=loader_kwargs,
+            )
+
+        # Retrieve the cache file
+        cache_file = callback.cache_file
+
+        # store the `cache_file` as an attribute
+        if split is None:
+            self.cache_file = cache_file
+        else:
+            if self.cache_file is None:
+                self.cache_file = {}
+            self.cache_file[split] = cache_file
+
+        return cache_file
+
+    @cache.register(DatasetDict)
+    def _(self, dataset: DatasetDict, **kwargs) -> Dict[Split, CACHE_FILE]:
+        """
+        Cache the predictions of the model for a DatasetDict.
+
+        Parameters
+        ----------
+        dataset
+            The DatasetDict to cache the predictions on.
+        kwargs
+            Additional keyword arguments passed to `cache`.
+        Returns
+        Dict[str, Union[Path, str, tempfile.TemporaryFile]]
+            The path to the cache file for each split
+        -------
+        """
+        return {split: self.cache(dset, split=split, **kwargs) for split, dset in dataset.items()}
+
+    def _process(
+        self,
+        dataset: Dataset,
+        *,
+        callback: StorePredictionsCallback,
+        trainer: Optional[Trainer],
+        collate_fn: Optional[Callable],
+        loader_kwargs: Optional[Dict],
+    ) -> CACHE_FILE:
+        """
+        Process the dataset using the Trainer an the model.
+        """
+        trainer.callbacks.append(callback)
+
+        # init the dataloader (the collate_fn and dataset are wrapped to return the ROW_IDX)
+        loader = self._init_loader(dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs)
+
+        # modify the dataloader to return __idx__ aside from the original data
+        loader = self._wrap_dataloader(loader)
+        assert isinstance(
+            loader.sampler, SequentialSampler
+        ), "Cannot handle DataLoader with shuffle=True."
+
+        # run the trainer predict method, model.forward() is called
+        # for each batch and store into the callback cache
+        trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
+
+        cache_file = callback.cache_file
+        trainer.callbacks.remove(callback)
+        return cache_file
+
+    def read_table(self, split: Optional[Split]) -> pa.Table:
+        """Returns the cached `pyarrow.Table` for the given split"""
+
+        if isinstance(self.cache_file, dict):
+            assert split is not None, "Split must be provided when using a dict of cache files."
+
+        read_args = {"memory_map": True}
+        if split is None:
+            assert not isinstance(
+                self.cache_file, dict
+            ), "Split must be provided to access the table."
+            if self._loaded_table is None:
+                self._loaded_table = pq.read_table(self.cache_file, **read_args)
+        elif split == self._loaded_split and self._loaded_table is not None:
+            pass
+        else:
+            cache = self.cache_file[split]
+            self._loaded_table = pq.read_table(cache, **read_args)
+            self._loaded_split = split
+
+        return self._loaded_table
+
     def _init_loader(
         self,
         dataset: Dataset,
@@ -342,18 +371,17 @@ class Predict(Pipe):
         if collate_fn is None:
             collate_fn = Collate()
 
-        collate_fn = self._wrap_collate_fn(collate_fn)
-
         loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
         loader = DataLoader(
             self._wrap_dataset(dataset),
-            collate_fn=collate_fn,
+            collate_fn=self._wrap_collate_fn(collate_fn),
             shuffle=False,
             **loader_kwargs,
         )
         return loader
 
-    def _wrap_collate_fn(self, collate_fn: Callable) -> Pipe:
+    @staticmethod
+    def _wrap_collate_fn(collate_fn: Callable) -> Pipe:
         """Wrap the collate_fn to return IDX_COL along the batch values"""
         return Parallel(collate_fn, Collate(IDX_COL))
 
@@ -380,33 +408,11 @@ class Predict(Pipe):
         """Wrap the dataset to return IDX_COL along the batch values"""
         return AddRowIdx(dataset)
 
-    def _process(
-        self,
-        dataset: Dataset,
-        *,
-        callback: StorePredictionsCallback,
-        trainer: Optional[Trainer],
-        collate_fn: Optional[Callable],
-        loader_kwargs: Optional[Dict],
-    ) -> CACHE_FILE:
-        """
-        Process the model using the Trainer an the .
-        """
-        trainer.callbacks.append(callback)
+    def __getstate__(self) -> Dict:
+        state = {k: v for k, v in self.__dict__.items() if k not in self._pickle_exclude}
+        return state.copy()
 
-        # init the dataloader (the collate_fn and dataset are wrapped to return the ROW_IDX)
-        loader = self._init_loader(dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs)
-
-        # modify the dataloader to return __idx__ aside from the original data
-        loader = self._wrap_dataloader(loader)
-        assert isinstance(
-            loader.sampler, SequentialSampler
-        ), "Cannot handle DataLoader with shuffle=True."
-
-        # run the trainer predict method, model.forward() is called
-        # for each batch and store into the callback cache
-        trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
-
-        cache_file = callback.cache_file
-        trainer.callbacks.remove(callback)
-        return cache_file
+    def __setstate__(self, state: Dict):
+        self.__dict__.update(state)
+        for k in self._pickle_exclude:
+            self.__dict__[k] = None

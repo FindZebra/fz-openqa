@@ -188,7 +188,10 @@ class Pipe(Component):
         """
 
         if not all(isinstance(eg, dict) for eg in examples):
-            raise TypeError(f"examples must be a list of dicts, got {type(examples[0])}")
+            raise TypeError(
+                f"Error in pipe {type(self)}, examples must be a list of dicts, "
+                f"got {type(examples[0])}"
+            )
 
         if self.update is True:
             raise AttributeError("Pipe.update is set to True, cannot update a list of examples")

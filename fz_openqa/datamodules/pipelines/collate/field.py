@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Any
 from typing import List
 from typing import Optional
@@ -85,9 +86,10 @@ class CollateField(Gate):
 
         # pipe used to pad and collate tokens
         if tokenizer is not None:
+            pad_fn = partial(tokenizer.pad, return_tensors="pt")
             tokenizer_pipe = Gate(
                 HasKeys(["input_ids"]),
-                pipe=ApplyAsFlatten(Lambda(tokenizer.pad), level=level),
+                pipe=ApplyAsFlatten(Lambda(pad_fn), level=level),
                 input_filter=In(["input_ids", "attention_mask", "offset_mapping"]),
                 id="pad-and-collate-tokens",
             )

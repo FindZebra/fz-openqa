@@ -1,5 +1,4 @@
 import abc
-import json
 from collections import OrderedDict
 from typing import Callable
 from typing import Dict
@@ -9,8 +8,7 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
-from ...utils.json_struct import apply_to_json_struct
-from ..component import Component
+from ...utils.pretty import repr_batch
 from .base import Pipe
 from .control.condition import HasPrefix
 from fz_openqa.utils.datastruct import Batch
@@ -22,22 +20,10 @@ class PipeProcessError(Exception):
 
     def __init__(self, meta_pipe: Pipe, pipe: Pipe, batch: Batch, **kwargs):
         keys = _infer_keys(batch)
-        if isinstance(pipe, Component):
-            pipe_repr = apply_to_json_struct(pipe.to_json_struct(), str)
-        else:
-            pipe_repr = str(pipe)
-        if isinstance(pipe, Component):
-            meta_pipe_repr = apply_to_json_struct(meta_pipe.to_json_struct(), str)
-        else:
-            meta_pipe_repr = str(meta_pipe)
         msg = (
-            f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)}\n"
-            f"- batch of type {type(batch)} with keys={keys}\n"
-            f"- kwargs={kwargs}.\n\n"
-            f"Full pipe:\n"
-            f"{json.dumps(pipe_repr, indent=2)}\n\n"
-            f"Full meta pipe:\n"
-            f"{json.dumps(meta_pipe_repr, indent=2)}"
+            f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)} with "
+            f"batch of type {type(batch)} with keys={keys} "
+            f"and kwargs={kwargs}. Batch=\n{repr_batch(batch)}"
         )
         super().__init__(msg)
 
@@ -50,7 +36,7 @@ def _call_pipe_and_handle_exception(
     except PipeProcessError as e:
         raise e
     except Exception as e:
-        raise PipeProcessError(meta_pipe, pipe, batch, **kwargs).with_traceback(e.__traceback__)
+        raise PipeProcessError(meta_pipe, pipe, batch, **kwargs) from e
 
 
 def _infer_keys(batch):

@@ -9,6 +9,7 @@ import numpy as np
 import rich
 from torch import Tensor
 
+from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe
 from .utils.nesting import flatten_nested
@@ -123,6 +124,9 @@ class ApplyAsFlatten(Pipe):
     ```
     """
 
+    flatten: Optional[Flatten] = None
+    nest: Optional[Nest] = None
+
     def __init__(
         self,
         pipe: Pipe,
@@ -151,7 +155,11 @@ class ApplyAsFlatten(Pipe):
         # check output and return
         new_shape = infer_batch_shape(output)[: self.flatten.level + 1]
         explain = "Applying a pipe that changes the batch size might have caused this issue."
-        assert new_shape == input_shape, f"{new_shape} != {input_shape}. {explain}"
+        if new_shape != input_shape:
+            raise ValueError(
+                f"{new_shape} != {input_shape}. {explain}\n"
+                f"{repr_batch(batch, header='ApplyAsFlatten output batch')}"
+            )
         return output
 
 

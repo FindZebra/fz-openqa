@@ -13,6 +13,7 @@ from datasets import Split
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
+from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
@@ -118,10 +119,13 @@ class OpenQaBuilder(DatasetBuilder):
         return f"{self.__class__.__name__}({args})"
 
     def __call__(self, format: Optional[str] = "torch", **kwargs) -> OpenQaDataset:
+        # de-activate formatting for the dataset to avoid messing up
+        # with the newly added columns in map_dataset
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder()
 
         index = self.index_builder(dataset=corpus, **kwargs)
+
         dataset = self.map_dataset(dataset=dataset, corpus=corpus, index=index, **self.map_args)
 
         if format is not None:
@@ -155,6 +159,12 @@ class OpenQaBuilder(DatasetBuilder):
         deleting the the dataset, see issue #114.
         """
 
+        if isinstance(index, FaissIndex):
+            collate_fn = CollateField(
+                "question", tokenizer=self.tokenizer, exclude=["metamap", "text"], level=0
+            )
+            index.cache_query_dataset(dataset, collate_fn=collate_fn)
+
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
             [
@@ -183,6 +193,7 @@ class OpenQaBuilder(DatasetBuilder):
             mapper = MapWithFingerprint(
                 block,
                 batched=True,
+                cache_dir=self.dataset_builder.cache_dir,
                 num_proc=num_proc,
                 batch_size=batch_size,
                 desc=f"[Mapping] {k}",

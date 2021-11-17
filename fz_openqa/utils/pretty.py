@@ -1,13 +1,12 @@
 import logging
 import shutil
-from collections import defaultdict
 from typing import Dict
 from typing import List
+from typing import Tuple
 from typing import Union
 
 import numpy as np
 import rich
-import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
@@ -47,13 +46,24 @@ def get_separator(char="\u2500"):
 
 
 def pprint_batch(batch: Batch, header=None):
-    exceptions = _pprint_batch(batch, header)
+    u, exceptions = _repr_batch(batch, header, rich=True)
+    u = get_separator() + "\n" + u
+    rich.print(u)
+    if len(exceptions):
+        rich.print(
+            f"couldn't pretty print keys={list(exceptions.keys())}. See log for further details."
+        )
     for key, e in exceptions.items():
         logger.warning(f"Couldn't pretty print key={key}\nException={e}")
 
 
-def _pprint_batch(batch: Batch, header=None) -> Dict[str, Exception]:
-    u = get_separator() + "\n"
+def repr_batch(batch: Batch, header=None, rich: bool = False) -> str:
+    u, exceptions = _repr_batch(batch, header)
+    return u
+
+
+def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dict[str, Exception]]:
+    u = ""
     if header is not None:
         u += f"=== {header} ===\n"
         u += get_separator("-") + "\n"
@@ -72,11 +82,14 @@ def _pprint_batch(batch: Batch, header=None) -> Dict[str, Exception]:
     keys = list(data[0].keys())
     maxs = {k: max([len(d[k]) for d in data]) for k in keys}
     _s = "  "
-    _sep = " [white]|[/white] "
+    _sep = " [white]|[/white] " if rich else " | "
+
+    row_in = "[white]" if rich else ""
+    row_out = "[/white]" if rich else ""
     _row_sep = (
-        f"{_s}[white]{'_'*maxs['key']}"
-        f"{_sep}{'_'*maxs['shape']}"
-        f"{_sep}{'_'*maxs['leaf_type']}[/white]\n"
+        f"{_s}{row_in}{'_' * maxs['key']}"
+        f"{_sep}{'_' * maxs['shape']}"
+        f"{_sep}{'_' * maxs['leaf_type']}{row_out}\n"
     )
     u += _row_sep
     u += (
@@ -93,9 +106,5 @@ def _pprint_batch(batch: Batch, header=None) -> Dict[str, Exception]:
         )
 
     u += _row_sep
-    rich.print(u)
-    if len(exceptions):
-        rich.print(
-            f"couldn't pretty print keys={list(exceptions.keys())}. See log for further details."
-        )
-    return exceptions
+
+    return u, exceptions

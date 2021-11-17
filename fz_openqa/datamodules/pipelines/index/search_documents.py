@@ -3,8 +3,11 @@ from datasets import Dataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes.control.condition import Contains
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.search import FetchDocuments
 
@@ -36,4 +39,5 @@ class SearchDocuments(Sequential):
             SearchCorpus(corpus_index=corpus_index, k=n_documents),
             FilterKeys(In(["document.row_idx", "document.retrieval_score"])),
             id="search-documents",
+            input_filter=In(["question.input_ids", "question.attention_mask", "question.text"]),
         )
