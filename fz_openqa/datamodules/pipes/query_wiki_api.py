@@ -1,8 +1,10 @@
 from abc import ABCMeta
-from typing import List, Union, Callable
+from typing import Callable
+from typing import List
+from typing import Union
 
-import wikipedia
 import rich
+import wikipedia
 
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.utils.datastruct import Batch
@@ -32,5 +34,7 @@ class QueryWikiAPI:
     def __call__(self, batch: Batch, text_key: str = "answer.text", **kwargs) -> Batch:
         text_key = text_key or self.text_key
         assert text_key is not None, "attribute `text_key` must be set."
-        batch["wiki.pages"] = [self._extract_wiki_pages(eg, self.query_api) for eg in batch[text_key]]
+        batch["wiki.pages"] = [
+            self._extract_wiki_pages(eg, self.query_api) for eg in batch[text_key]
+        ]
         return batch

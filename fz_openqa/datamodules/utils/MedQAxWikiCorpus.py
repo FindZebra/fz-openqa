@@ -2,20 +2,26 @@ import itertools
 import logging
 import os
 import pickle
-from typing import Dict, Callable, List
+from typing import Callable
+from typing import Dict
+from typing import List
 from typing import Optional
 
+import rich
 from datasets import DatasetDict
 from datasets import load_dataset
-import rich
 from pyarrow._dataset import Dataset
-from rich.status import Status
 from rich.progress import track
+from rich.status import Status
 
 from fz_openqa.datamodules.builders import DatasetBuilder
 from fz_openqa.datamodules.builders import MedQABuilder
-from fz_openqa.datamodules.pipes import BlockSequential, PrintBatch, Sequential, FilterKeys, UpdateWith
+from fz_openqa.datamodules.pipes import BlockSequential
+from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.extract_wiki_page import ExtractWikiPage
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
@@ -74,32 +80,29 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             num_proc=self.num_proc,
             batched=True,
             batch_size=self.batch_size,
-            desc="Search for Wikipedia pages")
+            desc="Search for Wikipedia pages",
+        )
 
         return dataset
 
     def extract_page_content(self, dataset: DatasetDict) -> DatasetDict:
         dataset.map(
-            ExtractWikiPage(
-                wiki_data=self.wikipedia_data,
-                query_key="wiki.pages"
-            ),
+            ExtractWikiPage(wiki_data=self.wikipedia_data, query_key="wiki.pages"),
             num_proc=self.num_proc,
             batched=True,
             batch_size=self.batch_size,
-            desc="Extract content of Wikipedia pages")
+            desc="Extract content of Wikipedia pages",
+        )
 
     @staticmethod
     def build_wiki_corpus(dataset: DatasetDict) -> Dataset:
         json_list = []
         for split, ds in dataset.items():
-            for batch in track(
-                ds, description=f"Iterating through the {split} dataset..."
-            ):
-                #pages = list(itertools.filterfalse(
+            for batch in track(ds, description=f"Iterating through the {split} dataset..."):
+                # pages = list(itertools.filterfalse(
                 #    lambda x: x in self.title_index.keys(), pages)
-                #)
-                json_list.extend(batch['wiki.pages'])
+                # )
+                json_list.extend(batch["wiki.pages"])
             rich.print(f"[red]{len(json_list)}")
 
         rich.print(f"[red]{len(json_list)}")

@@ -1,11 +1,12 @@
 import itertools
-from typing import Dict, List
+from typing import Dict
+from typing import List
+
+import rich
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.datastruct import Batch
-
-import rich
 
 
 class ExtractWikiPage(Pipe):
@@ -26,4 +27,3 @@ class ExtractWikiPage(Pipe):
         assert query_key is not None, "attribute `text_key` must be set."
         batch["wiki.text"] = [self.extract_content(eg) for eg in batch[query_key]]
         return batch
-
