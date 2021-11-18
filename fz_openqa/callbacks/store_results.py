@@ -38,7 +38,7 @@ class StorePredictionsCallback(Callback):
         cache_dir: Optional[str] = None,
         store_fields: Optional[List[str]] = None,
         cache_name: Optional[str] = None,
-        persist: bool = False,
+        persist: bool = True,
     ):
         if cache_dir is None:
             # todo: set proper default cache path

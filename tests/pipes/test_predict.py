@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 from functools import partial
 from unittest import TestCase
 
@@ -43,6 +45,11 @@ class TestPredict(TestCase):
         self.trainer = pl.Trainer(checkpoint_callback=False,
                                   logger=False)
 
+        self.cache_dir = str(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.cache_dir)
+
     def test_cached_predict_dataset(self):
         """Test that the output of the pipe with caching is
         the same as when using the model directly (using Dataset)."""
@@ -64,9 +71,8 @@ class TestPredict(TestCase):
             dataset,
             trainer=self.trainer,
             collate_fn=collate_fn,
-            cache_dir=None,
+            cache_dir=self.cache_dir,
             loader_kwargs={"batch_size": 2},
-            persist=False,
         )
 
         # expected output
@@ -106,9 +112,8 @@ class TestPredict(TestCase):
             dataset,
             trainer=self.trainer,
             collate_fn=collate_fn,
-            cache_dir=None,
+            cache_dir=self.cache_dir,
             loader_kwargs={"batch_size": 2},
-            persist=False,
         )
 
         # check if there is a distinct cache file for each split

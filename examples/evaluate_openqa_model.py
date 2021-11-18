@@ -13,26 +13,17 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
-from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules import DataModule
 from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
-from fz_openqa.datamodules.builders.corpus import FzCorpusBuilder
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndexBuilder
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import ExactMatch
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.inference.checkpoint import CheckpointLoader
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +41,6 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
     config_name="script_config.yaml",
 )
 def run(config: DictConfig) -> None:
-    logging.basicConfig(
-        level="NOTSET",
-        format="%(message)s",
-        datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True)],
-    )
-
     # set the context
     datasets.set_caching_enabled(True)
     datasets.logging.set_verbosity(datasets.logging.CRITICAL)

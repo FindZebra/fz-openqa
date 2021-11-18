@@ -1,11 +1,16 @@
 import logging
+import os
 from functools import singledispatchmethod
+from pathlib import Path
+from typing import Any
 from typing import Callable
 from typing import Dict
+from typing import Generator
 from typing import Iterable
 from typing import Iterator
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import faiss
@@ -30,23 +35,63 @@ from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
+from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
 
-class FaissIndex(Index):
-    """Dense indexing using faiss"""
+def iter_batches_with_indexes(
+    loader: Union[Generator, DataLoader]
+) -> Iterable[Tuple[List[int], Batch]]:
+    """
+    Iterate over batches and return a tuple of the batch index and the batch itself.
+    """
+    i = 0
+    it = iter(loader)
+    for batch in it:
+        bs = infer_batch_size(batch)
+        idx = list(range(i, i + bs))
+        i += bs
+        yield idx, batch
 
-    # todo: remove need to store the `document.row_idx`
+
+DEFAULT_FAISS_KWARGS = {"metric_type": faiss.METRIC_INNER_PRODUCT, "nlist": 10}
+
+
+class FaissIndex(Index):
+    """
+    A dense index using Faiss. This class allows storing document vectors (one-dimensional)
+    into a Faiss index and allows querying the index for similar documents.
+
+    This class allows processing `Dataset` using  a `pl.LighningModule` and
+    (optionally) a `pl.Trainer`. This is done automatically when passing a Trainer in the
+    constructor. This functionality relies on the `Predict` pipe, which is used to
+    handle PyTorch Lightning mechanics. `Predict` works by caching predictions to a
+    `pyarrow.Table`. Indexes must be passed (i.e. `pipe(batch, idx=idx)`) at all times to
+    enables the `Predict` pipe to work.
+
+    The trainer can also be used to process the queries. In that case either
+    1. call `cache_query_dataset` before calling `search` on each batch`
+    2. call `search` directly on the query `Dataset`
+
+    Parameters
+    ----------
+    model
+        The model to use for indexing and querying, e.g. a `pl.LightningModule`.
+    index_name
+        The name of the index. Must be unique for each configuration.
+    """
 
     vectors_column_name = "__vectors__"
     _dtype: np.dtype = np.float32
     _index: FaissSwigIndex = None
     model: Callable = None
+    index_name: str
 
     def __init__(
         self,
@@ -54,32 +99,69 @@ class FaissIndex(Index):
         *,
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
-        nlist: int = 10,
+        faiss_args: Dict[str, Any] = None,
         index_key: str = "document.row_idx",
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
-        metric_type: str = faiss.METRIC_INNER_PRODUCT,
-        persist_cache: bool = False,
+        persist_cache: bool = True,
         cache_dir: Optional[str] = None,
         **kwargs,
     ):
-
-        #  save fingerprints
-        self._model_fingerprint = get_fingerprint(model)
-        self._dataset_fingerprint = dataset._fingerprint
+        """
+        Parameters
+        ----------
+        dataset
+            The dataset to index.
+        model
+            The model to use for indexing and querying, e.g. a `pl.LightningModule`.
+        trainer
+            The trainer to use for indexing and querying, e.g. a `pl.Trainer`.
+            Indexing and querying can also be done without a trainer.
+        faiss_args
+            Additional arguments to pass to the Faiss index.
+        index_key
+            Name of the column in the indexed dataset to use as index.
+        model_output_keys
+            Names of the accepted model output keys (vector to use for indexing).
+        loader_kwargs
+            Additional arguments to pass to the `DataLoader`.
+        collate_pipe
+            A pipe to use for collating the examples from the `dataset`
+        persist_cache
+            Whether to persist the cache to disk when calling `predict.cache`
+        cache_dir
+            The directory to store the cache in.
+        kwargs
+            Additional arguments to pass to the `Index` class.
+        """
+        faiss_args = faiss_args or DEFAULT_FAISS_KWARGS
+        #  save fingerprints and define the index name. The index name
+        # must be unique for each dataset x model x faiss_args combination
+        model_fingerprint = get_fingerprint(model)
+        dataset_fingerprint = dataset._fingerprint
+        faiss_fingerprint = get_fingerprint(faiss_args)
+        self._fingerprint = get_fingerprint(
+            {
+                "model": model_fingerprint,
+                "dataset": dataset_fingerprint,
+                "faiss": faiss_fingerprint,
+            }
+        )
+        self.index_name = f"{type(self).__name__}-{self._fingerprint}"
 
         # model and params
         self.model = model
-        self.nlist = nlist
-        self.metric_type = metric_type
+        self.faiss_args = faiss_args
+        self.trainer = trainer
 
+        # column names
         self.index_key = index_key
         self.model_output_keys = model_output_keys
 
         # trainer and dataloader
         self.trainer = trainer
-        self.loader_kwargs = loader_kwargs
+        self.loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
 
         # collate pipe use to convert dataset rows into a batch
         self.collate = collate_pipe or Collate()
@@ -88,8 +170,8 @@ class FaissIndex(Index):
         # warning: this is actually not used when using the trainer
         self.persist_cache = persist_cache
         self.cache_dir = cache_dir
-        self.predict_docs = Predict(model=self.model)
-        self.predict_queries = Predict(model=self.model)
+        self.predict_docs = Predict(self.model)
+        self.predict_queries = Predict(self.model)
 
         # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
         self.postprocess = self.get_rename_output_names_pipe(
@@ -97,19 +179,75 @@ class FaissIndex(Index):
         )
 
         # call the super: build the index
-        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
+        super(FaissIndex, self).__init__(
+            dataset=dataset, name=self.index_name, cache_dir=cache_dir, **kwargs
+        )
 
     @property
     def is_indexed(self):
         return self._index is None or self._index.is_trained
 
-    def build(self, dataset: Dataset, **kwargs):
-        """Index a dataset."""
+    def build(
+        self, dataset: Dataset, *, name: Optional[str] = None, cache_dir=Optional[None], **kwargs
+    ):
+        """
+        Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
+
+        Parameters
+        ----------
+        dataset
+            The dataset to index.
+        name
+            The name of the index (must be unique).
+        cache_dir
+            The directory to store the cache in.
+        kwargs
+            Additional arguments to pass to `_build`
+        Returns
+        -------
+        None
+
+        """
+        if cache_dir is None or name is None:
+            # skip caching if not cache_dir is provided
+            self._build(dataset, **kwargs)
+
+        else:
+            cache_file = Path(cache_dir) / "indexes" / f"{name}.index"
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            if cache_file.exists():
+                # load the index from the cache
+                logger.info(f"Loading FaissIndex from cache: {cache_file}")
+                self._index = faiss.read_index(str(cache_file))
+            else:
+                # build the index
+                self._build(dataset, **kwargs)
+                logger.info(f"Writing FaissIndex to cache: {cache_file}")
+                faiss.write_index(self._index, str(cache_file))
+
+    def _build(self, dataset: Dataset, **kwargs):
+        """
+        Build the index using the model and the dataset.
+        Iterate over each batch and add the vectors to the index.
+        If a trainer is provided, predictions (vectors) are computed using the trainer
+        and cached to a file, otherwise they are computed on the fly.
+
+        Parameters
+        ----------
+        dataset
+            The dataset to index.
+        kwargs
+            Additional arguments, not used here
+
+        Returns
+        -------
+        None
+        """
 
         # if a trainer is available, use it to process and cache the whole dataset
         loader_args = {}
         if self.trainer is not None:
-            self._predict_and_cache(dataset, predict=self.predict_docs, collate_fn=self.collate)
+            self._cache_vectors(dataset, predict=self.predict_docs, collate_fn=self.collate)
             loader_args["batch_size"] = 1000
 
         # instantiate the base data loader
@@ -117,24 +255,22 @@ class FaissIndex(Index):
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
-        desc = "Ingest Faiss index"
-        if self.trainer is not None:
-            desc += " (loading vectors from cache)"
-        processed_batches = self._process_batches(loader, predict=self.predict_docs, desc=desc)
+        processed_batches = self._process_batches(loader, predict=self.predict_docs)
 
         # build an iterator over the processed batches
-        it = iter(processed_batches)
+        it = iter_batches_with_indexes(processed_batches)
 
         # init the faiss index and add the 1st batch
-        batch = next(it)
+        idx, batch = next(it)
         self._init_index(batch)
-        self._add_batch_to_index(batch)
+        pprint_batch(batch, "first batch")
+        self._add_batch_to_index(batch, idx)
 
         # iterate through the remaining batches and add them to the index
         while True:
             try:
-                batch = next(it)
-                self._add_batch_to_index(batch)
+                idx, batch = next(it)
+                self._add_batch_to_index(batch, idx=idx)
             except Exception:
                 break
 
@@ -143,9 +279,24 @@ class FaissIndex(Index):
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
 
-    def _predict_and_cache(
+    def _cache_vectors(
         self, dataset: Union[Dataset, DatasetDict], *, predict: Predict, collate_fn: Callable
     ):
+        """
+        Compute and cache the vectors for the entire dataset.
+        Parameters
+        ----------
+        dataset
+            The dataset to cache the vectors for.
+        predict
+            The pipe to use to compute and cache the vectors.
+        collate_fn
+            The pipe used to collate rows from the dataset
+
+        Returns
+        -------
+        None
+        """
         predict.invalidate_cache()
         predict.cache(
             dataset,
@@ -163,33 +314,20 @@ class FaissIndex(Index):
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
-        self._index = faiss.IndexFlat(vectors.shape[-1], self.metric_type)
+        metric_type = self.faiss_args["metric_type"]
+        self._index = faiss.IndexFlat(vectors.shape[-1], metric_type)
 
-    def _add_batch_to_index(self, batch: Batch):
+    def _add_batch_to_index(self, batch: Batch, idx: List[int]):
         """
         Add one batch of data to the index
         """
-        # check the ordering of the indexes
-        indexes = batch[IDX_COL]
-        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
-        assert is_index_contiguous(indexes), msg
-        msg = (
-            f"The stored index and the indexes are not contiguous, "
-            f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"
-        )
-        assert self._index.ntotal == indexes[0], msg
+        self._check_index_consistency(idx)
 
         # add the vectors to the index
         vector = self._get_vector_from_batch(batch)
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
         self._index.add(vector)
-
-    def _query_index(self, query: Batch, *, k: int) -> SearchResult:
-        """Query the index given a batch of data"""
-        vector = self._get_vector_from_batch(query)
-        score, indices = self._index.search(vector, k)
-        return SearchResult(score=score, index=indices, dataset_size=self.dataset_size)
 
     @singledispatchmethod
     def search(
@@ -201,8 +339,35 @@ class FaissIndex(Index):
         k: int = 1,
         **kwargs,
     ) -> SearchResult:
-        """Search the index using the `query` and
-        return the index of the results within the original dataset."""
+        """
+        Search the index using a batch of queries. For a single query, the batch is processed
+        using the model and the predict pipe.
+        For a whole query dataset, you might consider calling `cache_query_dataset` first. In that
+        case you must provide the `idx` and `split` arguments (see Warnings).
+        This is however handled automatically when calling `search` with a `Dataset` as query.
+
+        Warnings
+        --------
+        `idx` and `split` must be provided if the queried dataset was cached. Caching is
+        performed if calling `cache_query_dataset()` beforehand.
+
+        Parameters
+        ----------
+        query
+            The batch of queries to search for.
+        idx
+            The indexes to search in.
+        split
+            The dataset split to search in.
+        k
+        kwargs
+
+        Returns
+        -------
+        SearchResult
+            The search result for the batch
+
+        """
         query = self.predict_queries(query, idx=idx, split=split)
         query = self.postprocess(query)
         return self._query_index(query, k=k)
@@ -212,6 +377,7 @@ class FaissIndex(Index):
         self, query: Dataset, *, k: int = 1, collate_fn: Callable, **kwargs
     ) -> Iterator[SearchResult]:
         """This method is called if `query` is of type Dataset"""
+        # todo : reimplement
         if self.trainer:
             self.cache_query_dataset(query, collate_fn=collate_fn)
 
@@ -221,12 +387,19 @@ class FaissIndex(Index):
     @search.register(DatasetDict)
     def _(self, query: DatasetDict, *, k: int = 1, **kwargs) -> Dict[Split, Iterator[SearchResult]]:
         """This method is called if `query` is of type DatasetDict"""
+        # todo : reimplement
         return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
+
+    def _query_index(self, query: Batch, *, k: int) -> SearchResult:
+        """Query the index given a batch of data"""
+        vector = self._get_vector_from_batch(query)
+        score, indices = self._index.search(vector, k)
+        return SearchResult(score=score, index=indices, dataset_size=self.dataset_size)
 
     def cache_query_dataset(
         self, dataset: Union[Dataset, DatasetDict], *, collate_fn: Callable, **kwargs
     ):
-        self._predict_and_cache(dataset, predict=self.predict_queries, collate_fn=collate_fn)
+        self._cache_vectors(dataset, predict=self.predict_queries, collate_fn=collate_fn)
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""
@@ -235,23 +408,19 @@ class FaissIndex(Index):
         return vector
 
     def _init_loader(self, dataset, **kwargs):
-        _kwargs = self.loader_kwargs.copy()
+        loader_kwargs = self.loader_kwargs.copy()
         for k, v in kwargs.items():
-            _kwargs[k] = v
-        loader = DataLoader(
-            dataset,
-            collate_fn=self.collate,
-            shuffle=False,
-            **_kwargs,
+            loader_kwargs[k] = v
+
+        return Predict.init_loader(
+            dataset, collate_fn=self.collate, loader_kwargs=loader_kwargs, wrap_indices=False
         )
-        return loader
 
     def _process_batches(
         self,
         loader: DataLoader,
         *,
         predict: Predict,
-        desc: str = "Processing dataset",
         progress_bar: bool = True,
     ) -> Iterable[Batch]:
 
@@ -263,21 +432,25 @@ class FaissIndex(Index):
         This function processes batches as they are loaded from the dataloader.
         """
 
-        # modify the dataloader to return __idx__ aside from the original data
+        # Make sue the loader is not shuffled
         assert isinstance(
             loader.sampler, SequentialSampler
         ), "Cannot handle DataLoader with shuffle=True."
 
+        # add a progress bar, assume that vectors are cached if the Trainer was provided
         if progress_bar:
-            loader = track(iter(loader), description=desc)
+            desc = "Ingest Faiss index"
+            if self.trainer is not None:
+                desc += " (loading vectors from cache)"
+            loader = track(loader, description=desc)
 
-        # process each batch sequentially using `self.process`
-        i = 0
-        for batch in loader:
-            bs = infer_batch_size(batch)
-            batch = predict(batch, idx=list(range(i, i + bs)))
+        # wrap the loader to return the indexes along the batch
+        loader = iter_batches_with_indexes(loader)
+
+        # process batches sequentially
+        for idx, batch in loader:
+            batch = predict(batch, idx=idx)
             batch = self.postprocess(batch)
-            i += bs
             yield batch
 
     def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:
@@ -297,3 +470,13 @@ class FaissIndex(Index):
     def __setstate__(self, state):
         state["_index"] = faiss.deserialize_index(state["_index"])
         self.__dict__.update(state)
+
+    def _check_index_consistency(self, idx):
+        """Make sure the new idx are consistent with the `_index`"""
+        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={idx}"
+        assert is_index_contiguous(idx), msg
+        msg = (
+            f"The stored index and the indexes are not contiguous, "
+            f"\nindex_size={self._index.ntotal}, first_index={idx[0]}"
+        )
+        assert self._index.ntotal == idx[0], msg

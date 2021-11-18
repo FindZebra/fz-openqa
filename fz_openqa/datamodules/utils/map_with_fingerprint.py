@@ -80,6 +80,10 @@ class MapWithFingerprint:
         """Check that the pipe fingerprint is identical to the one of the previous run.
         This allows tracking down problems with on-deterministic serialization."""
 
+        if self.cache_dir is None:
+            logger.warning("cache_dir is not provided, previous fingerprints cannot be verified.")
+            return
+
         # get a json-file from the current pipe
         fingerprints = self.pipe.fingerprint(reduce=False)
         fingerprints["__all__"] = self.pipe.fingerprint(reduce=True)

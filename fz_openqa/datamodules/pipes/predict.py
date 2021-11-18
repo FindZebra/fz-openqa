@@ -170,7 +170,7 @@ class Predict(Pipe):
 
         """
         use_cache = self.cache_file is not None
-        if idx is None:
+        if use_cache and idx is None:
             logger.warning(
                 "Cache file exists but `idx` is not set, the cache won't be used. "
                 "Make sure to call `Dataset.map` with `use_indices=True`"
@@ -220,7 +220,7 @@ class Predict(Pipe):
         loader_kwargs: Optional[Dict] = None,
         cache_dir: Optional[str] = None,
         split: Optional[Split] = None,
-        persist: bool = False,
+        persist: bool = True,
     ) -> CACHE_FILE:
         """
         Cache the predictions of the model on the dataset.
@@ -322,7 +322,7 @@ class Predict(Pipe):
         trainer.callbacks.append(callback)
 
         # init the dataloader (the collate_fn and dataset are wrapped to return the ROW_IDX)
-        loader = self._init_loader(dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs)
+        loader = self.init_loader(dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs)
 
         # modify the dataloader to return __idx__ aside from the original data
         loader = self._wrap_dataloader(loader)
@@ -360,21 +360,45 @@ class Predict(Pipe):
 
         return self._loaded_table
 
-    def _init_loader(
-        self,
+    @staticmethod
+    def init_loader(
         dataset: Dataset,
         collate_fn: Optional[Callable] = None,
         loader_kwargs: Optional[Dict] = None,
+        wrap_indices: bool = True,
     ) -> DataLoader:
-        """Initialize the dataloader. This also wraps the dataset such that each example
-        comes with a valid `ROW_IDX` value."""
+        """Initialize the dataloader.
+
+        if `wrap_indices` is True, the dataset and collate_fn are wrapped
+        such that each example comes with a valid `ROW_IDX` value.
+
+        Parameters
+        ----------
+        dataset
+            The dataset to initialize the dataloader for.
+        collate_fn
+            The collate_fn to use for the dataloader.
+        loader_kwargs
+            Additional keyword arguments to pass to the dataloader.
+        wrap_indices
+            Whether to wrap the dataset and collate_fn with a valid `ROW_IDX` value.
+
+        Returns
+        -------
+        DataLoader
+            The initialized dataloader.
+        """
         if collate_fn is None:
             collate_fn = Collate()
 
+        if wrap_indices:
+            dataset = Predict._wrap_dataset(dataset)
+            collate_fn = Predict._wrap_collate_fn(collate_fn)
+
         loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
         loader = DataLoader(
-            self._wrap_dataset(dataset),
-            collate_fn=self._wrap_collate_fn(collate_fn),
+            dataset,
+            collate_fn=collate_fn,
             shuffle=False,
             **loader_kwargs,
         )
@@ -385,7 +409,8 @@ class Predict(Pipe):
         """Wrap the collate_fn to return IDX_COL along the batch values"""
         return Parallel(collate_fn, Collate(IDX_COL))
 
-    def _wrap_dataloader(self, loader: DataLoader) -> DataLoader:
+    @staticmethod
+    def _wrap_dataloader(loader: DataLoader) -> DataLoader:
         """
         Return a copy of the original dataset such that the `dataset` and `collate_fn` are
         updated such as to return the field `ROW_IDX` along the original data.
@@ -399,12 +424,13 @@ class Predict(Pipe):
 
         args = {k: v for k, v in loader.__dict__.items() if not exclude(k)}
         return DataLoader(
-            dataset=self._wrap_dataset(loader.dataset),
-            collate_fn=self._wrap_collate_fn(loader.collate_fn),
+            dataset=Predict._wrap_dataset(loader.dataset),
+            collate_fn=Predict._wrap_collate_fn(loader.collate_fn),
             **args,
         )
 
-    def _wrap_dataset(self, dataset: Dataset) -> TorchDataset:
+    @staticmethod
+    def _wrap_dataset(dataset: Dataset) -> TorchDataset:
         """Wrap the dataset to return IDX_COL along the batch values"""
         return AddRowIdx(dataset)
 
