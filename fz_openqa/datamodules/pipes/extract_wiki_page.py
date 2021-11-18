@@ -10,16 +10,17 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class ExtractWikiPage(Pipe):
-    def __init__(self, *, wiki_data: HfDataset, query_key: str):
+    def __init__(self, *, wiki_data: HfDataset, wiki_index: Dict, query_key: str):
         self.wiki_data = wiki_data
+        self.wiki_index = wiki_index
         self.query_key = query_key
 
     def extract_content(self, pages: List[str]) -> List[Dict]:
         wiki_content = []
         for page_title in pages:
-            wiki_pages = self.wiki_data.filter(lambda row: row["title"] == page_title)
-            if wiki_pages:
-                wiki_content.append({"title": page_title, "content": wiki_pages["text"]})
+            wiki_idx = self.wiki_index.get(page_title)
+            wiki_page = self.wiki_data.__getitem__(wiki_idx)
+            wiki_content.append({"title": page_title, "content": wiki_page["text"]})
         return wiki_content
 
     def __call__(self, batch: Batch, query_key: str = "wiki.pages", **kwargs) -> Batch:

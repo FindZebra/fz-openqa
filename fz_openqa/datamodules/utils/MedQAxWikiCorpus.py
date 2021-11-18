@@ -10,7 +10,7 @@ from typing import Optional
 import rich
 from datasets import DatasetDict
 from datasets import load_dataset
-from pyarrow._dataset import Dataset
+from datasets import Dataset
 from rich.progress import track
 from rich.status import Status
 
@@ -26,6 +26,7 @@ from fz_openqa.datamodules.pipes.extract_wiki_page import ExtractWikiPage
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
+from fz_openqa.utils.functional import infer_batch_size
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +52,15 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         self.dataset_builder = dataset_builder
         self.query_articles = query_articles
-        self.title_index = {}
 
         self.num_proc = num_proc
         self.batch_size = batch_size
 
-        with Status("Downloding Wikipedia dump..."):
+        with Status("Downloading Wikipedia dump..."):
             self.wikipedia_data = load_dataset("wikipedia", "20200501.en", split="train")
+            self.wikipedia_index = {
+                title:  idx for idx, title in enumerate(self.wikipedia_data['title'])
+            }
 
         self.dataset_dict_path = dataset_dict_path
 
@@ -67,10 +70,9 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         dataset = self.extract_page_titles(dataset=dataset)
 
-        dataset = self.extract_page_content(dataset=dataset)
-
         new_dataset = self.build_wiki_corpus(dataset=dataset)
 
+        exit()
         new_dataset.save_to_disk(self.dataset_dict_path)
         rich.print(f"[green]Wikipedia Corpus was successfully saved to {self.dataset_dict_path}")
 
@@ -85,25 +87,28 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         return dataset
 
-    def extract_page_content(self, dataset: DatasetDict) -> DatasetDict:
-        dataset.map(
-            ExtractWikiPage(wiki_data=self.wikipedia_data, query_key="wiki.pages"),
-            num_proc=self.num_proc,
-            batched=True,
-            batch_size=self.batch_size,
-            desc="Extract content of Wikipedia pages",
-        )
+    def extract_page_content(self, pages: List[str]) -> DatasetDict:
+        titles = []
+        texts = []
+        for page_title in pages:
+            wiki_idx = self.wikipedia_index.get(page_title)
+            if wiki_idx:
+                wiki_page = self.wikipedia_data.__getitem__(wiki_idx)
+                titles.append(page_title)
+                texts.append(wiki_page["text"])
+        return titles, texts
 
-    @staticmethod
-    def build_wiki_corpus(dataset: DatasetDict) -> Dataset:
-        json_list = []
+    def build_wiki_corpus(self, dataset: DatasetDict) -> Dataset:
+        data_dict = {"document.title": [], "document.text": []}
         for split, ds in dataset.items():
-            for batch in track(ds, description=f"Iterating through the {split} dataset..."):
-                # pages = list(itertools.filterfalse(
-                #    lambda x: x in self.title_index.keys(), pages)
-                # )
-                json_list.extend(batch["wiki.pages"])
-            rich.print(f"[red]{len(json_list)}")
+            for eg in track(ds, description=f"Iterating through the {split} dataset..."):
+                eg['wiki.pages'] = list(itertools.filterfalse(
+                     lambda x: x not in list(self.wikipedia_index.keys()), set(eg['wiki.pages']))
+                 )
+                [self.wikipedia_index.pop(key) for key in eg['wiki.pages']]
+                titles, texts = self.extract_page_content(pages=eg['wiki.pages'])
+                data_dict["document.title"].extend(titles)
+                data_dict["document.text"].extend(texts)
 
-        rich.print(f"[red]{len(json_list)}")
-        return Dataset(el for el in json_list)
+        rich.print(f"[red]{len(data_dict['document.title'])}")
+        return Dataset.from_dict(data_dict)
