@@ -16,6 +16,7 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
+from torch import Tensor
 from transformers import AutoModel
 from utils import gen_example_query
 
@@ -23,16 +24,8 @@ import fz_openqa
 from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.colbert import ColbertIndex
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
@@ -138,6 +131,14 @@ def run(config: DictConfig) -> None:
     index = faiss.IndexIVFPQ(quantiser, ndims, nlist, m, faiss.METRIC_L2)
 
     # add faiss index for each token and store token index to original document
+    # tok2doc = {}
+    # k = 0
+    # for i, doc in enumerate(document_representations):
+    #    index.train(doc)
+    #    index.add(doc)
+    #    tok2doc[k] = i
+    #    k += 1
+
     tok2doc = []
     for doc, idx in zip_longest(document_representations, batch["document.row_idx"]):
         index.train(doc)
@@ -146,24 +147,43 @@ def run(config: DictConfig) -> None:
         tok2doc.extend(ids)
 
     rich.print(f"Total number of indices: {index.ntotal}")
+    rich.print(len(tok2doc))
 
     k = 3  # number of retrieved documents
     query = gen_example_query(loader.tokenizer)
-    # todo: remove padding from tokenizer
 
     xq = model(query["question.input_ids"], query["question.attention_mask"]).last_hidden_state
+    # todo: remove padding tokens
     xq = np.ascontiguousarray(xq.numpy())
 
     # Perform search on index
+    doc_idxs = {}
     for i, eg in enumerate(xq):
-        rich.print(query["question.text"][i])
+        # rich.print(query["question.text"][i])
         _, indices = index.search(eg, k)
-        doc_idxs = set(indices.flatten())
-        # rich.print([f'{idx}: {corpus["document.text"][idx]}' for idx in doc_idxs])
-        rich.print([f"{idx}: {tok2doc[idx]}" for idx in doc_idxs])
+        doc_idxs[i] = list(set(indices.flatten()))
+
+    # Show retrieved document indices
+    for k, idx in doc_idxs.items():
+        for i in idx:
+            rich.print(f"Query: {k} with faiss index: {i} is found in document: {tok2doc[i]}")
 
     # todo: use tok2doc list to retrieve the related documents and
     # apply MaxSim to filter them further
+    retrieved_doc_index = [[tok2doc[i] for i in idx] for idx in doc_idxs.values()]
+    rich.print(retrieved_doc_index)
+
+    def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
+        if similarity_metric == "cosine":
+            return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
+        elif similarity_metric == "l2":
+            return (
+                (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
+                .max(-1)
+                .values.sum(-1)
+            )
+
+    # max_sim(similarity_metric="l2", query=xq, document=document_representations)
 
 
 if __name__ == "__main__":
