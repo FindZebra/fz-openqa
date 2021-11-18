@@ -1,5 +1,4 @@
 import logging
-import os
 from functools import singledispatchmethod
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from typing import Union
 import faiss
 import numpy as np
 import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -40,7 +40,6 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +77,8 @@ class FaissIndex(Index):
     The trainer can also be used to process the queries. In that case either
     1. call `cache_query_dataset` before calling `search` on each batch`
     2. call `search` directly on the query `Dataset`
+
+    # todo: handle temporary cache_dir form here (persist=False)
 
     Parameters
     ----------
@@ -210,7 +211,8 @@ class FaissIndex(Index):
         """
         if cache_dir is None or name is None:
             # skip caching if not cache_dir is provided
-            self._build(dataset, **kwargs)
+            logger.info("No cache_dir provided. Building index without caching")
+            self._build(dataset, cache_dir=cache_dir, **kwargs)
 
         else:
             cache_file = Path(cache_dir) / "indexes" / f"{name}.index"
@@ -221,7 +223,7 @@ class FaissIndex(Index):
                 self._index = faiss.read_index(str(cache_file))
             else:
                 # build the index
-                self._build(dataset, **kwargs)
+                self._build(dataset, cache_dir=cache_dir, **kwargs)
                 logger.info(f"Writing FaissIndex to cache: {cache_file}")
                 faiss.write_index(self._index, str(cache_file))
 
@@ -251,7 +253,7 @@ class FaissIndex(Index):
             loader_args["batch_size"] = 1000
 
         # instantiate the base data loader
-        loader = self._init_loader(dataset, **loader_args)
+        loader = self._init_loader(dataset, collate_fn=self.collate, **loader_args)
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
@@ -263,7 +265,6 @@ class FaissIndex(Index):
         # init the faiss index and add the 1st batch
         idx, batch = next(it)
         self._init_index(batch)
-        pprint_batch(batch, "first batch")
         self._add_batch_to_index(batch, idx)
 
         # iterate through the remaining batches and add them to the index
@@ -373,19 +374,28 @@ class FaissIndex(Index):
         return self._query_index(query, k=k)
 
     @search.register(Dataset)
-    def _(
+    def _search_dataset(
         self, query: Dataset, *, k: int = 1, collate_fn: Callable, **kwargs
     ) -> Iterator[SearchResult]:
-        """This method is called if `query` is of type Dataset"""
-        # todo : reimplement
+        """
+        This method is called if `query` is of type Dataset
+
+        todo: refactor to return a dataset instead of an iterator.
+        todo: replace `search` with `call` and return search results
+              as Batch instead of SearchResult
+        """
         if self.trainer:
             self.cache_query_dataset(query, collate_fn=collate_fn)
 
-        loader = self._init_loader(query)
-        return self.search(loader, k=k, **kwargs)
+        loader = self._init_loader(query, collate_fn=collate_fn)
+        loader = iter_batches_with_indexes(loader)
+        for idx, batch in loader:
+            yield self.search(batch, k=k, idx=idx, **kwargs)
 
     @search.register(DatasetDict)
-    def _(self, query: DatasetDict, *, k: int = 1, **kwargs) -> Dict[Split, Iterator[SearchResult]]:
+    def _search_dataset_dict(
+        self, query: DatasetDict, *, k: int = 1, **kwargs
+    ) -> Dict[Split, Iterator[SearchResult]]:
         """This method is called if `query` is of type DatasetDict"""
         # todo : reimplement
         return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
@@ -407,13 +417,13 @@ class FaissIndex(Index):
         vector = vector.astype(self._dtype)
         return vector
 
-    def _init_loader(self, dataset, **kwargs):
+    def _init_loader(self, dataset, *, collate_fn: Callable, **kwargs):
         loader_kwargs = self.loader_kwargs.copy()
         for k, v in kwargs.items():
             loader_kwargs[k] = v
 
         return Predict.init_loader(
-            dataset, collate_fn=self.collate, loader_kwargs=loader_kwargs, wrap_indices=False
+            dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs, wrap_indices=False
         )
 
     def _process_batches(

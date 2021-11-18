@@ -62,7 +62,7 @@ class StorePredictionsCallback(Callback):
             store_fields = []
         self.store_fields = list(set(store_fields + [IDX_COL]))
         self._reset()
-        logger.info(f"Storing predictions to {self.cache_file}")
+        logger.info(f"Initialized {type(self).__name__} with cache_file={self.cache_file}")
         logger.info(f"is_written={self.is_written}")
 
     def on_predict_epoch_end(self, *args, **kwargs) -> None:

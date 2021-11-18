@@ -23,6 +23,7 @@ from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.inference.checkpoint import CheckpointLoader
+from fz_openqa.utils.config import print_config
 from fz_openqa.utils.fingerprint import get_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
     cache_dir = config.get("sys.cache_dir", default_cache_dir)
+    print_config(config)
 
     # load model
     loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)

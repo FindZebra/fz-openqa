@@ -1,6 +1,7 @@
 import functools
 import logging
 from pathlib import Path
+from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -11,6 +12,7 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -442,3 +444,18 @@ class Predict(Pipe):
         self.__dict__.update(state)
         for k in self._pickle_exclude:
             self.__dict__[k] = None
+
+    def to_json_struct(self, exclude: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
+        """
+        Override `to_json_struct` to exclude the cache location from the fingerprint.
+        # todo: unsure about the efficiency of this.
+          if fingerprinting is not working as expected, this may be the cause.
+
+        Warnings
+        --------
+        exclude list will also be pass to the attribute pipes.
+        """
+
+        exclude = exclude or []
+        exclude += ["cache_file", "cache_dir"]
+        super(Predict, self).to_json_struct(exclude=exclude, **kwargs)

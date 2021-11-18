@@ -12,19 +12,18 @@ import rich
 
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.json_struct import apply_to_json_struct
-from fz_openqa.utils.json_struct import reduce_json_struct
 
 logger = logging.getLogger(__name__)
 
 
-def leaf_to_json_struct(v: Any, append_self: bool = False) -> Union[Dict, List]:
+def leaf_to_json_struct(v: Any, **kwargs) -> Union[Dict, List]:
     """Convert a leaf value into a json structure."""
     if isinstance(v, Component):
-        return v.to_json_struct(append_self=append_self)
+        return v.to_json_struct(**kwargs)
     elif isinstance(v, list):
-        return [leaf_to_json_struct(x) for x in v]
+        return [leaf_to_json_struct(x, **kwargs) for x in v]
     elif isinstance(v, dict):
-        return {k: leaf_to_json_struct(x) for k, x in v.items()}
+        return {k: leaf_to_json_struct(x, **kwargs) for k, x in v.items()}
     else:
         return v
 
@@ -135,6 +134,8 @@ class Component:
             allows both a string and a nested structure of strings.
         """
         data = self.to_json_struct()
+        if type(self).__name__.lower() == "predict":
+            rich.print(data)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
             """return the fingerprint, excepts if key==__name__"""
@@ -150,7 +151,9 @@ class Component:
 
         return fingerprints
 
-    def to_json_struct(self, append_self: bool = False) -> Dict[str, Any]:
+    def to_json_struct(
+        self, append_self: bool = False, exclude: Optional[List[str]] = None, **kwargs
+    ) -> Dict[str, Any]:
         """
         Return a dictionary representation of the object.
 
@@ -159,13 +162,18 @@ class Component:
         Dictionary[str, Any]
             Dictionary representation of the object
         """
+        kwargs = {"append_self": append_self, "exclude": exclude, **kwargs}
         attributes = self._get_attributes()
+
+        if exclude is None:
+            exclude = []
 
         data = {"__name__": type(self).__name__, **attributes}
         if append_self:
             data["__self__"] = self
         data = {k: v for k, v in data.items() if not (k == "id" and v is None)}
-        data = {k: leaf_to_json_struct(v, append_self=append_self) for k, v in data.items()}
+        data = {k: v for k, v in data.items() if k not in exclude}
+        data = {k: leaf_to_json_struct(v, **kwargs) for k, v in data.items()}
         return data
 
     def _get_attributes(self) -> Dict:

@@ -64,6 +64,7 @@ def run(config: DictConfig) -> None:
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
+    cache_dir = config.get("sys.cache_dir", default_cache_dir)
 
     # load model
     loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -88,12 +89,13 @@ def run(config: DictConfig) -> None:
         tokenizer=loader.tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
-        cache_dir=config.get("sys.cache_dir", default_cache_dir),
+        cache_dir=cache_dir,
         num_proc=config.get("num_proc", 2),
     )
 
     # build the corpus and take a subset
     corpus = corpus_builder()
+    collate_fn = corpus_builder.get_collate_pipe()
     n_samples = config.get("n_samples", 10)
     if n_samples is not None and n_samples > 0:
         n_samples = min(n_samples, len(corpus))
@@ -113,24 +115,18 @@ def run(config: DictConfig) -> None:
         },
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder.get_collate_pipe(),
+        cache_dir=cache_dir,
     )
 
     # setup search pipe (query the indexes from the corpus)
     search = SearchCorpus(index, k=3, model=model)
     # setup the fetch pipe (fetch all the other fields from the corpus)
-    fetcher = FetchNestedDocuments(
-        corpus_dataset=corpus_builder(), collate_pipe=corpus_builder.get_collate_pipe()
-    )
-    query = corpus_builder.get_collate_pipe()([corpus[i] for i in range(3)])
+    fetcher = FetchNestedDocuments(corpus_dataset=corpus_builder(), collate_pipe=collate_fn)
+    query = collate_fn([corpus[i] for i in range(3)])
 
-    # search
+    # search for one batch
     output = search(query)
     query: Batch = {str(k).replace("document.", "question."): v for k, v in query.items()}
-
-    # alternatively, you can iterate you can search for a whole dataloader:
-    # outputs = index.search(corpus, k=3)
-    # for search_results in outputs:
-    #     pprint_batch(vars(search_results), "batch of search results")
 
     # format the output
     pprint_batch(output, "query output")
@@ -145,6 +141,12 @@ def run(config: DictConfig) -> None:
             txt = eg["document.text"][j]
             score = eg["document.retrieval_score"][j]
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
+
+    # alternatively, you can iterate you can search for a whole dataloader:
+    outputs = index.search(corpus, k=3, collate_fn=collate_fn)
+    for search_results in outputs:
+        pprint_batch(vars(search_results), "search whole dataset - results")
+        break
 
 
 if __name__ == "__main__":
