@@ -4,7 +4,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from fz_openqa.datamodules.pipes import Pipe
+from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -15,6 +15,8 @@ class GenerateSentences(Pipe):
     https://github.com/jind11/MedQA/blob/master/IR/scripts/insert_text_to_elasticsearch.py
     """
 
+    _allows_update = False
+
     def __init__(
         self, *, delimiter: Optional[str] = ".", required_keys: Optional[List[str]] = None, **kwargs
     ):
@@ -23,7 +25,7 @@ class GenerateSentences(Pipe):
         self.delimiter = delimiter
         self.required_keys = required_keys
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return self.generate_sentences(
             batch, required_keys=self.required_keys, delimiter=self.delimiter
         )

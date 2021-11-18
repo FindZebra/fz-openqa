@@ -98,7 +98,7 @@ class DataModule(LightningDataModule):
         # define the collate operator
         self.collate_pipe = self.builder.get_collate_pipe()
 
-    def train_dataloader(self):
+    def train_dataloader(self, *, shuffle: bool = True):
         collate_fn = self._get_collate_fn(split=Split.TRAIN)
 
         return DataLoader(
@@ -107,11 +107,11 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
-            shuffle=True,
+            shuffle=shuffle,
             collate_fn=collate_fn,
         )
 
-    def _eval_loader(self, split):
+    def _eval_loader(self, split, *, shuffle: bool = False):
         collate_fn = self._get_collate_fn(split=split)
 
         return DataLoader(
@@ -120,7 +120,7 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
-            shuffle=False,
+            shuffle=shuffle,
             collate_fn=collate_fn,
         )
 
@@ -130,11 +130,11 @@ class DataModule(LightningDataModule):
             collate_fn = partial(collate_fn, split=split)
         return collate_fn
 
-    def val_dataloader(self):
-        return self._eval_loader(Split.VALIDATION)
+    def val_dataloader(self, **kwargs):
+        return self._eval_loader(Split.VALIDATION, **kwargs)
 
-    def test_dataloader(self):
-        return self._eval_loader(Split.TEST)
+    def test_dataloader(self, **kwargs):
+        return self._eval_loader(Split.TEST, **kwargs)
 
     def get_dataset(
         self, split: Union[str, Split], dataset: Optional[HfDataset] = None

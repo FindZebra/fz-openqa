@@ -6,6 +6,7 @@ import rich
 import torch
 
 from fz_openqa.datamodules.pipes import Sort
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -46,7 +47,7 @@ class TestSort(TestCase):
     def test_sort_with_filter(self):
         batch = {"a": [1, 2, 3, 4], "b": [4, 3, 2, 1], "c": [2, 5, 7, 3]}
 
-        pipe = Sort(keys=["a"], reverse=True, filter=lambda key: key in {"a", "b"})
+        pipe = Sort(keys=["a"], reverse=True, input_filter=In(["a", "b"]), update=True)
 
         # sort the batch
         reversed_batch = pipe(deepcopy(batch))

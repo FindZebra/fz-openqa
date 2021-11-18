@@ -5,6 +5,7 @@ from typing import Union
 from transformers import PreTrainedTokenizerFast
 
 from .base import Pipe
+from .control.condition import In
 from fz_openqa.modeling.functional import TorchBatch
 from fz_openqa.utils.datastruct import Batch
 
@@ -19,15 +20,22 @@ class TokenizerPipe(Pipe):
         drop_columns: bool = True,
         fields: Union[str, List[str]],
         max_length: Optional[int],
+        return_token_type_ids: bool = False,
+        return_offsets_mapping: bool = False,
+        add_special_tokens: bool = True,
         **kwargs,
     ):
+        self.fields = [fields] if isinstance(fields, str) else fields
+        assert kwargs.get("input_filter", None) is None, "input_filter is not allowed"
+        super(TokenizerPipe, self).__init__(**kwargs, input_filter=In(self.fields))
         self.tokenizer = tokenizer
         self.drop_columns = drop_columns
-        self.fields = [fields] if isinstance(fields, str) else fields
         self.args = {
             "max_length": max_length,
             "truncation": max_length is not None,
-            **kwargs,
+            "return_token_type_ids": return_token_type_ids,
+            "return_offsets_mapping": return_offsets_mapping,
+            "add_special_tokens": add_special_tokens,
         }
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
@@ -39,7 +47,9 @@ class TokenizerPipe(Pipe):
             input_keys += ["offset_mapping"]
         return input_keys
 
-    def __call__(self, batch: TorchBatch, **kwargs) -> TorchBatch:
+    def _call_batch(
+        self, batch: TorchBatch, idx: Optional[List[int]] = None, **kwargs
+    ) -> TorchBatch:
         tokenizer_input = {field: batch[field] for field in self.fields}
 
         batch_encoding = self.tokenizer(*tokenizer_input.values(), **self.args, **kwargs)
@@ -61,7 +71,7 @@ class CleanupPadTokens(Pipe):
     def __init__(self, tokenizer: PreTrainedTokenizerFast):
         self.pad_tok = tokenizer.pad_token_id
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         for k in batch.keys():
             if str(k).endswith(".input_ids"):
                 all_tokens = batch[k]

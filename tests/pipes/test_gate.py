@@ -28,7 +28,7 @@ class TestGate(TestCase):
     def test__call(self):
         for update in [False, True]:
             for cond, _exp_output in zip(self.conds, self.outputs):
-                for alt in [None, lambda x: {'w': None}]:
+                for alt in [None, lambda x, **kwargs: {'w': None}]:
 
                     # build pipe and process batch
                     pipe = Gate(cond, pipe=Identity(), alt=alt, update=update)

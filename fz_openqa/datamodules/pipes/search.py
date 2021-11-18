@@ -11,8 +11,8 @@ import dill
 import torch
 from datasets import Dataset
 
-from . import Collate
 from .base import Pipe
+from .collate import Collate
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -76,26 +76,7 @@ class SearchCorpus(Pipe):
         self.k = k
         self.model = model
 
-    def __repr__(self):
-        return {
-            "__type__": type(self),
-            "k": self.k,
-            "es_index": self.index.index_name,
-        }.__repr__()
-
-    def dill_inspect(self, **kwargs) -> Dict[str, Any]:
-        return {
-            "__all__": dill.pickles(self),
-            "index": self.index.dill_inspect(),
-        }
-
-    def fingerprint(self) -> Dict[str, Any]:
-        return {
-            "__all__": self._fingerprint(self),
-            "index": self._fingerprint(self.index),
-        }
-
-    def __call__(
+    def _call_batch(
         self,
         query: Batch,
         *,
@@ -109,7 +90,7 @@ class SearchCorpus(Pipe):
         model = model or self.model
 
         # query the index
-        search_result = self.index.search(query=query, k=k, model=model, **kwargs)
+        search_result = self.index.search(query, k=k, model=model, **kwargs)
 
         # store as a dictionary and return
         output = {
@@ -129,7 +110,7 @@ class FetchDocuments(Pipe):
         *,
         corpus_dataset: Dataset,
         keys: Optional[List[str]] = None,
-        collate_pipe: Pipe = Collate(),
+        collate_pipe: Pipe = None,
         index_key: str = "document.row_idx",
         output_format: str = "dict",
         id: str = "fetch-documents-pipe",
@@ -137,29 +118,21 @@ class FetchDocuments(Pipe):
     ):
         super(FetchDocuments, self).__init__(id=id)
         if keys is not None:
-            keys = set(keys).union([index_key])
+            keys.append(index_key)
             # make sure to sort the keys to ensure deterministic fingerprinting
-            cols_to_drop = list(sorted(set(corpus_dataset.column_names) - keys))
+            cols_to_drop = [c for c in corpus_dataset.column_names if c not in keys]
             corpus_dataset = corpus_dataset.remove_columns(cols_to_drop)
 
         self.corpus_dataset = corpus_dataset
         self.keys = keys
-        self.collate_pipe = collate_pipe
+        self.collate_pipe = collate_pipe or Collate()
         self.index_key = index_key
         self.output_format = output_format
-
-    def fingerprint(self) -> Dict[str, Any]:
-        return {
-            "__all__": self._fingerprint(self),
-            "corpus_dataset": self._fingerprint(self.corpus_dataset),
-            "corpus_dataset_fingerprint": self.corpus_dataset._fingerprint,
-            "self.collate_pipe": self._fingerprint(self.collate_pipe),
-        }
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes

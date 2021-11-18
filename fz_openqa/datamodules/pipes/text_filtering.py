@@ -10,11 +10,12 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class TextFilter(Pipe):
-    def __init__(self, *, text_key: str, query_key):
+    def __init__(self, *, text_key: str, query_key, **kwargs):
+        super(TextFilter, self).__init__(**kwargs)
         self.text_key = text_key
         self.query_key = query_key
 
-    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
         text_key = text_key or self.text_key
         batch[text_key] = [self.filter_one(eg) for eg in batch[text_key]]
         return batch
@@ -66,7 +67,7 @@ class SciSpacyFilter(TextFilter):
     def _join_ents(doc: Doc) -> str:
         return " ".join([str(ent.text) for ent in doc.ents])
 
-    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
         text_key = text_key or self.text_key
         docs = self.model.pipe(batch[text_key])
         batch[text_key] = [self._join_ents(doc) for doc in docs]
@@ -89,7 +90,7 @@ class MetaMapFilter(TextFilter):
     def _join_ents(MetaMapList: list) -> str:
         return " ".join([str(ent) for ent in MetaMapList])
 
-    def __call__(self, batch: Batch, query_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, query_key: Optional[str] = None, **kwargs) -> Batch:
         rich.print(f"[green]{batch.keys()}")
         query_key = query_key or self.query_key
         batch[query_key] = [self._join_ents(lst) for lst in batch["question.metamap"]]

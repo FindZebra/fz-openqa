@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+Eg = Dict[str, Union[bool, str, Number, Tensor, List, np.ndarray]]
 Batch = Dict[str, Union[bool, Number, Tensor, List, np.ndarray]]
 
 

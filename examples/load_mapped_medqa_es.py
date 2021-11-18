@@ -11,7 +11,7 @@ from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -37,13 +37,14 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = MedQABuilder(
+    dataset_builder = MedQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
+    dataset_builder.subset_size = [200, 50, 50]
 
     # define the corpus builder
     corpus_builder = MedQaCorpusBuilder(
@@ -61,11 +62,11 @@ def run(config):
         index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(interpretable=True),
         n_retrieved_documents=1000,
-        n_documents=100,
-        max_pos_docs=10,
+        n_documents=10,
+        max_pos_docs=1,
         filter_unmatched=True,
         num_proc=2,
-        batch_size=10,
+        batch_size=50,
     )
 
     # define the data module
@@ -74,13 +75,13 @@ def run(config):
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=10)
+    dm.display_samples(n_samples=3)
 
     # access dataset
     rich.print(dm.dataset)
 
     # sample a batch
-    _ = next(iter(dm.train_dataloader()))
+    # _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":
