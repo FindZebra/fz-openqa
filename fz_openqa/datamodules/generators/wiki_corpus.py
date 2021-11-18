@@ -2,6 +2,7 @@ import json
 
 import datasets
 
+
 class WikiCorpusConfig(datasets.BuilderConfig):
     """BuilderConfig for the MedQa English Corpus objecxt."""
 
