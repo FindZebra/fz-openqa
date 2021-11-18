@@ -139,14 +139,14 @@ class FaissIndex(Index):
         faiss_args = faiss_args or DEFAULT_FAISS_KWARGS
         #  save fingerprints and define the index name. The index name
         # must be unique for each dataset x model x faiss_args combination
-        model_fingerprint = get_fingerprint(model)
-        dataset_fingerprint = dataset._fingerprint
-        faiss_fingerprint = get_fingerprint(faiss_args)
+        self._model_fingerprint = get_fingerprint(model)
+        self._dataset_fingerprint = dataset._fingerprint
+        self._faiss_fingerprint = get_fingerprint(faiss_args)
         self._fingerprint = get_fingerprint(
             {
-                "model": model_fingerprint,
-                "dataset": dataset_fingerprint,
-                "faiss": faiss_fingerprint,
+                "model": self._model_fingerprint,
+                "dataset": self._dataset_fingerprint,
+                "faiss": self._faiss_fingerprint,
             }
         )
         self.index_name = f"{type(self).__name__}-{self._fingerprint}"
