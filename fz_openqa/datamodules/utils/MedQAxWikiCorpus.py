@@ -8,9 +8,9 @@ from typing import List
 from typing import Optional
 
 import rich
+from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
-from datasets import Dataset
 from rich.progress import track
 from rich.status import Status
 
@@ -63,7 +63,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             self.wikipedia_data = load_dataset("wikipedia", "20200501.en", split="train")
             # Index to look up Wikipedia pages and extract page content
             self.wikipedia_index = {
-                title:  idx for idx, title in enumerate(self.wikipedia_data['title'])
+                title: idx for idx, title in enumerate(self.wikipedia_data["title"])
             }
         # Directory path to output Wikipedia corpus
         self.dataset_dict_path = dataset_dict_path
@@ -77,9 +77,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # build Wikipedia corpus to output
         new_dataset = self.build_wiki_corpus(dataset=dataset)
 
-        exit()
         new_dataset.save_to_disk(self.dataset_dict_path)
-        rich.print(f"[green]Wikipedia Corpus was successfully saved to {self.dataset_dict_path}")
 
     def extract_page_titles(self, dataset: DatasetDict) -> DatasetDict:
         """Extracts a list of Wikipedia pages for each question"""
@@ -95,7 +93,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
     def _update_title_index(self, page: str):
         """Updates title index to catch already queried Wikipedia pages"""
-        self.title_index[page] = ''
+        self.title_index[page] = ""
 
     def extract_page_content(self, pages: List[str]) -> DatasetDict:
         """Extracts the page content of each Wikipedia page"""
@@ -112,17 +110,18 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
     def build_wiki_corpus(self, dataset: DatasetDict) -> Dataset:
         """Builds the Wikipedia Corpus based on extracted Wikipedia pages
-                Features: {"document.title", "document.text"}
+        Features: {"document.title", "document.text"}
         """
         data_dict = {"document.title": [], "document.text": []}
         for split, ds in dataset.items():
             for eg in track(ds, description=f"Iterating through the {split} dataset..."):
-                eg['wiki.pages'] = list(itertools.filterfalse(
-                     lambda x: x in self.title_index.keys(), set(eg['wiki.pages']))
-                 )
-                titles, texts = self.extract_page_content(pages=eg['wiki.pages'])
+                eg["wiki.pages"] = list(
+                    itertools.filterfalse(
+                        lambda x: x in self.title_index.keys(), set(eg["wiki.pages"])
+                    )
+                )
+                titles, texts = self.extract_page_content(pages=eg["wiki.pages"])
                 data_dict["document.title"].extend(titles)
                 data_dict["document.text"].extend(texts)
 
-        rich.print(f"[red]{len(data_dict['document.title'])}")
         return Dataset.from_dict(data_dict)

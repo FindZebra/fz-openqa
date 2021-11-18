@@ -34,7 +34,7 @@ def run(config):
     dataset_builder = MedQABuilder(
         tokenizer=None,
         text_formatter=text_formatter,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
