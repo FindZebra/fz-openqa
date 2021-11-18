@@ -1,6 +1,8 @@
+from functools import partial
 from typing import Any
 from typing import Iterable
 from typing import List
+from typing import T
 from typing import Tuple
 from typing import Type
 from typing import Union
@@ -9,7 +11,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.shape import infer_missing_dims
+from fz_openqa.utils.shape import infer_shape
 
 
 def flatten_nested_(values: List[List], level=1, current_level=0) -> Iterable[Any]:
@@ -89,3 +93,40 @@ def reconcat(values: List[Any], original_type: Type):
     else:
         raise ValueError(f"Cannot reconstruct values of original type={original_type}")
     return values
+
+
+def expand_and_repeat(x, n):
+    """Expand by one dimension and repeat `n` times"""
+    if isinstance(x, np.ndarray):
+        x = x[..., None]
+        return np.repeat(x, n, axis=-1)
+
+    elif isinstance(x, torch.Tensor):
+        x = x[..., None]
+        return x.expand(x.shape[:-1] + (n,))
+
+    elif isinstance(x, list):
+
+        def repeat(x, *, n):
+            return [x] * n
+
+        return apply_to_json_struct(x, partial(repeat, n=n))
+
+
+def expand_to_shape(x: T, target_shape: List[int]) -> T:
+    """Expand a batch value to a target shape."""
+    shape = infer_shape(x)
+    while len(shape) < len(target_shape):
+        if not target_shape[: len(shape)] == shape:
+            raise ValueError(
+                f"First dimentions must match. Cannot expand batch of "
+                f"shape {shape} to shape {target_shape}"
+            )
+
+        # expand the batch by one dim
+        new_dim = target_shape[len(shape)]
+        x = expand_and_repeat(x, new_dim)
+
+        # update `shape`
+        shape = infer_shape(x)
+    return x

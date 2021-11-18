@@ -1,23 +1,21 @@
 from functools import partial
-from typing import Callable
 from typing import List
 from typing import Optional
 from typing import T
 from typing import Union
 
 import numpy as np
-import rich
 from torch import Tensor
 
 from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe
+from .utils.nesting import expand_to_shape
 from .utils.nesting import flatten_nested
 from .utils.nesting import nested_list
 from .utils.nesting import reconcat
 from fz_openqa.datamodules.pipes.basic import ApplyToAll
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.functional import always_true
 from fz_openqa.utils.functional import infer_batch_size
 
 
@@ -218,3 +216,36 @@ class Nested(ApplyAsFlatten):
         """
         pipe = NestedLevel1(pipe)
         super().__init__(pipe=pipe, level=level - 1, **kwargs)
+
+
+class Expand(Pipe):
+    """
+    Expand the batch to match the new shape. New dimensions are repeated.
+    """
+
+    def __init__(self, shape: List[int], **kwargs):
+        """
+        Parameters
+        ----------
+        shape
+            The shape of the batch after expansion.
+        kwargs
+            Additional keyword arguments passed to `Pipe`.
+        """
+        super().__init__(**kwargs)
+        self.shape = shape
+
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        shape, shapes = infer_batch_shape(batch, return_all_shapes=True)
+        if not all(list(shape) == list(s) for s in shapes.values()):
+            raise ValueError(f"All fields must have the same shape. Found: {shapes}")
+        if not list(self.shape[: len(shape)]) == list(shape):
+            raise ValueError(
+                f"First dimensions must match. "
+                f"Cannot expand batch of shape {shape} to shape {self.shape}"
+            )
+        if shape == self.shape:
+            return batch
+
+        else:
+            return {k: expand_to_shape(v, shape) for k, v in batch.items()}
