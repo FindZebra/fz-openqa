@@ -14,7 +14,7 @@ from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes.concat_answer_options import (
-    ConcatQuestionAnswerOption,
+    ConcatTextFields,
 )
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
@@ -65,7 +65,7 @@ dm.build_index()
 rich.print("[green]>> index is built.")
 print(get_separator())
 
-concat_pipe = ConcatQuestionAnswerOption()
+concat_pipe = ConcatTextFields()
 select_fields = FilterKeys(lambda key: key == "question.metamap")
 search_index = SearchCorpus(corpus_index=corpus._index, k=25)
 flatten_and_search = ApplyAsFlatten(search_index)

@@ -1,3 +1,4 @@
+from copy import copy
 from functools import partial
 from typing import List
 from typing import Optional
@@ -236,16 +237,23 @@ class Expand(Pipe):
         self.shape = shape
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        target_shape = copy(self.shape)
         shape, shapes = infer_batch_shape(batch, return_all_shapes=True)
+
+        # replace negative target_shape values with the original shape
+        for i, s in enumerate(shape):
+            if target_shape[i] < 0:
+                target_shape[i] = s
+
+        # check shape consistency
         if not all(list(shape) == list(s) for s in shapes.values()):
             raise ValueError(f"All fields must have the same shape. Found: {shapes}")
-        if not list(self.shape[: len(shape)]) == list(shape):
+        if not list(target_shape[: len(shape)]) == list(shape):
             raise ValueError(
                 f"First dimensions must match. "
                 f"Cannot expand batch of shape {shape} to shape {self.shape}"
             )
-        if shape == self.shape:
+        if shape == target_shape:
             return batch
-
         else:
-            return {k: expand_to_shape(v, shape) for k, v in batch.items()}
+            return {k: expand_to_shape(v, target_shape) for k, v in batch.items()}

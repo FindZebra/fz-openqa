@@ -1,30 +1,26 @@
+from typing import List
+
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
-class ConcatQuestionAnswerOption(Pipe):
-    """Concat question text with answer text"""
+class ConcatTextFields(Pipe):
+    """
+    Apply a lambda function to the batch.
+    """
 
-    def __init__(
-        self,
-        *,
-        question_key: str = "question.metamap",
-        answer_key: str = "answer.text",
-        **kwargs,
-    ):
-        super(ConcatQuestionAnswerOption, self).__init__(**kwargs)
-        self.question_key = question_key
-        self.answer_key = answer_key
+    def __init__(self, keys: List[str], *, new_key: str = "concatenated", **kwargs):
+        super().__init__(**kwargs)
+        self.fields = keys
+        self.new_field = new_key
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-        questions = batch[self.question_key]  # [bs,]
-        answers = batch[self.answer_key]  # [bs, n_options]
+        columns = [batch[field] for field in self.fields]
+        new_column = []
+        for u in zip(*columns):
+            new_column += [" ".join(u)]
+        output = {self.new_field: new_column}
+        return output
 
-        def _concat(q: str, a: str):
-            return f"{q}, {a}"
-
-        batch[self.question_key] = [
-            [_concat(q, a) for a in a_options] for q, a_options in zip(questions, answers)
-        ]
-
-        return batch
+    def output_keys(self, input_keys: List[str]) -> List[str]:
+        return [self.new_field]

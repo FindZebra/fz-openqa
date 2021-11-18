@@ -2,9 +2,8 @@ import json
 from copy import deepcopy
 from unittest import TestCase
 
-import torch
 import numpy as np
-import rich
+import torch
 from parameterized import parameterized
 
 from fz_openqa.datamodules.pipes import ApplyAsFlatten, Identity, Lambda
@@ -83,13 +82,13 @@ class TestNested(TestAsFlatten):
 class TestExpand(TestCase):
 
     @parameterized.expand([
-        ({'list': [1,2,3], 'np': np.array([1,2,3]), 'torch': torch.tensor([1,2,3])}, (3,1)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, (3, 1)),
         ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, (3, 2)),
-        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, (3, 3, 2)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])},
+         (3, 3, 2)),
     ])
     def test_shape(self, data, shape):
         pipe = Expand(shape)
         output = pipe(data)
-
         for k in data.keys():
-            self.assertTrue((np.array(data[k])==np.array(output[k])).all())
+            self.assertEqual(list(shape), list(np.array(output[k]).shape))

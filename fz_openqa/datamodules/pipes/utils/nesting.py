@@ -116,8 +116,14 @@ def expand_and_repeat(x, n):
 def expand_to_shape(x: T, target_shape: List[int]) -> T:
     """Expand a batch value to a target shape."""
     shape = infer_shape(x)
+
+    # replace negative target_shape values with the original shape
+    for i, s in enumerate(shape):
+        if target_shape[i] < 0:
+            target_shape[i] = s
+
     while len(shape) < len(target_shape):
-        if not target_shape[: len(shape)] == shape:
+        if not list(target_shape[: len(shape)]) == list(shape):
             raise ValueError(
                 f"First dimentions must match. Cannot expand batch of "
                 f"shape {shape} to shape {target_shape}"
@@ -129,4 +135,5 @@ def expand_to_shape(x: T, target_shape: List[int]) -> T:
 
         # update `shape`
         shape = infer_shape(x)
+
     return x
