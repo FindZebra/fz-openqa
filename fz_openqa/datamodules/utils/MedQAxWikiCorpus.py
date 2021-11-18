@@ -51,25 +51,30 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         super(WikixMedQaCorpusBuilder, self).__init__(cache_dir=None, **kwargs)
 
         self.dataset_builder = dataset_builder
+        # Pipe to query potential Wikipedia pages (e.g. Wikipedia API, SpikeX)
         self.query_articles = query_articles
+        # Index applied to catch already queried Wikipedia pages
+        self.title_index = {}
 
         self.num_proc = num_proc
         self.batch_size = batch_size
 
         with Status("Downloading Wikipedia dump..."):
             self.wikipedia_data = load_dataset("wikipedia", "20200501.en", split="train")
+            # Index to look up Wikipedia pages and extract page content
             self.wikipedia_index = {
                 title:  idx for idx, title in enumerate(self.wikipedia_data['title'])
             }
-
+        # Directory path to output Wikipedia corpus
         self.dataset_dict_path = dataset_dict_path
 
     def __call__(self, format: Optional[str] = None, **kwargs):
         with Status(f"Instantiating {self.dataset_builder.__module__}.."):
             dataset = self.dataset_builder(format=None, tokenizer=None)
 
+        # process the whole dataset (extract wikipedia pages)
         dataset = self.extract_page_titles(dataset=dataset)
-
+        # build Wikipedia corpus to output
         new_dataset = self.build_wiki_corpus(dataset=dataset)
 
         exit()
@@ -77,6 +82,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         rich.print(f"[green]Wikipedia Corpus was successfully saved to {self.dataset_dict_path}")
 
     def extract_page_titles(self, dataset: DatasetDict) -> DatasetDict:
+        """Extracts a list of Wikipedia pages for each question"""
         dataset = dataset.map(
             self.query_articles,
             num_proc=self.num_proc,
@@ -87,10 +93,16 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         return dataset
 
+    def _update_title_index(self, page: str):
+        """Updates title index to catch already queried Wikipedia pages"""
+        self.title_index[page] = ''
+
     def extract_page_content(self, pages: List[str]) -> DatasetDict:
+        """Extracts the page content of each Wikipedia page"""
         titles = []
         texts = []
         for page_title in pages:
+            self._update_title_index(page_title)
             wiki_idx = self.wikipedia_index.get(page_title)
             if wiki_idx:
                 wiki_page = self.wikipedia_data.__getitem__(wiki_idx)
@@ -99,13 +111,15 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         return titles, texts
 
     def build_wiki_corpus(self, dataset: DatasetDict) -> Dataset:
+        """Builds the Wikipedia Corpus based on extracted Wikipedia pages
+                Features: {"document.title", "document.text"}
+        """
         data_dict = {"document.title": [], "document.text": []}
         for split, ds in dataset.items():
             for eg in track(ds, description=f"Iterating through the {split} dataset..."):
                 eg['wiki.pages'] = list(itertools.filterfalse(
-                     lambda x: x not in list(self.wikipedia_index.keys()), set(eg['wiki.pages']))
+                     lambda x: x in self.title_index.keys(), set(eg['wiki.pages']))
                  )
-                [self.wikipedia_index.pop(key) for key in eg['wiki.pages']]
                 titles, texts = self.extract_page_content(pages=eg['wiki.pages'])
                 data_dict["document.title"].extend(titles)
                 data_dict["document.text"].extend(texts)
