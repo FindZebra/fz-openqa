@@ -8,6 +8,7 @@ import datasets
 import faiss
 import hydra
 import numpy as np
+import pandas as pd
 import rich
 import torch
 import transformers
@@ -162,7 +163,8 @@ def run(config: DictConfig) -> None:
     #    doc_idxs[i] = list(set(indices.flatten()))
     _, indices = index.search(xq, k)
     rich.print(indices)
-    rich.print([f"{i} : {tok2doc[i]}" for i in indices[0]])
+    index.make_direct_map()
+    rich.print(index.reconstruct(30))
 
     # Show retrieved document indices
     # for k, idx in doc_idxs.items():
