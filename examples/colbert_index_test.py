@@ -105,7 +105,7 @@ def run(config: DictConfig) -> None:
         n_samples = min(n_samples, len(corpus))
         corpus = corpus.select(range(n_samples))
     batch = corpus[:]
-    # rich.print(batch['document.row_idx'][0], batch['document.text'][0])
+    rich.print(batch["document.row_idx"][5], batch["document.text"][5])
 
     # load the bert model model
     model = AutoModel.from_pretrained(bert_id)
@@ -131,14 +131,6 @@ def run(config: DictConfig) -> None:
     index = faiss.IndexIVFPQ(quantiser, ndims, nlist, m, faiss.METRIC_L2)
 
     # add faiss index for each token and store token index to original document
-    # tok2doc = {}
-    # k = 0
-    # for i, doc in enumerate(document_representations):
-    #    index.train(doc)
-    #    index.add(doc)
-    #    tok2doc[k] = i
-    #    k += 1
-
     tok2doc = []
     for doc, idx in zip_longest(document_representations, batch["document.row_idx"]):
         index.train(doc)
@@ -147,41 +139,52 @@ def run(config: DictConfig) -> None:
         tok2doc.extend(ids)
 
     rich.print(f"Total number of indices: {index.ntotal}")
-    rich.print(len(tok2doc))
+    rich.print(f"Number of unique values in tok2doc list: {len(set(tok2doc))}")
 
     k = 3  # number of retrieved documents
-    query = gen_example_query(loader.tokenizer)
+    # query = gen_example_query(loader.tokenizer)
+    query = ["Thus, ATP must be continuously synthesized"]
+    query_tok = loader.tokenizer(query)
+    rich.print(torch.tensor(query_tok["input_ids"]).shape)
 
-    xq = model(query["question.input_ids"], query["question.attention_mask"]).last_hidden_state
+    xq = model(
+        torch.tensor(query_tok["input_ids"]).detach(),
+        torch.tensor(query_tok["attention_mask"]).detach(),
+    ).last_hidden_state[:, 0, :]
     # todo: remove padding tokens
     xq = np.ascontiguousarray(xq.numpy())
 
     # Perform search on index
-    doc_idxs = {}
-    for i, eg in enumerate(xq):
-        # rich.print(query["question.text"][i])
-        _, indices = index.search(eg, k)
-        doc_idxs[i] = list(set(indices.flatten()))
+    # doc_idxs = {}
+    # for i, eg in enumerate(xq):
+    # rich.print(query["question.text"][i])
+    #    _, indices = index.search(eg, k)
+    #    doc_idxs[i] = list(set(indices.flatten()))
+    _, indices = index.search(xq, k)
+    rich.print(indices)
+    rich.print([f"{i} : {tok2doc[i]}" for i in indices[0]])
 
     # Show retrieved document indices
-    for k, idx in doc_idxs.items():
-        for i in idx:
-            rich.print(f"Query: {k} with faiss index: {i} is found in document: {tok2doc[i]}")
+    # for k, idx in doc_idxs.items():
+    #    for i in idx:
+    #        rich.print(f"Query: {k} with faiss index: {i} is found in document: {tok2doc[i]}")
+    # rich.print(f"Query: {k} with faiss index: {i}")
 
     # todo: use tok2doc list to retrieve the related documents and
     # apply MaxSim to filter them further
-    retrieved_doc_index = [[tok2doc[i] for i in idx] for idx in doc_idxs.values()]
-    rich.print(retrieved_doc_index)
 
-    def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
-        if similarity_metric == "cosine":
-            return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
-        elif similarity_metric == "l2":
-            return (
-                (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
-                .max(-1)
-                .values.sum(-1)
-            )
+    # retrieved_doc_index = [[tok2doc[i] for i in idx] for idx in doc_idxs.values()]
+    # rich.print(retrieved_doc_index)
+
+    # def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
+    #    if similarity_metric == "cosine":
+    #        return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
+    #    elif similarity_metric == "l2":
+    #        return (
+    #            (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
+    #            .max(-1)
+    #            .values.sum(-1)
+    #        )
 
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)
 
