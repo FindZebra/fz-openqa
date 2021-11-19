@@ -270,8 +270,28 @@ class FzCorpusBuilder(CorpusBuilder):
 
 
 class WikipediaCorpusBuilder(CorpusBuilder):
+    subset_size = [10]
+    dset_script_path_or_id = "wikipedia"
+    dset_name = "20200501.en"
+
+
+class MedWikipediaCorpusBuilder(CorpusBuilder):
     subset_size = [20]
     dset_script_path_or_id = wiki_corpus.__file__
+
+
+class FZxMedQaCorpusBuilder(CorpusBuilder):
+    subset_size = [3]
+    dset_script_path_or_id: List = [
+        fz_corpus.__file__,
+        meqa_en_corpus.__file__,
+    ]
+
+    def load_base_dataset(self) -> DatasetDict:
+        assert self.input_dir is None
+        kwargs = {"cache_dir": self.cache_dir}
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        return concatenate_datasets(dsets)
 
 
 class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
