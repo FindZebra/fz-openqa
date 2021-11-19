@@ -6,6 +6,7 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -183,7 +184,7 @@ class OpenQaBuilder(DatasetBuilder):
                         corpus_dataset=corpus,
                         classifier=relevance_classifier,
                         axis=1,
-                        n_documents=n_retrieved_documents,
+                        n=n_retrieved_documents,
                     ),
                 ),
                 ("Sort documents", SortDocuments()),
@@ -352,6 +353,18 @@ class ConcatOpenQabuilder(OpenQaBuilder):
                     "Search documents",
                     SearchCorpus(index, k=n_retrieved_documents, level=1),
                 ),
+                (
+                    "Classify documents",
+                    ClassifyDocuments(
+                        corpus_dataset=corpus,
+                        classifier=relevance_classifier,
+                        axis=2,
+                        n=n_retrieved_documents,
+                        level=2,
+                        extract_gold=False,
+                    ),
+                ),
+                ("Sort documents", SortDocuments(level=2)),
             ]
         )
 
@@ -416,12 +429,12 @@ class ConcatOpenQabuilder(OpenQaBuilder):
         idx = row["answer.target"]
 
         # for each question-answer pair
-        for i, an in enumerate(row["qa.input_ids"]):
+        for i, an in enumerate(row["question.input_ids"]):
             locator = f"QA #{i+1}"
             repr += get_separator("-") + "\n"
             repr += f"|-* {locator}\n"
             # print question-answer pair
-            an_style = "green" if idx == i else "yellow"
+            an_style = "green" if idx == i else "cyan"
             line = (
                 f"   - ({'x' if idx == i else ' '}) "
                 f"{pretty_decode(an, **decode_kwargs, only_text=False, style=an_style)}\n"
@@ -451,7 +464,7 @@ class ConcatOpenQabuilder(OpenQaBuilder):
                     )
                 repr += "\n"
 
-                doc_style = "magenta" if match_on else "white"
+                doc_style = "yellow" if match_on else "white"
                 repr += (
                     pretty_decode(
                         row["document.input_ids"][i][j],
@@ -460,9 +473,5 @@ class ConcatOpenQabuilder(OpenQaBuilder):
                     )
                     + "\n"
                 )
-
-        return repr
-
-        repr = self.dataset_builder.format_row(row)
 
         return repr

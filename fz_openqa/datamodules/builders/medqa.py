@@ -8,7 +8,7 @@ from datasets import DatasetDict
 from datasets import load_dataset
 
 from ..pipelines.collate.field import CollateField
-from ..pipes.concat_answer_options import ConcatTextFields
+from ..pipes.answer_options import ConcatTextFields
 from ..pipes.control.condition import In
 from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
@@ -171,8 +171,8 @@ class ConcatMedQaBuilder(MedQaBuilder):
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
     pt_attributes = [
-        "qa.input_ids",
-        "qa.attention_mask",
+        "question.input_ids",
+        "question.attention_mask",
         "answer.target",
         "document.match_score",
         "document.retrieval_score",
@@ -180,12 +180,11 @@ class ConcatMedQaBuilder(MedQaBuilder):
 
     # output columns
     column_names = [
-        "qa.text",
-        "qa.input_ids",
-        "qa.attention_mask",
+        "question.text",
+        "question.input_ids",
+        "question.attention_mask",
         "answer.text",
         "answer.target",
-        "question.text",
     ]
 
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
@@ -197,7 +196,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
             self.get_concat_qa_pipe(),
             batched=True,
             num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
+            desc="Concatenating questions and answers",
         )
 
         # Tokenize the text fields (question and answers)
@@ -221,7 +220,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
 
     def get_qa_tokenizer_pipe(self):
         return FormatAndTokenize(
-            prefix="qa.",
+            prefix="question.",
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
@@ -233,12 +232,11 @@ class ConcatMedQaBuilder(MedQaBuilder):
     def get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
-            CollateField("question", level=0, exclude=["input_ids", "attention_mask", "metamap"]),
             CollateField(
                 "answer", level=0, exclude=["input_ids", "attention_mask", "cui", "synonyms"]
             ),
             CollateField(
-                "qa",
+                "question",
                 tokenizer=self.tokenizer,
                 level=1,
             ),
@@ -255,7 +253,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         repr += get_separator("-") + "\n"
         repr += "* Question-answer:" + "\n"
         idx = row["answer.target"]
-        for i, an in enumerate(row["qa.input_ids"]):
+        for i, an in enumerate(row["question.input_ids"]):
             an_style = "green" if idx == i else "white"
             line = (
                 f"   - ({'x' if idx == i else ' '}) "
@@ -269,7 +267,8 @@ class ConcatMedQaBuilder(MedQaBuilder):
         return Sequential(
             Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
             ApplyAsFlatten(
-                ConcatTextFields(keys=["question.text", "answer.text"], new_key="qa.text"), level=1
+                ConcatTextFields(keys=["question.text", "answer.text"], new_key="question.text"),
+                level=1,
             ),
             input_filter=In(["question.text", "answer.text"]),
         )

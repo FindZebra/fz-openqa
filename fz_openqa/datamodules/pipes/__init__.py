@@ -1,3 +1,5 @@
+from .answer_options import ConcatTextFields
+from .answer_options import ExtractGoldAnswer
 from .base import Pipe
 from .basic import AddPrefix
 from .basic import Apply

@@ -1,4 +1,3 @@
-from copy import copy
 from functools import partial
 from typing import List
 from typing import Optional
@@ -245,5 +244,4 @@ class Expand(Pipe):
         self.n = n
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-
         return {k: expand_and_repeat(v, axis=self.axis, n=self.n) for k, v in batch.items()}

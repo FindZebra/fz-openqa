@@ -53,13 +53,13 @@ def run(config):
     builder = ConcatOpenQabuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
-        index_builder=ElasticSearchIndexBuilder(query_field="qa"),
+        index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(interpretable=True),
         n_retrieved_documents=1000,
         n_documents=10,
-        max_pos_docs=None,
+        max_pos_docs=1,
         filter_unmatched=True,
-        num_proc=2,
+        num_proc=config.get("num_proc", 2),
         batch_size=50,
     )
 

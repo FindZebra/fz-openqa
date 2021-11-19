@@ -186,11 +186,9 @@ class RelevanceClassifier(Pipe):
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
-    @staticmethod
-    def _get_matches(pair: Pair) -> List[str]:
-        doc_text = pair.document["document.text"]
-        answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index]
+    def _get_matches(self, pair: Pair) -> List[str]:
+        doc_text = pair.document[f"{self.document_field}.text"]
+        answer_text = pair.answer[f"{self.answer_field}.text"]
         return find_all(doc_text, [answer_text])
 
 
@@ -215,10 +213,9 @@ class AliasBasedMatch(RelevanceClassifier):
         if not lazy_setup:
             self._setup_models()
 
-    @staticmethod
-    def _get_matches(pair: Pair) -> List[str]:
-        doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer["answer.aliases"]
+    def _get_matches(self, pair: Pair) -> List[str]:
+        doc_text = pair.document[f"{self.document_field}.text"]
+        answer_aliases = pair.answer[f"{self.answer_field}.aliases"]
         return find_all(doc_text, answer_aliases)
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
@@ -286,12 +283,12 @@ class AliasBasedMatch(RelevanceClassifier):
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
 
     def _extract_answer_text(self, pair: Pair) -> str:
-        answer_index = pair.answer[f"{self.answer_field}.target"]
-        return pair.answer[f"{self.answer_field}.text"][answer_index]
+        return pair.answer[f"{self.answer_field}.text"]
 
-    @staticmethod
-    def _extract_synonym_text(pair: Pair) -> str:
-        return ",".join([synonym for synonym in pair.answer.get("answer.synonyms", [])])
+    def _extract_synonym_text(self, pair: Pair) -> str:
+        return ",".join(
+            [synonym for synonym in pair.answer.get(f"{self.answer_field}.synonyms", [])]
+        )
 
     def detect_acronym(self, alias: str) -> bool:
         """

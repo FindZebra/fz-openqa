@@ -13,7 +13,7 @@ from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes.concat_answer_options import (
+from fz_openqa.datamodules.pipes.answer_options import (
     ConcatTextFields,
 )
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
