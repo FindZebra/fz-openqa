@@ -1,9 +1,34 @@
+# Fz-openqa Index
+
+> Auto-generated documentation index.
+
 <div align="center">
+
+Full Fz-openqa project documentation can be found in [Modules](MODULES.md#fz-openqa-modules)
+
+- [Fz-openqa Index](#fz-openqa-index)
+- [Medical Open Domain Question Answering](#medical-open-domain-question-answering)
+    - [Setup](#setup)
+        - [Opening issues](#opening-issues)
+        - [Using the project tab](#using-the-project-tab)
+        - [Branching](#branching)
+        - [[Black](https://github.com/psf/black)](#blackhttpsgithubcompsfblack)
+        - [[flake8](https://flake8.pycqa.org/en/latest/)](#flake8httpsflake8pycqaorgenlatest)
+        - [Setting up git hooks using [pre-commit](http://python-poetry.org)](#setting-up-git-hooks-using-pre-commithttppython-poetryorg)
+    - [Running the code](#running-the-code)
+    - [Documentation](#documentation)
+        - [HfDatasetBuilder design](#hfdatasetbuilder-design)
+- [todo: update this section](#todo-update-this-section)
+        - [Data Management](#data-management)
+    - [Future Improvements](#future-improvements)
+    - [Tips and Tricks](#tips-and-tricks)
+    - [Implemented papers](#implemented-papers)
+    - [Credits](#credits)
+  - [Fz-openqa Modules](MODULES.md#fz-openqa-modules)
 
  ![FindZebra: rare disease search](fz-banner.png)
 
 # Medical Open Domain Question Answering
-
 
 <p align="center">
 <a href="https://pytorch.org/get-started/locally/"><img alt="Python" src="https://img.shields.io/badge/-Python 3.9-blue?style=for-the-badge&logo=python&logoColor=white"></a>
@@ -11,7 +36,6 @@
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?style=for-the-badge&logo=pytorchlightning&logoColor=white"></a>
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
-
 
 [![unit testing](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml/badge.svg)](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml)
 [![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
@@ -78,7 +102,6 @@ poetry run python run.py <args>
 ```
 
 </details>
-
 
 <details>
 <summary>Using Github</summary>
@@ -181,7 +204,6 @@ Config groups selected using `@` (i.e. corpus_builder) can be overrided using co
 ```shell
 poetry run python run.py +experiment=preprocessing +environ=titan +datamodule/builder@datamodule.builder.corpus_builder=wikipedia_corpus.yaml
 ```
-
 
 </details>
 
@@ -303,7 +325,6 @@ Batches represent a two-level data structure with first-level keys [`question`, 
 second-level attributes [`text`, `input_ids`, `attention_mask`, `idx`, ...]. The nested-structured is flattened and keys joined
 using a dot such as `document` + `input_ids` -> `document.input_ids`.
 
-
 A batch of data is of the following structure.
 Documents are not necessarily given as they might be sampled dynamically within the Module.
 
@@ -322,7 +343,6 @@ Documents are not necessarily given as they might be sampled dynamically within 
   * attention_mask: tensor of shape `[batch_size, N_docs, L_d]`
   * idx: tensor of shape `[batch_size, ]`
 </details>
-
 
 <details>
 <summary>Generating the positive and negative passages</summary>
@@ -364,7 +384,7 @@ Sample from the retriever lives and learn from the signal given by the reader co
 
 ## Tips and Tricks
 
-<details>
+ <details>
 <summary>Disk usage</summary>
 
 Check the disk usage for each sub-directory. Useful to check the available. space on `/scratch`.
@@ -402,21 +422,12 @@ ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 <summary>Export `elasticsearch`</summary>
 
 Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
-
 ```bash
 export ES_HOME=/home/valv/libs/elasticsearch/elasticsearch-7.15.0
 export PATH="$ES_HOME/bin:$PATH"
 ```
 </details>
 
- <details>
-<summary>Generate documentation</summary>
-
-```bash
-poetry run handsdown --exclude fz_openqa/configs -o docs
-```
-
-</details>
 ## Implemented papers
 
  1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)
