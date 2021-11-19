@@ -155,12 +155,14 @@ def run(config: DictConfig) -> None:
     # todo: remove padding tokens
     xq = np.ascontiguousarray(xq.numpy())
 
-    # Perform search on index
+    # Perform search on index with query tokens
     # doc_idxs = {}
     # for i, eg in enumerate(xq):
     # rich.print(query["question.text"][i])
     #    _, indices = index.search(eg, k)
     #    doc_idxs[i] = list(set(indices.flatten()))
+
+    # Perform search on index with entire query
     _, indices = index.search(xq, k)
     rich.print(indices)
     index.make_direct_map()
