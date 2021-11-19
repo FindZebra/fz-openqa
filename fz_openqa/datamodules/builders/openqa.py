@@ -272,6 +272,7 @@ class OpenQaBuilder(DatasetBuilder):
             neg_select_mode="first",
             strict=False,
             update=True,
+            level=level,
         )
 
     def format_row(self, row: Dict[str, Any]) -> str:
@@ -381,10 +382,11 @@ class ConcatOpenQabuilder(OpenQaBuilder):
         )
 
         # B. select documents (resample the field `document.row_idx`)
-        # select_documents = self.get_select_documents_pipe(
-        #     self.n_documents,
-        #     max_pos_docs=self.max_pos_docs,
-        # )
+        select_documents = self.get_select_documents_pipe(
+            self.n_documents,
+            max_pos_docs=self.max_pos_docs,
+            level=2,
+        )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
@@ -396,7 +398,7 @@ class ConcatOpenQabuilder(OpenQaBuilder):
         return BlockSequential(
             [
                 ("Collate Q&A + document indexes", collate_qad),
-                # ("Select documents", select_documents),
+                ("Select documents", select_documents),
                 ("Fetch document data", fetch_documents),
             ],
             id="collate-pipeline",
@@ -413,7 +415,7 @@ class ConcatOpenQabuilder(OpenQaBuilder):
 
         # for each question-answer pair
         for i, an in enumerate(row["qa.input_ids"]):
-            locator = f"Question-Answer#{i+1}"
+            locator = f"QA #{i+1}"
             repr += get_separator("-") + "\n"
             repr += f"|-* {locator}\n"
             # print question-answer pair
