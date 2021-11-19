@@ -18,7 +18,7 @@ class ExtractWikiPage(Pipe):
         self.query_key = query_key
 
     def extract_content(self, pages: List[str]) -> List[Dict]:
-        """ Takes a list of Wikipedia page titles and extracts the page content based on a Wikipedia dump. """
+        """ Takes a list of Wiki-page titles and extracts the page content based on a Wiki-dump. """
         wiki_content = []
         for page_title in pages:
             # Look up index in Wikipedia dump og page title

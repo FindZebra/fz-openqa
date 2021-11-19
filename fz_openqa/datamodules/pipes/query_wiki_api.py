@@ -18,12 +18,12 @@ class QueryWikiAPI:
 
     @staticmethod
     def query_api(answer_str: str) -> List[str]:
-        "Returns a list of all the article's titles (max 10) that contain the query."
+        """Returns a list of all the article's titles (max 10) that contain the query."""
         return wikipedia.search(answer_str)
 
     @staticmethod
     def _extract_wiki_pages(answer_options: Union[str, List], fn: Callable) -> List[str]:
-        "Takes a string or list of strings, queries each string against the Wikipedia API."
+        """Takes a string or list of strings, queries each string against the Wikipedia API."""
         if isinstance(answer_options, str):
             return fn(answer_options)
         elif isinstance(answer_options, (tuple, list)):

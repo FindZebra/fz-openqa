@@ -1,5 +1,5 @@
 <div align="center">
- 
+
  ![FindZebra: rare disease search](fz-banner.png)
 
 # Medical Open Domain Question Answering
@@ -17,7 +17,7 @@
 [![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
 
  </div>
- 
+
 ## Setup
 
 <details>

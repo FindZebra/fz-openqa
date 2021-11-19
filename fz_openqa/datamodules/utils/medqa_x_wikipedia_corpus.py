@@ -1,7 +1,6 @@
 import itertools
 import logging
 import os
-import pickle
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -24,20 +23,11 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.extract_wiki_page import ExtractWikiPage
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
-from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
-from fz_openqa.datamodules.utils.typing import HfDataset
-from fz_openqa.utils.functional import infer_batch_size
 
 logger = logging.getLogger(__name__)
 
 
 class WikixMedQaCorpusBuilder(DatasetBuilder):
-    column_names = MedQABuilder.column_names + [
-        "idx",
-        "title",
-        "content",
-    ]
-
     def __init__(
         self,
         *,
