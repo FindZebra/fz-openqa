@@ -17,8 +17,10 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
+from rich.status import Status
 from torch import Tensor
 from transformers import AutoModel
+from transformers import BertTokenizer
 from utils import gen_example_query
 
 import fz_openqa
@@ -38,6 +40,8 @@ bert_id = "google/bert_uncased_L-2_H-128_A-2"
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+
+tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
 
 class ModelWrapper:
@@ -116,6 +120,7 @@ def run(config: DictConfig) -> None:
     ).last_hidden_state
 
     # remove CLS and SEP vectors
+    train_representations = document_representations[:, 0, :]
     document_representations = document_representations[:, 1:-1, :]
 
     # convert to contiguous numpy array
@@ -129,44 +134,59 @@ def run(config: DictConfig) -> None:
     nlist = 3  # number of clusters
     m = 2
     quantiser = faiss.IndexFlatL2(ndims)
+    rich.print(f"Is index trained: {quantiser.is_trained}")
     index = faiss.IndexIVFPQ(quantiser, ndims, nlist, m, faiss.METRIC_L2)
+    rich.print(f"Is index trained: {index.is_trained}")
+
+    # Todo: Find a to train the index based on token-level (training is failing)
+    with Status("Training Index..."):
+        for doc in train_representations:
+            index.train(doc)
+
+    rich.print(f"Is index trained: {index.is_trained}")
 
     # add faiss index for each token and store token index to original document
     tok2doc = []
     for doc, idx in zip_longest(document_representations, batch["document.row_idx"]):
-        index.train(doc)
         index.add(doc)
         ids = np.linspace(idx, idx, num=doc.shape[0], dtype="int32").tolist()
         tok2doc.extend(ids)
 
-    rich.print(f"Total number of indices: {index.ntotal}")
-    rich.print(f"Number of unique values in tok2doc list: {len(set(tok2doc))}")
+    rich.print(f"[red]Total number of indices: {index.ntotal}")
+    rich.print(f"[red]Number of unique values in tok2doc list: {len(set(tok2doc))}")
 
     k = 3  # number of retrieved documents
     # query = gen_example_query(loader.tokenizer)
-    query = ["Thus, ATP must be continuously synthesized"]
+    query = ["I don't know what to say; bingo, post polio syndrome, b-cell and spouse"]
     query_tok = loader.tokenizer(query)
+    rich.print(f"[green]Tokenized sequence: {tokenizer.tokenize(query[0])}")
     rich.print(torch.tensor(query_tok["input_ids"]).shape)
 
     xq = model(
         torch.tensor(query_tok["input_ids"]).detach(),
         torch.tensor(query_tok["attention_mask"]).detach(),
-    ).last_hidden_state[:, 0, :]
+    ).last_hidden_state[:, 1:-1, :]
     # todo: remove padding tokens
     xq = np.ascontiguousarray(xq.numpy())
+    rich.print(f"[green] {xq.shape}")
 
     # Perform search on index with query tokens
-    # doc_idxs = {}
-    # for i, eg in enumerate(xq):
-    # rich.print(query["question.text"][i])
-    #    _, indices = index.search(eg, k)
-    #    doc_idxs[i] = list(set(indices.flatten()))
+    doc_idxs = {}
+    for i, eg in enumerate(xq):
+        _, indices = index.search(eg, k)
+        doc_idxs[i] = list(set(indices.flatten()))
+        rich.print(indices)
+
+    indices_flat = [i for sublist in indices for i in sublist]
+    doc_indices = [tok2doc[indice] for indice in indices_flat]
+
+    rich.print(doc_indices)
 
     # Perform search on index with entire query
-    _, indices = index.search(xq, k)
-    rich.print(indices)
-    index.make_direct_map()
-    rich.print(index.reconstruct(30))
+    # _, indices = index.search(xq, k)
+    # rich.print(indices)
+    # index.make_direct_map()
+    # rich.print(index.reconstruct(30))
 
     # Show retrieved document indices
     # for k, idx in doc_idxs.items():
