@@ -6,7 +6,6 @@
     - Modules
         - [Callbacks](callbacks/index.md#callbacks)
         - [Component](component.md#component)
-        - [Configs](configs/index.md#configs)
         - [Datamodules](datamodules/index.md#datamodules)
         - [Inference](inference/index.md#inference)
         - [Modeling](modeling/index.md#modeling)
