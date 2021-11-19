@@ -6,10 +6,10 @@ import torch
 from parameterized import parameterized
 
 from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested, nested_list, \
-    expand_and_repeat, expand_to_shape
+    expand_and_repeat
 
 
-class TestNested(TestCase):
+class TestNestedUtils(TestCase):
 
     @parameterized.expand([
         ([[1, 2, 3], [4, 5, 6]], 1, [1, 2, 3, 4, 5, 6]),
@@ -32,34 +32,37 @@ class TestNested(TestCase):
         self.assertTrue((expected == output).all())
 
     @parameterized.expand([
-        ([1, 2, 3], 3, [3 * [1], 3 * [2], 3 * [3]], None),
-        ([1, 2, 3], 3, [3 * [1], 3 * [2], 3 * [3]], np.array),
-        ([1, 2, 3], 3, [3 * [1], 3 * [2], 3 * [3]], torch.tensor),
-        ([[1, 2, 3]], 3, [[3 * [1], 3 * [2], 3 * [3]]], None),
-        ([[1, 2, 3]], 3, [[3 * [1], 3 * [2], 3 * [3]]], np.array),
-        ([[1, 2, 3]], 3, [[3 * [1], 3 * [2], 3 * [3]]], torch.tensor),
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], None),
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], np.array),
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], torch.tensor),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], None),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], np.array),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], torch.tensor),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], None),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], np.array),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], torch.tensor),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], None),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], np.array),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], torch.tensor),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], None),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], np.array),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], torch.tensor),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], None),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], np.array),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], torch.tensor),
     ])
-    def test_expand_and_repeat(self, data, n, expected, op):
+    def test_expand_and_repeat(self, data, axis, n, expected, op):
         if op is not None:
             data = op(data)
             expected = op(expected)
-        output = expand_and_repeat(data, n)
-        self.assertTrue((np.array(expected) == np.array(output)).all())
 
-    @parameterized.expand([
-        ([1, 2, 3], [3, 2], [2 * [1], 2 * [2], 2 * [3]], None),
-        ([1, 2, 3], [3, 2], [2 * [1], 2 * [2], 2 * [3]], np.array),
-        ([1, 2, 3], [3, 2], [2 * [1], 2 * [2], 2 * [3]], torch.tensor),
-        ([1, 2, 3], [3, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], None),
-        ([1, 2, 3], [3, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], np.array),
-        ([1, 2, 3], [3, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], torch.tensor),
-        ([1, 2, 3], [-1, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], None),
-        ([1, 2, 3], [-1, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], np.array),
-        ([1, 2, 3], [-1, 4, 2], [4 * [2 * [1]], 4 * [2 * [2]], 4 * [2 * [3]]], torch.tensor),
-    ])
-    def test_expand_to_shape(self, data, shape, expected, op):
-        if op is not None:
-            data = op(data)
-            expected = op(expected)
-        output = expand_to_shape(data, shape)
-        self.assertTrue((np.array(expected) == np.array(output)).all())
+        # process
+        output = expand_and_repeat(data, axis=axis, n=n)
+
+        # cast
+        output = np.array(output)
+        expected = np.array(expected)
+
+        # test
+        self.assertTrue((expected == output).all())
+        self.assertEqual(expected.shape, output.shape)

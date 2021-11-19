@@ -267,7 +267,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
 
     def get_concat_qa_pipe(self):
         return Sequential(
-            Expand([-1, self.n_options], update=True, input_filter=In(["question.text"])),
+            Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
             ApplyAsFlatten(
                 ConcatTextFields(keys=["question.text", "answer.text"], new_key="qa.text"), level=1
             ),

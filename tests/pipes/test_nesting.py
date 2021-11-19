@@ -82,13 +82,14 @@ class TestNested(TestAsFlatten):
 class TestExpand(TestCase):
 
     @parameterized.expand([
-        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, (3, 1)),
-        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, (3, 2)),
-        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])},
-         (3, 3, 2)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, -1, 1, (3, 1)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, -1, 2, (3, 2)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, 0, 2, (2, 3)),
+        ({'list': [1, 2, 3], 'np': np.array([1, 2, 3]), 'torch': torch.tensor([1, 2, 3])}, 0, 5,
+         (5, 3)),
     ])
-    def test_shape(self, data, shape):
-        pipe = Expand(shape)
+    def test_shape(self, data, axis, n, expected_shape):
+        pipe = Expand(axis, n=n)
         output = pipe(data)
         for k in data.keys():
-            self.assertEqual(list(shape), list(np.array(output[k]).shape))
+            self.assertEqual(list(expected_shape), list(np.array(output[k]).shape))

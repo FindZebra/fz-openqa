@@ -144,6 +144,7 @@ class FetchDocuments(Pipe):
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes
+        # todo: query dataset for unique indexes only {i: idx for i, idx in enumerate(indexes)}
         indexes = [int(idx) for idx in batch[self.index_key]]
 
         err_msg = (

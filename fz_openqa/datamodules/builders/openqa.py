@@ -181,7 +181,9 @@ class OpenQaBuilder(DatasetBuilder):
                     "Classify documents",
                     ClassifyDocuments(
                         corpus_dataset=corpus,
-                        relevance_classifier=relevance_classifier,
+                        classifier=relevance_classifier,
+                        axis=1,
+                        n_documents=n_retrieved_documents,
                     ),
                 ),
                 ("Sort documents", SortDocuments()),

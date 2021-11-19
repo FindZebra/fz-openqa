@@ -11,7 +11,7 @@ from torch import Tensor
 from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe
-from .utils.nesting import expand_to_shape
+from .utils.nesting import expand_and_repeat
 from .utils.nesting import flatten_nested
 from .utils.nesting import nested_list
 from .utils.nesting import reconcat
@@ -229,36 +229,21 @@ class Expand(Pipe):
     Expand the batch to match the new shape. New dimensions are repeated.
     """
 
-    def __init__(self, shape: List[int], **kwargs):
+    def __init__(self, axis: int, *, n: int, **kwargs):
         """
         Parameters
         ----------
-        shape
-            The shape of the batch after expansion.
+        axis
+            Axis to expand
+        n
+            Number of times to repeat the axis
         kwargs
             Additional keyword arguments passed to `Pipe`.
         """
         super().__init__(**kwargs)
-        self.shape = shape
+        self.axis = axis
+        self.n = n
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-        target_shape = copy(self.shape)
-        shape, shapes = infer_batch_shape(batch, return_all_shapes=True)
 
-        # replace negative target_shape values with the original shape
-        for i, s in enumerate(shape):
-            if target_shape[i] < 0:
-                target_shape[i] = s
-
-        # check shape consistency
-        if not all(list(shape) == list(s) for s in shapes.values()):
-            raise ValueError(f"All fields must have the same shape. Found: {shapes}")
-        if not list(target_shape[: len(shape)]) == list(shape):
-            raise ValueError(
-                f"First dimensions must match. "
-                f"Cannot expand batch of shape {shape} to shape {self.shape}"
-            )
-        if shape == target_shape:
-            return batch
-        else:
-            return {k: expand_to_shape(v, target_shape) for k, v in batch.items()}
+        return {k: expand_and_repeat(v, axis=self.axis, n=self.n) for k, v in batch.items()}

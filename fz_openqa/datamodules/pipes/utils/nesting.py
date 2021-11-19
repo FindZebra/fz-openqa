@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Any
+from typing import Callable
 from typing import Iterable
 from typing import List
 from typing import T
@@ -11,7 +12,6 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.shape import infer_missing_dims
 from fz_openqa.utils.shape import infer_shape
 
@@ -95,45 +95,34 @@ def reconcat(values: List[Any], original_type: Type):
     return values
 
 
-def expand_and_repeat(x, n):
-    """Expand by one dimension and repeat `n` times"""
+def expand_and_repeat(x: T, axis: int, n: int = 1) -> T:
+    """Expand by the axis and repeat `n` times"""
+    shape = infer_shape(x)
+    if axis < 0:
+        axis = len(shape)
+
     if isinstance(x, np.ndarray):
-        x = x[..., None]
-        return np.repeat(x, n, axis=-1)
+        x = np.expand_dims(x, axis=axis)
+        return np.repeat(x, n, axis=axis)
 
     elif isinstance(x, torch.Tensor):
-        x = x[..., None]
-        return x.expand(x.shape[:-1] + (n,))
+        shape = x.shape
+        x = x.unsqueeze(axis)
+        a, b = shape[:axis], shape[axis:]
+        new_shape = a + (n,) + b
+        return x.expand(new_shape)
 
     elif isinstance(x, list):
 
         def repeat(x, *, n):
             return [x] * n
 
-        return apply_to_json_struct(x, partial(repeat, n=n))
+        def apply_at_level(fn: Callable, x: Iterable, *, level: int, current_level: int = 0):
+            if level == current_level:
+                return fn(x)
+            else:
+                return [
+                    apply_at_level(fn, y, level=level, current_level=current_level + 1) for y in x
+                ]
 
-
-def expand_to_shape(x: T, target_shape: List[int]) -> T:
-    """Expand a batch value to a target shape."""
-    shape = infer_shape(x)
-
-    # replace negative target_shape values with the original shape
-    for i, s in enumerate(shape):
-        if target_shape[i] < 0:
-            target_shape[i] = s
-
-    while len(shape) < len(target_shape):
-        if not list(target_shape[: len(shape)]) == list(shape):
-            raise ValueError(
-                f"First dimentions must match. Cannot expand batch of "
-                f"shape {shape} to shape {target_shape}"
-            )
-
-        # expand the batch by one dim
-        new_dim = target_shape[len(shape)]
-        x = expand_and_repeat(x, new_dim)
-
-        # update `shape`
-        shape = infer_shape(x)
-
-    return x
+        return apply_at_level(partial(repeat, n=n), x, level=axis)
