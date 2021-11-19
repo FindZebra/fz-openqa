@@ -34,7 +34,6 @@ from .relevance import ExactMatch
 from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
-from .search import SearchCorpus
 from .sorting import Sort
 from .text_filtering import MetaMapFilter
 from .text_filtering import SciSpacyFilter

@@ -1,35 +1,12 @@
 import logging
-from typing import Callable
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import Optional
 
-import dill
 import faiss
 import numpy as np
-import pytorch_lightning
 from datasets import Dataset
-from faiss.swigfaiss import Index as FaissSwigIndex
-from pytorch_lightning import Trainer
-from rich.progress import track
-from torch.utils.data import DataLoader
 
-from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Forward
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import RenameKeys
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import ToNumpy
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 
 logger = logging.getLogger(__name__)
 

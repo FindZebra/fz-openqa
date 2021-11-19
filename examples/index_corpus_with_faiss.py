@@ -19,7 +19,7 @@ from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
+from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.inference.checkpoint import CheckpointLoader

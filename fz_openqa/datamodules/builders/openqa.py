@@ -12,13 +12,14 @@ from datasets import Split
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
+from fz_openqa.datamodules.builders.medqa import ConcatMedQaBuilder
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
+from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
-from fz_openqa.datamodules.pipelines.index import SearchDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
@@ -170,9 +171,10 @@ class OpenQaBuilder(DatasetBuilder):
             [
                 (
                     "Search documents",
-                    SearchDocuments(
-                        corpus_index=index,
-                        n_documents=n_retrieved_documents,
+                    SearchCorpus(
+                        index,
+                        k=n_retrieved_documents,
+                        level=0,
                     ),
                 ),
                 (
@@ -255,7 +257,10 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: Union[int, Dict], *, max_pos_docs: Optional[int]
+        n_documents: Union[int, Dict],
+        *,
+        max_pos_docs: Optional[int],
+        level: int = 1,
     ) -> Optional[Pipe]:
         if n_documents == 0:
             return None
@@ -301,5 +306,159 @@ class OpenQaBuilder(DatasetBuilder):
                 )
                 + "\n"
             )
+
+        return repr
+
+
+class ConcatOpenQabuilder(OpenQaBuilder):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert isinstance(self.dataset_builder, ConcatMedQaBuilder)
+
+    def map_dataset(
+        self,
+        *,
+        dataset: DatasetDict,
+        corpus: Dataset,
+        index: Index,
+        n_retrieved_documents: int,
+        n_documents: int,
+        max_pos_docs: Optional[int],
+        num_proc: int,
+        batch_size: int,
+        relevance_classifier: RelevanceClassifier,
+        filter_unmatched: bool,
+    ) -> DatasetDict:
+        """
+        Map the dataset with documents from the corpus.
+
+        NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
+        deleting the the dataset, see issue #114.
+        """
+
+        if isinstance(index, FaissIndex):
+            collate_fn = CollateField(
+                "question", tokenizer=self.tokenizer, exclude=["metamap", "text"], level=0
+            )
+            index.cache_query_dataset(dataset, collate_fn=collate_fn)
+
+        # Search the document and tag them with `document.match_score`
+        pipe = BlockSequential(
+            [
+                (
+                    "Search documents",
+                    SearchCorpus(index, k=n_retrieved_documents, level=1),
+                ),
+            ]
+        )
+
+        # process the dataset with each block
+        original_size = {k: len(dset) for k, dset in dataset.items()}
+        for k, block in pipe.blocks.items():
+            logger.info(f"Processing: {k}")
+            mapper = MapWithFingerprint(
+                block,
+                batched=True,
+                cache_dir=self.dataset_builder.cache_dir,
+                num_proc=num_proc,
+                batch_size=batch_size,
+                desc=f"[Mapping] {k}",
+            )
+            dataset = mapper(dataset)
+
+        # print the difference in length for each split
+        logger.info(format_size_difference(original_size, dataset))
+
+        return dataset
+
+    def get_collate_pipe(self) -> BlockSequential:
+        """Build a Pipe to transform examples into a Batch."""
+
+        # A. Collate all attributes stored in `self.dataset`
+        collate_qad = Parallel(
+            CollateField("document", tokenizer=self.tokenizer, level=2),
+            self.dataset_builder.get_collate_pipe(),
+        )
+
+        # B. select documents (resample the field `document.row_idx`)
+        # select_documents = self.get_select_documents_pipe(
+        #     self.n_documents,
+        #     max_pos_docs=self.max_pos_docs,
+        # )
+
+        # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
+        fetch_documents = FetchNestedDocuments(
+            corpus_dataset=self.corpus_builder(),
+            collate_pipe=self.corpus_builder.get_collate_pipe(),
+            level=2,
+        )
+
+        return BlockSequential(
+            [
+                ("Collate Q&A + document indexes", collate_qad),
+                # ("Select documents", select_documents),
+                ("Fetch document data", fetch_documents),
+            ],
+            id="collate-pipeline",
+        )
+
+    def format_row(self, row: Dict[str, Any]) -> str:
+        decode_kwargs = {
+            "skip_special_tokens": False,
+            "tokenizer": self.tokenizer,
+        }
+
+        repr = f"* Question #{row.get('question.idx', None)}\n"
+        idx = row["answer.target"]
+
+        # for each question-answer pair
+        for i, an in enumerate(row["qa.input_ids"]):
+            locator = f"Question-Answer#{i+1}"
+            repr += get_separator("-") + "\n"
+            repr += f"|-* {locator}\n"
+            # print question-answer pair
+            an_style = "green" if idx == i else "yellow"
+            line = (
+                f"   - ({'x' if idx == i else ' '}) "
+                f"{pretty_decode(an, **decode_kwargs, only_text=False, style=an_style)}\n"
+            )
+            repr += line
+
+            # print documents attached to the question-answer pair
+            repr += get_separator(".") + "\n"
+            repr += f"|-* {locator} - Documents: n={len(row['document.text'][i])}"
+            if "document.match_score" in row:
+                repr += (
+                    f", n_positive={sum(row['document.match_score'][i] > 0)}, "
+                    f"n_negative={sum(row['document.match_score'][i] == 0)}"
+                )
+            repr += "\n"
+
+            # for each document
+            for j in range(min(len(row["document.text"][i]), 3)):
+                match_on = row.get("document.match_on", None)
+                match_on = match_on[i][j] if match_on is not None else None
+                repr += f"|---* {locator} - Document #{1 + j}"
+                if "document.match_score" in row:
+                    repr += (
+                        f", score={row['document.retrieval_score'][i][j]:.2f}, "
+                        f"match_score={row['document.match_score'][i][j]}, "
+                        f"match_on={match_on}"
+                    )
+                repr += "\n"
+
+                doc_style = "magenta" if match_on else "white"
+                repr += (
+                    pretty_decode(
+                        row["document.input_ids"][i][j],
+                        **decode_kwargs,
+                        style=doc_style,
+                    )
+                    + "\n"
+                )
+
+        return repr
+
+        repr = self.dataset_builder.format_row(row)
 
         return repr

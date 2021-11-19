@@ -1,18 +1,17 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any
-from typing import Callable
-from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
 import dill
-import torch
 from datasets import Dataset
 
-from .base import Pipe
-from .collate import Collate
+from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.index.base import IndexMode
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes.base import Pipe
+from fz_openqa.datamodules.pipes.collate import Collate
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -54,43 +53,52 @@ class FakeDataset:
             return deepcopy(self.data)
 
 
-class SearchCorpus(Pipe):
+class SearchCorpus(ApplyAsFlatten):
+    def __init__(
+        self,
+        index: Index,
+        *,
+        level: int = 0,
+        **kwargs,
+    ):
+        assert "input_filter" not in kwargs
+        input_filter = In(index.input_keys(IndexMode.QUERY))
+        pipe = SearchCorpusFlat(index, **kwargs)
+        super().__init__(pipe, level=level, input_filter=input_filter)
+
+
+class SearchCorpusFlat(Pipe):
     """Search a Corpus object given a query"""
 
     def __init__(
         self,
-        corpus_index,
+        index: Index,
         *,
         k: Optional[int] = None,
-        model: Optional[Union[Callable, torch.nn.Module]] = None,
         index_output_key: str = "document.row_idx",
         score_output_key: str = "document.retrieval_score",
         analyzed_output_key: str = "document.analyzed_tokens",
         **kwargs,
     ):
-        super(SearchCorpus, self).__init__(**kwargs)
-        self.index = corpus_index
+        super(SearchCorpusFlat, self).__init__(**kwargs)
+        self.index = index
         self.index_output_key = index_output_key
         self.score_output_key = score_output_key
         self.analyzed_output_key = analyzed_output_key
         self.k = k
-        self.model = model
 
     def _call_batch(
         self,
         query: Batch,
         *,
         k: Optional[int] = None,
-        model: Optional[Union[Callable, torch.nn.Module]] = None,
-        simple_collate: Optional[bool] = None,
         **kwargs,
     ):
         # update args
         k = k or self.k
-        model = model or self.model
 
         # query the index
-        search_result = self.index.search(query, k=k, model=model, **kwargs)
+        search_result = self.index.search(query, k=k, **kwargs)
 
         # store as a dictionary and return
         output = {
@@ -157,3 +165,23 @@ class FetchDocuments(Pipe):
 
         # collate and return
         return self.collate_pipe(rows)
+
+
+class FetchNestedDocuments(ApplyAsFlatten):
+    """Retrieve the full document rows (text, input_ids, ...) from
+    the corpus object given the input `index_key` for nested documents ([[input_ids]])"""
+
+    def __init__(
+        self,
+        corpus_dataset: Dataset,
+        collate_pipe: Pipe,
+        update: bool = True,
+        index_key: str = "document.row_idx",
+        level: int = 1,
+    ):
+        pipe = FetchDocuments(
+            corpus_dataset=corpus_dataset,
+            collate_pipe=collate_pipe,
+        )
+
+        super().__init__(pipe=pipe, input_filter=In([index_key]), update=update, level=level)

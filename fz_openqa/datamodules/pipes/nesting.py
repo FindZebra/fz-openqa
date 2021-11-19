@@ -145,6 +145,7 @@ class ApplyAsFlatten(Pipe):
 
         # infer the original shape of the batch
         input_shape = infer_batch_shape(batch)[: self.flatten.level + 1]
+
         batch = self.flatten(batch)
         # apply the batch to the flattened batch
         batch = self.pipe(batch, **kwargs)
@@ -152,7 +153,8 @@ class ApplyAsFlatten(Pipe):
         output = self.nest(batch, shape=input_shape)
 
         # check output and return
-        new_shape = infer_batch_shape(output)[: self.flatten.level + 1]
+        new_shape = infer_batch_shape(output)
+        new_shape = new_shape[: self.flatten.level + 1]
         explain = "Applying a pipe that changes the batch size might have caused this issue."
         if new_shape != input_shape:
             raise ValueError(
@@ -215,8 +217,11 @@ class Nested(ApplyAsFlatten):
         kwargs
             Additional keyword arguments passed to `ApplyAsFlatten`.
         """
-        pipe = NestedLevel1(pipe)
-        super().__init__(pipe=pipe, level=level - 1, **kwargs)
+        if level == 0:
+            super().__init__(pipe=pipe, level=0, **kwargs)
+        else:
+            pipe = NestedLevel1(pipe)
+            super().__init__(pipe=pipe, level=level - 1, **kwargs)
 
 
 class Expand(Pipe):

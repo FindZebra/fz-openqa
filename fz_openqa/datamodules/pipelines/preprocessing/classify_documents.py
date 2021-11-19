@@ -1,11 +1,10 @@
 from datasets import Dataset
 
+from fz_openqa.datamodules.index.pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.search import FetchDocuments
 
 
 class ClassifyDocuments(Sequential):

@@ -250,10 +250,10 @@ class ConcatMedQaBuilder(MedQaBuilder):
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,
         }
-        u = f"Question #{row.get('question.idx', None)}\n"
+        repr = f"Question #{row.get('question.idx', None)}\n"
 
-        u += get_separator("-") + "\n"
-        u += "* Question-answer:" + "\n"
+        repr += get_separator("-") + "\n"
+        repr += "* Question-answer:" + "\n"
         idx = row["answer.target"]
         for i, an in enumerate(row["qa.input_ids"]):
             an_style = "green" if idx == i else "white"
@@ -261,9 +261,9 @@ class ConcatMedQaBuilder(MedQaBuilder):
                 f"   - ({'x' if idx == i else ' '}) "
                 f"{pretty_decode(an, **decode_kwargs, only_text=False, style=an_style)}\n"
             )
-            u += line
+            repr += line
 
-        return u
+        return repr
 
     def get_concat_qa_pipe(self):
         return Sequential(
