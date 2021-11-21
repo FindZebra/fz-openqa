@@ -119,39 +119,36 @@ def run(config: DictConfig) -> None:
         batch["document.input_ids"], batch["document.attention_mask"]
     ).last_hidden_state
 
-    # remove CLS and SEP vectors
-    train_representations = document_representations[:, 1:-1, :].numpy()
-    train_representations = np.ascontiguousarray(train_representations)
-    train_representations = train_representations.reshape(-1, 128)
-
     # convert to contiguous numpy array
     document_representations = document_representations[:, 1:-1, :]
     document_representations = document_representations.numpy()
     document_representations = np.ascontiguousarray(document_representations)
+    document_representations = document_representations.reshape(-1, 128)
 
-    rich.print(f"Train representations: {train_representations.shape}")
     rich.print(f"Document representations: {document_representations.shape}")
 
     # faiss parameters + init
     ndims = document_representations.shape[-1]
-    nlist = 3  # number of clusters
-    m = 2
+    nlist = 32  # The number of cells (space partition). Typical value is sqrt(N)
+    m = 16 # The number of sub-vector. Typically this is 8, 16, 32, etc.
+    n_bits = 8 # bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte
     quantizer = faiss.IndexFlatL2(ndims)
+
     rich.print(f"Is index trained: {quantizer.is_trained}")
-    index = faiss.IndexIVFPQ(quantizer, ndims, nlist, 16, 8) # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
+    index = faiss.IndexIVFPQ(quantizer, ndims, nlist, m, n_bits) # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
     rich.print(f"Is index trained: {index.is_trained}")
 
     # Todo: Find a to train the index based on token-level (training is failing)
-    with Status("Training Index..."):
-        index.train(train_representations)
-        index.add(train_representations)
+    with Status("Setting up Faiss Index..."):
+        index.train(document_representations)
+        index.add(document_representations)
 
     rich.print(f"Is index trained: {index.is_trained}")
 
     # add faiss index for each token and store token index to original document
     tok2doc = []
-    for doc, idx in zip_longest(document_representations, batch["document.row_idx"]):
-        ids = np.linspace(idx, idx, num=doc.shape[0], dtype="int32").tolist()
+    for idx in batch["document.row_idx"]:
+        ids = np.linspace(idx, idx, num=198, dtype="int32").tolist()
         tok2doc.extend(ids)
 
     rich.print(f"[red]Total number of indices: {index.ntotal}")
@@ -159,7 +156,7 @@ def run(config: DictConfig) -> None:
 
     k = 3  # number of retrieved documents
     # query = gen_example_query(loader.tokenizer)
-    query = ["I don't know what to say; bingo, post polio syndrome, b-cell and spouse"]
+    query = ["What is the symptons of post polio syndrom?"]
     query_tok = loader.tokenizer(query)
     rich.print(f"[green]Tokenized sequence: {tokenizer.tokenize(query[0])}")
     rich.print(torch.tensor(query_tok["input_ids"]).shape)
