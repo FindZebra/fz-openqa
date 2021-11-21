@@ -130,12 +130,16 @@ def run(config: DictConfig) -> None:
     # faiss parameters + init
     ndims = document_representations.shape[-1]
     nlist = 32  # The number of cells (space partition). Typical value is sqrt(N)
-    m = 16 # The number of sub-vector. Typically this is 8, 16, 32, etc.
-    n_bits = 8 # bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte
+    m = 16  # The number of sub-vector. Typically this is 8, 16, 32, etc.
+    n_bits = (
+        8  # bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte
+    )
     quantizer = faiss.IndexFlatL2(ndims)
 
     rich.print(f"Is index trained: {quantizer.is_trained}")
-    index = faiss.IndexIVFPQ(quantizer, ndims, nlist, m, n_bits) # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
+    index = faiss.IndexIVFPQ(
+        quantizer, ndims, nlist, m, n_bits
+    )  # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
     rich.print(f"Is index trained: {index.is_trained}")
 
     # Todo: Find a to train the index based on token-level (training is failing)
@@ -170,47 +174,34 @@ def run(config: DictConfig) -> None:
     xq = xq.reshape(-1, 128)
     rich.print(f"[green] {xq.shape}")
 
-    # Perform search on index with query tokens
-    #doc_idxs = {}
-    #for i, eg in enumerate(xq):
+    # Perform search on index
     _, indices = index.search(xq, k)
-    #doc_idxs[i] = list(set(indices.flatten()))
     rich.print(indices)
 
+    # todo: use tok2doc list to retrieve the related documents
     indices_flat = [i for sublist in indices for i in sublist]
-    doc_indices = [tok2doc[indice] for indice in indices_flat]
+    doc_indices = [tok2doc[index] for index in indices_flat]
 
     rich.print(doc_indices)
+    # todo: extract document_representations for retrieved documents
 
-    # Perform search on index with entire query
-    # _, indices = index.search(xq, k)
-    # rich.print(indices)
-    # index.make_direct_map()
-    # rich.print(index.reconstruct(30))
-
-    # Show retrieved document indices
-    # for k, idx in doc_idxs.items():
-    #    for i in idx:
-    #        rich.print(f"Query: {k} with faiss index: {i} is found in document: {tok2doc[i]}")
-    # rich.print(f"Query: {k} with faiss index: {i}")
-
-    # todo: use tok2doc list to retrieve the related documents and
-    # apply MaxSim to filter them further
-
-    # retrieved_doc_index = [[tok2doc[i] for i in idx] for idx in doc_idxs.values()]
-    # rich.print(retrieved_doc_index)
-
-    # def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
-    #    if similarity_metric == "cosine":
-    #        return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
-    #    elif similarity_metric == "l2":
-    #        return (
-    #            (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
-    #            .max(-1)
-    #            .values.sum(-1)
-    #        )
-
+    # apply MaxSim to filter related documents further
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)
+
+
+# todo: adapt max_sim to our code
+def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
+    """
+    MaxSim score from original ColBERT repo
+    """
+    if similarity_metric == "cosine":
+        return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
+    elif similarity_metric == "l2":
+        return (
+            (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
+            .max(-1)
+            .values.sum(-1)
+        )
 
 
 if __name__ == "__main__":
