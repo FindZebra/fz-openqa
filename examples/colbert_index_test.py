@@ -120,35 +120,37 @@ def run(config: DictConfig) -> None:
     ).last_hidden_state
 
     # remove CLS and SEP vectors
-    train_representations = document_representations[:, 0, :]
-    document_representations = document_representations[:, 1:-1, :]
+    train_representations = document_representations[:, 1:-1, :].numpy()
+    train_representations = np.ascontiguousarray(train_representations)
+    train_representations = train_representations.reshape(-1, 128)
 
     # convert to contiguous numpy array
+    document_representations = document_representations[:, 1:-1, :]
     document_representations = document_representations.numpy()
     document_representations = np.ascontiguousarray(document_representations)
 
+    rich.print(f"Train representations: {train_representations.shape}")
     rich.print(f"Document representations: {document_representations.shape}")
 
     # faiss parameters + init
     ndims = document_representations.shape[-1]
     nlist = 3  # number of clusters
     m = 2
-    quantiser = faiss.IndexFlatL2(ndims)
-    rich.print(f"Is index trained: {quantiser.is_trained}")
-    index = faiss.IndexIVFPQ(quantiser, ndims, nlist, m, faiss.METRIC_L2)
+    quantizer = faiss.IndexFlatL2(ndims)
+    rich.print(f"Is index trained: {quantizer.is_trained}")
+    index = faiss.IndexIVFPQ(quantizer, ndims, nlist, 16, 8) # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
     rich.print(f"Is index trained: {index.is_trained}")
 
     # Todo: Find a to train the index based on token-level (training is failing)
     with Status("Training Index..."):
-        for doc in train_representations:
-            index.train(doc)
+        index.train(train_representations)
+        index.add(train_representations)
 
     rich.print(f"Is index trained: {index.is_trained}")
 
     # add faiss index for each token and store token index to original document
     tok2doc = []
     for doc, idx in zip_longest(document_representations, batch["document.row_idx"]):
-        index.add(doc)
         ids = np.linspace(idx, idx, num=doc.shape[0], dtype="int32").tolist()
         tok2doc.extend(ids)
 
@@ -168,14 +170,15 @@ def run(config: DictConfig) -> None:
     ).last_hidden_state[:, 1:-1, :]
     # todo: remove padding tokens
     xq = np.ascontiguousarray(xq.numpy())
+    xq = xq.reshape(-1, 128)
     rich.print(f"[green] {xq.shape}")
 
     # Perform search on index with query tokens
-    doc_idxs = {}
-    for i, eg in enumerate(xq):
-        _, indices = index.search(eg, k)
-        doc_idxs[i] = list(set(indices.flatten()))
-        rich.print(indices)
+    #doc_idxs = {}
+    #for i, eg in enumerate(xq):
+    _, indices = index.search(xq, k)
+    #doc_idxs[i] = list(set(indices.flatten()))
+    rich.print(indices)
 
     indices_flat = [i for sublist in indices for i in sublist]
     doc_indices = [tok2doc[indice] for indice in indices_flat]
