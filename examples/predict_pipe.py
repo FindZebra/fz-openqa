@@ -127,7 +127,7 @@ def run(config: DictConfig) -> None:
         persist=True,
     )
 
-    rich.print(">> cache_file={predict.cache_file}")
+    rich.print(f">> cache_file={predict.cache_file}")
 
     idx = list(range(n_samples))
     batch = corpus_builder.get_collate_pipe()([corpus[i] for i in idx])

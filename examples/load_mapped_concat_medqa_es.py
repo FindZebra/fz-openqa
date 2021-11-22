@@ -32,7 +32,7 @@ def run(config):
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
@@ -43,8 +43,6 @@ def run(config):
         cache_dir = config["sys"]["cache_dir"]
     except Exception:
         cache_dir = default_cache_dir
-
-    rich.print(f">> cache_dir={cache_dir}")
 
     # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
@@ -78,7 +76,7 @@ def run(config):
         n_retrieved_documents=1000,
         n_documents=10,
         max_pos_docs=1,
-        filter_unmatched=False,
+        filter_unmatched=config.get("filter_unmatched", False),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 10),
     )

@@ -28,6 +28,7 @@ from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.utils.dataset import filter_concatenated_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -384,12 +385,10 @@ class ConcatOpenQabuilder(OpenQaBuilder):
 
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
-            # todo: implement this
-            raise NotImplementedError
 
             def fn(split: Split):
                 return partial(
-                    filter_questions_by_pos_docs,
+                    filter_concatenated_questions_by_pos_docs,
                     n_documents=n_documents,
                     max_pos_docs=max_pos_docs,
                     split=split,
