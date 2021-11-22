@@ -21,7 +21,6 @@ from rich.status import Status
 from torch import Tensor
 from transformers import AutoModel
 from transformers import BertTokenizer
-from utils import gen_example_query
 
 import fz_openqa
 from fz_openqa import configs
@@ -135,8 +134,6 @@ def run(config: DictConfig) -> None:
         8  # bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte
     )
     quantizer = faiss.IndexFlatL2(ndims)
-
-    rich.print(f"Is index trained: {quantizer.is_trained}")
     index = faiss.IndexIVFPQ(
         quantizer, ndims, nlist, m, n_bits
     )  # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
@@ -159,8 +156,8 @@ def run(config: DictConfig) -> None:
     rich.print(f"[red]Number of unique values in tok2doc list: {len(set(tok2doc))}")
 
     k = 3  # number of retrieved documents
-    # query = gen_example_query(loader.tokenizer)
-    query = ["What is the symptons of post polio syndrom?"]
+    # query = ["What is the symptons of post polio syndrom?"]
+    query = ["Thus, ATP must be continuously synthesized"]
     query_tok = loader.tokenizer(query)
     rich.print(f"[green]Tokenized sequence: {tokenizer.tokenize(query[0])}")
     rich.print(torch.tensor(query_tok["input_ids"]).shape)
@@ -175,16 +172,19 @@ def run(config: DictConfig) -> None:
     rich.print(f"[green] {xq.shape}")
 
     # Perform search on index
-    _, indices = index.search(xq, k)
-    rich.print(indices)
+    scores, indices = index.search(xq, k)
+    # rich.print(indices)
 
-    # todo: use tok2doc list to retrieve the related documents
     indices_flat = [i for sublist in indices for i in sublist]
+    scores_flat = [i for sublist in scores for i in sublist]
     doc_indices = [tok2doc[index] for index in indices_flat]
 
-    rich.print(doc_indices)
+    rich.print(doc_indices, scores_flat)
+    for i, idx in enumerate(doc_indices):
+        rich.print(f"[red]Document {idx} with score {scores_flat[i]}:[/red] ")
+        rich.print(f"[green]{corpus['document.text'][idx]}[/green]")
+
     # todo: extract document_representations for retrieved documents
-    # todo: look up the doc_indices in the corpus
 
     # apply MaxSim to filter related documents further
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)

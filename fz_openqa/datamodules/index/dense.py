@@ -324,9 +324,10 @@ class FaissIndex(Index):
             The number of cells (space partition). Typical value is sqrt(N)
         m
             The number of sub-vector. Typically this is 8, 16, 32, etc.
+            Must be a divisor of the dimension
         n_bits
             Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
-            Must be a dicisor of the dimension
+
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
@@ -335,7 +336,7 @@ class FaissIndex(Index):
         m = self.faiss_args["m"]
         n_bits = self.faiss_args["n_bits"]
         dim = vectors.shape[-1]
-        assert dim % m == 0
+        assert dim % m == 0, "m must be a divisor of dim"
         quantizer = faiss.IndexFlatL2(dim)
         self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, m, n_bits, metric_type)
 
@@ -347,6 +348,7 @@ class FaissIndex(Index):
         ----------
         vector
             vector from batch
+
         """
         self._index.train(vector)
         assert self._index.is_trained is True, "Index is not trained"

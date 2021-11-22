@@ -13,6 +13,7 @@ import rich
 from datasets import Dataset
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
+from rich import status
 from rich.progress import track
 from torch.utils import data
 from torch.utils.data import DataLoader
@@ -36,18 +37,21 @@ from fz_openqa.utils.fingerprint import get_fingerprint
 logger = logging.getLogger(__name__)
 
 DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
+DEFAULT_FAISS_KWARGS = {
+    "metric_type": faiss.METRIC_INNER_PRODUCT,
+    "n_list": 32,
+    "m": 16,
+    "n_bits": 8,
+}
 
 
 class ColbertIndex(FaissIndex):
-    def __init__(self, dataset: Dataset, partitions: int, **kwargs):
+    def __init__(self, dataset: Dataset, **kwargs):
         """
         todo: @idariis : this needs to be adapted for Colbert
         the init should mostly reuse the one from the parent class (FaissIndex)
         you might need to init the token index (to store the index of the original document)
         """
-        # initializing parameters for faiss index
-        # self.dim = dim
-        self.partitions = partitions
 
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
@@ -59,23 +63,29 @@ class ColbertIndex(FaissIndex):
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
+        metric_type = self.faiss_args["metric_type"]
+        n_list = self.faiss_args["n_list"]
+        m = self.faiss_args["m"]
+        n_bits = self.faiss_args["n_bits"]
         dim = vectors.shape[-1]
-        quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, self.partitions, 2, 2, self.metric_type)
+        assert dim % m == 0, "m must be a divisor of dim"
 
-    def train(self, vector, dtype=np.float32):
+        quantizer = faiss.IndexFlatL2(dim)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, m, n_bits, metric_type)
+
+    def _train(self, vector):
         """
-        Train index on data
+        Train faiss index on data
+
+        Parameters
+        ----------
+        vector
+            vector from batch
+
         """
-        if self._index.is_trained is False:
-            print("#> Training index")
-            self._index.train(vector)
-            logger.info(
-                f"Index is_trained={self._index.is_trained}, "
-                f"size={self._index.ntotal}, type={type(self._index)}"
-            )
-        else:
-            return print(f"Index is trained={self._index.is_trained}")
+        self._index.train(vector)
+        assert self._index.is_trained is True, "Index is not trained"
+        print("Done training!")
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """
@@ -92,14 +102,20 @@ class ColbertIndex(FaissIndex):
         )
         assert self._index.ntotal == indexes[0], msg
 
-        # add the vectors
+        # train index and add vector to index
         vector: np.ndarray = batch[self.vectors_column_name]
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
         vector = vector.astype(dtype)
-        self.train(vector=vector)
+        self._train(vector)
         if self._index.is_trained is True:
             self._index.add(vector)
+            # store token index to original document
+            self.tok2doc = []
+            for idx in vector["document.row_idx"]:
+                ids = np.linspace(idx, idx, num=198, dtype="int32").tolist()
+                self.tok2doc.extend(ids)
+        rich.print(f"[red]Total number of indices: {self._index.ntotal}")
 
     def search(
         self,
@@ -116,5 +132,10 @@ class ColbertIndex(FaissIndex):
         query = self.process(query)
         query = self.postprocess(query)
         vectors = query[self.vectors_column_name]
-        score, indices = self._index.search(vectors, k)
-        return SearchResult(score=score, index=indices)
+        scores, indices = self._index.search(vectors, k)
+
+        indices_flat = [i for sublist in indices for i in sublist]
+        doc_indices = [self.tok2doc[index] for index in indices_flat]
+        doc_indices = set(doc_indices)
+
+        return SearchResult(score=scores, index=doc_indices)
