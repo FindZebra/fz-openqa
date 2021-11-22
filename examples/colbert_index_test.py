@@ -184,6 +184,7 @@ def run(config: DictConfig) -> None:
 
     rich.print(doc_indices)
     # todo: extract document_representations for retrieved documents
+    # todo: look up the doc_indices in the corpus
 
     # apply MaxSim to filter related documents further
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)
