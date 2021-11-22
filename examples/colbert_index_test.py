@@ -61,7 +61,7 @@ class ModelWrapper:
 )
 def run(config: DictConfig) -> None:
     """
-    Load a corpus and index it using Faiss.
+    Load a corpus and index it using Faiss. Adapted for ColBERT
 
     PytorchLightning's Trainer can be used to accelerate indexing.
     Example, to index the whole corpus (~5min on `rhea`):
@@ -190,7 +190,34 @@ def run(config: DictConfig) -> None:
 
 
 # todo: adapt max_sim to our code
-def max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
+def max_similarity(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
+    """Compute the maximum similarity score between a query and a document.
+
+    Parameters
+    ----------
+    similarity_metric
+        Specify similarity: cosine or L2
+    query
+        Query representation as Tensor
+    document
+        Document representation as Tensor
+
+    Returns
+    -------
+
+    """
+    assert len(document.shape) == 3
+    assert len(query.shape) == 3
+
+    if similarity_metric == "cosine":
+        raise NotImplementedError
+    elif similarity_metric == "L2":
+        raise NotImplementedError
+    else:
+        raise ValueError(f"Unknown similarity metric: `{similarity_metric}`")
+
+
+def original_max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
     """
     MaxSim score from original ColBERT repo
     """
