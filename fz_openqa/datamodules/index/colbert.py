@@ -19,8 +19,8 @@ from torch.utils.data import DataLoader
 
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.base import SearchResult
 from fz_openqa.datamodules.index.dense import FaissIndex
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Forward
@@ -29,7 +29,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import ToNumpy
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 
@@ -51,13 +51,6 @@ class ColbertIndex(FaissIndex):
 
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
-
-    def dill_inspect(self) -> Dict[str, bool]:
-        """check if the module can be pickled."""
-        return {
-            "__all__": dill.pickles(self),
-            **{k: dill.pickles(v) for k, v in self.__getstate__().items()},
-        }
 
     def _init_index(self, batch):
         """

@@ -92,7 +92,7 @@ class HfDatasetBuilder(DatasetBuilder):
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = False,
-        text_formatter: Optional[TextFormatter] = TextFormatter(),
+        text_formatter: Optional[TextFormatter] = None,
         **kwargs,
     ):
         super().__init__(cache_dir=cache_dir)
@@ -103,7 +103,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.verbose = verbose
 
         # tokenizer and dataset
-        self.text_formatter = text_formatter
+        self.text_formatter = text_formatter or TextFormatter()
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.add_encoding_tokens = add_encoding_tokens

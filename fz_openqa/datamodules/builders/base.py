@@ -1,6 +1,6 @@
 import os
 import re
-from abc import ABC
+from abc import ABCMeta
 from abc import abstractmethod
 from typing import Any
 from typing import Dict
@@ -16,10 +16,16 @@ CAMEL2SNAKE = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 def to_snake_format(name: str) -> str:
+    """convert a class name (Camel style) to file style (Snake style)"""
     return str(CAMEL2SNAKE.sub("_", name).lower())
 
 
-class DatasetBuilder(ABC):
+class DatasetBuilder:
+    """
+    DatasetBuilder is a class that is responsible for building a dataset.
+    """
+
+    __metaclass__ = ABCMeta
     _cache_path: Optional[str] = None
     _cache_type: Optional[Union[Dataset.__class__, DatasetDict.__class__]] = None
     _cache_dir = None

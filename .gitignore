@@ -9,6 +9,8 @@ sandbox*
 elasticsearch-*
 *__copy.py
 compiled-dataset-*.jsonl
+.fingerprints/
+.fingerprint/
 
 # Editors
 .vscode/

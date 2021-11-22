@@ -1,49 +1,37 @@
-from abc import ABC
+from abc import ABCMeta
 from abc import abstractmethod
-from dataclasses import dataclass
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
 
-import dill
 from datasets import Dataset
 from rich.progress import track
 
+from fz_openqa.datamodules.component import Component
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 
 
-@dataclass
-class SearchResult:
-    score: List[List[float]]
-    index: List[List[int]]
-    tokens: Optional[List[List[str]]] = None
-
-
-class Index(ABC):
+class Index(Component):
     """Keep an index of a Dataset and search u
     sing queries."""
 
+    __metaclass__ = ABCMeta
     index_name: Optional[str] = None
     is_indexed: bool = False
 
     def __init__(self, dataset: Dataset, *, verbose: bool = False, **kwargs):
+        super(Index, self).__init__(**kwargs)
         self.verbose = verbose
+        self.dataset_size = len(dataset)
         self.build(dataset=dataset, **kwargs)
 
     def __repr__(self):
         params = {"is_indexed": self.is_indexed, "index_name": self.index_name}
         params = [f"{k}={v}" for k, v in params.items()]
         return f"{self.__class__.__name__}({', '.join(params)})"
-
-    def dill_inspect(self) -> bool:
-        """check if the module can be pickled."""
-        return dill.pickles(self)
-
-    def _fingerprint(self) -> str:
-        return get_fingerprint(self)
 
     @abstractmethod
     def build(self, dataset: Dataset, **kwargs):
@@ -79,7 +67,9 @@ class Index(ABC):
             if tokens_i is not None:
                 tokens += [tokens_i]
         tokens = None if len(tokens) == 0 else tokens
-        return SearchResult(index=indexes, score=scores, tokens=tokens)
+        return SearchResult(
+            index=indexes, score=scores, tokens=tokens, dataset_size=self.dataset_size
+        )
 
     def get_example(self, query: Batch, index: int) -> Dict[str, Any]:
         return {k: v[index] for k, v in query.items()}

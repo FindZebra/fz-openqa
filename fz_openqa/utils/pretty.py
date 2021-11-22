@@ -1,5 +1,8 @@
+import logging
 import shutil
+from typing import Dict
 from typing import List
+from typing import Tuple
 from typing import Union
 
 import numpy as np
@@ -8,6 +11,10 @@ from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.shape import infer_batch_shape
+from fz_openqa.utils.shape import infer_shape
+
+logger = logging.getLogger(__name__)
 
 
 def pretty_decode(
@@ -39,39 +46,65 @@ def get_separator(char="\u2500"):
 
 
 def pprint_batch(batch: Batch, header=None):
+    u, exceptions = _repr_batch(batch, header, rich=True)
+    u = get_separator() + "\n" + u
+    rich.print(u)
+    if len(exceptions):
+        rich.print(
+            f"couldn't pretty print keys={list(exceptions.keys())}. See log for further details."
+        )
+    for key, e in exceptions.items():
+        logger.warning(f"Couldn't pretty print key={key}\nException={e}")
+
+
+def repr_batch(batch: Batch, header=None, rich: bool = False) -> str:
+    u, exceptions = _repr_batch(batch, header)
+    return u
+
+
+def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dict[str, Exception]]:
     u = ""
     if header is not None:
-        u += get_separator() + "\n"
         u += f"=== {header} ===\n"
+        u += get_separator("-") + "\n"
 
-    u += get_separator() + "\n"
-    u += f"Batch <{type(batch).__name__}>:"
+    u += f"Batch (shape={infer_batch_shape(batch)}):\n"
+
+    data = []
+    exceptions = {}
     for k in sorted(batch.keys()):
-        v = batch[k]
-        if isinstance(v, Tensor):
-            u += f"\n   - {k}: {v.shape} <{v.dtype}> ({v.device})"
-        elif isinstance(v, np.ndarray):
-            u += f"\n   - {k}: {v.shape} <np.{v.dtype}>"
-        elif isinstance(v, list):
-            if isinstance(v[0], str):
-                lens = [len(vv) for vv in v]
-                u += (
-                    f"\n   - {k}: {len(v)} items with {min(lens)} "
-                    f"to {max(lens)} characters <list<text>>"
-                )
-            elif isinstance(v[0], list):
-                dtype = type(v[0][0]).__name__ if len(v[0]) else "<empty>"
-                lengths = list(set([len(vv) for vv in v]))
-                if len(lengths) == 1:
-                    w = f"shape = [{len(v)}, {lengths[0]}]"
-                else:
-                    w = f"{len(v)} items, each with {min(lengths)} to {max(lengths)} elements"
-                u += f"\n   - {k}: {w} <list<list<{dtype}>>>"
-            else:
-                dtype = type(v[0]).__name__
-                u += f"\n   - {k}: {len(v)} items <list<{dtype}>>"
-        else:
-            u += f"\n   - {k}: {v} {type(v)}"
+        try:
+            shape, leaf_type = infer_shape(batch[k], return_leaf_type=True)
+        except Exception as e:
+            exceptions[k] = e
+        data += [{"key": k, "shape": str(shape), "leaf_type": str(leaf_type)}]
 
-    u += "\n" + get_separator()
-    rich.print(u)
+    keys = list(data[0].keys())
+    maxs = {k: max([len(d[k]) for d in data]) for k in keys}
+    _s = "  "
+    _sep = " [white]|[/white] " if rich else " | "
+
+    row_in = "[white]" if rich else ""
+    row_out = "[/white]" if rich else ""
+    _row_sep = (
+        f"{_s}{row_in}{'_' * maxs['key']}"
+        f"{_sep}{'_' * maxs['shape']}"
+        f"{_sep}{'_' * maxs['leaf_type']}{row_out}\n"
+    )
+    u += _row_sep
+    u += (
+        f"{_s}{'key':{maxs['key']}}"
+        f"{_sep}{'shape':{maxs['shape']}}"
+        f"{_sep}{'leaf_type':{maxs['leaf_type']}}\n"
+    )
+    u += _row_sep
+    for row in data:
+        u += (
+            f"{_s}{row['key']:{maxs['key']}}"
+            f"{_sep}{row['shape']:{maxs['shape']}}"
+            f"{_sep}{row['leaf_type']:{maxs['leaf_type']}}\n"
+        )
+
+    u += _row_sep
+
+    return u, exceptions
