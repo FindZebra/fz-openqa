@@ -11,8 +11,8 @@ from pytorch_lightning import seed_everything
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.builders import ConcatMedQaBuilder
-from fz_openqa.datamodules.builders import ConcatOpenQabuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
@@ -68,7 +68,7 @@ def run(config):
     )
 
     # define the OpenQA builder
-    builder = ConcatOpenQabuilder(
+    builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(),

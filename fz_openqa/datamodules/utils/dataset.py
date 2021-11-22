@@ -46,7 +46,16 @@ def format_size_difference(original_size: Dict[str, int], new_dataset: DatasetDi
     return u + ")"
 
 
-def filter_questions_by_pos_docs(
+def filter_questions_by_pos_docs(row, *, level: int = 0, **kwargs):
+    if level == 0:
+        return filter_questions_by_pos_docs_flat(row, **kwargs)
+    elif level == 1:
+        return filter_concatenated_questions_by_pos_docs(row, **kwargs)
+    else:
+        raise ValueError(f"level must be 0 or 1, got {level}")
+
+
+def filter_questions_by_pos_docs_flat(
     row,
     *,
     n_documents: Union[int, Dict],

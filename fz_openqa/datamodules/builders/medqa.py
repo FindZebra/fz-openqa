@@ -35,6 +35,9 @@ class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = medqa.__file__
 
+    # nesting level of the question field
+    nesting_level = 0
+
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
     pt_attributes = [
@@ -167,6 +170,9 @@ class MedQaBuilder(HfDatasetBuilder):
 
 class ConcatMedQaBuilder(MedQaBuilder):
     """A MedQa dataset with concatenated questions and answers"""
+
+    # nesting level of the question field
+    nesting_level = 1
 
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
