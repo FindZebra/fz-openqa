@@ -314,7 +314,7 @@ class FaissIndex(Index):
             cache_dir=self.cache_dir,
         )
 
-    def _init_index(self, batch, n_list: int = 32, m: int = 16, n_bits: int = 8):
+    def _init_index(self, batch):
         """
         Initialize the index
 
@@ -331,6 +331,9 @@ class FaissIndex(Index):
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
         metric_type = self.faiss_args["metric_type"]
+        n_list = self.faiss_args["n_list"]
+        m = self.faiss_args["m"]
+        n_bits = self.faiss_args["n_bits"]
         dim = vectors.shape[-1]
         assert dim % m == 0
         quantizer = faiss.IndexFlatL2(dim)
@@ -345,9 +348,8 @@ class FaissIndex(Index):
         vector
             vector from batch
         """
-        with Status("Training Faiss Index..."):
-            self._index.train(vector)
-            assert self._index.is_trained is True, "Index is not trained"
+        self._index.train(vector)
+        assert self._index.is_trained is True, "Index is not trained"
         print("Done training!")
 
     def _add_batch_to_index(self, batch: Batch, idx: List[int]):
