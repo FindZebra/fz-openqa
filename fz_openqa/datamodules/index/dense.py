@@ -22,6 +22,7 @@ from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
+from rich.status import Status
 from torch.utils.data import DataLoader
 from torch.utils.data import SequentialSampler
 
@@ -59,7 +60,12 @@ def iter_batches_with_indexes(
         yield idx, batch
 
 
-DEFAULT_FAISS_KWARGS = {"metric_type": faiss.METRIC_INNER_PRODUCT, "nlist": 10}
+DEFAULT_FAISS_KWARGS = {
+    "metric_type": faiss.METRIC_INNER_PRODUCT,
+    "n_list": 32,
+    "m": 16,
+    "n_bits": 8,
+}
 
 
 class FaissIndex(Index):
@@ -308,19 +314,41 @@ class FaissIndex(Index):
             cache_dir=self.cache_dir,
         )
 
-    def _init_index(self, batch, partitions: int = 2, bits: int = 2, m: int = 2):
+    def _init_index(self, batch, n_list: int = 32, m: int = 16, n_bits: int = 8):
         """
         Initialize the index
 
-        @param partitions: the number of clusters for each sub-vector set
-        @param bits: number of bits in each centroid
-        @param m: number of centroid ids in final compressed vector.
-        Must be a divisor of the dimension (dim)
+        Parameters
+        ----------
+        n_list
+            The number of cells (space partition). Typical value is sqrt(N)
+        m
+            The number of sub-vector. Typically this is 8, 16, 32, etc.
+        n_bits
+            Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
+            Must be a dicisor of the dimension
         """
         vectors = batch[self.vectors_column_name]
         assert len(vectors.shape) == 2
         metric_type = self.faiss_args["metric_type"]
-        self._index = faiss.IndexFlat(vectors.shape[-1], metric_type)
+        dim = vectors.shape[-1]
+        assert dim % m == 0
+        quantizer = faiss.IndexFlatL2(dim)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, m, n_bits, metric_type)
+
+    def _train(self, vector):
+        """
+        Train faiss index on data
+
+        Parameters
+        ----------
+        vector
+            vector from batch
+        """
+        with Status("Training Faiss Index..."):
+            self._index.train(vector)
+            assert self._index.is_trained is True, "Index is not trained"
+        print("Done training!")
 
     def _add_batch_to_index(self, batch: Batch, idx: List[int]):
         """
@@ -332,6 +360,7 @@ class FaissIndex(Index):
         vector = self._get_vector_from_batch(batch)
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
+        self._train(vector)
         self._index.add(vector)
 
     @singledispatchmethod
