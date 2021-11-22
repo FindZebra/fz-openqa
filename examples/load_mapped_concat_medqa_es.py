@@ -1,8 +1,12 @@
+import os
 from pathlib import Path
 
 import datasets
 import hydra
 import rich
+import transformers
+from omegaconf import OmegaConf
+from pytorch_lightning import seed_everything
 
 import fz_openqa
 from fz_openqa import configs
@@ -14,6 +18,10 @@ from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+from fz_openqa.utils.config import print_config
+
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
 @hydra.main(
@@ -21,10 +29,22 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
     config_name="script_config.yaml",
 )
 def run(config):
+    print_config(config)
+    # set the context
     datasets.set_caching_enabled(True)
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    transformers.logging.set_verbosity(transformers.logging.CRITICAL)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    seed_everything(1, workers=True)
 
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
+    try:
+        cache_dir = config["sys"]["cache_dir"]
+    except Exception:
+        cache_dir = default_cache_dir
+
+    rich.print(f">> cache_dir={cache_dir}")
 
     # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
@@ -35,7 +55,7 @@ def run(config):
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
-        cache_dir=config.get("cache_dir", default_cache_dir),
+        cache_dir=cache_dir,
         num_proc=4,
     )
     dataset_builder.subset_size = [200, 50, 50]
@@ -45,7 +65,7 @@ def run(config):
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=False,
-        cache_dir=config.get("cache_dir", default_cache_dir),
+        cache_dir=cache_dir,
         num_proc=4,
     )
 
@@ -58,9 +78,9 @@ def run(config):
         n_retrieved_documents=1000,
         n_documents=10,
         max_pos_docs=1,
-        filter_unmatched=True,
+        filter_unmatched=False,
         num_proc=config.get("num_proc", 2),
-        batch_size=50,
+        batch_size=config.get("batch_size", 10),
     )
 
     # define the data module

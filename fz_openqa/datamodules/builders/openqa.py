@@ -21,7 +21,7 @@ from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
 from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
-from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
+from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Parallel
@@ -180,7 +180,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ),
                 (
                     "Classify documents",
-                    ClassifyDocuments(
+                    FetchAndClassifyDocuments(
                         corpus_dataset=corpus,
                         classifier=relevance_classifier,
                         axis=1,
@@ -355,7 +355,7 @@ class ConcatOpenQabuilder(OpenQaBuilder):
                 ),
                 (
                     "Classify documents",
-                    ClassifyDocuments(
+                    FetchAndClassifyDocuments(
                         corpus_dataset=corpus,
                         classifier=relevance_classifier,
                         axis=2,
@@ -381,6 +381,26 @@ class ConcatOpenQabuilder(OpenQaBuilder):
                 desc=f"[Mapping] {k}",
             )
             dataset = mapper(dataset)
+
+        # filter out questions that are not match to any  positive document
+        if filter_unmatched:
+            # todo: implement this
+            raise NotImplementedError
+
+            def fn(split: Split):
+                return partial(
+                    filter_questions_by_pos_docs,
+                    n_documents=n_documents,
+                    max_pos_docs=max_pos_docs,
+                    split=split,
+                )
+
+            dataset = DatasetDict(
+                {
+                    split: dset.filter(fn(split), num_proc=num_proc)
+                    for split, dset in dataset.items()
+                }
+            )
 
         # print the difference in length for each split
         logger.info(format_size_difference(original_size, dataset))

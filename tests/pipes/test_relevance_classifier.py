@@ -137,7 +137,10 @@ class TestRelevanceClassifier(TestCase):
         Expand the `answer` field to match the batch shape.
         Flatten and process with the classifier.
         """
-        return ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
+        return Sequential(
+            PrintBatch("input"),
+            ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
+        )
 
     def test_exact_match(self):
         classifier = ExactMatch(interpretable=True)
