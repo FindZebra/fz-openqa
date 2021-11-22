@@ -2,12 +2,14 @@ import json
 from unittest import TestCase
 
 import numpy as np
+import torch
 from parameterized import parameterized
 
-from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested, nested_list
+from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested, nested_list, \
+    expand_and_repeat
 
 
-class TestNested(TestCase):
+class TestNestedUtils(TestCase):
 
     @parameterized.expand([
         ([[1, 2, 3], [4, 5, 6]], 1, [1, 2, 3, 4, 5, 6]),
@@ -28,3 +30,39 @@ class TestNested(TestCase):
         expected = np.array(values).reshape(shape)
         output = np.array(nested_list(values, shape=shape))
         self.assertTrue((expected == output).all())
+
+    @parameterized.expand([
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], None),
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], np.array),
+        ([1, 2, 3], -1, 4, [4 * [1], 4 * [2], 4 * [3]], torch.tensor),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], None),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], np.array),
+        ([[1, 2, 3]], -1, 4, [[4 * [1], 4 * [2], 4 * [3]]], torch.tensor),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], None),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], np.array),
+        ([1, 2, 3], 0, 4, 4 * [[1, 2, 3]], torch.tensor),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], None),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], np.array),
+        ([[1, 2, 3]], 0, 4, 4 * [[[1, 2, 3]]], torch.tensor),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], None),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], np.array),
+        ([1, 2, 3], 1, 4, [4 * [1], 4 * [2], 4 * [3]], torch.tensor),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], None),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], np.array),
+        ([[1, 2, 3]], 1, 4, [4 * [[1, 2, 3]]], torch.tensor),
+    ])
+    def test_expand_and_repeat(self, data, axis, n, expected, op):
+        if op is not None:
+            data = op(data)
+            expected = op(expected)
+
+        # process
+        output = expand_and_repeat(data, axis=axis, n=n)
+
+        # cast
+        output = np.array(output)
+        expected = np.array(expected)
+
+        # test
+        self.assertTrue((expected == output).all())
+        self.assertEqual(expected.shape, output.shape)

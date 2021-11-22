@@ -1,6 +1,9 @@
+from functools import partial
 from typing import Any
+from typing import Callable
 from typing import Iterable
 from typing import List
+from typing import T
 from typing import Tuple
 from typing import Type
 from typing import Union
@@ -10,6 +13,7 @@ import torch
 from torch import Tensor
 
 from fz_openqa.utils.shape import infer_missing_dims
+from fz_openqa.utils.shape import infer_shape
 
 
 def flatten_nested_(values: List[List], level=1, current_level=0) -> Iterable[Any]:
@@ -89,3 +93,36 @@ def reconcat(values: List[Any], original_type: Type):
     else:
         raise ValueError(f"Cannot reconstruct values of original type={original_type}")
     return values
+
+
+def expand_and_repeat(x: T, axis: int, n: int = 1) -> T:
+    """Expand by the axis and repeat `n` times"""
+    shape = infer_shape(x)
+    if axis < 0:
+        axis = len(shape)
+
+    if isinstance(x, np.ndarray):
+        x = np.expand_dims(x, axis=axis)
+        return np.repeat(x, n, axis=axis)
+
+    elif isinstance(x, torch.Tensor):
+        shape = x.shape
+        x = x.unsqueeze(axis)
+        a, b = shape[:axis], shape[axis:]
+        new_shape = a + (n,) + b
+        return x.expand(new_shape)
+
+    elif isinstance(x, list):
+
+        def repeat(x, *, n):
+            return [x] * n
+
+        def apply_at_level(fn: Callable, x: Iterable, *, level: int, current_level: int = 0):
+            if level == current_level:
+                return fn(x)
+            else:
+                return [
+                    apply_at_level(fn, y, level=level, current_level=current_level + 1) for y in x
+                ]
+
+        return apply_at_level(partial(repeat, n=n), x, level=axis)

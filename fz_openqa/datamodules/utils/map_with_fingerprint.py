@@ -11,7 +11,7 @@ import rich
 from datasets import Dataset
 from datasets import DatasetDict
 
-from fz_openqa.datamodules.pipelines.index import SearchDocuments
+from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -52,7 +52,7 @@ class MapWithFingerprint:
 
             # adjust kwargs
             kwargs = self.map_kwargs.copy()
-            if isinstance(self.pipe, SearchDocuments):
+            if isinstance(self.pipe, SearchCorpus):
                 # todo: fix: faiss freezes when using multiprocessing
                 kwargs["num_proc"] = 1
 

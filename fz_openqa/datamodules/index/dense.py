@@ -15,7 +15,6 @@ from typing import Union
 import faiss
 import numpy as np
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -28,14 +27,14 @@ from torch.utils.data import SequentialSampler
 from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Predict
-from fz_openqa.datamodules.pipes import RenameKeys
-from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes.base import Pipe
+from fz_openqa.datamodules.pipes.basic import FilterKeys
+from fz_openqa.datamodules.pipes.basic import RenameKeys
+from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.meta import Sequential
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
+from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
@@ -98,10 +97,12 @@ class FaissIndex(Index):
         self,
         dataset: Dataset,
         *,
+        required_keys: List[str] = None,
+        query_field: str = "question",
+        index_field: str = "document",
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
         faiss_args: Dict[str, Any] = None,
-        index_key: str = "document.row_idx",
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
@@ -114,6 +115,12 @@ class FaissIndex(Index):
         ----------
         dataset
             The dataset to index.
+        required_keys
+            The keys required for each field. e.g. ['text']]
+        query_field
+            The field to be used as query (in the query dataset). e.g. question
+        index_field
+            The field to be used as index (in the dataset). e.g. document
         model
             The model to use for indexing and querying, e.g. a `pl.LightningModule`.
         trainer
@@ -121,8 +128,6 @@ class FaissIndex(Index):
             Indexing and querying can also be done without a trainer.
         faiss_args
             Additional arguments to pass to the Faiss index.
-        index_key
-            Name of the column in the indexed dataset to use as index.
         model_output_keys
             Names of the accepted model output keys (vector to use for indexing).
         loader_kwargs
@@ -136,6 +141,9 @@ class FaissIndex(Index):
         kwargs
             Additional arguments to pass to the `Index` class.
         """
+        if required_keys is None:
+            required_keys = ["input_ids", "attention_mask"]
+
         faiss_args = faiss_args or DEFAULT_FAISS_KWARGS
         #  save fingerprints and define the index name. The index name
         # must be unique for each dataset x model x faiss_args combination
@@ -149,7 +157,7 @@ class FaissIndex(Index):
                 "faiss": self._faiss_fingerprint,
             }
         )
-        self.index_name = f"{type(self).__name__}-{self._fingerprint}"
+        index_name = f"{type(self).__name__}-{self._fingerprint}"
 
         # model and params
         self.model = model
@@ -157,7 +165,6 @@ class FaissIndex(Index):
         self.trainer = trainer
 
         # column names
-        self.index_key = index_key
         self.model_output_keys = model_output_keys
 
         # trainer and dataloader
@@ -180,17 +187,21 @@ class FaissIndex(Index):
         )
 
         # call the super: build the index
-        super(FaissIndex, self).__init__(
-            dataset=dataset, name=self.index_name, cache_dir=cache_dir, **kwargs
+        kwargs.update(
+            required_keys=required_keys,
+            query_field=query_field,
+            index_field=index_field,
+            index_name=index_name,
+            cache_dir=cache_dir,
         )
+
+        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
 
     @property
     def is_indexed(self):
         return self._index is None or self._index.is_trained
 
-    def build(
-        self, dataset: Dataset, *, name: Optional[str] = None, cache_dir=Optional[None], **kwargs
-    ):
+    def build(self, dataset: Dataset, *, cache_dir=Optional[None], **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
 
@@ -198,8 +209,6 @@ class FaissIndex(Index):
         ----------
         dataset
             The dataset to index.
-        name
-            The name of the index (must be unique).
         cache_dir
             The directory to store the cache in.
         kwargs
@@ -209,13 +218,13 @@ class FaissIndex(Index):
         None
 
         """
-        if cache_dir is None or name is None:
+        if cache_dir is None or self.index_name is None:
             # skip caching if not cache_dir is provided
             logger.info("No cache_dir provided. Building index without caching")
             self._build(dataset, cache_dir=cache_dir, **kwargs)
 
         else:
-            cache_file = Path(cache_dir) / "indexes" / f"{name}.index"
+            cache_file = Path(cache_dir) / "indexes" / f"{self.index_name}.index"
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             if cache_file.exists():
                 # load the index from the cache
