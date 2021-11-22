@@ -3,7 +3,7 @@ import json
 import datasets
 
 
-class WikiCorpusConfig(datasets.BuilderConfig):
+class MedWikipediaCorpusConfig(datasets.BuilderConfig):
     """BuilderConfig for the MedQa English Corpus objecxt."""
 
     def __init__(self, **kwargs):
@@ -11,17 +11,17 @@ class WikiCorpusConfig(datasets.BuilderConfig):
         Args:
           **kwargs: keyword arguments forwarded to super.
         """
-        super(WikiCorpusConfig, self).__init__(**kwargs)
+        super(MedWikipediaCorpusConfig, self).__init__(**kwargs)
 
 
 _DESCRIPTION = "A class to load a collection of MedQA related Wikipedia articles"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1DtLbMsErbFOQ7u-kDz_tgb8AR_YiRTUz/view?usp=sharing"
+_URL = "https://drive.google.com/file/d/1h1SSvTWg7aW1g5-IVQy4_fd3D_yY74H2/view?usp=sharing"
 
 
-class WikiCorpusGenerator(datasets.GeneratorBasedBuilder):
+class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     """FzCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
@@ -66,7 +66,8 @@ class WikiCorpusGenerator(datasets.GeneratorBasedBuilder):
             for idx, val in enumerate(json_list):
                 article = json.loads(val)
                 yield idx, {
-                    "text": article["content"],
+                    "text": article["text"],
                     "title": article["title"],
+                    "question.idx": article["question.idx"],
                     "idx": idx,
                 }
