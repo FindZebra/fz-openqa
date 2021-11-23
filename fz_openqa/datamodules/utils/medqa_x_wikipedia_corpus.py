@@ -8,11 +8,11 @@ from typing import List
 from typing import Optional
 
 import rich
+from apiclient import errors
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from googleapiclient.http import MediaFileUpload
-from apiclient import errors
 from rich.progress import track
 from rich.status import Status
 
@@ -74,7 +74,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # build Wikipedia corpus to output
         json_list = self.build_wiki_corpus(dataset=dataset)
 
-        with Status(f"Uploading file to Google Drive.."):
+        with Status("Uploading file to Google Drive.."):
             with open(os.path.join(self.dataset_dict_path, self.file_name), mode="w") as fp:
                 json.dump(json_list, fp)
 
@@ -142,20 +142,18 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         """
         result = {}
         try:
-            param = {
-                'q': f"'{folder_id}' in parents and trashed=false"
-            }
+            param = {"q": f"'{folder_id}' in parents and trashed=false"}
             files = self.drive.files().list(**param).execute()
 
-            for f in files['files']:
-                result[f['name']] = f['id']
+            for f in files["files"]:
+                result[f["name"]] = f["id"]
         except (errors.HttpError, errors) as e:
-            print('An error occurred: %s' % e)
+            print("An error occurred: %s" % e)
         return result
 
     def _upload_to_drive(self, path_to_file: str):
         """ Update or create file on gdrive based on whether file name is in file list """
-        file_name = path_to_file.split('/')[-1]
+        file_name = path_to_file.split("/")[-1]
         #
         file_list = self._retrieve_all_files(folder_id="1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb")
 
@@ -167,9 +165,9 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         else:
             file_metadata = {
-                'name': file_name,
-                'parents': ['1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb'],
-                'mimetype': '*/*',
+                "name": file_name,
+                "parents": ["1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb"],
+                "mimetype": "*/*",
             }
             # Create new file
             file = self.drive.files().create(body=file_metadata, media_body=content).execute()
