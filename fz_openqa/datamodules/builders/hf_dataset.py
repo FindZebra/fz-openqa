@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 from datasets import DatasetDict
@@ -15,6 +16,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.utils.dataset import remove_columns
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -109,13 +111,15 @@ class HfDatasetBuilder(DatasetBuilder):
         self.add_encoding_tokens = add_encoding_tokens
 
     # @cache_hf_dataset
-    def __call__(self, format: Optional[str] = "torch", **kwargs) -> HfDataset:
+    def __call__(
+        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+    ) -> HfDataset:
         # load the dataset, potentially filter, preprocess and return
         dataset = self.load_and_filter_dataset()
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return dataset
+        return remove_columns(dataset, columns=columns)
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]

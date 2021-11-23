@@ -15,17 +15,13 @@ from ..pipes.nesting import Expand
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -44,6 +40,7 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.input_ids",
         "question.attention_mask",
         "question.idx",
+        "question.row_idx",
         "answer.input_ids",
         "answer.attention_mask",
         "answer.target",
@@ -128,13 +125,20 @@ class MedQaBuilder(HfDatasetBuilder):
     def get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
-            CollateField("question", tokenizer=self.tokenizer, level=0),
-            CollateField("answer", level=0, exclude=["input_ids", "attention_mask"]),
+            CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
+            ),
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
                 level=1,
-                exclude=["synonyms", "target", "cui", "synonyms", "text"],
+                include_only=["input_ids", "attention_mask"],
+                id="pad-answer-tokens",
             ),
         )
 
@@ -239,12 +243,21 @@ class ConcatMedQaBuilder(MedQaBuilder):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
-                "answer", level=0, exclude=["input_ids", "attention_mask", "cui", "synonyms"]
+                "question", exclude=["input_ids", "attention_mask"], level=0, id="collate-questions"
+            ),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
             ),
             CollateField(
                 "question",
                 tokenizer=self.tokenizer,
                 level=1,
+                include_only=["input_ids", "attention_mask"],
+                id="pad-nested-question-tokens",
             ),
         )
 

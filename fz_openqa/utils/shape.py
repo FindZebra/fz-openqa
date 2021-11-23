@@ -63,6 +63,9 @@ class LeafType:
 
 def longest_sublist(lists: List[List[T]]) -> List[T]:
     """Returns the longest common sequence, starting from the start."""
+    if len(lists) == 0:
+        return []
+
     output = []
     ref = lists[0]
     for i in range(min(len(le) for le in lists)):

@@ -3,6 +3,7 @@ import logging
 from functools import partial
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -31,6 +32,7 @@ from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.utils.dataset import remove_columns
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
 
@@ -61,6 +63,11 @@ class OpenQaBuilder(DatasetBuilder):
         "document.match_score",
     ]
 
+    _pt_attributes = [
+        "document.match_score",
+        "document.retrieval_score",
+    ]
+
     def __init__(
         self,
         *,
@@ -74,6 +81,7 @@ class OpenQaBuilder(DatasetBuilder):
         filter_unmatched: bool = True,
         num_proc: int = 2,
         batch_size: int = 100,
+        output_columns: Optional[List[str]] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None)
@@ -90,6 +98,7 @@ class OpenQaBuilder(DatasetBuilder):
         self.index_builder = index_builder
 
         # arguments
+        self.output_columns = output_columns
         self.n_documents = n_documents or n_retrieved_documents
         self.max_pos_docs = max_pos_docs
         self.map_args = {
@@ -108,7 +117,12 @@ class OpenQaBuilder(DatasetBuilder):
 
     @property
     def pt_attributes(self):
-        return self.dataset_builder.pt_attributes + self.corpus_builder.pt_attributes
+        attrs = (
+            self.dataset_builder.pt_attributes
+            + self.corpus_builder.pt_attributes
+            + self._pt_attributes
+        )
+        return list(set(attrs))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -122,7 +136,12 @@ class OpenQaBuilder(DatasetBuilder):
         args = json.dumps({k: str(v) for k, v in self.to_dict().items()}, indent=2)
         return f"{self.__class__.__name__}({args})"
 
-    def __call__(self, format: Optional[str] = "torch", **kwargs) -> OpenQaDataset:
+    def __call__(
+        self, format: Optional[str] = "torch", columns: Optional[str] = None, **kwargs
+    ) -> OpenQaDataset:
+
+        columns = columns or self.output_columns
+
         # de-activate formatting for the dataset to avoid messing up
         # with the newly added columns in map_dataset
         dataset = self.dataset_builder(format=None)
@@ -134,6 +153,12 @@ class OpenQaBuilder(DatasetBuilder):
 
         if format is not None:
             dataset = self.set_format(dataset, format=format)
+
+        # remove columns that are not needed
+
+        if columns is not None:
+            dataset = remove_columns(dataset, columns=columns)
+            corpus = remove_columns(corpus, columns=columns)
 
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
@@ -248,8 +273,14 @@ class OpenQaBuilder(DatasetBuilder):
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
         # A. Collate all attributes stored in `self.dataset`
+        # document attributes are collated at level 0
         collate_qad = Parallel(
-            CollateField("document", tokenizer=self.tokenizer, level=document_nesting_level),
+            CollateField(
+                "document",
+                level=document_nesting_level,
+                to_tensor=["match_score", "retrieval_score"],
+                id="collate-nested-document-attributes",
+            ),
             self.dataset_builder.get_collate_pipe(),
         )
 
@@ -262,7 +293,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
-            corpus_dataset=self.corpus_builder(),
+            corpus_dataset=self.corpus_builder(columns=self.output_columns),
             collate_pipe=self.corpus_builder.get_collate_pipe(),
             level=document_nesting_level,
         )

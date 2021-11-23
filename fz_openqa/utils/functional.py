@@ -102,7 +102,13 @@ def check_equal_arrays(x, y):
     """check if x==y"""
     x = cast_to_numpy(x)
     y = cast_to_numpy(y)
-    return (x == y).all()
+    r = x == y
+    if isinstance(r, np.ndarray):
+        return r.all()
+    elif isinstance(r, bool):
+        return r
+    else:
+        raise TypeError(f"Cannot check equality of {type(r)}")
 
 
 def iter_batch_rows(batch: Batch) -> Iterable[Dict]:
