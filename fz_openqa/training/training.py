@@ -3,6 +3,7 @@ from typing import List
 from typing import Optional
 
 import datasets
+import rich
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback

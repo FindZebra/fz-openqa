@@ -25,6 +25,17 @@ datamodule:
   eval_batch_size: 16
   n_documents: 10
   max_pos_docs: 1
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+    - answer.input_ids
+    - answer.attention_mask
+    - answer.target
 
 logger:
   wandb:

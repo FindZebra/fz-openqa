@@ -29,3 +29,4 @@ n_documents:
   test: 100
 max_pos_docs: 1
 filter_unmatched: true
+output_columns: null

@@ -3,6 +3,7 @@ import re
 import warnings
 from abc import ABC
 from abc import abstractmethod
+from copy import deepcopy
 from typing import Any
 from typing import Dict
 from typing import List
@@ -90,7 +91,7 @@ class Module(nn.Module, ABC):
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
-        heads: Union[DictConfig, Dict[str, Head]],
+        head: Union[DictConfig, Head],
         prefix: str = "",
     ):
         """Initialize a Metric for each split=train/validation/test"""
@@ -101,9 +102,8 @@ class Module(nn.Module, ABC):
         for k in self._required_heads:
             assert k in self._required_heads, f"Head {k} is required."
 
-        self.heads = nn.ModuleDict(
-            {k: maybe_instantiate(heads[k], bert=self.bert) for k in self._required_heads}
-        )
+        head = maybe_instantiate(head, bert=self.bert)
+        self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
         self._init_metrics(prefix=prefix)
 
         # check that required heads are initialized

@@ -1,0 +1,11 @@
+progress_bar:
+  _target_: pytorch_lightning.callbacks.RichProgressBar
+  theme:
+    _target_: pytorch_lightning.callbacks.progress.rich_progress.RichProgressBarTheme
+    text_color: "white"
+    progress_bar_complete: Union[str, Style] = "green"
+    progress_bar_finished: Union[str, Style] = "blue"
+    progress_bar_pulse: Union[str, Style] = "magenta"
+    batch_process: str = "cyan"
+    time: str = "grey54"
+    processing_speed: str = "cyan"

@@ -25,6 +25,14 @@ datamodule:
     validation: 100
     test: 100
   max_pos_docs: 1
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
 
 logger:
   wandb:

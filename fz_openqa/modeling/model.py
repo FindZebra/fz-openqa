@@ -4,9 +4,11 @@ from typing import Optional
 from typing import Union
 
 import rich
+import torch
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
+from torch import nn
 from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
@@ -17,6 +19,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class Model(LightningModule):
@@ -61,6 +64,7 @@ class Model(LightningModule):
         tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
         module: Union[DictConfig, Module],
+        head: Union[DictConfig, Module],
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         **kwargs,
@@ -78,16 +82,10 @@ class Model(LightningModule):
         self.module: Optional[Module] = maybe_instantiate(
             module,
             bert=bert,
-            heads=self._infer_head_configs(kwargs),
+            head=head,
             tokenizer=tokenizer,
             _recursive_=False,
         )
-
-    def _infer_head_configs(self, kwargs):
-        heads_cfgs = {
-            k.replace("head_", ""): v for k, v in kwargs.items() if str(k).startswith("head_")
-        }
-        return heads_cfgs
 
     def forward(self, batch: Batch, **kwargs) -> Batch:
         return self.module.forward(batch, **kwargs)
