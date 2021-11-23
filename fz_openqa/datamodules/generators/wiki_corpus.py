@@ -18,7 +18,7 @@ _DESCRIPTION = "A class to load a collection of MedQA related Wikipedia articles
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1DtLbMsErbFOQ7u-kDz_tgb8AR_YiRTUz/view?usp=sharing"
+_URL = "https://drive.google.com/file/d/1h1SSvTWg7aW1g5-IVQy4_fd3D_yY74H2/view?usp=sharing"
 
 
 class WikiCorpusGenerator(datasets.GeneratorBasedBuilder):
@@ -61,12 +61,11 @@ class WikiCorpusGenerator(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, filepath: str):
         """Yields examples."""
 
-        with open(filepath, "r") as json_file:
-            json_list = list(json_file)
-            for idx, val in enumerate(json_list):
-                article = json.loads(val)
+        with open(filepath, "r") as f:
+            data = json.load(f)
+            for idx, article in enumerate(data):
                 yield idx, {
-                    "text": article["content"],
+                    "text": article["text"],
                     "title": article["title"],
                     "idx": idx,
                 }
