@@ -43,6 +43,7 @@ def run(config):
     wiki_builder = WikixMedQaCorpusBuilder(
         dataset_builder=dataset_builder,
         query_articles=QueryWikiAPI(text_key="answer.text"),
+        file_name="wikipedia_corpus_v2.jsonl",
         num_proc=4,
         batch_size=10,
     )
@@ -59,4 +60,3 @@ def run(config):
 if __name__ == "__main__":
     run()
 
-import wikipedia

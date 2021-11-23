@@ -12,6 +12,7 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from googleapiclient.http import MediaFileUpload
+from apiclient import errors
 from rich.progress import track
 from rich.status import Status
 
@@ -20,9 +21,9 @@ from fz_openqa.datamodules.builders import MedQABuilder
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.utils.gdrive_dl_manager import _create_service
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-CLIENT_SECRET_FILE = "./fz_openqa/utils/client-secrets.json"
+CLIENT_SECRET_FILE = f"{os.getcwd()}/fz_openqa/utils/client-secrets.json"
 API_NAME = "drive"
 API_VERSION = "v3"
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -37,6 +38,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         num_proc: int = 4,
         batch_size: int = 10,
         dataset_dict_path: str = os.getcwd(),
+        file_name: str = "wikipedia_corpus_v2.jsonl",
         **kwargs,
     ):
         super(WikixMedQaCorpusBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -58,6 +60,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             }
         # Directory path to output Wikipedia corpus
         self.dataset_dict_path = dataset_dict_path
+        self.file_name = file_name
 
         # Set up GoogleDrive Service
         self.drive = _create_service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
@@ -68,20 +71,18 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         # process the whole dataset (extract wikipedia pages)
         dataset = self.extract_page_titles(dataset=dataset)
-        rich.print(dataset)
         # build Wikipedia corpus to output
         json_list = self.build_wiki_corpus(dataset=dataset)
-        rich.print(len(json_list))
-        # exit()
-        with open(os.path.join(self.dataset_dict_path, "wiki_corpus.jsonl"), mode="w") as fp:
-            json.dump(json_list, fp)
 
-        # new_dataset.save_to_disk(self.dataset_dict_path)
-        file = self._upload_to_drive(
-            path_to_file=os.path.join(self.dataset_dict_path, "wiki_corpus.jsonl")
-        )
+        with Status(f"Uploading file to Google Drive.."):
+            with open(os.path.join(self.dataset_dict_path, self.file_name), mode="w") as fp:
+                json.dump(json_list, fp)
 
-        rich.print(file)
+            file = self._upload_to_drive(
+                path_to_file=os.path.join(self.dataset_dict_path, self.file_name)
+            )
+
+        log.info(f"Uploaded file to Google Drive: <{file}>")
         exit()
 
     def extract_page_titles(self, dataset: DatasetDict) -> DatasetDict:
@@ -117,7 +118,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         """Builds the Wikipedia Corpus based on extracted Wikipedia pages
         Features: {"document.title", "document.text"}
         """
-        # data_dict = {"document.title": [], "document.text": []}
         json_list = []
         for split, ds in dataset.items():
             for eg in track(ds, description=f"Iterating through the {split} dataset..."):
@@ -129,16 +129,49 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
                 json_list.extend(
                     self.extract_page_content(qst_idx=eg["question.idx"], pages=eg["wiki.pages"])
                 )
-                # data_dict["document.title"].extend(titles)
-                # data_dict["document.text"].extend(texts)
 
         return json_list
 
+    def _retrieve_all_files(self, folder_id: str = "1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb") -> Dict:
+        """Retrieve a Dict of File resources.
+
+        Args:
+        service: Drive API service instance.
+        Returns:
+        Dict of File resources.
+        """
+        result = {}
+        try:
+            param = {
+                'q': f"'{folder_id}' in parents and trashed=false"
+            }
+            files = self.drive.files().list(**param).execute()
+
+            for f in files['files']:
+                result[f['name']] = f['id']
+        except (errors.HttpError, errors) as e:
+            print('An error occurred: %s' % e)
+        return result
+
     def _upload_to_drive(self, path_to_file: str):
+        """ Update or create file on gdrive based on whether file name is in file list """
+        file_name = path_to_file.split('/')[-1]
+        #
+        file_list = self._retrieve_all_files(folder_id="1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb")
 
-        file_id = "1h1SSvTWg7aW1g5-IVQy4_fd3D_yY74H2"
         content = MediaFileUpload(path_to_file, mimetype="*/*", resumable=True)
+        if file_name in file_list.keys():
+            file_id = file_list[file_name]
+            # Update existing file based on id
+            file = self.drive.files().update(fileId=file_id, media_body=content).execute()
 
-        file = self.drive.files().update(fileId=file_id, media_body=content).execute()
+        else:
+            file_metadata = {
+                'name': file_name,
+                'parents': ['1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb'],
+                'mimetype': '*/*',
+            }
+            # Create new file
+            file = self.drive.files().create(body=file_metadata, media_body=content).execute()
 
         return file
