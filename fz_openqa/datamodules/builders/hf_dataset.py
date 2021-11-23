@@ -95,7 +95,7 @@ class HfDatasetBuilder(DatasetBuilder):
         text_formatter: Optional[TextFormatter] = None,
         **kwargs,
     ):
-        super().__init__(cache_dir=cache_dir)
+        super().__init__(cache_dir=cache_dir, **kwargs)
 
         self.cache_dir = cache_dir
         self.use_subset = use_subset
@@ -109,7 +109,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.add_encoding_tokens = add_encoding_tokens
 
     # @cache_hf_dataset
-    def __call__(self, format: Optional[str] = "torch", **kwargs) -> HfDataset:
+    def _call(self, format: Optional[str] = "torch", **kwargs) -> HfDataset:
         # load the dataset, potentially filter, preprocess and return
         dataset = self.load_and_filter_dataset()
         dataset = self.preprocess_dataset(dataset)

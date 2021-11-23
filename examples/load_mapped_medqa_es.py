@@ -11,6 +11,7 @@ from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
+from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
 from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
@@ -64,9 +65,10 @@ def run(config):
         n_retrieved_documents=1000,
         n_documents=10,
         max_pos_docs=1,
-        filter_unmatched=True,
+        filter_unmatched=config.get("filter_unmatched", False),
         num_proc=2,
         batch_size=50,
+        analyses=[CountMatchedQuestions(output_dir="./analyses", verbose=True)],
     )
 
     # define the data module
