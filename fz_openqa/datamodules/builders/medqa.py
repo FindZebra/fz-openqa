@@ -15,8 +15,10 @@ from ..pipes.nesting import Expand
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
+from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
@@ -106,7 +108,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -118,7 +120,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            spec_token=QUERY_TOKEN,
             shape=None,
         )
 
@@ -234,8 +236,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
-            add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            add_encoding_tokens=False,
             shape=[-1, self.n_options],
         )
 
@@ -283,10 +284,23 @@ class ConcatMedQaBuilder(MedQaBuilder):
         return repr
 
     def get_concat_qa_pipe(self):
+
+        if self.add_encoding_tokens:
+            add_spec_tokens_pipe = Apply(
+                {
+                    "question.text": partial(add_spec_token, QUERY_TOKEN),
+                    "answer.text": partial(add_spec_token, ANS_TOKEN),
+                },
+                element_wise=True,
+            )
+        else:
+            add_spec_tokens_pipe = None
+
         return Sequential(
+            add_spec_tokens_pipe,
             Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
             ApplyAsFlatten(
-                ConcatTextFields(keys=["question.text", "answer.text"], new_key="question.text"),
+                ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
                 level=1,
             ),
             input_filter=In(["question.text", "answer.text"]),

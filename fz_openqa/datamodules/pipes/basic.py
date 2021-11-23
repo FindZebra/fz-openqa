@@ -8,6 +8,7 @@ from typing import Union
 
 import rich
 
+from ...utils.json_struct import apply_to_json_struct
 from .base import Pipe
 from .control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
@@ -225,7 +226,7 @@ class Apply(Pipe):
         for key, op in self.ops.items():
             values = batch[key]
             if self.element_wise:
-                batch[key] = [op(x) for x in values]
+                batch[key] = apply_to_json_struct(values, op)
             else:
                 batch[key] = op(values)
 

@@ -32,35 +32,35 @@ class FormatAndTokenize(Sequential):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool,
         max_length: Optional[int],
-        spec_tokens: List,
+        spec_token: Optional[str] = None,
         shape: Optional[List[int]],
         return_token_type_ids: bool = False,
         add_special_tokens: bool = False,
         return_offsets_mapping: bool = False,
-        field: str = "text",
+        key: str = "text",
     ):
         if shape is None:
             shape = [-1]
 
         if add_encoding_tokens:
-            add_spec_tokens = Apply(
-                {"text": partial(add_spec_token, spec_tokens)},
+            add_spec_tokens_pipe = Apply(
+                {key: partial(add_spec_token, spec_token)},
                 element_wise=True,
             )
         else:
-            add_spec_tokens = None
+            add_spec_tokens_pipe = None
 
         super().__init__(
-            FilterKeys(In([f"{prefix}text"])),
+            FilterKeys(In([f"{prefix}{key}"])),
             ReplaceInKeys(prefix, ""),
-            text_formatter.copy(text_key="text"),
+            text_formatter.copy(text_key=key),
             ApplyAsFlatten(
                 Sequential(
-                    add_spec_tokens,
+                    add_spec_tokens_pipe,
                     TokenizerPipe(
                         tokenizer,
                         max_length=max_length,
-                        fields=field,
+                        fields=key,
                         return_token_type_ids=return_token_type_ids,
                         add_special_tokens=add_special_tokens,
                         return_offsets_mapping=return_offsets_mapping,
