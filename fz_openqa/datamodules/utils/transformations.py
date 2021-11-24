@@ -18,7 +18,6 @@ def add_spec_token(
     The pretrained tokenizer with registered special tokens will encode the output as:
     [CLS][SPEC][ text tokens ][SEP]
     """
-    assert special_token in [QUERY_TOKEN, ANS_TOKEN, DOC_TOKEN]
     return f"{special_token}{text}"
 
 

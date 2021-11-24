@@ -236,7 +236,8 @@ class ConcatMedQaBuilder(MedQaBuilder):
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
-            add_encoding_tokens=False,
+            add_encoding_tokens=self.add_encoding_tokens,
+            spec_token=QUERY_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -288,8 +289,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         if self.add_encoding_tokens:
             add_spec_tokens_pipe = Apply(
                 {
-                    "question.text": partial(add_spec_token, QUERY_TOKEN),
-                    "answer.text": partial(add_spec_token, ANS_TOKEN),
+                    "question.text": partial(add_spec_token, self.tokenizer.sep_token),
                 },
                 element_wise=True,
             )
