@@ -274,7 +274,7 @@ class AliasBasedMatch(RelevanceClassifier):
 
             Parameters
             ----------
-            Doc
+            doc : Doc
                 A Doc is a sequence of entities.
 
             Returns
