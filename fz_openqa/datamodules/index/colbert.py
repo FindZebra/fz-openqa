@@ -74,7 +74,7 @@ class ColbertIndex(FaissIndex):
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """
         # check indexes
-        indexes = batch[self.index_key]  # throws error - missing 'index_key'
+        indexes = batch[self.index_key]  # @vlievin: throws error - missing 'index_key'
         msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
         assert all(indexes[:-1] + 1 == indexes[1:]), msg
         msg = (
@@ -87,7 +87,9 @@ class ColbertIndex(FaissIndex):
         vector: np.ndarray = batch[self.vectors_column_name]
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
-        vector = vector.astype(dtype)
+        vector = vector.astype(
+            dtype
+        )  # @vlievin: throws error - field elements must be 2- or 3- tuples but got 0
         self._index.add(vector)
 
         # store token index to original document
