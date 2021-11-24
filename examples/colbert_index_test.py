@@ -135,7 +135,7 @@ def run(config: DictConfig) -> None:
     )
     quantizer = faiss.IndexFlatL2(ndims)
     index = faiss.IndexIVFPQ(
-        quantizer, ndims, nlist, m, n_bits
+        quantizer, ndims, nlist, m, n_bits, faiss.METRIC_L2
     )  # (quantiser, ndims, nlist, m, faiss.METRIC_L2)
     rich.print(f"Is index trained: {index.is_trained}")
 

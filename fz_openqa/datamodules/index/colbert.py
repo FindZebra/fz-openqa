@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 DEFAULT_FAISS_KWARGS = {
-    "metric_type": faiss.METRIC_INNER_PRODUCT,
+    "metric_type": faiss.METRIC_L2,
     "n_list": 32,
     "m": 16,
     "n_bits": 8,
@@ -38,7 +38,7 @@ class ColbertIndex(FaissIndex):
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
-    def _init_index(self, batch):
+    def _init_index(self, batch, n_list: int = 32, m: int = 16, n_bits: int = 8):
         """
         Initialize the index and train on first batch of data
 
@@ -58,12 +58,10 @@ class ColbertIndex(FaissIndex):
             The dimension of the input vectors
 
         """
-        vectors = batch[self.vectors_column_name]
+        vectors: np.ndarray = batch[self.vectors_column_name]
+        vectors = vectors.astype(np.float32)
         assert len(vectors.shape) == 2
         metric_type = self.faiss_args["metric_type"]
-        n_list = self.faiss_args["n_list"], "n should be sqrt(len(dataset))"
-        m = self.faiss_args["m"]
-        n_bits = self.faiss_args["n_bits"]
         self.dim = vectors.shape[-1]
         assert self.dim % m == 0, "m must be a divisor of dim"
 
@@ -76,7 +74,7 @@ class ColbertIndex(FaissIndex):
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """
         # check indexes
-        indexes = batch[self.index_key]
+        indexes = batch[self.index_key]  # throws error - missing 'index_key'
         msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
         assert all(indexes[:-1] + 1 == indexes[1:]), msg
         msg = (

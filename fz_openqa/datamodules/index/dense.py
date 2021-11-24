@@ -60,7 +60,7 @@ def iter_batches_with_indexes(
 
 
 DEFAULT_FAISS_KWARGS = {
-    "metric_type": faiss.METRIC_INNER_PRODUCT,
+    "metric_type": faiss.METRIC_L2,
     "n_list": 32,
     "m": 16,
     "n_bits": 8,
