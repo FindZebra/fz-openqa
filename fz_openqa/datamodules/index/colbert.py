@@ -13,8 +13,8 @@ from torch.utils import data
 from torch.utils.data import DataLoader
 
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
-from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
 
