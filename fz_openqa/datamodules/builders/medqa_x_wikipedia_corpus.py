@@ -113,6 +113,25 @@ class AddSplitInfo:
 
 
 class WikixMedQaCorpusBuilder(DatasetBuilder):
+    """Builds a corpus of related Wikipedia articles w.r.t. dataset containing pairs of (question, answer).
+
+    Parameters
+    __________
+    dataset_builder
+        Dataset containing pairs of (questiosn, answer)
+    query_articles
+        Pipe to extract Wikipedia page titles based on answer string
+    num_proc
+        Max number of processes when generating cache
+    batch_size
+        Number of examples per batch provided to function
+    cache_dir
+        Provide the name of a path for the cache file
+    file_name
+        Provide the name of file uploaded to Google Drive
+    upload_to_drive
+        Allow dataset to get uploaded to Google Drive
+    """
     def __init__(
         self,
         *,
