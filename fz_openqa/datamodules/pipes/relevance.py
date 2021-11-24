@@ -185,6 +185,27 @@ class AliasBasedMatch(RelevanceClassifier):
         spacy_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+        filter_tui : bool
+            Filter aliases according to DISCARD_TUIs list
+        filter_acronyms : bool
+            Filter aliases according to regex pattern catching acronyms
+        model_name : str
+            String defining what ScispaCy model to use
+            see: https://github.com/allenai/scispacy#available-models
+        linker_name : str
+            String defining what knowledge base to use as Linker
+            see: https://github.com/allenai/scispacy#entitylinker
+        threshold : float
+            Threshold that a mention candidate must reach to be added
+            to the mention in the Doc as a mention candidate.
+        lazy_setup : bool
+
+        spacy_kwargs : Dict
+
+        """
         super().__init__(**kwargs)
         self.filter_tui = filter_tui
         self.filter_acronyms = filter_acronyms
@@ -237,8 +258,30 @@ class AliasBasedMatch(RelevanceClassifier):
 
     @staticmethod
     def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.45):
+        """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
+
+        Doc is then processed in several different steps – the processing pipeline."""
+
         @Language.component("__combineEntities__")
         def _combine_entities(doc: Doc) -> Doc:
+            """A spaCy pipeline component; a function that receives a Doc object, modifies it and returns it.
+
+            Note
+            ----
+            We force all medical entities into one entity to handle questions featuring multiple
+            entities (e.g. "elevated" + "glucose") to increase recall, i.e. we query the whole
+            answer string against the knowledge base instead of the individual entities.
+
+            Parameters
+            ----------
+            Doc
+                A Doc is a sequence of entities.
+
+            Returns
+            -------
+            Doc
+                A Doc holding one entity
+            """
             doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
             return doc
 
@@ -268,6 +311,7 @@ class AliasBasedMatch(RelevanceClassifier):
         return model
 
     def get_linked_entities(self, entity: [List, Entity]) -> Iterable[LinkedEntity]:
+        """ Extracts the linked entities by querying the Doc entity against the knowledge base"""
         if not isinstance(entity, List):
             entity = [cui_str for (cui_str, _) in entity._.kb_ents]
         for cui_str in entity:
@@ -283,9 +327,22 @@ class AliasBasedMatch(RelevanceClassifier):
         return pair.answer[f"{self.answer_field}.text"]
 
     def detect_acronym(self, alias: str) -> bool:
-        """
-        returns true if accronym is found in string
-            example: "AbIA AoP U.S.A. USA"
+        """Regex pattern to detect acronym.
+
+        Parameters
+        ----------
+        alias : str
+            The string representing an alias
+
+        Returns
+        ------
+        bool
+            True if accronym is found in string
+
+        Examples
+        --------
+        >>> print(detect_acronym("AbIA|AoP|U.S.A.|USA")
+        True
         """
         regex_pattern = r"\b[A-Z][a-zA-Z\.]*[A-Z]\b\.?"
         return re.match(regex_pattern, alias)
@@ -295,6 +352,7 @@ class AliasBasedMatch(RelevanceClassifier):
         return any(tui not in discard_list for tui in ent.tuis)
 
     def extract_aliases(self, linked_entities: Iterable[LinkedEntity]) -> Iterable[str]:
+        """ Extract aliases of the linked entities"""
         # get the TUIs of linked entities to filter irrelevant ones
         # filter irrelevant entities based on TUIs
         if self.filter_tui:
@@ -323,7 +381,7 @@ class MetaMapMatch(AliasBasedMatch):
 
         # join the aliases
         for pair, answer in zip_longest(pairs, answer_texts):
-            answer_cuis = pair.answer.get("answer.cui", [])
+            answer_cuis = pair.answer.get(f"{self.answer_field}.cui", [])
             e_aliases = set()
             if answer_cuis:
                 del answer_cuis[3:]
@@ -332,7 +390,7 @@ class MetaMapMatch(AliasBasedMatch):
 
             answer_aliases = [answer] + list(e_aliases)
             # update the pair and return
-            pair.answer["answer.aliases"] = answer_aliases
+            pair.answer[f"{self.answer_field}.aliases"] = answer_aliases
             yield pair
 
 
@@ -357,5 +415,5 @@ class ScispaCyMatch(AliasBasedMatch):
 
             answer_aliases = [answer_str] + list(e_aliases)
             # update the pair and return
-            pair.answer["answer.aliases"] = answer_aliases
+            pair.answer[f"{self.answer_field}.aliases"] = answer_aliases
             yield pair
