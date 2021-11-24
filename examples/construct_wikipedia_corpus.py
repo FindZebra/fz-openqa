@@ -8,9 +8,9 @@ import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules import DataModule
 from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
-from fz_openqa.datamodules.utils.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
 from fz_openqa.utils.train_utils import setup_safe_env
 
 
