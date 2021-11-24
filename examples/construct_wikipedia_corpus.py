@@ -40,10 +40,13 @@ def run(config):
     )
     dataset_builder.subset_size = [1000, 100, 100]
 
+    file_name = "wikipedia_corpus_v2.arrow"
+    if config.get("use_subset", False):
+        file_name = file_name.replace(".arrow", "_subset.arrow")
     wiki_builder = WikixMedQaCorpusBuilder(
         dataset_builder=dataset_builder,
         query_articles=QueryWikiAPI(text_key="answer.text"),
-        file_name="wikipedia_corpus_v2.jsonl",
+        file_name=file_name,
         num_proc=4,
         batch_size=10,
     )
@@ -52,7 +55,7 @@ def run(config):
     dm = DataModule(builder=wiki_builder, train_batch_size=10)
 
     # prepare both the QA dataset and the corpus
-    dm.prepare_data()
+    # dm.prepare_data()
     dm.setup()
     rich.print(dm.dataset)
 
