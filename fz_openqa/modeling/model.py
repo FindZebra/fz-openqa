@@ -3,12 +3,9 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
-import torch
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
-from torch import nn
 from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
@@ -18,8 +15,6 @@ from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class Model(LightningModule):

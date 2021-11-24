@@ -83,8 +83,9 @@ class DataModule(LightningDataModule):
     def prepare_data(self, **kwargs):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
-        self.builder(**kwargs)
+        pass  # todo: uncomment this
+        # logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
+        # self.builder(**kwargs)
 
     def setup(self, stage: Optional[str] = None, **kwargs):
         """

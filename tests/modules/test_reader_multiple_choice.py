@@ -11,8 +11,8 @@ from tests.modules.base import TestModel
 class TestReaderMultipleChoice(TestModel):
     def setUp(self) -> None:
         super(TestReaderMultipleChoice, self).setUp()
-        heads = defaultdict(lambda: ClsHead(bert=self.bert, output_size=None))
-        self.model = ReaderMultipleChoice(bert=self.bert, tokenizer=self.tokenizer, heads=heads)
+        head = ClsHead(bert=self.bert, output_size=None)
+        self.model = ReaderMultipleChoice(bert=self.bert, tokenizer=self.tokenizer, head=head)
         self.model.eval()
 
     def test_step(self):

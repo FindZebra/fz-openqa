@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /model: option_retriever
+  - override /datamodule/builder: concat_openqa
+base:
+  seed: null
+  target_metric: validation/reader/logp
+  target_mode: max
+
+trainer:
+  gpus: 8
+  strategy: dp
+  min_epochs: 1
+  max_epochs: 1000
+  accumulate_grad_batches: 2
+  val_check_interval: 100
+
+datamodule:
+  use_subset: false
+  train_batch_size: 8
+  valid_batch_size: 16
+  num_workers: 8
+  builder:
+    batch_size: 20
+  n_documents:
+    train: 10
+    validation: 10
+    test: 10
+  max_pos_docs: 3
+  filter_unmatched: False
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+    - answer.target
+
+logger:
+  wandb:
+    group: option-retriever

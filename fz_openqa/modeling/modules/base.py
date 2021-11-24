@@ -15,13 +15,13 @@ from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
-from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.heads import ClsHead
 from fz_openqa.modeling.heads.base import Head
+from fz_openqa.modeling.modules.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
@@ -278,13 +278,47 @@ class Module(nn.Module, ABC):
         """
         return self.metrics.compute(split)
 
+    @staticmethod
+    def _get_base_metrics(
+        *,
+        prefix: Optional[str] = None,
+        metric_kwargs: Optional[Dict] = None,
+        topk: Optional[List[Union[None, int]]] = None,
+    ) -> SplitMetrics:
+        """
+        Return the base metrics for the given prefix.
+
+        Parameters
+        ----------
+        prefix
+            The prefix of the metrics group
+        metric_kwargs
+            The kwargs to pass to the metrics
+        topk
+            The list of topk to compute (None means default Accuracy)
+        Returns
+        SplitMetrics
+            the metrics group
+        -------
+
+        """
+        metric_kwargs = metric_kwargs or {"compute_on_step": False, "dist_sync_on_step": True}
+
+        if topk is None:
+            topk = [None]
+
+        def _name(k):
+            return f"top{k}_Accuracy" if k is not None else "Accuracy"
+
+        metrics = SafeMetricCollection(
+            {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in topk},
+            prefix=prefix,
+        )
+
+        return SplitMetrics(metrics)
+
     def _init_metrics(self, prefix: str):
-        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
-
-        def init_metric():
-            return MetricCollection([Accuracy(**metric_kwargs)], prefix=prefix)
-
-        self.metrics = SplitMetrics(init_metric)
+        self.metrics = self._get_base_metrics(prefix=prefix)
 
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:
