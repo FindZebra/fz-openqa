@@ -21,11 +21,11 @@ from rich.progress import track
 
 from fz_openqa.datamodules.builders import DatasetBuilder
 from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders.utils.gdrive import Gdrive
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.gdrive_dl_manager import _create_service
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # Set up GoogleDrive Service
         if upload_to_drive:
             # todo: implement as a separate module
-            self.drive = _create_service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+            self.drive = Gdrive()
         else:
             self.drive = None
 
@@ -172,7 +172,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # upload to drive
         if self.drive is not None:
             log.info("Uploading file to Google Drive..")
-            file = self._upload_to_drive(path_to_file=str(self.output_file))
+            file = self.drive.upload_to_drive(path_to_file=str(self.output_file))
             log.info(f"Uploaded file to Google Drive: <{file}>")
 
         return dataset
@@ -259,48 +259,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
                 "wiki.text": "text",
             }
         )
-
-    def _retrieve_all_files(self, folder_id: str = "1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb") -> Dict:
-        """Retrieve a Dict of File resources.
-
-        Args:
-        service: Drive API service instance.
-        Returns:
-        Dict of File resources.
-        """
-        result = {}
-        try:
-            param = {"q": f"'{folder_id}' in parents and trashed=false"}
-            files = self.drive.files().list(**param).execute()
-
-            for f in files["files"]:
-                result[f["name"]] = f["id"]
-        except (errors.HttpError, errors) as e:
-            print("An error occurred: %s" % e)
-        return result
-
-    def _upload_to_drive(self, path_to_file: str):
-        """ Update or create file on gdrive based on whether file name is in file list """
-        file_name = path_to_file.split("/")[-1]
-        #
-        file_list = self._retrieve_all_files(folder_id="1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb")
-
-        content = MediaFileUpload(path_to_file, mimetype="*/*", resumable=True)
-        if file_name in file_list.keys():
-            file_id = file_list[file_name]
-            # Update existing file based on id
-            file = self.drive.files().update(fileId=file_id, media_body=content).execute()
-
-        else:
-            file_metadata = {
-                "name": file_name,
-                "parents": ["1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb"],
-                "mimetype": "*/*",
-            }
-            # Create new file
-            file = self.drive.files().create(body=file_metadata, media_body=content).execute()
-
-        return file
 
     def get_collate_pipe(self) -> Optional[Pipe]:
         return None

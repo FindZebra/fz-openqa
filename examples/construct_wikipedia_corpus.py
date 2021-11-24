@@ -50,6 +50,7 @@ def run(config):
         query_articles=QueryWikiAPI(text_key="answer.text"),
         file_name=file_name,
         cache_dir=default_cache_dir,
+        upload_to_drive=True,
         num_proc=4,
         batch_size=10,
     )
