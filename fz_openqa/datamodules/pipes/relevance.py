@@ -13,7 +13,6 @@ from typing import Tuple
 
 import dill
 import numpy as np
-import rich
 import spacy
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
@@ -84,6 +83,14 @@ def find_all(text: str, queries: Sequence[Any], lower_case_queries: bool = True)
 
 
 class RelevanceClassifier(Pipe):
+    """
+    Classify if a given document is relevant to the question.
+    Returns `document.match_score`, which indicates the relevance of the
+    document (higher ==> more relevant).
+    If `interpretable=True`, the matched tokens in the given document (`document.match_on`)
+    are also returned.
+    """
+
     def __init__(
         self,
         answer_field: str = "answer",
@@ -171,6 +178,8 @@ class ExactMatch(RelevanceClassifier):
 
 
 class AliasBasedMatch(RelevanceClassifier):
+    """Relevance Classifier based on Entity aliases"""
+
     model: Optional[Language] = None
     linker: Optional[Callable] = None
 
@@ -188,23 +197,23 @@ class AliasBasedMatch(RelevanceClassifier):
         """
         Parameters
         ----------
-        filter_tui : bool
+        filter_tui
             Filter aliases according to DISCARD_TUIs list
-        filter_acronyms : bool
+        filter_acronyms
             Filter aliases according to regex pattern catching acronyms
-        model_name : str
+        model_name
             String defining what ScispaCy model to use
             see: https://github.com/allenai/scispacy#available-models
-        linker_name : str
+        linker_name
             String defining what knowledge base to use as Linker
             see: https://github.com/allenai/scispacy#entitylinker
-        threshold : float
+        threshold
             Threshold that a mention candidate must reach to be added
             to the mention in the Doc as a mention candidate.
-        lazy_setup : bool
-
-        spacy_kwargs : Dict
-
+        lazy_setup
+            If True, the model and linker will be loaded only when needed.
+        spacy_kwargs
+            Keyword arguments to pass to the ScispaCy model.
         """
         super().__init__(**kwargs)
         self.filter_tui = filter_tui
