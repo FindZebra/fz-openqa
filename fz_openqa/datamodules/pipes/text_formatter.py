@@ -15,21 +15,23 @@ class TextFormatter(Pipe):
         self,
         text_key: Optional[Union[str, List[str]]] = None,
         *,
-        remove_linebreaks: bool = True,
+        remove_breaks: bool = True,
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
+        remove_hex: bool = False,
         update: bool = True,
         **kwargs,
     ):
         super().__init__(update=update, **kwargs)
         self.text_key = text_key
-        self.remove_linebreaks = remove_linebreaks
+        self.remove_breaks = remove_breaks
         self.remove_ref = remove_ref
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
         self.remove_symbols = remove_symbols
+        self.remove_hex = remove_hex
 
     def clean(self, text: str) -> str:
 

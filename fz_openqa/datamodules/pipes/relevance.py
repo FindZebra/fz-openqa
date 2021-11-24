@@ -11,7 +11,6 @@ from typing import Optional
 from typing import Sequence
 from typing import Tuple
 
-import dill
 import numpy as np
 import spacy
 from scispacy.abbreviation import AbbreviationDetector  # type: ignore
@@ -247,12 +246,6 @@ class AliasBasedMatch(RelevanceClassifier):
 
         return state
 
-    def fingerprint(self) -> Any:
-        return {k: self._fingerprint(v) for k, v in self.__getstate__().items()}
-
-    def dill_inspect(self, reduce=True) -> Dict:
-        return {k: dill.pickles(v) for k, v in self.__getstate__().items()}
-
     def _setup_models(self):
         if self.model is None:
             self.model = self._load_spacy_model(self.model_name, self.linker_name)
@@ -335,7 +328,8 @@ class AliasBasedMatch(RelevanceClassifier):
     def _extract_answer_text(self, pair: Pair) -> str:
         return pair.answer[f"{self.answer_field}.text"]
 
-    def detect_acronym(self, alias: str) -> bool:
+    @staticmethod
+    def detect_acronym(alias: str) -> bool:
         """Regex pattern to detect acronym.
 
         Parameters
@@ -350,7 +344,7 @@ class AliasBasedMatch(RelevanceClassifier):
 
         Examples
         --------
-        >>> print(detect_acronym("AbIA|AoP|U.S.A.|USA")
+        >>> print(AliasBasedMatch.detect_acronym("AbIA|AoP|U.S.A.|USA")
         True
         """
         regex_pattern = r"\b[A-Z][a-zA-Z\.]*[A-Z]\b\.?"

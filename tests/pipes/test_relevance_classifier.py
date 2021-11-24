@@ -220,53 +220,45 @@ class TestRelevanceClassifier(TestCase):
 class TestFindOne(TestCase):
     """Test the function find one"""
 
-    def setUp(self) -> None:
-        self.ops = [None, len, lambda x: -len(x)]
-
     def test_simple_match(self):
         """test that matching with simple queries and documents"""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["hello"]),
-                ("hello world", ["hello", "world"]),
-                ("hello world", ["world"]),
-                ("hello world", ["ll"]),
-            ]:
-                self.assertTrue(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["hello"]),
+            ("hello world", ["hello", "world"]),
+            ("hello world", ["world"]),
+            ("hello world", ["ll"]),
+        ]:
+            self.assertTrue(find_one(doc, queries))
 
     def test_str_case(self):
         """test that matching with simple queries and documents,
         with upper and lowercase inputs."""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["Hello"]),
-                ("hello world", ["HELLO"]),
-                ("hello WOrLd", ["world"]),
-                ("heLLo world", ["ll"]),
-            ]:
-                self.assertTrue(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["Hello"]),
+            ("hello world", ["HELLO"]),
+            ("hello WOrLd", ["world"]),
+            ("heLLo world", ["ll"]),
+        ]:
+            self.assertTrue(find_one(doc, queries))
 
     def test_negatives(self):
         """test that find_one returns False where queries are not in the doc."""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["paris"]),
-                ("hello world", ["paris", "amsterdam"]),
-                ("hello world", ["helllo"]),
-            ]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["paris"]),
+            ("hello world", ["paris", "amsterdam"]),
+            ("hello world", ["helllo"]),
+        ]:
+            self.assertFalse(find_one(doc, queries))
 
     def test_empty_query(self):
         """test the output for empty queries"""
-        for op in self.ops:
-            for doc, queries in [("hello world", [])]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [("hello world", [])]:
+            self.assertFalse(find_one(doc, queries))
 
     def test_empty_doc(self):
         """test the output for empty docs"""
-        for op in self.ops:
-            for doc, queries in [("", ["hello", "world"])]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [("", ["hello", "world"])]:
+            self.assertFalse(find_one(doc, queries))
 
 
 class TestFindAll(TestCase):
