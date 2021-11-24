@@ -30,19 +30,19 @@ class FormatAndTokenize(Sequential):
         *,
         text_formatter: TextFormatter,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool,
-        max_length: Optional[int],
+        add_encoding_tokens: bool = True,
+        max_length: Optional[int] = 512,
         spec_token: Optional[str] = None,
-        shape: Optional[List[int]],
+        shape: Optional[List[int]] = None,
         return_token_type_ids: bool = False,
-        add_special_tokens: bool = False,
+        add_special_tokens: bool = True,
         return_offsets_mapping: bool = False,
         key: str = "text",
     ):
         if shape is None:
             shape = [-1]
 
-        if add_encoding_tokens:
+        if add_encoding_tokens and spec_token is not None:
             add_spec_tokens_pipe = Apply(
                 {key: partial(add_spec_token, spec_token)},
                 element_wise=True,

@@ -1,5 +1,7 @@
 from typing import Any
 from typing import Dict
+from typing import List
+from typing import Union
 
 import torch
 from transformers import PreTrainedTokenizerFast
@@ -10,7 +12,7 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 
 
 def add_spec_token(
-    special_token: str,
+    special_token: Union[str, List[str]],
     text: str,
 ):
     """
@@ -18,6 +20,8 @@ def add_spec_token(
     The pretrained tokenizer with registered special tokens will encode the output as:
     [CLS][SPEC][ text tokens ][SEP]
     """
+    if isinstance(special_token, list):
+        special_token = "".join(special_token)
     return f"{special_token}{text}"
 
 
