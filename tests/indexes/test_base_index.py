@@ -9,7 +9,7 @@ from datasets import Dataset
 from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.index import Index
-from fz_openqa.datamodules.index.base import SearchResult
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
 
@@ -18,7 +18,7 @@ class TestIndex(TestCase, ABC):
     # todo: test search_one
     _bert_id = "google/bert_uncased_L-2_H-128_A-2"
     cls: Index.__class__ = Index
-    k = 3
+    k = 100
     pt_cols = ["input_ids", "attention_mask"]
 
     def setUp(self) -> None:
@@ -79,7 +79,7 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         dill_status = index.dill_inspect()
         if isinstance(dill_status, bool):
-            self.assertTrue(dill_status, f"Index {index.__name__} could not be pickled.")
+            self.assertTrue(dill_status, f"Index {type(index).__name__} could not be pickled.")
         elif isinstance(dill_status, dict):
             for k, v in dill_status.items():
                 self.assertTrue(v, f"Attribute {k} could not be pickled.")
@@ -101,10 +101,14 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
-        output = index.search(query=query, k=self.k)
+        output = index.search(query, k=self.k)
 
         # check the output type
         self.assertIsInstance(output, SearchResult)
+
+
+        self.assertTrue((np.array(output.index)>=0).all())
+        self.assertTrue((np.array(output.index)<len(self.corpus)).all())
 
         # check shape of the output
         expected_shape = (len(self.dataset), self.k)
@@ -117,9 +121,7 @@ class TestIndex(TestCase, ABC):
 
         # check the top-1 scores
         for target, scores, idx in zip(self.retrieval_targets, output.score, output.index):
-            print(target, scores, idx)
             pred = np.argmax(scores, axis=-1)
             self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
-
             # check if output values are sorted
             self.assertTrue(np.all(scores[:-1] >= scores[1:]), "scores are not properly sorted")

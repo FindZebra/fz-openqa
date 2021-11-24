@@ -5,15 +5,14 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
-import dill
-import numpy as np
 import rich
 from datasets import Dataset
 from omegaconf import OmegaConf
 from rich.status import Status
 
 from .base import Index
-from .base import SearchResult
+from .base import IndexMode
+from .search_result import SearchResult
 from fz_openqa.configs.datamodule.index_builder import es_body
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import Batchify
@@ -27,7 +26,6 @@ from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import get_separator
-
 
 # load the default es configuration
 DEFAULT_ES_BODY = OmegaConf.to_object(
@@ -43,8 +41,10 @@ class ElasticSearchIndex(Index):
         dataset: Dataset,
         *,
         index_key: str = "document.row_idx",
-        text_key: str = "document.text",
-        query_key: str = "question.text",
+        required_keys: List[str] = None,
+        query_field: str = "question",
+        index_field: str = "document",
+        index_name: Optional[str] = None,
         batch_size: int = 32,
         num_proc: int = 1,
         filter_mode: Optional[str] = None,
@@ -53,20 +53,24 @@ class ElasticSearchIndex(Index):
         analyze: Optional[bool] = False,
         **kwargs,
     ):
+        if required_keys is None:
+            required_keys = ["text"]
 
+        self.index_field = index_field
+        self.query_field = query_field
+        self.required_keys = required_keys
         self.index_key = index_key
-        self.text_key = text_key
-        self.query_key = query_key
         self.batch_size = batch_size
         self.num_proc = num_proc
         self.engine = ElasticSearchEngine(analyze=False)
         self.es_body = es_body
         self.analyze = analyze
 
-        # text cleaning
-        if isinstance(text_cleaner, TextFormatter):
-            text_cleaner = text_cleaner.copy(text_key=self.text_key)
-        self.text_cleaner = text_cleaner
+        # input keys
+        msg = f"ElasticSearch Index is only implemented for one key. Got {required_keys}"
+        assert len(required_keys) == 1, msg
+        self.index_text_key = self.input_keys(mode=IndexMode.INDEX)[0]
+        self.query_text_key = self.input_keys(mode=IndexMode.QUERY)[0]
 
         # pipe used to potentially filter the input text
         if filter_mode is not None:
@@ -75,11 +79,11 @@ class ElasticSearchIndex(Index):
                 "metamap": MetaMapFilter,
                 "stopwords": StopWordsFilter,
             }[filter_mode]
-            filter_pipe = filter_pipe_cls(text_key=self.text_key, query_key=self.query_key)
+            filter_pipe = filter_pipe_cls(text_key=self.index_text_key)
         else:
             filter_pipe = None
 
-        # text cleaning and filtering
+        # text cleaning and filtering ()
         if filter_pipe is not None and text_cleaner is not None:
             self.preprocesing_pipe = Sequential(
                 CopyBatch(),
@@ -89,23 +93,22 @@ class ElasticSearchIndex(Index):
         else:
             self.preprocesing_pipe = None
 
-        # important
+        # call the super to index the dataset
+        kwargs.update(
+            required_keys=self.required_keys,
+            query_field=self.query_field,
+            index_field=self.index_field,
+            index_name=index_name,
+        )
         super(ElasticSearchIndex, self).__init__(dataset=dataset, **kwargs)
-
-    def dill_inspect(self) -> Dict[str, Any]:
-        output = {
-            "__all__": dill.pickles(self),
-            "engine": dill.pickles(self.engine),
-        }
-
-        return output
 
     def build(self, dataset: Dataset, verbose: bool = False, **kwargs):
         """Index the dataset using elastic search.
         We make sure a unique index is created for each dataset"""
-        rich.print(f"\n build: {dataset}")
         # preprocess the dataset
-        cols_to_drop = list(sorted(set(dataset.column_names) - {self.index_key, self.text_key}))
+        cols_to_drop = [
+            c for c in dataset.column_names if c not in [self.index_key, self.index_text_key]
+        ]
         dataset = dataset.remove_columns(cols_to_drop)
         dataset = self.preprocess_text(dataset)
 
@@ -125,10 +128,8 @@ class ElasticSearchIndex(Index):
                 try:
                     response = self.engine.es_bulk(
                         index_name=self.index_name,
-                        # todo: find a way to extract document titles
-                        title="__no_title__",
                         document_idx=dataset[self.index_key],
-                        document_txt=dataset[self.text_key],
+                        document_txt=dataset[self.index_text_key],
                     )
                 except Exception as ex:
                     # todo: catch a more precise exception
@@ -151,10 +152,10 @@ class ElasticSearchIndex(Index):
         Filter the incoming batch using the same pipe as the one
         used to build the index."""
         if self.preprocesing_pipe is not None:
-            query = self.preprocesing_pipe(query, text_key=self.query_key)
+            query = self.preprocesing_pipe(query, text_key=self.query_text_key)
 
         scores, indexes, contents = self.engine.es_search_bulk(
-            self.index_name, query[self.query_key], k=k
+            self.index_name, query[self.query_text_key], k=k
         )
 
         if self.analyze:
@@ -162,19 +163,21 @@ class ElasticSearchIndex(Index):
         else:
             analyzed_tokens = None
 
-        return SearchResult(score=scores, index=indexes, tokens=analyzed_tokens)
+        return SearchResult(
+            score=scores, index=indexes, tokens=analyzed_tokens, dataset_size=self.dataset_size
+        )
 
     def search_one(
-        self, query: Dict[str, Any], *, field: str = None, k: int = 1, **kwargs
+        self, query: Dict[str, Any], *, k: int = 1, **kwargs
     ) -> Tuple[List[float], List[int]]:
         """Search the index using the elastic search index for a single example."""
         query = Batchify()(query)
-        query = self.preprocesing_pipe(query, text_key=self.query_key)
+        query = self.preprocesing_pipe(query, text_key=self.query_text_key)
         query = DeBatchify()(query)
 
         results = self.engine.es_search(
             index_name=self.index_name,
-            query=query[field],
+            query=query[self.query_text_key],
             results=k,
         )
 
@@ -191,10 +194,6 @@ class ElasticSearchIndex(Index):
         return dataset.map(
             self.preprocesing_pipe,
             batched=True,
-            # @idariis: we need to decide how to set this, it depends on
-            # the scispacy models
-            # batch_size=self.batch_size,
-            # @idariis: potentially increase this to `self.num_proc` to use multiprocessing
             num_proc=self.num_proc,
             desc="ES Indexing: preprocessing",
         )

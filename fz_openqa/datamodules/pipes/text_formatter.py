@@ -1,5 +1,4 @@
 import re
-from typing import Any
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -14,16 +13,17 @@ class TextFormatter(Pipe):
 
     def __init__(
         self,
-        text_key: Optional[str] = None,
+        text_key: Optional[Union[str, List[str]]] = None,
         *,
         remove_linebreaks: bool = True,
         remove_ref: bool = True,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
+        update: bool = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(update=update, **kwargs)
         self.text_key = text_key
         self.remove_linebreaks = remove_linebreaks
         self.remove_ref = remove_ref
@@ -66,8 +66,9 @@ class TextFormatter(Pipe):
         else:
             ValueError(f"Cannot handle type {type(x).__name__}.")
 
-    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
         text_key = text_key or self.text_key
         assert text_key is not None, "attribute `text_key` must be set."
-        batch[text_key] = self._apply_to_leaves(batch[text_key], self.clean)
-        return batch
+        if isinstance(text_key, str):
+            text_key = [text_key]
+        return {key: self._apply_to_leaves(batch[key], self.clean) for key in text_key}

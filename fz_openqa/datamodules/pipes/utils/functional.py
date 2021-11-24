@@ -9,7 +9,7 @@ from fz_openqa.datamodules.pipes import Pipe
 def safe_todict(x):
     """return a dictionary representation of `x`, even if `x` is not a `Pipe`."""
     if isinstance(x, Pipe):
-        return x.todict()
+        return x.to_json_struct()
     else:
         try:
             return dict(x)

@@ -6,6 +6,7 @@ from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.pipes import Pipe, AddPrefix, DropKeys, FilterKeys, GetKey, Identity, \
     Lambda, ReplaceInKeys, RenameKeys, Apply, ApplyToAll, CopyBatch, Batchify
+from fz_openqa.datamodules.pipes.control.condition import In, Not
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -60,8 +61,8 @@ class TestPipesOutputKeys(TestCase):
         pipe = GetKey("text")
         self._call_pipe(pipe)
 
-    def test_fitler_keys(self):
-        pipe = FilterKeys(lambda key: "text" not in key)
+    def test_filter_keys(self):
+        pipe = FilterKeys(Not(In(["text"])))
         output = self._call_pipe(pipe)
         self.assertNotIn("text", output.output.keys())
 

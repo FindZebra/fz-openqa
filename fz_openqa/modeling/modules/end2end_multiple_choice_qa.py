@@ -12,7 +12,7 @@ from torch import Tensor
 from torchmetrics import MetricCollection
 from torchmetrics.classification import Accuracy
 
-from ...datamodules.pipes.nesting import nested_list
+from ...datamodules.pipes.utils.nesting import nested_list
 from .base import Module
 from .metrics import SplitMetrics
 from fz_openqa.datamodules.__old.corpus_dm import CorpusDataModule

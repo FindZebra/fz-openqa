@@ -364,7 +364,7 @@ Sample from the retriever lives and learn from the signal given by the reader co
 
 ## Tips and Tricks
 
- <details>
+<details>
 <summary>Disk usage</summary>
 
 Check the disk usage for each sub-directory. Useful to check the available. space on `/scratch`.
@@ -402,12 +402,21 @@ ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 <summary>Export `elasticsearch`</summary>
 
 Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
+
 ```bash
 export ES_HOME=/home/valv/libs/elasticsearch/elasticsearch-7.15.0
 export PATH="$ES_HOME/bin:$PATH"
 ```
 </details>
 
+ <details>
+<summary>Generate documentation</summary>
+
+```bash
+poetry run handsdown --exclude fz_openqa/configs -o docs
+```
+
+</details>
 ## Implemented papers
 
  1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)
