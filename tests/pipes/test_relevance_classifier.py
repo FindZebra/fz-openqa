@@ -3,11 +3,18 @@ import unittest
 from copy import copy
 from unittest import TestCase
 
-from fz_openqa.datamodules.pipes import Collate
+import rich
+
+from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import ExpandAndClassify
+from fz_openqa.datamodules.pipes import Collate, Sequential, PrintBatch
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix, Reduce
+from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
 from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
                                                    ScispaCyMatch,
-                                                   find_one, find_all)
+                                                   find_one, find_all, RelevanceClassifier)
+from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.memory_requirement import MemoryRequirement
+from fz_openqa.utils.shape import infer_batch_shape
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
       "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"], 'answer.synonyms': [],
@@ -121,8 +128,23 @@ class TestRelevanceClassifier(TestCase):
         exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8]
         self.batch = Collate(keys=None)(exs)
 
+        shape = infer_batch_shape({k:v for k,v in self.batch.items() if k.startswith('document')})
+        self.batch_size, self.n_docs = shape
+
+
+    def _wrap_classifier(self, classifier: RelevanceClassifier):
+        """
+        Expand the `answer` field to match the batch shape.
+        Flatten and process with the classifier.
+        """
+        return Sequential(
+            PrintBatch("input"),
+            ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
+        )
+
     def test_exact_match(self):
         classifier = ExactMatch(interpretable=True)
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # {answer.text : "Post polio syndrome (PPS)" }. Only "Post polio syndrome" is written in the document so 0 matches are found
         self.assertEqual(output['document.match_score'][0][0], 0)
@@ -143,9 +165,11 @@ class TestRelevanceClassifier(TestCase):
         # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should find 0 matches
         self.assertEqual(output['document.match_score'][8][0], 0)
 
+
     @unittest.skipUnless(MemoryRequirement(10)(), MemoryRequirement(10).explain())
     def test_metamap_match(self):
         classifier = MetaMapMatch(model_name="en_core_sci_sm", linker_name="umls")
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
         self.assertEqual(output['document.match_score'][0][0], 0)
@@ -170,6 +194,7 @@ class TestRelevanceClassifier(TestCase):
     def test_scispacy_match(self):
         classifier = ScispaCyMatch(interpretable=True, model_name="en_core_sci_sm",
                                    linker_name="umls")
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed with 1 macth because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertEqual(output['document.match_score'][0][0], 1)

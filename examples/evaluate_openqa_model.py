@@ -119,7 +119,7 @@ def run(config: DictConfig) -> None:
         n_retrieved_documents=100,
         n_documents=None,
         max_pos_docs=10,
-        filter_unmatched=True,
+        filter_unmatched=config.get("filter_unmatched", True),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 2),
     )

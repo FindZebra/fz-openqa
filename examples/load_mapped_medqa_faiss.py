@@ -85,7 +85,8 @@ def run(config):
         cache_dir = default_cache_dir
 
     # load model
-    if config.get("zero_shot", False):
+    zero_shot = config.get("zero_shot", False)
+    if zero_shot:
         model = ZeroShot()
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -113,6 +114,7 @@ def run(config):
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
+        add_encoding_tokens=not zero_shot,
         cache_dir=cache_dir,
         num_proc=4,
     )
@@ -122,6 +124,7 @@ def run(config):
     corpus_builder = MedQaCorpusBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
+        add_encoding_tokens=not zero_shot,
         use_subset=config.get("corpus_subset", False),
         cache_dir=cache_dir,
         num_proc=4,

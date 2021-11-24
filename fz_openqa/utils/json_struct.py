@@ -1,5 +1,5 @@
 """
-Function to process json-like structures
+Functions to process json-like structures
 """
 from typing import Any
 from typing import Callable

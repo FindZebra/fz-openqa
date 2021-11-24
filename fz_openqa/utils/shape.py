@@ -1,5 +1,6 @@
 from numbers import Number
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import T
@@ -164,22 +165,32 @@ def infer_shape(
         raise TypeError(f"Unsupported type {type(x)}")
 
 
-def infer_batch_shape(batch: Batch) -> List[int]:
+def infer_batch_shape(
+    batch: Batch, return_all_shapes: bool = False
+) -> Union[List[int], Tuple[List[int], Dict[str, List[int]]]]:
     """
     Infer the batch shape, which is the longest common shape of all the fields.
     Parameters
     ----------
     batch
         Input batch with nested values.
+    return_all_shapes
+        If True, also return the shapes of each field.
 
     Returns
     -------
-    List[int]
-        Shape of the batch (minimum of all values)
+    Union[List[int], Tuple[List[int], Dict[str, List[int]]]]
+        Shape of the batch (minimum of all values) if return_all_shapes is False,
+        else the shape of the batch and the shapes of each field.
     """
-    shapes = [infer_shape(b) for b in batch.values()]
-    shapes = [s for s in shapes if s is not None and len(s) > 0]
-    return longest_sublist(shapes)
+    shapes = {k: infer_shape(b) for k, b in batch.items()}
+    non_null_shapes = [s for s in shapes.values() if s is not None and len(s) > 0]
+    shape = longest_sublist(non_null_shapes)
+
+    if return_all_shapes:
+        return shape, shapes
+    else:
+        return shape
 
 
 def infer_missing_dims(n_elements: int, *, shape: List[int]) -> List[int]:

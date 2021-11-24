@@ -1,23 +1,21 @@
 from functools import partial
-from typing import Callable
 from typing import List
 from typing import Optional
 from typing import T
 from typing import Union
 
 import numpy as np
-import rich
 from torch import Tensor
 
 from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe
+from .utils.nesting import expand_and_repeat
 from .utils.nesting import flatten_nested
 from .utils.nesting import nested_list
 from .utils.nesting import reconcat
 from fz_openqa.datamodules.pipes.basic import ApplyToAll
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.functional import always_true
 from fz_openqa.utils.functional import infer_batch_size
 
 
@@ -146,6 +144,7 @@ class ApplyAsFlatten(Pipe):
 
         # infer the original shape of the batch
         input_shape = infer_batch_shape(batch)[: self.flatten.level + 1]
+
         batch = self.flatten(batch)
         # apply the batch to the flattened batch
         batch = self.pipe(batch, **kwargs)
@@ -153,7 +152,8 @@ class ApplyAsFlatten(Pipe):
         output = self.nest(batch, shape=input_shape)
 
         # check output and return
-        new_shape = infer_batch_shape(output)[: self.flatten.level + 1]
+        new_shape = infer_batch_shape(output)
+        new_shape = new_shape[: self.flatten.level + 1]
         explain = "Applying a pipe that changes the batch size might have caused this issue."
         if new_shape != input_shape:
             raise ValueError(
@@ -216,5 +216,32 @@ class Nested(ApplyAsFlatten):
         kwargs
             Additional keyword arguments passed to `ApplyAsFlatten`.
         """
-        pipe = NestedLevel1(pipe)
-        super().__init__(pipe=pipe, level=level - 1, **kwargs)
+        if level == 0:
+            super().__init__(pipe=pipe, level=0, **kwargs)
+        else:
+            pipe = NestedLevel1(pipe)
+            super().__init__(pipe=pipe, level=level - 1, **kwargs)
+
+
+class Expand(Pipe):
+    """
+    Expand the batch to match the new shape. New dimensions are repeated.
+    """
+
+    def __init__(self, axis: int, *, n: int, **kwargs):
+        """
+        Parameters
+        ----------
+        axis
+            Axis to expand
+        n
+            Number of times to repeat the axis
+        kwargs
+            Additional keyword arguments passed to `Pipe`.
+        """
+        super().__init__(**kwargs)
+        self.axis = axis
+        self.n = n
+
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        return {k: expand_and_repeat(v, axis=self.axis, n=self.n) for k, v in batch.items()}

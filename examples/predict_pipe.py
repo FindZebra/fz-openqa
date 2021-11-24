@@ -30,7 +30,7 @@ from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.dense import AddRowIdx
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
+from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
@@ -127,7 +127,7 @@ def run(config: DictConfig) -> None:
         persist=True,
     )
 
-    rich.print(">> cache_file={predict.cache_file}")
+    rich.print(f">> cache_file={predict.cache_file}")
 
     idx = list(range(n_samples))
     batch = corpus_builder.get_collate_pipe()([corpus[i] for i in idx])

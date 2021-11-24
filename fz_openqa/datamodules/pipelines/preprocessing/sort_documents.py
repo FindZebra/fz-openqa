@@ -14,7 +14,7 @@ class GenIsPositive(Pipe):
 
 
 class SortDocuments(Sequential):
-    def __init__(self):
+    def __init__(self, level: int = 1):
         super().__init__(
             Nested(
                 Sequential(
@@ -27,7 +27,8 @@ class SortDocuments(Sequential):
                         reverse=True,
                     ),
                     DropKeys(["document.is_positive"]),
-                )
+                ),
+                level=level,
             ),
             input_filter=HasPrefix("document."),
             id="sort-documents",

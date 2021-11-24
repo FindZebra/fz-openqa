@@ -7,7 +7,7 @@ from datasets import Dataset, DatasetDict, Split
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
@@ -106,11 +106,44 @@ class TestFZxMedQaCorpusBuilder(TestMedQaCorpusBuilder):
 @unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
 class TestOpenQaBuilder(TestBuilder):
     cls = OpenQaBuilder
+    dset_cls = MedQaBuilder
 
     def get_default_config(self):
         # dataset builder
         dataset_config = get_default_config()
-        dataset_builder = MedQaBuilder(**dataset_config)
+        dataset_builder = self.dset_cls(**dataset_config)
+
+        # corpus builder
+        corpus_config = get_default_config()
+        corpus_config.update(
+            {'max_length': None, 'passage_length': 200, 'passage_stride': 200, 'use_subset': False})
+        corpus_builder = MedQaCorpusBuilder(**corpus_config)
+
+        # index builder
+        return {
+            'dataset_builder': dataset_builder,
+            'corpus_builder': corpus_builder,
+            'index_builder': ElasticSearchIndexBuilder(),
+            'relevance_classifier': ExactMatch(),
+            'n_retrieved_documents': 10,
+            'n_documents': 5,
+            'max_pos_docs': 1,
+            'filter_unmatched': True,
+            'num_proc': 2,
+            'batch_size': 10,
+            'verbose': False,
+        }
+
+
+@unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
+class TestConcatenatedOpenQaBuilder(TestBuilder):
+    cls = OpenQaBuilder
+    dset_cls = ConcatMedQaBuilder
+
+    def get_default_config(self):
+        # dataset builder
+        dataset_config = get_default_config()
+        dataset_builder = self.dset_cls(**dataset_config)
 
         # corpus builder
         corpus_config = get_default_config()

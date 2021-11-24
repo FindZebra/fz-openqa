@@ -13,13 +13,15 @@ from datasets import Split
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
+from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
+from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
+from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
-from fz_openqa.datamodules.pipelines.index import FetchNestedDocuments
-from fz_openqa.datamodules.pipelines.index import SearchDocuments
-from fz_openqa.datamodules.pipelines.preprocessing import ClassifyDocuments
+from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Parallel
@@ -31,8 +33,6 @@ from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class OpenQaDataset(DatasetDict):
 
 
 class OpenQaBuilder(DatasetBuilder):
-    column_names = MedQaBuilder.column_names + [
+    _column_names = [
         "document.row_idx",
         "document.retrieval_score",
         "document.match_score",
@@ -101,6 +101,10 @@ class OpenQaBuilder(DatasetBuilder):
             "num_proc": num_proc,
             "batch_size": batch_size,
         }
+
+    @property
+    def column_names(self):
+        return self._column_names + self.dataset_builder.column_names
 
     @property
     def pt_attributes(self):
@@ -159,9 +163,18 @@ class OpenQaBuilder(DatasetBuilder):
         deleting the the dataset, see issue #114.
         """
 
+        question_nesting_level = self.dataset_builder.nesting_level
+        document_nesting_level = self.dataset_builder.nesting_level + 1
+
         if isinstance(index, FaissIndex):
+            if question_nesting_level > 0:
+                raise NotImplementedError
+
             collate_fn = CollateField(
-                "question", tokenizer=self.tokenizer, exclude=["metamap", "text"], level=0
+                "question",
+                tokenizer=self.tokenizer,
+                exclude=["metamap", "text"],
+                level=self.dataset_builder.nesting_level,
             )
             index.cache_query_dataset(dataset, collate_fn=collate_fn)
 
@@ -170,19 +183,24 @@ class OpenQaBuilder(DatasetBuilder):
             [
                 (
                     "Search documents",
-                    SearchDocuments(
-                        corpus_index=index,
-                        n_documents=n_retrieved_documents,
+                    SearchCorpus(
+                        index,
+                        k=n_retrieved_documents,
+                        level=question_nesting_level,
                     ),
                 ),
                 (
                     "Classify documents",
-                    ClassifyDocuments(
+                    FetchAndClassifyDocuments(
                         corpus_dataset=corpus,
-                        relevance_classifier=relevance_classifier,
+                        classifier=relevance_classifier,
+                        level=document_nesting_level,
+                        axis=document_nesting_level,
+                        n=n_retrieved_documents,
+                        extract_gold=question_nesting_level == 0,
                     ),
                 ),
-                ("Sort documents", SortDocuments()),
+                ("Sort documents", SortDocuments(level=document_nesting_level)),
             ]
         )
 
@@ -209,6 +227,7 @@ class OpenQaBuilder(DatasetBuilder):
                     n_documents=n_documents,
                     max_pos_docs=max_pos_docs,
                     split=split,
+                    level=question_nesting_level,
                 )
 
             dataset = DatasetDict(
@@ -226,9 +245,11 @@ class OpenQaBuilder(DatasetBuilder):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
+        document_nesting_level = self.dataset_builder.nesting_level + 1
+
         # A. Collate all attributes stored in `self.dataset`
         collate_qad = Parallel(
-            CollateField("document", tokenizer=self.tokenizer, level=1),
+            CollateField("document", tokenizer=self.tokenizer, level=document_nesting_level),
             self.dataset_builder.get_collate_pipe(),
         )
 
@@ -236,12 +257,14 @@ class OpenQaBuilder(DatasetBuilder):
         select_documents = self.get_select_documents_pipe(
             self.n_documents,
             max_pos_docs=self.max_pos_docs,
+            level=document_nesting_level,
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(),
             collate_pipe=self.corpus_builder.get_collate_pipe(),
+            level=document_nesting_level,
         )
 
         return BlockSequential(
@@ -255,7 +278,10 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: Union[int, Dict], *, max_pos_docs: Optional[int]
+        n_documents: Union[int, Dict],
+        *,
+        max_pos_docs: Optional[int],
+        level: int = 1,
     ) -> Optional[Pipe]:
         if n_documents == 0:
             return None
@@ -267,39 +293,16 @@ class OpenQaBuilder(DatasetBuilder):
             neg_select_mode="first",
             strict=False,
             update=True,
+            level=level,
         )
 
     def format_row(self, row: Dict[str, Any]) -> str:
-        decode_kwargs = {
-            "skip_special_tokens": False,
-            "tokenizer": self.tokenizer,
-        }
+        """Pretty format a dataset row"""
 
-        repr = self.dataset_builder.format_row(row)
-        repr += get_separator("-") + "\n"
-        repr += (
-            f"* Documents: n={len(row['document.text'])}, "
-            f"n_positive={sum(row['document.match_score'] > 0)}, "
-            f"n_negative={sum(row['document.match_score'] == 0)}\n"
-        )
-        for j in range(min(len(row["document.text"]), 3)):
-            repr += get_separator(".") + "\n"
-            match_on = row.get("document.match_on", None)
-            match_on = match_on[j] if match_on is not None else None
-            repr += (
-                f"|-* Document #{1 + j}, "
-                f"score={row['document.retrieval_score'][j]:.2f}, "
-                f"match_score={row['document.match_score'][j]}, "
-                f"match_on={match_on}\n"
-            )
-
-            repr += (
-                pretty_decode(
-                    row["document.input_ids"][j],
-                    **decode_kwargs,
-                    style="white",
-                )
-                + "\n"
-            )
-
-        return repr
+        args = {"dataset_builder": self.dataset_builder, "tokenizer": self.tokenizer}
+        if self.dataset_builder.nesting_level == 0:
+            return format_row_flat_questions(row, **args)
+        elif self.dataset_builder.nesting_level == 1:
+            return format_row_nested_questions(row, **args)
+        else:
+            raise ValueError(f"Unsupported nesting level: {self.dataset_builder.nesting_level}")

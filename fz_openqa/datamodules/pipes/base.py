@@ -86,10 +86,10 @@ class Pipe(Component):
         """
         output_keys = copy(input_keys)
         if self.input_filter is not None:
-            output_keys = {k: None for k in output_keys if self.input_filter(k)}.keys()
+            output_keys = list({k: None for k in output_keys if self.input_filter(k)}.keys())
 
         if self.update:
-            output_keys = {**input_keys, **output_keys}
+            output_keys = input_keys + output_keys
 
         return output_keys
 
@@ -144,7 +144,8 @@ class Pipe(Component):
 
         # update the input batch with the output if update is set to True
         if self.update:
-            output = {**batch, **output}
+            batch.update(output)
+            output = batch
 
         return output
 

@@ -52,10 +52,12 @@ class SelectDocsOneEg(Pipe):
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
+        score_key: str = "document.match_score",
         **kwargs,
     ):
         super(SelectDocsOneEg, self).__init__(**kwargs)
         self.total = total
+        self.score_key = score_key
         self.max_pos_docs = max_pos_docs
         self.pos_select_mode = pos_select_mode
         self.neg_select_mode = neg_select_mode
@@ -69,7 +71,17 @@ class SelectDocsOneEg(Pipe):
         if isinstance(total, (dict, DictConfig)):
             total = total[str(split)]
 
-        is_positive = [x > 0 for x in batch["document.match_score"]]
+        # get the positive documents, if `score_key` is not available
+        # consider all documents as negative
+        if self.score_key in batch:
+            is_positive = [x > 0 for x in batch[self.score_key]]
+        else:
+            warnings.warn(
+                f"The key {self.score_key} was not found in batch with "
+                f"keys={list(batch.keys())}. Handling all documents as negative."
+            )
+            values = next(iter(batch.values()))
+            is_positive = len(values) * [False]
         assert len(is_positive) >= total
 
         # get the positive indexes
