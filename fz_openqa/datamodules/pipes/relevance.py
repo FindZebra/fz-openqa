@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
-from itertools import tee
 from itertools import zip_longest
 from typing import Any
 from typing import Callable
@@ -22,9 +21,10 @@ from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 
-from .nesting import nested_list
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
+from ...utils.functional import infer_batch_size
+from .base import Pipe
+from .utils.nesting import nested_list
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
@@ -78,7 +78,7 @@ def find_one(text: str, queries: Sequence[Any], sort_by: Optional[Callable] = No
 def find_all(text: str, queries: Sequence[Any], lower_case_queries: bool = True) -> List:
     """Find all matching queries in the document.
     There are one returned item per match in the document."""
-    assert isinstance(text, str)
+    assert isinstance(text, str), f"The input must be a string. Found {type(text)}"
     if len(queries) == 0:
         return []
     if len(text) == 0:
@@ -108,8 +108,8 @@ def find_all(text: str, queries: Sequence[Any], lower_case_queries: bool = True)
 class RelevanceClassifier(Pipe):
     def __init__(
         self,
-        answer_prefix: str = "answer.",
-        document_prefix: str = "document.",
+        answer_field: str = "answer",
+        document_field: str = "document",
         output_key: str = "document.match_score",
         interpretable: bool = False,
         interpretation_key: str = "document.match_on",
@@ -118,8 +118,8 @@ class RelevanceClassifier(Pipe):
     ):
         super(RelevanceClassifier, self).__init__(id=id)
         self.output_key = output_key
-        self.answer_prefix = answer_prefix
-        self.document_prefix = document_prefix
+        self.answer_field = answer_field
+        self.document_field = document_field
         self.interpretable = interpretable
         self.interpretation_key = interpretation_key
 
@@ -149,18 +149,15 @@ class RelevanceClassifier(Pipe):
         return pairs
 
     def _infer_n_docs(self, batch: Batch) -> int:
-        x = [v for k, v in batch.items() if str(k).startswith(self.document_prefix)][0]
+        x = [v for k, v in batch.items() if str(k).startswith(self.document_field)][0]
         length = len(x[0])
         assert all(length == len(y) for y in x)
         return length
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         output = {}
-        n_documents = self._infer_n_docs(batch)
-        batch_size = self._infer_batch_size(batch)
-
-        # get one pair: (question and document) size: [batch_size x n_documents]
-        pairs = self._get_data_pairs(batch, batch_size=batch_size)
+        # get pairs of data: Pair(answer, document)
+        pairs = self._get_data_pairs(batch)
 
         # potentially transform all pairs (in batch)
         pairs = self.preprocess(pairs)
@@ -169,47 +166,30 @@ class RelevanceClassifier(Pipe):
         if self.interpretable:
             all_results = zip(*map(self.classify_and_interpret, pairs))
             results, interpretations = map(list, all_results)
-            output[self.interpretation_key] = nested_list(interpretations, stride=n_documents)
+            output[self.interpretation_key] = list(interpretations)
         else:
             results = list(map(self.classify, pairs))
 
         # reshape as [batch_size, n_documents] and cast as Tensor
-        output[self.output_key] = nested_list(results, stride=n_documents)
+        output[self.output_key] = list(results)
+
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:
-        batch_size = batch_size or self._infer_batch_size(batch)
+        batch_size = batch_size or infer_batch_size(batch)
         for i in range(batch_size):
-            a_data_i = self.get_eg(batch, i, filter_op=KeyWithPrefix(self.answer_prefix))
-            d_data_i = self.get_eg(batch, i, filter_op=KeyWithPrefix(self.document_prefix))
-
-            # iterate through each document
-            n_docs = len(next(iter(d_data_i.values())))
-            for j in range(n_docs):
-                d_data_ij = {k: v[j] for k, v in d_data_i.items()}
-                yield Pair(answer=a_data_i, document=d_data_ij)
-
-    def _infer_batch_size(self, batch):
-        bs = len(next(iter(batch.values())))
-        assert all(bs == len(x) for x in batch.values())
-        return bs
+            a_data_i = self.get_eg(batch, i, filter_op=HasPrefix(self.answer_field))
+            d_data_i = self.get_eg(batch, i, filter_op=HasPrefix(self.document_field))
+            yield Pair(answer=a_data_i, document=d_data_i)
 
 
 class ExactMatch(RelevanceClassifier):
     """Match the lower-cased answer string in the document."""
 
-    @staticmethod
-    def _get_matches(pair: Pair) -> List[str]:
-        doc_text = pair.document["document.text"]
-        answer_index = pair.answer["answer.target"]
-        answer_text = pair.answer["answer.text"][answer_index]
+    def _get_matches(self, pair: Pair) -> List[str]:
+        doc_text = pair.document[f"{self.document_field}.text"]
+        answer_text = pair.answer[f"{self.answer_field}.text"]
         return find_all(doc_text, [answer_text])
-
-    # def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
-    #     """Generate the field `pair.answer["aliases"]`"""
-    #     # An iterator can only be consumed once, generate two of them
-    #     # casting as a list would also work
-    #     pairs_1, pairs_2 = tee(pairs, 2)
 
 
 class AliasBasedMatch(RelevanceClassifier):
@@ -233,17 +213,16 @@ class AliasBasedMatch(RelevanceClassifier):
         if not lazy_setup:
             self._setup_models()
 
-    @staticmethod
-    def _get_matches(pair: Pair) -> List[str]:
-        doc_text = pair.document["document.text"]
-        answer_aliases = pair.answer["answer.aliases"]
+    def _get_matches(self, pair: Pair) -> List[str]:
+        doc_text = pair.document[f"{self.document_field}.text"]
+        answer_aliases = pair.answer[f"{self.answer_field}.aliases"]
         return find_all(doc_text, answer_aliases)
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """Super-charge the __call__ method to load the spaCy models
         if they are not already loaded."""
         self._setup_models()
-        return super().__call__(batch, **kwargs)
+        return super()._call_batch(batch, **kwargs)
 
     def __getstate__(self):
         """this method is called when attempting pickling"""
@@ -303,14 +282,13 @@ class AliasBasedMatch(RelevanceClassifier):
             aliases = self.linker.kb.cui_to_entity[cui_str].aliases
             yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
 
-    @staticmethod
-    def _extract_answer_text(pair: Pair) -> str:
-        answer_index = pair.answer["answer.target"]
-        return pair.answer["answer.text"][answer_index]
+    def _extract_answer_text(self, pair: Pair) -> str:
+        return pair.answer[f"{self.answer_field}.text"]
 
-    @staticmethod
-    def _extract_synonym_text(pair: Pair) -> str:
-        return ",".join([synonym for synonym in pair.answer.get("answer.synonyms", [])])
+    def _extract_synonym_text(self, pair: Pair) -> str:
+        return ",".join(
+            [synonym for synonym in pair.answer.get(f"{self.answer_field}.synonyms", [])]
+        )
 
     def detect_acronym(self, alias: str) -> bool:
         """
@@ -373,7 +351,7 @@ class MetaMapMatch(AliasBasedMatch):
 
         # join the aliases
         for pair, answer, synonym_doc in zip_longest(pairs, answer_texts, synonym_docs):
-            answer_cuis = pair.answer.get("answer.cui", [])
+            answer_cuis = pair.answer.get(f"{self.answer_field}.cui", [])
             filtered_synonyms = self.extract_and_filters_entities(synonym_doc)
             answer_aliases = set(filtered_synonyms)
             if len(answer_cuis) > 0:
@@ -384,7 +362,7 @@ class MetaMapMatch(AliasBasedMatch):
 
             answer_aliases = [str(answer)] + sorted(answer_aliases, key=len)
             # update the pair and return
-            pair.answer["answer.aliases"] = list(answer_aliases)
+            pair.answer[f"{self.answer_field}.aliases"] = list(answer_aliases)
             yield pair
 
 
@@ -417,5 +395,5 @@ class ScispaCyMatch(AliasBasedMatch):
             answer_aliases = [str(answer_doc)] + sorted(answer_aliases, key=len)
 
             # update the pair and return
-            pair.answer["answer.aliases"] = list(answer_aliases)
+            pair.answer[f"{self.answer_field}.aliases"] = list(answer_aliases)
             yield pair

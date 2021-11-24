@@ -6,15 +6,13 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import Apply
-from fz_openqa.datamodules.pipes import ApplyToAll
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyIn
-from fz_openqa.datamodules.pipes.nesting import flatten_nested
-from fz_openqa.datamodules.pipes.nesting import nested_list
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 
 
@@ -35,12 +33,14 @@ class FormatAndTokenize(Sequential):
         add_encoding_tokens: bool,
         max_length: Optional[int],
         spec_tokens: List,
-        stride: Optional[int],
+        shape: Optional[List[int]],
         return_token_type_ids: bool = False,
         add_special_tokens: bool = False,
         return_offsets_mapping: bool = False,
         field: str = "text",
     ):
+        if shape is None:
+            shape = [-1]
 
         if add_encoding_tokens:
             add_spec_tokens = Apply(
@@ -51,19 +51,22 @@ class FormatAndTokenize(Sequential):
             add_spec_tokens = None
 
         super().__init__(
-            FilterKeys(KeyIn([f"{prefix}text"])),
+            FilterKeys(In([f"{prefix}text"])),
             ReplaceInKeys(prefix, ""),
             text_formatter.copy(text_key="text"),
-            ApplyToAll(flatten_nested, element_wise=False) if stride else None,
-            add_spec_tokens,
-            TokenizerPipe(
-                tokenizer,
-                max_length=max_length,
-                fields=field,
-                return_token_type_ids=return_token_type_ids,
-                add_special_tokens=add_special_tokens,
-                return_offsets_mapping=return_offsets_mapping,
+            ApplyAsFlatten(
+                Sequential(
+                    add_spec_tokens,
+                    TokenizerPipe(
+                        tokenizer,
+                        max_length=max_length,
+                        fields=field,
+                        return_token_type_ids=return_token_type_ids,
+                        add_special_tokens=add_special_tokens,
+                        return_offsets_mapping=return_offsets_mapping,
+                    ),
+                ),
+                level=len(shape) - 1,
             ),
-            ApplyToAll(partial(nested_list, stride=stride)) if stride else None,
             AddPrefix(prefix),
         )

@@ -1,13 +1,11 @@
-from typing import Any
-from typing import Callable
-from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
-from typing import Union
 
-from . import Pipe
 from ...utils.datastruct import Batch
+from ...utils.datastruct import Eg
+from .base import Pipe
+from .control.condition import In
 
 
 class Collate(Pipe):
@@ -18,56 +16,32 @@ class Collate(Pipe):
     This default class concatenate values as lists.
     """
 
-    def __init__(
-        self,
-        keys: Optional[Union[str, List[str], Callable]] = None,
-        key_op: Optional[Callable] = None,
-    ):
-        self.keys = keys
-        self.key_op = key_op
+    _allows_update = False
 
-    def __call__(self, examples: Union[Batch, Iterable[Batch]], **kwargs) -> Batch:
-        # cast, filter keys and check type and keys consistency
-        if isinstance(examples, dict):
-            keys = self.get_keys_form_eg(examples)
-            batch = {key: examples[key] for key in keys}
+    def __init__(self, keys: Optional[List[str]] = None, **kwargs):
+        if keys is not None:
+            msg = "input_filter is not allowed when keys are explicitely set"
+            assert kwargs.get("input_filter", None) is None, msg
+            input_filter = In(keys)
         else:
-            examples = list(examples)
-            first_eg = examples[0]
-            keys = self.get_keys_form_eg(first_eg)
-            self.check_consistency(examples, keys)
+            input_filter = kwargs.pop("input_filter", None)
+        super().__init__(**kwargs, input_filter=input_filter)
 
-            # build a batch: {key: [values]}
-            batch = {key: [eg[key] for eg in examples] for key in keys}
-
-        # apply the operator
-        if self.key_op is not None:
-            batch = {self.key_op(k): v for k, v in batch.items()}
-
+    def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         return batch
 
-    @staticmethod
-    def check_consistency(examples, keys):
-        assert all(isinstance(eg, dict) for eg in examples)
-        assert all(keys.issubset(set(eg.keys())) for eg in examples)
-
-    def get_keys_form_eg(self, first_eg):
+    def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        first_eg = examples[0]
         keys = set(first_eg.keys())
-        if self.keys is not None:
-            if isinstance(self.keys, (list, set, tuple)):
-                _keys = set(self.keys)
-            else:
-                _keys = set(filter(self.keys, keys))
-
-            keys = set.intersection(keys, _keys)
-        return keys
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        return self.keys or input_keys
+        return {key: [eg[key] for eg in examples] for key in keys}
 
 
 class DeCollate(Pipe):
-    def __call__(self, batch: Batch, **kwargs) -> List[Dict[str, Any]]:
+    """Returns a list of examples from a batch"""
+
+    _allows_update = False
+
+    def _call_batch(self, batch: Batch, **kwargs) -> List[Eg]:
         keys = list(batch.keys())
         length = len(batch[keys[0]])
         lengths = {k: len(v) for k, v in batch.items()}
@@ -76,14 +50,21 @@ class DeCollate(Pipe):
 
 
 class FirstEg(Pipe):
-    def __call__(self, examples: List[Batch]) -> Batch:
+    """Returns the first example"""
+
+    _allows_update = False
+
+    def _call_egs(self, examples: List[Eg], **kwargs) -> Eg:
         return examples[0]
 
 
 class ApplyToEachExample(Pipe):
-    def __init__(self, pipe: Pipe):
+    _allows_update = False
+
+    def __init__(self, pipe: Pipe, **kwargs):
+        super(ApplyToEachExample, self).__init__(**kwargs)
         self.pipe = pipe
 
-    def __call__(self, examples: Iterable[Batch]) -> Iterable[Batch]:
+    def _call_egs(self, examples: List[Eg], **kwargs) -> Iterable[Eg]:
         for eg in examples:
-            yield self.pipe(eg)
+            yield self.pipe(eg, **kwargs)

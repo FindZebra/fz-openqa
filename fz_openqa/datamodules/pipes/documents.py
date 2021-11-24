@@ -13,7 +13,7 @@ from omegaconf import DictConfig
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -30,6 +30,7 @@ class SelectDocs(Nested):
         strict: bool = False,
         prefix="document.",
         id="select-docs",
+        **kwargs,
     ):
         pipe = SelectDocsOneEg(
             total=total,
@@ -39,7 +40,7 @@ class SelectDocs(Nested):
             strict=strict,
         )
 
-        super(SelectDocs, self).__init__(pipe=pipe, filter=KeyWithPrefix(prefix), id=id)
+        super(SelectDocs, self).__init__(pipe=pipe, input_filter=HasPrefix(prefix), id=id, **kwargs)
 
 
 class SelectDocsOneEg(Pipe):
@@ -51,10 +52,12 @@ class SelectDocsOneEg(Pipe):
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
+        score_key: str = "document.match_score",
         **kwargs,
     ):
         super(SelectDocsOneEg, self).__init__(**kwargs)
         self.total = total
+        self.score_key = score_key
         self.max_pos_docs = max_pos_docs
         self.pos_select_mode = pos_select_mode
         self.neg_select_mode = neg_select_mode
@@ -63,12 +66,22 @@ class SelectDocsOneEg(Pipe):
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
 
-    def __call__(self, batch: Batch, split: Optional[Split] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, split: Optional[Split] = None, **kwargs) -> Batch:
         total = self.total
         if isinstance(total, (dict, DictConfig)):
             total = total[str(split)]
 
-        is_positive = [x > 0 for x in batch["document.match_score"]]
+        # get the positive documents, if `score_key` is not available
+        # consider all documents as negative
+        if self.score_key in batch:
+            is_positive = [x > 0 for x in batch[self.score_key]]
+        else:
+            warnings.warn(
+                f"The key {self.score_key} was not found in batch with "
+                f"keys={list(batch.keys())}. Handling all documents as negative."
+            )
+            values = next(iter(batch.values()))
+            is_positive = len(values) * [False]
         assert len(is_positive) >= total
 
         # get the positive indexes

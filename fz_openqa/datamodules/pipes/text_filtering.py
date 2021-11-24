@@ -1,4 +1,7 @@
+import abc
+from typing import List
 from typing import Optional
+from typing import Union
 
 import rich
 import spacy
@@ -10,15 +13,26 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class TextFilter(Pipe):
-    def __init__(self, *, text_key: str, query_key):
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, *, text_key: Union[str, List[str]], **kwargs):
+        super(TextFilter, self).__init__(**kwargs)
         self.text_key = text_key
-        self.query_key = query_key
 
-    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
         text_key = text_key or self.text_key
-        batch[text_key] = [self.filter_one(eg) for eg in batch[text_key]]
-        return batch
+        if isinstance(text_key, str):
+            text_key = [text_key]
 
+        output = {}
+        for key in text_key:
+            output[key] = self.filter_batch(batch[key])
+        return output
+
+    def filter_batch(self, texts: List[str]) -> List[str]:
+        return [self.filter_one(text) for text in texts]
+
+    @abc.abstractmethod
     def filter_one(self, text: str) -> str:
         raise NotImplementedError
 
@@ -40,43 +54,38 @@ class SciSpacyFilter(TextFilter):
         document: text data to be analysed
     """
 
-    def __init__(self, spacy_model=None, **kwargs):
+    def __init__(self, model_name: str = "en_core_sci_sm", **kwargs):
         super().__init__(**kwargs)
-
-        if spacy_model is None:
-            self.model = spacy.load(
-                "en_core_sci_sm",
-                disable=[
-                    "tok2vec",
-                    "tagger",
-                    "parser",
-                    "attribute_ruler",
-                    "lemmatizer",
-                ],
-            )
-
-        else:
-            self.model = spacy_model.load()
+        self.model = spacy.load(
+            model_name,
+            disable=[
+                "tok2vec",
+                "tagger",
+                "parser",
+                "attribute_ruler",
+                "lemmatizer",
+            ],
+        )
 
     def filter_one(self, text: str) -> str:
         doc = self.model.pipe(text)
         return self._join_ents(doc)
 
+    def filter_batch(self, texts: List[str]) -> List[str]:
+        docs = self.model.pipe(texts)
+        return [self._join_ents(doc) for doc in docs]
+
     @staticmethod
     def _join_ents(doc: Doc) -> str:
         return " ".join([str(ent.text) for ent in doc.ents])
-
-    def __call__(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
-        text_key = text_key or self.text_key
-        docs = self.model.pipe(batch[text_key])
-        batch[text_key] = [self._join_ents(doc) for doc in docs]
-        return batch
 
 
 class MetaMapFilter(TextFilter):
     """
     Build a Pipe to return a string of unique entities recognized
     based on offline processed MetaMap heuristic
+
+
     Args:
         MetaMapList: A list of recognised entities inferred from the question query
         Question: query to be replaced by MetaMapList
@@ -85,11 +94,14 @@ class MetaMapFilter(TextFilter):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        # todo: fix this. this cannot work as it is
+        raise NotImplementedError
+
     @staticmethod
     def _join_ents(MetaMapList: list) -> str:
         return " ".join([str(ent) for ent in MetaMapList])
 
-    def __call__(self, batch: Batch, query_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, query_key: Optional[str] = None, **kwargs) -> Batch:
         rich.print(f"[green]{batch.keys()}")
         query_key = query_key or self.query_key
         batch[query_key] = [self._join_ents(lst) for lst in batch["question.metamap"]]

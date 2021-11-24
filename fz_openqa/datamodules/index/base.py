@@ -1,49 +1,87 @@
-from abc import ABC
+from abc import ABCMeta
 from abc import abstractmethod
-from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
 
-import dill
 from datasets import Dataset
 from rich.progress import track
 
+from fz_openqa.datamodules.component import Component
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 
 
-@dataclass
-class SearchResult:
-    score: List[List[float]]
-    index: List[List[int]]
-    tokens: Optional[List[List[str]]] = None
+class IndexMode(Enum):
+    INDEX = "index"
+    QUERY = "query"
 
 
-class Index(ABC):
-    """Keep an index of a Dataset and search u
-    sing queries."""
+class Index(Component):
+    """Keep an index of a Dataset and search it using queries."""
 
+    # todo: cleanup the way attributes are set and build() is called (EsIndex)
+
+    __metaclass__ = ABCMeta
     index_name: Optional[str] = None
     is_indexed: bool = False
 
-    def __init__(self, dataset: Dataset, *, verbose: bool = False, **kwargs):
+    def __init__(
+        self,
+        dataset: Dataset,
+        *,
+        required_keys: List[str],
+        query_field: str = "question",
+        index_field: str = "document",
+        index_name: Optional[str] = None,
+        verbose: bool = False,
+        **kwargs,
+    ):
+        """
+        Parameters
+        ----------
+        dataset
+            The dataset to be index (corpus)
+        required_keys
+            The keys required for each field. e.g. ['text']]
+        query_field
+            The field to be used as query (in the query dataset). e.g. question
+        index_field
+            The field to be used as index (in the dataset). e.g. document
+        index_name:
+            The name of the index. Must be unique to allow for sage caching.
+        verbose
+            Whether to print the progress
+        kwargs
+            Other parameters to be passed to the `build` method
+        """
+        super(Index, self).__init__(**kwargs)
+        self.query_field = query_field
+        self.index_field = index_field
+        self.required_keys = required_keys
+        self.index_name = index_name
         self.verbose = verbose
+        self.dataset_size = len(dataset)
         self.build(dataset=dataset, **kwargs)
+
+    def input_keys(self, mode: Optional[IndexMode] = None) -> List[str]:
+        """Return the list of keys required for each mode (indexing, querying)"""
+        output = []
+        if mode is None or mode == IndexMode.INDEX:
+            output += [f"{self.index_field}.{key}" for key in self.required_keys]
+
+        if mode is None or mode == IndexMode.QUERY:
+            output += [f"{self.query_field}.{key}" for key in self.required_keys]
+
+        return output
 
     def __repr__(self):
         params = {"is_indexed": self.is_indexed, "index_name": self.index_name}
         params = [f"{k}={v}" for k, v in params.items()]
         return f"{self.__class__.__name__}({', '.join(params)})"
-
-    def dill_inspect(self) -> bool:
-        """check if the module can be pickled."""
-        return dill.pickles(self)
-
-    def _fingerprint(self) -> str:
-        return get_fingerprint(self)
 
     @abstractmethod
     def build(self, dataset: Dataset, **kwargs):
@@ -79,7 +117,9 @@ class Index(ABC):
             if tokens_i is not None:
                 tokens += [tokens_i]
         tokens = None if len(tokens) == 0 else tokens
-        return SearchResult(index=indexes, score=scores, tokens=tokens)
+        return SearchResult(
+            index=indexes, score=scores, tokens=tokens, dataset_size=self.dataset_size
+        )
 
     def get_example(self, query: Batch, index: int) -> Dict[str, Any]:
         return {k: v[index] for k, v in query.items()}

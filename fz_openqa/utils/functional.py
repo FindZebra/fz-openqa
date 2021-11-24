@@ -42,9 +42,13 @@ def batch_reduce(x, op=torch.sum):
     return op(x.view(x.size(0), -1), dim=1)
 
 
-def cast_to_numpy(x: Any, as_contiguous: bool = True) -> np.ndarray:
+def cast_to_numpy(
+    x: Any, as_contiguous: bool = True, dtype: Optional[np.dtype] = None
+) -> np.ndarray:
     if isinstance(x, torch.Tensor):
         x = x.detach().to(device="cpu").numpy()
+        if dtype is not None:
+            x = x.astype(dtype)
     elif isinstance(x, np.ndarray):
         pass
     else:
@@ -56,8 +60,10 @@ def cast_to_numpy(x: Any, as_contiguous: bool = True) -> np.ndarray:
     return x
 
 
-def cast_values_to_numpy(batch: Batch, as_contiguous: bool = True) -> Batch:
-    return {k: cast_to_numpy(v, as_contiguous=as_contiguous) for k, v in batch.items()}
+def cast_values_to_numpy(
+    batch: Batch, as_contiguous: bool = True, dtype: Optional[np.dtype] = None
+) -> Batch:
+    return {k: cast_to_numpy(v, as_contiguous=as_contiguous, dtype=dtype) for k, v in batch.items()}
 
 
 def always_true(*args, **kwargs):
@@ -71,10 +77,15 @@ def get_batch_eg(batch: Batch, idx: int, filter_op: Optional[Callable] = None) -
 
 
 def infer_batch_size(batch: Batch) -> int:
-    def _cond(k):
-        return not k.startswith("__") and not k.endswith("__")
-
-    return next(iter((len(v) for k, v in batch.items() if _cond(k))))
+    batch = {k: v for k, v in batch.items() if v is not None and not isinstance(v, (Number, str))}
+    bss = [len(v) for v in batch.values()]
+    bs = bss[0]
+    if not all(bs == bs_ for bs_ in bss):
+        lengths = ", ".join([f"{k}={len(v)}" for k, v in batch.items()])
+        raise ValueError(
+            f"Fields are not of the same length. Cannot infer batch size. Lengths=({lengths})"
+        )
+    return bs
 
 
 def infer_stride(batch: Batch) -> int:
@@ -99,3 +110,8 @@ def iter_batch_rows(batch: Batch) -> Iterable[Dict]:
     batch_size = infer_batch_size(batch)
     for i in range(batch_size):
         yield get_batch_eg(batch, idx=i)
+
+
+def is_index_contiguous(indexes):
+    """Check if indexes are contiguous: i.e I[i+1] = I[i] + 1"""
+    return all(p + 1 == n for p, n in zip(indexes[:-1], indexes[1:]))

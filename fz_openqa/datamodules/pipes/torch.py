@@ -18,7 +18,7 @@ class ToNumpy(Pipe):
         super(ToNumpy, self).__init__(**kwargs)
         self.as_contiguous = as_contiguous
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return cast_values_to_numpy(batch, as_contiguous=self.as_contiguous)
 
 
@@ -33,7 +33,7 @@ class Itemize(Pipe):
         else:
             return values
 
-    def __call__(self, batch: Batch) -> Batch:
+    def _call_batch(self, batch: Batch) -> Batch:
         return {k: self.itemize(v) for k, v in batch.items()}
 
 
@@ -45,7 +45,7 @@ class Forward(Pipe):
         self.model = model
 
     @torch.no_grad()
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """Compute one batch of vectors"""
 
         # move data to device

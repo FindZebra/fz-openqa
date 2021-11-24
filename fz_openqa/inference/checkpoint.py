@@ -36,7 +36,7 @@ def download_asset_from_gdrive(
 def maybe_download_weights(checkpoint: str, cache_dir: Optional[str] = None) -> str:
     is_url = isinstance(checkpoint, str) and checkpoint.startswith("https://")
     if is_url:
-        logger.info(f"Downloading weights from {checkpoint}")
+        logger.info(f"Using weights from {checkpoint}")
         checkpoint = download_asset_from_gdrive(checkpoint, cache_dir=cache_dir, extract=True)
     return checkpoint
 
