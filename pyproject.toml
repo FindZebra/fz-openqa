@@ -28,6 +28,8 @@ en_core_sci_lg = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/rel
 pre-commit = "^2.15.0"
 nltk = "^3.6.5"
 coverage = "^6.0.2"
+wikipedia = "^1.4.0"
+google-api-python-client = "^2.31.0"
 
 
 [tool.poetry.scripts]
