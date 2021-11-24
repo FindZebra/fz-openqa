@@ -14,7 +14,7 @@ from googleapiclient.http import MediaFileUpload
 class Gdrive:
     def __init__(
         self,
-        client_secret_file: str = f"{os.getcwd()}/fz_openqa/datamodules/builders/utils/client-secrets.json",
+        client_secret_file: str = f"{os.getcwd()}/fz_openqa/datamodules/builders/utils/client-secrets.json",  # noqa: E501
         api_name: str = "drive",
         api_version: str = "v3",
         scopes: List[str] = ["https://www.googleapis.com/auth/drive"],

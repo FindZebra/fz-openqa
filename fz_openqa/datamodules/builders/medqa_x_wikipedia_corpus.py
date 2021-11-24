@@ -113,7 +113,8 @@ class AddSplitInfo:
 
 
 class WikixMedQaCorpusBuilder(DatasetBuilder):
-    """Builds a corpus of related Wikipedia articles w.r.t. dataset containing pairs of (question, answer).
+    """Builds a corpus of related Wikipedia articles
+    w.r.t. dataset containing pairs of (question, answer).
 
     Parameters
     __________
@@ -132,6 +133,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
     upload_to_drive
         Allow dataset to get uploaded to Google Drive
     """
+
     def __init__(
         self,
         *,
