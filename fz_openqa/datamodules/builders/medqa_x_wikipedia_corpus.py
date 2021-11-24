@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 from typing import Dict
 from typing import Optional
+from typing import Union
 
 import rich
 from apiclient import errors
@@ -119,8 +120,8 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         query_articles: Callable = QueryWikiAPI(text_key="answer.text"),
         num_proc: int = 4,
         batch_size: int = 10,
-        cache_dir: str = os.getcwd(),
-        file_name: Optional[str] = None,
+        cache_dir: str = Path(os.getcwd()) / "cache",
+        file_name: Optional[Union[str, Path]] = None,
         upload_to_drive: bool = False,
         **kwargs,
     ):
@@ -142,8 +143,9 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         }
 
         # Directory path to output Wikipedia corpus
+        self.cache_dir = Path(cache_dir)
         if file_name is not None:
-            self.output_file = os.path.join(cache_dir, file_name)
+            self.output_file = self.cache_dir / file_name
 
         # Set up GoogleDrive Service
         if upload_to_drive:
@@ -162,15 +164,15 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # build Wikipedia corpus to output
         dataset = self.build_wiki_corpus(dataset=dataset)
 
-        log.info(f"Save the dataset to file n_lines={len(dataset)}")
+        # write to disk
         if self.output_file is not None:
-            dataset.save_to_disk(self.output_file)
+            log.info(f"Save the dataset to file n_lines={len(dataset)}")
+            dataset.save_to_disk(str(self.output_file))
 
+        # upload to drive
         if self.drive is not None:
             log.info("Uploading file to Google Drive..")
-            file = self._upload_to_drive(
-                path_to_file=os.path.join(self.dataset_dict_path, self.file_name)
-            )
+            file = self._upload_to_drive(path_to_file=str(self.output_file))
             log.info(f"Uploaded file to Google Drive: <{file}>")
 
         return dataset
@@ -207,53 +209,56 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             }
         )
 
-        dataset = concatenate_datasets(list(dataset.values()))
+        dataset = concatenate_datasets([dataset[s] for s in sorted(dataset.keys())])
 
         # step 3.1: reduce the dataset per page name
         # I don't think we can use Datasets for that step unfortunately
-        reduced_dataset = {}
-        for row in track(dataset, description="Iterating through the dataset"):
-            page = row["wiki.pages"]
-            split = row["split"]
-            qst_idx = row["question.idx"]
+        # todo: investigate why the fingerprint is not deterministic
+        rich.print(f"[magenta]# fingerprint={dataset._fingerprint}")
+        cache_file = self.cache_dir / f"{dataset._fingerprint}.jsonl"
+        if not cache_file.exists():
 
-            if page not in reduced_dataset:
-                reduced_dataset[page] = {"split": [], "question.idx": []}
+            reduced_dataset = {}
+            for row in track(dataset, description="Iterating through the dataset"):
+                page = row["wiki.pages"]
+                split = row["split"]
+                qst_idx = row["question.idx"]
 
-            reduced_dataset[page]["split"].append(split)
-            reduced_dataset[page]["question.idx"].append(qst_idx)
+                if page not in reduced_dataset:
+                    reduced_dataset[page] = {"split": [], "question.idx": []}
 
-        # step 3.3: save to file and load as Dataset
-        # (if we load from the dataset from memory, it stays in memory)
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cache = Path(temp_dir) / "cache.jsonl"
+                reduced_dataset[page]["split"].append(split)
+                reduced_dataset[page]["question.idx"].append(qst_idx)
 
-            # write as .jsonl
+            # step 3.2: save to file and load as Dataset
+            # (if we load from the dataset from memory, it stays in memory, so we need to cache it)
+            log.info(f"Saving the dataset to {cache_file}")
             reduced_dataset = ({"wiki.page": page, **row} for page, row in reduced_dataset.items())
-            with open(cache, "w") as f:
+            with open(cache_file, "w") as f:
                 for row in reduced_dataset:
                     f.write(json.dumps(row) + "\n")
 
-            # load as Dataset
-            dataset = Dataset.from_json(str(cache))
+        # step 3.3: load the result of step 3
+        dataset = Dataset.from_json(str(cache_file))
 
-            # step 4.1: extract the page content. NB: keep num_proc to 1 to reduce memory use
-            args = copy(self.map_kwargs)
-            args["num_proc"] = 1
-            dataset = dataset.map(
-                ExtractPageContent(self.wikipedia_data, self.wikipedia_index),
-                **args,
-                desc="Extracting Wikipedia pages",
-            )
+        # step 4.1: extract the page content.
+        # NB: use num_proc to 1 to reduce memory use (not sure if that's a problem)
+        args = copy(self.map_kwargs)
+        args["num_proc"] = 1
+        dataset = dataset.map(
+            ExtractPageContent(self.wikipedia_data, self.wikipedia_index),
+            **args,
+            desc="Extracting Wikipedia pages",
+        )
 
-            return dataset.rename_columns(
-                {
-                    "split": "question.split",
-                    "question.idx": "question.idx",
-                    "wiki.page": "title",
-                    "wiki.text": "text",
-                }
-            )
+        return dataset.rename_columns(
+            {
+                "split": "question.split",
+                "question.idx": "question.idx",
+                "wiki.page": "title",
+                "wiki.text": "text",
+            }
+        )
 
     def _retrieve_all_files(self, folder_id: str = "1mxQF7zm85cgP8jIvuRokCxopEDwmFlHb") -> Dict:
         """Retrieve a Dict of File resources.

@@ -13,6 +13,8 @@ from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.utils.train_utils import setup_safe_env
 
+default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
+
 
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
@@ -40,24 +42,21 @@ def run(config):
     )
     dataset_builder.subset_size = [1000, 100, 100]
 
-    file_name = "wikipedia_corpus_v2.arrow"
+    file_name = "wikipedia_corpus_v2"
     if config.get("use_subset", False):
-        file_name = file_name.replace(".arrow", "_subset.arrow")
+        file_name += "_subset"
     wiki_builder = WikixMedQaCorpusBuilder(
         dataset_builder=dataset_builder,
         query_articles=QueryWikiAPI(text_key="answer.text"),
         file_name=file_name,
+        cache_dir=default_cache_dir,
         num_proc=4,
         batch_size=10,
     )
 
     # define the data module
-    dm = DataModule(builder=wiki_builder, train_batch_size=10)
-
-    # prepare both the QA dataset and the corpus
-    # dm.prepare_data()
-    dm.setup()
-    rich.print(dm.dataset)
+    dataset = wiki_builder()
+    rich.print(dataset)
 
 
 if __name__ == "__main__":
