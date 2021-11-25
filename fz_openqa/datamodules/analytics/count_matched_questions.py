@@ -15,16 +15,18 @@ from fz_openqa.datamodules.utils.dataset import get_column_names
 
 class CountMatchedQuestions(Analytic):
     """Count the number of questions matched with positive documents"""
-
-    def report_split(self, dset: Dataset) -> Dict:
+    @staticmethod
+    def report_split(dset: Dataset) -> Dict:
         """
         Report on a specific split of the dataset.
         """
+        n_scores = dset["document.retrieval_score"]
         n_pos = dset["document.match_score"]
+        scores = [y[0].item() for y in n_scores]
         matches = [sum(y) for y in n_pos]
         n = len(matches)
         count = len([y for y in matches if y > 0])
-        return {"total": n, "count": count, "ratio": count / n}
+        return {"total": n, "count": count, "ratio": count / n, "avg_score": sum(scores) / len(scores)}
 
     def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs):
         """Count the number of questions matched with positive documents."""
