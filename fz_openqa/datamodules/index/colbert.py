@@ -1,4 +1,5 @@
 import logging
+from typing import List
 
 import faiss
 import numpy as np
@@ -17,6 +18,7 @@ from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 log = logging.getLogger(__name__)
 
@@ -34,11 +36,12 @@ class ColbertIndex(FaissIndex):
         """
         Reused init from parent class (FaissIndex)
         """
-
+        tok2doc = []
+        self.tok2doc = tok2doc
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
-    def _init_index(self, batch, n_list: int = 16, m: int = 8, n_bits: int = 8):
+    def _init_index(self, batch):
         """
         Initialize the index and train on first batch of data
 
@@ -62,6 +65,9 @@ class ColbertIndex(FaissIndex):
         vectors = vectors.astype(np.float32)
         assert len(vectors.shape) == 2
         metric_type = self.faiss_args["metric_type"]
+        n_list = self.faiss_args["n_list"]
+        m = self.faiss_args["m"]
+        n_bits = self.faiss_args["n_bits"]
         self.dim = vectors.shape[-1]
         assert self.dim % m == 0, "m must be a divisor of dim"
 
@@ -71,31 +77,20 @@ class ColbertIndex(FaissIndex):
         assert self._index.is_trained is True, "Index is not trained"
         log.info(f"Index is trained: {self._index.is_trained}")
 
-    def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
+    def _add_batch_to_index(self, batch: Batch, idx: List[int], dtype=np.float32):
         """ Add one batch of data to the index """
         # check indexes
-        indexes = batch[self.index_key]  # @vlievin: throws error - missing 'index_key'
-        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={indexes}"
-        assert all(indexes[:-1] + 1 == indexes[1:]), msg
-        msg = (
-            f"The stored index and the indexes are not contiguous, "
-            f"\nindex_size={self._index.ntotal}, first_index={indexes[0]}"
-        )
-        assert self._index.ntotal == indexes[0], msg
+        self._check_index_consistency(idx)
 
         # add vector to index
-        vector: np.ndarray = batch[self.vectors_column_name]
+        vector = self._get_vector_from_batch(batch)
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
-        vector = vector.astype(
-            dtype
-        )  # @vlievin: throws error - field elements must be 2- or 3- tuples but got 0
         self._index.add(vector)
 
         # store token index to original document
-        self.tok2doc = []
-        for idx in vector["document.row_idx"]:
-            ids = np.linspace(idx, idx, num=self.dim, dtype="int32").tolist()
+        for i in vector["index"]:
+            ids = np.linspace(i, i, num=self.dim, dtype="int32").tolist()
             self.tok2doc.extend(ids)
         rich.print(f"[red]Total number of indices: {self._index.ntotal}")
 
@@ -114,6 +109,7 @@ class ColbertIndex(FaissIndex):
         ----
         Scores are distances, i.e. the smaller the better
         """
+        rich.print(self.tok2doc)
         query = self.predict_queries(query)
         query = self.postprocess(query)
         vectors = query[self.vectors_column_name]
