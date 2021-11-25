@@ -23,7 +23,7 @@ class CountMatchedQuestions(Analytic):
         """
         n_scores = dset["document.retrieval_score"]
         n_pos = dset["document.match_score"]
-        scores = [y[0].item() for y in n_scores]
+        scores = [y[0].item() for x, y in zip(n_pos, n_scores) if sum(x) > 0]
         matches = [sum(y) for y in n_pos]
         n = len(matches)
         count = len([y for y in matches if y > 0])
