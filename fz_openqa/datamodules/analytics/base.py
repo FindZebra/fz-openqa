@@ -1,5 +1,6 @@
 import abc
 import json
+import os
 from typing import Union
 
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
@@ -22,6 +23,12 @@ class Analytic:
         """
         with open(filename, "w") as f:
             json.dump(results, f, indent=2)
+
+    def save_as_html(self, fig, filename: str) -> None:
+        """
+        Save plot as html file
+        """
+        fig.write_html(filename)
 
     @abc.abstractmethod
     def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs) -> None:
