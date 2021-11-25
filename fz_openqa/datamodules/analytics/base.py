@@ -17,18 +17,20 @@ class Analytic:
         self.verbose = verbose
         self.output_dir = output_dir
 
-    def save_as_json(self, results: Union[dict, list], filename: str) -> None:
+    @staticmethod
+    def save_as_json(results: Union[dict, list], filename: str) -> None:
         """
         Save results as json file.
         """
         with open(filename, "w") as f:
             json.dump(results, f, indent=2)
 
-    def save_as_html(self, fig, filename: str) -> None:
+    @staticmethod
+    def save_as_html(fig, filename: str) -> None:
         """
         Save plot as html file
         """
-        fig.write_html(filename)
+        fig.write_html(filename, include_plotlyjs=True)
 
     @abc.abstractmethod
     def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs) -> None:
