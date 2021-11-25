@@ -1,5 +1,6 @@
 import functools
 import logging
+import os.path
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -12,7 +13,6 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -268,6 +268,14 @@ class Predict(Pipe):
         # define a collate_fn to process the dataset
         if callback.is_written:
             logger.info(f"Loading pre-computed vectors from {callback.cache_file}")
+            cached_table = self.read_table_from_cache_file(callback.cache_file)
+            if not len(cached_table) == len(dataset):
+                raise ValueError(
+                    f"Dataset of length={len(dataset)} not matching "
+                    f"the cache with length={len(cached_table)}. "
+                    f"Consider deleting and re-computing these vectors.\n"
+                    f"path={os.path.abspath(callback.cache_file)}"
+                )
         else:
             # process the whole dataset using Trainer
             self._process(
@@ -346,21 +354,25 @@ class Predict(Pipe):
         if isinstance(self.cache_file, dict):
             assert split is not None, "Split must be provided when using a dict of cache files."
 
-        read_args = {"memory_map": True}
         if split is None:
             assert not isinstance(
                 self.cache_file, dict
             ), "Split must be provided to access the table."
             if self._loaded_table is None:
-                self._loaded_table = pq.read_table(self.cache_file, **read_args)
+                self._loaded_table = self.read_table_from_cache_file(self.cache_file)
         elif split == self._loaded_split and self._loaded_table is not None:
             pass
         else:
             cache = self.cache_file[split]
-            self._loaded_table = pq.read_table(cache, **read_args)
+            self._loaded_table = self.read_table_from_cache_file(cache)
             self._loaded_split = split
 
         return self._loaded_table
+
+    @staticmethod
+    def read_table_from_cache_file(cache_file: str) -> pa.Table:
+        read_args = {"memory_map": True}
+        return pq.read_table(cache_file, **read_args)
 
     @staticmethod
     def init_loader(

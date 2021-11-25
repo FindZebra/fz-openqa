@@ -21,7 +21,6 @@ from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
-from rich.status import Status
 from torch.utils.data import DataLoader
 from torch.utils.data import SequentialSampler
 
@@ -109,6 +108,7 @@ class FaissIndex(Index):
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
         faiss_args: Dict[str, Any] = None,
+        faiss_train_size: int = 1000,
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
@@ -134,6 +134,8 @@ class FaissIndex(Index):
             Indexing and querying can also be done without a trainer.
         faiss_args
             Additional arguments to pass to the Faiss index.
+        faiss_train_size
+            Number of data points to train the index on.
         model_output_keys
             Names of the accepted model output keys (vector to use for indexing).
         loader_kwargs
@@ -155,7 +157,9 @@ class FaissIndex(Index):
         # must be unique for each dataset x model x faiss_args combination
         self._model_fingerprint = get_fingerprint(model)
         self._dataset_fingerprint = dataset._fingerprint
-        self._faiss_fingerprint = get_fingerprint(faiss_args)
+        self._faiss_fingerprint = get_fingerprint(
+            {**faiss_args, "faiss_train_size": faiss_train_size}
+        )
         self._fingerprint = get_fingerprint(
             {
                 "model": self._model_fingerprint,
@@ -168,6 +172,7 @@ class FaissIndex(Index):
         # model and params
         self.model = model
         self.faiss_args = faiss_args
+        self.faiss_train_size = faiss_train_size
         self.trainer = trainer
 
         # column names
@@ -265,7 +270,7 @@ class FaissIndex(Index):
         loader_args = {}
         if self.trainer is not None:
             self._cache_vectors(dataset, predict=self.predict_docs, collate_fn=self.collate)
-            loader_args["batch_size"] = 1000
+            loader_args["batch_size"] = self.faiss_train_size
 
         # instantiate the base data loader
         loader = self._init_loader(dataset, collate_fn=self.collate, **loader_args)
@@ -338,8 +343,11 @@ class FaissIndex(Index):
             Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
 
         """
-        vectors = batch[self.vectors_column_name]
+        vectors = self._get_vector_from_batch(batch)
         assert len(vectors.shape) == 2
+        import rich
+
+        rich.print(self.faiss_args)
         metric_type = self.faiss_args["metric_type"]
         n_list = self.faiss_args["n_list"]
         m = self.faiss_args["m"]
@@ -349,7 +357,12 @@ class FaissIndex(Index):
         quantizer = faiss.IndexFlatL2(dim)
         self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, m, n_bits, metric_type)
 
-    def _train(self, vector):
+        # train the index once using the 1st batch
+        # todo: this is a hack, we should decorrelate batch_size of the dataloader
+        #  and faiss_train_size
+        self._train(vectors)
+
+    def _train(self, vectors):
         """
         Train faiss index on data
 
@@ -359,7 +372,7 @@ class FaissIndex(Index):
             vector from batch
 
         """
-        self._index.train(vector)
+        self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
         print("Done training!")
 
@@ -370,11 +383,10 @@ class FaissIndex(Index):
         self._check_index_consistency(idx)
 
         # add the vectors to the index
-        vector = self._get_vector_from_batch(batch)
-        assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
-        assert len(vector.shape) == 2, f"{vector} is not a 2D array"
-        self._train(vector)
-        self._index.add(vector)
+        vectors = self._get_vector_from_batch(batch)
+        assert isinstance(vectors, np.ndarray), f"vector {type(vectors)} is not a numpy array"
+        assert len(vectors.shape) == 2, f"{vectors} is not a 2D array"
+        self._index.add(vectors)
 
     @singledispatchmethod
     def search(

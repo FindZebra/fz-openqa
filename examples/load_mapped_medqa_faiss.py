@@ -1,13 +1,16 @@
-import logging
 import os
+import sys
+
+current_dir = os.path.dirname(os.path.realpath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+import logging
 from pathlib import Path
-from typing import Any
 from typing import Optional
 
 import datasets
 import hydra
-import pytorch_lightning
-import pytorch_lightning as pl
 import rich
 import transformers
 from hydra.utils import instantiate
@@ -15,12 +18,10 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
-from transformers import AutoModel
 
 import fz_openqa
+from utils import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import FzCorpusBuilder
-from fz_openqa.datamodules.builders import FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
@@ -31,7 +32,6 @@ from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
-from fz_openqa.utils.datastruct import Batch
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +40,6 @@ default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
-
-
-class ZeroShot(pl.LightningModule):
-    def __init__(self, bert_id: str = "dmis-lab/biobert-base-cased-v1.2", **kwargs):
-        super(ZeroShot, self).__init__()
-        self.bert = AutoModel.from_pretrained(bert_id)
-
-    def forward(self, batch: Batch, **kwargs) -> Any:
-        output = {}
-        key_map = {"document": "_hd_", "question": "_hq_"}
-        for prefix in ["document", "question"]:
-            if any(prefix in k for k in batch.keys()):
-                input_ids = batch[f"{prefix}.input_ids"]
-                attention_mask = batch[f"{prefix}.attention_mask"]
-                h = self.bert(input_ids, attention_mask).last_hidden_state
-                output[key_map[prefix]] = h[:, 0, :]
-        return output
 
 
 @hydra.main(

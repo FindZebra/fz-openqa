@@ -1,5 +1,13 @@
-import logging
 import os
+import sys
+
+from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+
+current_dir = os.path.dirname(os.path.realpath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +24,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 
 import fz_openqa
+from utils import ZeroShot
 from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
@@ -69,14 +78,20 @@ def run(config: DictConfig) -> None:
     cache_dir = config.get("sys.cache_dir", default_cache_dir)
 
     # load model
-    loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
-    if config.get("verbose", False):
-        loader.print_config()
-    model = loader.load_model(last=config.get("last", False))
+    zero_shot = config.get("zero_shot", True)
+    if zero_shot:
+        bert_id = config.get("bert", "google/bert_uncased_L-2_H-128_A-2")
+        model = ZeroShot(bert_id=bert_id)
+        tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
+    else:
+        loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
+        if config.get("verbose", False):
+            loader.print_config()
+        model = loader.load_model(last=config.get("last", False))
+        tokenizer = loader.tokenizer
     model.eval()
     model.freeze()
     logger.info(f"Model {type(model)} loaded")
-    logger.info(f"Model fingerprint: {get_fingerprint(model.module.bert)}")
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
@@ -88,9 +103,10 @@ def run(config: DictConfig) -> None:
     # set up the corpus builder
     logger.info(f"Initialize corpus <{MedQaCorpusBuilder.__name__}>")
     corpus_builder = MedQaCorpusBuilder(
-        tokenizer=loader.tokenizer,
+        tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
+        add_encoding_tokens=not zero_shot,
         cache_dir=cache_dir,
         num_proc=config.get("num_proc", 2),
     )
@@ -112,7 +128,7 @@ def run(config: DictConfig) -> None:
         trainer=trainer,
         faiss_args={"metric_type": faiss.METRIC_L2, "n_list": 4, "m": 8, "n_bits": 8},
         loader_kwargs={
-            "batch_size": config.get("batch_size", 2),
+            "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 1),
             "pin_memory": config.get("pin_memory", True),
         },
@@ -122,19 +138,20 @@ def run(config: DictConfig) -> None:
     )
 
     # setup search pipe (query the indexes from the corpus)
-    search = SearchCorpus(index, k=3, model=model)
+    search = SearchCorpus(index, k=3)
     # setup the fetch pipe (fetch all the other fields from the corpus)
     fetcher = FetchNestedDocuments(corpus_dataset=corpus_builder(), collate_pipe=collate_fn)
     query = collate_fn([corpus[i] for i in range(3)])
-
-    # search for one batch
-    output = search(query)
     query: Batch = {str(k).replace("document.", "question."): v for k, v in query.items()}
 
+    # search for one batch
+    pprint_batch(query, "query")
+    output = search(query)
+
     # format the output
-    pprint_batch(output, "query output")
+    pprint_batch(output, "search result")
     output = {**query, **fetcher(output)}
-    pprint_batch(output, "query output + all fields")
+    pprint_batch(output, "query + search results")
     for i in range(infer_batch_size(query)):
         eg = Pipe.get_eg(output, idx=i)
         rich.print(get_separator())
