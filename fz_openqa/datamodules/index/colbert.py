@@ -38,7 +38,7 @@ class ColbertIndex(FaissIndex):
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
-    def _init_index(self, batch, n_list: int = 32, m: int = 16, n_bits: int = 8):
+    def _init_index(self, batch, n_list: int = 16, m: int = 8, n_bits: int = 8):
         """
         Initialize the index and train on first batch of data
 
