@@ -12,6 +12,8 @@ from rich.logging import RichHandler
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
+from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTop20MatchTriggers
+from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
 from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
@@ -68,7 +70,11 @@ def run(config):
         filter_unmatched=config.get("filter_unmatched", False),
         num_proc=2,
         batch_size=50,
-        analyses=[CountMatchedQuestions(output_dir="./analyses", verbose=True)],
+        analyses=[
+            CountMatchedQuestions(output_dir="./analyses", verbose=True),
+            PlotScoreDistributions(output_dir="./analyses"),
+            PlotTop20MatchTriggers(output_dir="./analyses"),
+        ],
     )
 
     # define the data module
