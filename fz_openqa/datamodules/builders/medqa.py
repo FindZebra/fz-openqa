@@ -234,7 +234,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
     def get_concat_qa_pipe(self):
         q_start_tokens = []
         if self.add_special_tokens:
-            q_start_tokens.append(self.tokenizer.cls_token)
+            q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
             q_start_tokens.append(QUERY_TOKEN)
 
