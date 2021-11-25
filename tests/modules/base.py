@@ -3,6 +3,7 @@ from copy import deepcopy
 from unittest import TestCase
 
 import torch
+import transformers.utils.logging
 from transformers import AutoTokenizer, BertPreTrainedModel, AutoModel
 
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
@@ -42,19 +43,19 @@ class TestModel(TestCase, ABC):
     def setUp(self) -> None:
         """Instantiate the TestCase with dummy data"""
         torch.set_grad_enabled(False)
+        transformers.logging.set_verbosity(transformers.logging.CRITICAL)
         self.batch_size = 2
         self.n_documents = 4
         self.n_options = 3
 
         # init a tokenizer and bert
         self.tokenizer = AutoTokenizer.from_pretrained(self._bert_id)
-        self.bert: BertPreTrainedModel = AutoModel.from_pretrained(self._bert_id)
+        self.bert: BertPreTrainedModel = AutoModel.from_pretrained(self._bert_id,
+                                                                   attention_probs_dropout_prob=0,
+                                                                   hidden_dropout_prob=0)
 
         # tokenize data
         self._batch = self._encode_data(self.data)
-
-        assert self._batch['document.input_ids'].shape[:2] == (
-            self.batch_size, self.n_documents), "batch is not properly initialized"
 
     def _encode_data(self, data: Batch) -> Batch:
         pipe = self.get_preprocessing_pipe()
@@ -106,8 +107,7 @@ class TestModel(TestCase, ABC):
                          level=0,
                          ),
         )
-        pipe = Sequential(preprocess, collate)
-        return pipe
+        return Sequential(preprocess, collate)
 
     @property
     def batch(self):
