@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 import datasets
+import faiss
 import hydra
 import rich
 import torch
@@ -104,11 +105,12 @@ def run(config: DictConfig) -> None:
     rich.print(corpus)
 
     # init the index
-    logger.info(f"Initialize index <{ColbertIndex.__name__}>")
-    index = ColbertIndex(
+    logger.info(f"Initialize index <{FaissIndex.__name__}>")
+    index = FaissIndex(
         dataset=corpus,
         model=model,
         trainer=trainer,
+        faiss_args={"metric_type": faiss.METRIC_L2, "n_list": 4, "m": 8, "n_bits": 8},
         loader_kwargs={
             "batch_size": config.get("batch_size", 2),
             "num_workers": config.get("num_workers", 1),
