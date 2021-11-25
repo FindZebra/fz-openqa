@@ -14,20 +14,20 @@ trainer:
   strategy: dp
   min_epochs: 1
   max_epochs: 1000
-  accumulate_grad_batches: 2
-  # val_check_interval: 100
+  accumulate_grad_batches: 4
+  val_check_interval: 200
 
 datamodule:
   use_subset: false
   train_batch_size: 8
-  eval_batch_size: 16
-  num_workers: 8
+  eval_batch_size: 128
+  num_workers: 16
   builder:
     batch_size: 20
   n_documents:
-    train: 10
-    validation: 10
-    test: 10
+    train: 12
+    validation: 12
+    test: 12
   max_pos_docs: 3
   filter_unmatched: False
   output_columns:

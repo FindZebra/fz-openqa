@@ -116,7 +116,7 @@ class Model(LightningModule):
         if log_data:
             # potentially log the loss and
             # other metrics that are computed on each step
-            self.log_data(output, prefix=str(split))
+            self.log_data(output, prefix=str(split), on_step=True, on_epoch=False)
 
         return output
 

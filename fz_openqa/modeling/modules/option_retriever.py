@@ -1,10 +1,12 @@
 from typing import Any
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from .utils import batch_cartesian_product
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
@@ -85,29 +87,43 @@ class OptionRetriever(Module):
         """
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
+        targets = batch["answer.target"]
         output = self._forward(batch, **kwargs)
         hq, hd = (output[k] for k in ["_hq_", "_hd_"])
 
-        score = self._compute_score(hd=hd, hq=hq)
+        # compute the score for each pair `f([q_j; a_j], d_jk)`
+        partial_score = self._compute_score(hd=hd, hq=hq)
 
-        # answer likelihood p(a | q, D, A)
+        # repeat the scores for all combinations of documents: `\sigma \in S(M)`
+        score = batch_cartesian_product(partial_score)
+
+        # partial answer log-likelihood `\log p(a | q, D[\sigma], A)` for `\sigma \in S(M)`
         logp_a__d = score.log_softmax(dim=1)
-        targets = batch["answer.target"]
         targets_ = targets.unsqueeze(1).expand(-1, score.shape[2])
+        # rich.print(f">> logp_a__d={logp_a__d.shape}, targets_={targets_.shape}")
         logp_a_star__d = -F.cross_entropy(logp_a__d, targets_, reduction="none")
 
-        # retriever likelihood
-        logp_d = score.log_softmax(dim=2)
-        logp_d_a_star = torch.gather(logp_d, dim=1, index=targets[:, None, None])
+        # document log-likelihood `\log p(\sigma(d_j) | a_j, q_j)`
+        normalizer = partial_score.logsumexp(dim=2, keepdim=True)
+        log_p_d__a = score - normalizer
+        log_p_d__a_no_perm = partial_score.log_softmax(dim=2)
 
-        # likelihood
-        logp_a = (logp_a__d * logp_d.exp()).sum(-1)
-        logp_a_star = torch.gather(logp_a, dim=1, index=targets[:, None])
+        # answer lower-bound: `\sum_\sigma \log p(a_\star | q, A)`
+        logp_a = (logp_a__d * log_p_d__a.exp()).sum(-1)
+        logp_a_star = torch.gather(logp_a, dim=1, index=targets[:, None]).squeeze(1)
 
         # gradients / loss
+        MODE = "SUM"
         loss_reader = logp_a_star__d
-        loss_retriever = (logp_a_star__d.detach() * logp_d_a_star).sum(1)
-        # loss_b = (logp_a_star__d.detach().unsqueeze(1) * logp_d).sum(1)
+        retriever_score = logp_a_star__d.unsqueeze(1) * log_p_d__a.sum(1, keepdim=True).exp()
+        part_loss_retriever = retriever_score.detach() * log_p_d__a
+        if MODE == "SUM":
+            loss_retriever = part_loss_retriever.sum(1)
+        elif MODE == "GATHER":
+            targets_ = targets[:, None, None].expand(-1, 1, part_loss_retriever.shape[2])
+            loss_retriever = part_loss_retriever.gather(dim=1, index=targets_)
+        else:
+            raise ValueError(f"Unknown MODE: {MODE}")
         loss = -1 * (loss_reader + loss_retriever).mean(-1)
 
         return {
@@ -115,7 +131,7 @@ class OptionRetriever(Module):
             "logp": logp_a_star.detach(),
             "_logits_": logp_a.detach(),
             "_targets_": targets.detach(),
-            "_doc_logits_": logp_d.detach(),
+            "_doc_logits_": log_p_d__a_no_perm.detach(),
         }
 
     def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:

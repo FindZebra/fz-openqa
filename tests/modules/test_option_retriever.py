@@ -181,20 +181,24 @@ class TestOptionRetriever(TestModel):
 
     @torch.enable_grad()
     def test_overfit(self):
+        """Add noise to the weights of the model and optimize for a few steps."""
+        VERBOSE = False
+        if VERBOSE:
+            np.set_printoptions(precision=3, suppress=True)
+
+        # gather data
         batch = self.batch
-        pprint_batch(batch, "batch")
-        np.set_printoptions(precision=3, suppress=True)
         doc_targets = batch['document.match_score']
 
         # take a copy of the model, and add noise to the weights
         model = deepcopy(self.model)
         with torch.no_grad():
             for param in model.parameters():
-                param.add_(torch.randn(param.size()) * 0.1)
+                param.add_(torch.randn(param.size()) * 0.3)
 
         # optimize the model
         model.train()
-        optimizer = Adam(model.parameters(), lr=1e-5)
+        optimizer = Adam(model.parameters(), lr=1e-4)
         n_steps = 100
         for i in range(n_steps):
             optimizer.zero_grad()
@@ -203,12 +207,12 @@ class TestOptionRetriever(TestModel):
             loss.backward()
             optimizer.step()
 
-            if i % 10 == 0:
+            if VERBOSE and i % 10 == 0:
                 probs = output['_logits_'].detach().exp().numpy()
                 rich.print(f"{i} - loss={loss:.3f}, probs[0]={probs[0]}, probs[1]={probs[1]}")
                 doc_probs = output['_doc_logits_'].detach().exp()
                 doc_dist = (doc_probs - doc_targets).pow(2)
-                rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
+                # rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
         targets = batch['answer.target']
@@ -217,11 +221,12 @@ class TestOptionRetriever(TestModel):
         target_probs = probs.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1).numpy()
         probs = probs.numpy()
         targets = targets.numpy()
-        rich.print(f">> targets: {targets}")
-        rich.print(f">>> probs: {probs}")
-        rich.print(f">>> probs.target: {target_probs}")
+        if VERBOSE:
+            rich.print(f">> targets: {targets}")
+            rich.print(f">>> probs: {probs}")
+            rich.print(f">>> probs.target: {target_probs}")
 
-        doc_score = output['_doc_logits_'].detach().exp()
-        rich.print(f"doc probs: \n{doc_score.numpy()}")
+            doc_score = output['_doc_logits_'].detach().exp()
+            rich.print(f"doc probs: \n{doc_score.numpy()}")
 
         self.assertTrue((target_probs > 0.9).all())

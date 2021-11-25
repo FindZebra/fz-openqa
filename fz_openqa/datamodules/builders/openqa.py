@@ -270,7 +270,6 @@ class OpenQaBuilder(DatasetBuilder):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
-        question_nesting_level = self.dataset_builder.nesting_level
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
         # A. Collate all attributes stored in `self.dataset`
@@ -290,7 +289,7 @@ class OpenQaBuilder(DatasetBuilder):
             self.n_documents,
             max_pos_docs=self.max_pos_docs,
             level=document_nesting_level,
-            shuffle=question_nesting_level > 0,
+            shuffle=False,
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
