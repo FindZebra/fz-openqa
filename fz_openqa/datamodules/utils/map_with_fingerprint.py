@@ -11,6 +11,7 @@ import rich
 from datasets import Dataset
 from datasets import DatasetDict
 
+from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -38,7 +39,7 @@ class MapWithFingerprint:
         if isinstance(dataset, Dataset):
             dataset = DatasetDict({"__all__": dataset})
 
-        # check if the pipe is safe for multiprocesssing
+        # check if the pipe is safe for multi-processing
         self._check_pickling(self.pipe)
 
         # check if the fingerprint from the previous run is identical to the current one
@@ -52,7 +53,7 @@ class MapWithFingerprint:
 
             # adjust kwargs
             kwargs = self.map_kwargs.copy()
-            if isinstance(self.pipe, SearchCorpus):
+            if isinstance(self.pipe, SearchCorpus) and isinstance(self.pipe.index, FaissIndex):
                 # todo: fix: faiss freezes when using multiprocessing
                 kwargs["num_proc"] = 1
 
@@ -67,9 +68,6 @@ class MapWithFingerprint:
                 with_indices=True,
                 **kwargs,
             )
-        # rich.print(f"[green] === SUCCESS {self.map_kwargs.get('desc', None)}===")
-        # rich.print(dataset["train"])
-        # pprint_batch(dataset["train"][:3])
 
         if {"__all__"} == set(dataset.keys()):
             dataset = dataset.pop("__all__")

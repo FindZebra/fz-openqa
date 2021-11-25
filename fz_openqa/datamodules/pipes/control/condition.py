@@ -2,6 +2,7 @@ import abc
 from typing import Any
 from typing import Callable
 from typing import List
+from typing import Union
 
 from fz_openqa.datamodules.component import Component
 from fz_openqa.utils.datastruct import Batch
@@ -76,13 +77,21 @@ class Reduce(Condition):
     Reduce multiple conditions into outcome.
     """
 
-    def __init__(self, *conditions: Condition, reduce_op: Callable = all, **kwargs):
+    def __init__(self, *conditions: Union[bool, Condition], reduce_op: Callable = all, **kwargs):
         super(Reduce, self).__init__(**kwargs)
         self.reduce_op = reduce_op
         self.conditions = list(conditions)
 
     def __call__(self, batch: Batch, **kwargs) -> bool:
-        return self.reduce_op(c(batch) for c in self.conditions)
+        def safe_call_c(c: Union[bool, Condition], batch: Batch) -> bool:
+            if isinstance(c, Condition):
+                return c(batch)
+            elif isinstance(c, bool):
+                return c
+            else:
+                raise TypeError(f"{c} is not a valid condition")
+
+        return self.reduce_op(safe_call_c(c, batch) for c in self.conditions)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(conditions={list(self.conditions)}, op={self.reduce_op})"

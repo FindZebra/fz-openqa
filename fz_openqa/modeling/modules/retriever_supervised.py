@@ -5,14 +5,11 @@ from typing import Union
 import torch
 from omegaconf import DictConfig
 from torch.nn import functional as F
-from torchmetrics.classification import Accuracy
 
 from ...utils import maybe_instantiate
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
-from fz_openqa.modeling.modules.metrics import SafeMetricCollection
-from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.modeling.similarities import DotProduct
 from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
@@ -55,19 +52,7 @@ class RetrieverSupervised(Module):
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
-
-        def _name(k):
-            return f"top{k}_Accuracy" if k is not None else "Accuracy"
-
-        def init_metric():
-            """generate a collection of topk accuracies."""
-            return SafeMetricCollection(
-                {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in [None, 5, 10, 20, 50, 100]},
-                prefix=prefix,
-            )
-
-        self.metrics = SplitMetrics(init_metric)
+        self.metrics = self._get_base_metrics(prefix=prefix, topk=[None, 5, 10, 20, 50, 100])
 
     def _forward_question(self, batch: Batch, **kwargs: Any) -> Batch:
         assert batch["question.input_ids"].dim() == 2

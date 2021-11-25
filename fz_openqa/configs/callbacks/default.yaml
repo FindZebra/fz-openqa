@@ -1,3 +1,4 @@
 defaults:
   - checkpoint
   - early_stopping
+  - progress_bar

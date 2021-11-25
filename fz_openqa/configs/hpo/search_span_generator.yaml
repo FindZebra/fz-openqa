@@ -1,0 +1,74 @@
+# @package _global_
+# kill all idle processes using:
+# > ps aux | grep ray:: | grep -v grep | awk '{print $2}' | xargs kill -9
+
+target_metric: validation/F1
+target_mode: max
+cache_dir: '/scratch/valv/cache/'
+exp_dir: '/scratch/valv/raytune/'
+print_config: True
+server_address: null
+
+ray:
+  local_mode: False
+  configure_logging: False
+
+experiment:
+  experiment: base.yaml
+  cache_dir: ${cache_dir}
+  target_metric: ${target_metric}
+  target_mode: ${target_mode}
+  seed: null
+  print_config: False
+  verbose: False
+  ignore_warnings: True
+  trainer.progress_bar_refresh_rate: 0
+  trainer.checkpoint_callback: True
+  logger.wandb.group: ${runner.name}
+  callbacks: tune.yaml
+  datamodule.num_workers: 4
+  trainer.gpus: 1
+  trainer.max_epochs: 500
+
+space:
+  model.span_generator:
+    _target_: ray.tune.choice
+    categories:
+      - label_only.yaml
+      - bilou_first.yaml
+      - bilou_max.yaml
+  model.likelihood:
+    _target_: ray.tune.choice
+    categories:
+      - cross_entropy.yaml
+      - ar.yaml
+      - crf.yaml
+  model.head._target_:
+    _target_: ray.tune.choice
+    categories:
+      - fz_ner.modelling.heads.lstm.LstmHead
+      - fz_ner.modelling.heads.linear.LinearHead
+
+runner:
+  name: search_span_generator
+  num_samples: 500
+  metric: ${target_metric}
+  mode: ${target_mode}
+  resources_per_trial:
+    cpu: 4
+    gpu: 1
+  fail_fast: True
+  raise_on_failed_trial: False
+  #  checkpoint_freq: 0
+  #  checkpoint_at_end: False
+  local_dir: ${exp_dir}
+  #  progress_reporter:
+  #    _target_: ray.tune.CLIReporter
+  #    metric_columns: ['validation/loss', 'validation/F1']
+  #  scheduler:
+  #    _target_: ray.tune.schedulers.AsyncHyperBandScheduler
+  #    max_t: 1000
+  #    grace_period: 10
+  search_alg:
+    _target_: ray.tune.suggest.hyperopt.HyperOptSearch
+    points_to_evaluate: null

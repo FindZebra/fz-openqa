@@ -1,5 +1,5 @@
 defaults:
-  - medqa@dataset_builder
+  - concat_medqa@dataset_builder
   - medqa_corpus@corpus_builder
 
 _target_: fz_openqa.datamodules.builders.OpenQaBuilder
