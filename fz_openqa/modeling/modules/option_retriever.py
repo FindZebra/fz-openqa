@@ -3,6 +3,7 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from torch import Tensor
 
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
@@ -23,6 +24,7 @@ class OptionRetriever(Module):
         "question.attention_mask",
         "document.input_ids",
         "document.attention_mask",
+        "answer.target",
     ]
 
     # prefix for the logged metrics
@@ -43,7 +45,7 @@ class OptionRetriever(Module):
         """Initialize the metrics for each split."""
         self.metrics = self._get_base_metrics(prefix=f"{prefix}")
 
-    def _forward_as_flattened(self, batch: Batch, **kwargs: Any) -> Batch:
+    def _forward(self, batch: Batch, **kwargs) -> Batch:
 
         d_shape = batch["document.input_ids"].shape
         q_shape = batch["question.input_ids"].shape
@@ -77,26 +79,25 @@ class OptionRetriever(Module):
         hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
         return {"_hd_": hd, "_hq_": hq}
 
-    def _forward(self, batch: Batch, **kwargs) -> Batch:
-
+    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
+        """
+        Compute the forward pass for the question and the documents.
+        """
+        # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
-        output = self._forward_as_flattened(batch, **kwargs)
+        output = self._forward(batch, **kwargs)
         hq, hd = (output[k] for k in ["_hq_", "_hd_"])
 
-        # compute the reader logits
-        s_reader = torch.einsum("bah, badh -> bad", hq, hd)
-
-        # compute the retriever logits
-        s_retriever = s_reader
+        score = self._compute_score(hd=hd, hq=hq)
 
         # answer likelihood p(a | q, D, A)
-        logp_a__d = s_reader.log_softmax(dim=1)
+        logp_a__d = score.log_softmax(dim=1)
         targets = batch["answer.target"]
-        targets_ = targets.unsqueeze(1).expand(-1, s_reader.shape[2])
-        logp_a_star__d = F.cross_entropy(logp_a__d, targets_, reduction="none")
+        targets_ = targets.unsqueeze(1).expand(-1, score.shape[2])
+        logp_a_star__d = -F.cross_entropy(logp_a__d, targets_, reduction="none")
 
         # retriever likelihood
-        logp_d = s_retriever.log_softmax(dim=2)
+        logp_d = score.log_softmax(dim=2)
         logp_d_a_star = torch.gather(logp_d, dim=1, index=targets[:, None, None])
 
         # likelihood
@@ -104,23 +105,22 @@ class OptionRetriever(Module):
         logp_a_star = torch.gather(logp_a, dim=1, index=targets[:, None])
 
         # gradients / loss
-        loss_a = logp_a_star__d
-        loss_b = (logp_a_star__d.detach() * logp_d_a_star).sum(1)
-        loss = -1 * (loss_a + loss_b).mean(-1)
+        loss_reader = logp_a_star__d
+        loss_retriever = (logp_a_star__d.detach() * logp_d_a_star).sum(1)
+        # loss_b = (logp_a_star__d.detach().unsqueeze(1) * logp_d).sum(1)
+        loss = -1 * (loss_reader + loss_retriever).mean(-1)
 
         return {
             "loss": loss,
             "logp": logp_a_star.detach(),
             "_logits_": logp_a.detach(),
             "_targets_": targets.detach(),
+            "_doc_logits_": logp_d.detach(),
         }
 
-    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
-        """
-        Compute the forward pass for the question and the documents.
-        """
-        # check features, check that the first document of each question is positive
-        return self._forward(batch, **kwargs)
+    def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
+        """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
+        return torch.einsum("boh, bodh -> bod", hq, hd)
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

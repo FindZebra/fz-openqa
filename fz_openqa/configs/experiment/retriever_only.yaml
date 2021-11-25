@@ -18,7 +18,7 @@ trainer:
 
 datamodule:
   train_batch_size: 16
-  valid_batch_size: 32
+  eval_batch_size: 32
   num_workers: 8
   n_documents:
     train: 20

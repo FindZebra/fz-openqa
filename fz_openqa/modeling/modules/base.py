@@ -171,13 +171,15 @@ class Module(nn.Module, ABC):
         self._check_features(batch, self._required_feature_names)
         return self._forward(batch, **kwargs)
 
-    def evaluate(self, batch: Batch, **kwargs):
+    def evaluate(self, batch: Batch, filter_features=False, **kwargs):
         """
         Evaluate the model (step + step end) given a batch of data
         with targets
         """
         step_output = self.step(batch, **kwargs)
-        return self.step_end(step_output, None, update_metrics=False, filter_features=False)
+        return self.step_end(
+            step_output, None, update_metrics=False, filter_features=filter_features
+        )
 
     def step(self, batch: Batch, **kwargs: Any) -> Batch:
         """Compute the forward pass of the model and return output

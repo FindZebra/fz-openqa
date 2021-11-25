@@ -15,12 +15,12 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 2
-  val_check_interval: 100
+  # val_check_interval: 100
 
 datamodule:
   use_subset: false
   train_batch_size: 8
-  valid_batch_size: 16
+  eval_batch_size: 16
   num_workers: 8
   builder:
     batch_size: 20
