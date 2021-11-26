@@ -1,7 +1,7 @@
+from enum import Enum
 from typing import Any
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -10,6 +10,11 @@ from .utils import batch_cartesian_product
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
+
+
+class GradExpression(Enum):
+    SUM = "sum"
+    GATHER = "gather"
 
 
 class OptionRetriever(Module):
@@ -42,6 +47,10 @@ class OptionRetriever(Module):
 
     # require heads
     _required_heads = ["question", "document"]
+
+    def __init__(self, *args, grad_expr: GradExpression = GradExpression.SUM, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.grad_expr = GradExpression(grad_expr)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -113,17 +122,18 @@ class OptionRetriever(Module):
         logp_a_star = torch.gather(logp_a, dim=1, index=targets[:, None]).squeeze(1)
 
         # gradients / loss
-        MODE = "SUM"
         loss_reader = logp_a_star__d
         retriever_score = logp_a_star__d.unsqueeze(1) * log_p_d__a.sum(1, keepdim=True).exp()
         part_loss_retriever = retriever_score.detach() * log_p_d__a
-        if MODE == "SUM":
+        if self.grad_expr == GradExpression.SUM:
             loss_retriever = part_loss_retriever.sum(1)
-        elif MODE == "GATHER":
+        elif self.grad_expr == GradExpression.GATHER:
             targets_ = targets[:, None, None].expand(-1, 1, part_loss_retriever.shape[2])
-            loss_retriever = part_loss_retriever.gather(dim=1, index=targets_)
+            loss_retriever = part_loss_retriever.gather(dim=1, index=targets_).squeeze(1)
         else:
-            raise ValueError(f"Unknown MODE: {MODE}")
+            raise ValueError(
+                f"Unknown GradExpression: {self.grad_expr}, " f"GradExpression={GradExpression}"
+            )
         loss = -1 * (loss_reader + loss_retriever).mean(-1)
 
         return {
