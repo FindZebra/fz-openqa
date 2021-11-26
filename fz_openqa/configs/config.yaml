@@ -26,8 +26,6 @@ base:
 exp_version: 11
 code_version: "0.1.1"
 
-
-
 # base pretrained model
 pretrained_model: ${model.bert.pretrained_model_name_or_path}
 

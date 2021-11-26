@@ -84,9 +84,10 @@ class ElasticSearchEngine:
     def es_bulk(
         self,
         index_name: str,
-        title: str,
+        *,
         document_idx: list,
         document_txt: list,
+        title: str = "__no_title__",
     ):
         actions = [
             {

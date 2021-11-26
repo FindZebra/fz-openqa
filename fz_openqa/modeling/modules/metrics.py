@@ -1,7 +1,9 @@
+from copy import deepcopy
 from typing import Any
 from typing import Dict
 from typing import Optional
 from typing import Tuple
+from typing import Union
 
 import torch
 from datasets import Split
@@ -22,12 +24,12 @@ def is_computable(m: Metric):
 class SplitMetrics(nn.Module):
     """Define a metric for each split"""
 
-    def __init__(self, init_metric: [None, Metric]):
+    def __init__(self, metric: Union[MetricCollection, Metric]):
         super(SplitMetrics, self).__init__()
 
-        self.train_metric = init_metric()
-        self.valid_metric = init_metric()
-        self.test_metric = init_metric()
+        self.train_metric = deepcopy(metric)
+        self.valid_metric = deepcopy(metric)
+        self.test_metric = deepcopy(metric)
 
         self.metrics = {
             f"_{Split.TRAIN}": self.train_metric,

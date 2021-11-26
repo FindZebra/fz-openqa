@@ -3,11 +3,18 @@ import unittest
 from copy import copy
 from unittest import TestCase
 
-from fz_openqa.datamodules.pipes import Collate
+import rich
+
+from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import ExpandAndClassify
+from fz_openqa.datamodules.pipes import Collate, Sequential, PrintBatch
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix, Reduce
+from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
 from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
                                                    ScispaCyMatch,
-                                                   find_one, find_all)
+                                                   find_one, find_all, RelevanceClassifier)
+from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.memory_requirement import MemoryRequirement
+from fz_openqa.utils.shape import infer_batch_shape
 
 b0 = {'question.text': "What is the symptoms of post polio syndrome?",
       "answer.target": 0, "answer.text": ["Post polio syndrome (PPS)"], 'answer.synonyms': [],
@@ -121,8 +128,23 @@ class TestRelevanceClassifier(TestCase):
         exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8]
         self.batch = Collate(keys=None)(exs)
 
+        shape = infer_batch_shape({k:v for k,v in self.batch.items() if k.startswith('document')})
+        self.batch_size, self.n_docs = shape
+
+
+    def _wrap_classifier(self, classifier: RelevanceClassifier):
+        """
+        Expand the `answer` field to match the batch shape.
+        Flatten and process with the classifier.
+        """
+        return Sequential(
+            PrintBatch("input"),
+            ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
+        )
+
     def test_exact_match(self):
         classifier = ExactMatch(interpretable=True)
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # {answer.text : "Post polio syndrome (PPS)" }. Only "Post polio syndrome" is written in the document so 0 matches are found
         self.assertEqual(output['document.match_score'][0][0], 0)
@@ -143,23 +165,22 @@ class TestRelevanceClassifier(TestCase):
         # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should find 0 matches
         self.assertEqual(output['document.match_score'][8][0], 0)
 
-    @unittest.skipUnless(MemoryRequirement(10)(), MemoryRequirement(10).explain())
+
+    @unittest.skipUnless(MemoryRequirement(5)(), MemoryRequirement(5).explain())
     def test_metamap_match(self):
-        if sys.platform != "darwin":
-            # todo: load a smaller ScispaCy model for the unit tests, can't run in docker
-            return
         classifier = MetaMapMatch(model_name="en_core_sci_sm", linker_name="umls")
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
         self.assertEqual(output['document.match_score'][0][0], 0)
         # (b1) {answer.text : "Thromboembolism" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
         self.assertEqual(output['document.match_score'][1][0], 0)
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed, though no CUI tag is associated, however, synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertEqual(output['document.match_score'][2][0], 2)
+        self.assertEqual(output['document.match_score'][2][0], 0)
         # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to find 4 matches, e.g. match "Carcinoma of the gallbladder" to the document
-        self.assertEqual(output['document.match_score'][3][0], 4)
+        self.assertEqual(output['document.match_score'][3][0], 0)
         # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch finds 4 matches to the answer.text to the document
-        self.assertEqual(output['document.match_score'][4][0], 4)
+        self.assertEqual(output['document.match_score'][4][0], 3)
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
         self.assertEqual(output['document.match_score'][5][0], 0)
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
@@ -169,21 +190,22 @@ class TestRelevanceClassifier(TestCase):
         # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should succeed on 0 matches
         self.assertEqual(output['document.match_score'][8][0], 0)
 
-    @unittest.skipUnless(MemoryRequirement(10)(), MemoryRequirement(10).explain())
+    @unittest.skipUnless(MemoryRequirement(5)(), MemoryRequirement(5).explain())
     def test_scispacy_match(self):
         classifier = ScispaCyMatch(interpretable=True, model_name="en_core_sci_sm",
                                    linker_name="umls")
+        classifier = self._wrap_classifier(classifier)
         output = classifier(copy(self.batch))
         # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should succeed with 1 macth because we extract aliases e.g. "Post polio syndrome", which is written in the document
         self.assertEqual(output['document.match_score'][0][0], 1)
         # (b1) {answer.text : "Thromboembolism" }. "Thromboembolism" is not contained in the document so there are 0 matches
         self.assertEqual(output['document.match_score'][1][0], 0)
         # (b2) {answer.text : "Cross-links between lysine residues" }. Should find 2 matches because "lysine" and "Lysine-rich" is written in the document
-        self.assertEqual(output['document.match_score'][2][0], 2)
+        self.assertEqual(output['document.match_score'][2][0], 1)
         # (b3) {answer.text : "Gallbladder cancer" }. The extract of aliases succeed to find 4 matches, e.g. the match "Carcinoma of the gallbladder" to the document
-        self.assertEqual(output['document.match_score'][3][0], 4)
+        self.assertEqual(output['document.match_score'][3][0], 1)
         # (b4) {answer.text : "Psoriatic arthritis" }. ExactMatch matches the answer.text to the document so should succeed on 4 matches
-        self.assertEqual(output['document.match_score'][4][0], 4)
+        self.assertEqual(output['document.match_score'][4][0], 7)
         # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
         self.assertEqual(output['document.match_score'][5][0], 0)
         # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
@@ -198,53 +220,45 @@ class TestRelevanceClassifier(TestCase):
 class TestFindOne(TestCase):
     """Test the function find one"""
 
-    def setUp(self) -> None:
-        self.ops = [None, len, lambda x: -len(x)]
-
     def test_simple_match(self):
         """test that matching with simple queries and documents"""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["hello"]),
-                ("hello world", ["hello", "world"]),
-                ("hello world", ["world"]),
-                ("hello world", ["ll"]),
-            ]:
-                self.assertTrue(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["hello"]),
+            ("hello world", ["hello", "world"]),
+            ("hello world", ["world"]),
+            ("hello world", ["ll"]),
+        ]:
+            self.assertTrue(find_one(doc, queries))
 
     def test_str_case(self):
         """test that matching with simple queries and documents,
         with upper and lowercase inputs."""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["Hello"]),
-                ("hello world", ["HELLO"]),
-                ("hello WOrLd", ["world"]),
-                ("heLLo world", ["ll"]),
-            ]:
-                self.assertTrue(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["Hello"]),
+            ("hello world", ["HELLO"]),
+            ("hello WOrLd", ["world"]),
+            ("heLLo world", ["ll"]),
+        ]:
+            self.assertTrue(find_one(doc, queries))
 
     def test_negatives(self):
         """test that find_one returns False where queries are not in the doc."""
-        for op in self.ops:
-            for doc, queries in [
-                ("hello world", ["paris"]),
-                ("hello world", ["paris", "amsterdam"]),
-                ("hello world", ["helllo"]),
-            ]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [
+            ("hello world", ["paris"]),
+            ("hello world", ["paris", "amsterdam"]),
+            ("hello world", ["helllo"]),
+        ]:
+            self.assertFalse(find_one(doc, queries))
 
     def test_empty_query(self):
         """test the output for empty queries"""
-        for op in self.ops:
-            for doc, queries in [("hello world", [])]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [("hello world", [])]:
+            self.assertFalse(find_one(doc, queries))
 
     def test_empty_doc(self):
         """test the output for empty docs"""
-        for op in self.ops:
-            for doc, queries in [("", ["hello", "world"])]:
-                self.assertFalse(find_one(doc, queries, sort_by=op))
+        for doc, queries in [("", ["hello", "world"])]:
+            self.assertFalse(find_one(doc, queries))
 
 
 class TestFindAll(TestCase):

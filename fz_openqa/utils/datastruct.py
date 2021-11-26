@@ -4,10 +4,12 @@ from typing import Dict
 from typing import List
 from typing import Union
 
+import numpy as np
 import torch
 from torch import Tensor
 
-Batch = Dict[str, Union[bool, Number, Tensor, List]]
+Eg = Dict[str, Union[bool, str, Number, Tensor, List, np.ndarray]]
+Batch = Dict[str, Union[bool, Number, Tensor, List, np.ndarray]]
 
 
 def infer_device_from_batch(batch: Batch):

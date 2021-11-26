@@ -1,7 +1,11 @@
+from typing import List
 from typing import Optional
 
-from fz_openqa.datamodules.pipes import Pipe
+import rich
+
+from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import Eg
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
@@ -11,14 +15,33 @@ class PrintBatch(Pipe):
     Print the batch
     """
 
-    def __init__(self, header: Optional[str] = None):
+    def __init__(self, header: Optional[str] = None, **kwargs):
+        super(PrintBatch, self).__init__(**kwargs)
         self.header = header
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
-        pprint_batch(batch, header=self.header)
-
+        header = self.header
+        if header is None:
+            header = "PrintBatch"
+        if self.id is not None:
+            header = f"{header} (id={self.id})"
+        pprint_batch(batch, header=header)
+        if len(kwargs):
+            rich.print(f"PrintBatch input kwargs = {kwargs}")
         return batch
+
+    def _call_egs(self, examples: List[Eg], **kwargs) -> List[Eg]:
+        """The call of the pipeline process"""
+
+        header = f"{self.header} : " if self.header is not None else ""
+        try:
+            pprint_batch(examples[0], header=f"{header}First example")
+        except Exception:
+            rich.print(f"#{header}Failed to print using pprint_batch. First Example:")
+            rich.print(examples[0])
+
+        return examples
 
 
 class PrintText(Pipe):
@@ -27,16 +50,14 @@ class PrintText(Pipe):
     """
 
     def __init__(
-        self,
-        text_key: str,
-        limit: Optional[int] = None,
-        header: Optional[str] = None,
+        self, text_key: str, limit: Optional[int] = None, header: Optional[str] = None, **kwargs
     ):
+        super(PrintText, self).__init__(**kwargs)
         self.text_key = text_key
         self.limit = limit
         self.header = header
 
-    def __call__(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         txts = batch.get(self.text_key, None)
         if self.limit:

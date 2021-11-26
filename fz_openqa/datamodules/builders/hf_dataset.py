@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 from datasets import DatasetDict
@@ -15,8 +16,10 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.datamodules.utils.dataset import remove_columns
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -43,7 +46,7 @@ def cache_hf_dataset(func):
             if self._cache_dir is not None:
                 # get fingerprint
                 if isinstance(dataset, DatasetDict):
-                    fingerprint = Pipe._fingerprint({k: d._fingerprint for k, d in dataset.items()})
+                    fingerprint = get_fingerprint({k: d._fingerprint for k, d in dataset.items()})
                 else:
                     fingerprint = dataset._fingerprint
 
@@ -86,15 +89,16 @@ class HfDatasetBuilder(DatasetBuilder):
         *,
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
+        add_special_tokens: bool = True,
         cache_dir: str = "cache/",
         max_length: Optional[int] = 512,
         use_subset: bool = False,
         num_proc: int = 1,
         verbose: bool = False,
-        text_formatter: Optional[TextFormatter] = TextFormatter(),
+        text_formatter: Optional[TextFormatter] = None,
         **kwargs,
     ):
-        super().__init__(cache_dir=cache_dir)
+        super().__init__(cache_dir=cache_dir, **kwargs)
 
         self.cache_dir = cache_dir
         self.use_subset = use_subset
@@ -102,19 +106,37 @@ class HfDatasetBuilder(DatasetBuilder):
         self.verbose = verbose
 
         # tokenizer and dataset
-        self.text_formatter = text_formatter
+        self.text_formatter = text_formatter or TextFormatter()
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.add_encoding_tokens = add_encoding_tokens
+        self.add_special_tokens = add_special_tokens
 
     # @cache_hf_dataset
-    def __call__(self, format: Optional[str] = "torch", **kwargs) -> HfDataset:
-        # load the dataset, potentially filter, preprocess and return
+    def _call(
+        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+    ) -> HfDataset:
+        """
+        Loads the dataset and preprocesses it
+        Parameters
+        ----------
+        format
+            Output format (see `Dataset.set_format`)
+        columns
+            Columns to include in the output dataset
+        kwargs
+            Other arguments, unused here.
+
+        Returns
+        -------
+        HfDataset
+            The preprocessed dataset.
+        """
         dataset = self.load_and_filter_dataset()
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return dataset
+        return remove_columns(dataset, columns=columns)
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]

@@ -10,7 +10,7 @@ from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -32,7 +32,7 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = MedQABuilder(
+    builder = MedQaBuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),

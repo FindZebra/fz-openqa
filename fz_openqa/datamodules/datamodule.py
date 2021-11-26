@@ -18,10 +18,10 @@ from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
@@ -80,25 +80,26 @@ class DataModule(LightningDataModule):
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
 
-    def prepare_data(self):
+    def prepare_data(self, **kwargs):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
-        self.builder()
+        pass  # todo: uncomment this
+        # logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
+        # self.builder(**kwargs)
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: Optional[str] = None, **kwargs):
         """
         Load data and preprocess the data.
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
         logger.info(f"Setting up with <{self.builder.__class__.__name__}>")
-        self.dataset = self.builder()
+        self.dataset = self.builder(**kwargs)
 
         # define the collate operator
         self.collate_pipe = self.builder.get_collate_pipe()
 
-    def train_dataloader(self):
+    def train_dataloader(self, *, shuffle: bool = True):
         collate_fn = self._get_collate_fn(split=Split.TRAIN)
 
         return DataLoader(
@@ -107,11 +108,11 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
-            shuffle=True,
+            shuffle=shuffle,
             collate_fn=collate_fn,
         )
 
-    def _eval_loader(self, split):
+    def _eval_loader(self, split, *, shuffle: bool = False):
         collate_fn = self._get_collate_fn(split=split)
 
         return DataLoader(
@@ -120,7 +121,7 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
-            shuffle=False,
+            shuffle=shuffle,
             collate_fn=collate_fn,
         )
 
@@ -130,11 +131,11 @@ class DataModule(LightningDataModule):
             collate_fn = partial(collate_fn, split=split)
         return collate_fn
 
-    def val_dataloader(self):
-        return self._eval_loader(Split.VALIDATION)
+    def val_dataloader(self, **kwargs):
+        return self._eval_loader(Split.VALIDATION, **kwargs)
 
-    def test_dataloader(self):
-        return self._eval_loader(Split.TEST)
+    def test_dataloader(self, **kwargs):
+        return self._eval_loader(Split.TEST, **kwargs)
 
     def get_dataset(
         self, split: Union[str, Split], dataset: Optional[HfDataset] = None

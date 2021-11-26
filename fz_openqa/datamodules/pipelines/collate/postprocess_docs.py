@@ -10,11 +10,11 @@ from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.batch_condition import HasKeyWithPrefix
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import Not
 from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.datamodules.pipes.control.condition import Static
-from fz_openqa.datamodules.pipes.control.filter_keys import KeyWithPrefix
 
 
 class PostprocessPipe(BlockSequential):
@@ -35,7 +35,7 @@ class PostprocessPipe(BlockSequential):
             # sort the documents based on score and `match_score`
             sorter = ApplyAsFlatten(
                 Sort(keys=["document.match_score", "document.retrieval_score"]),
-                filter=KeyWithPrefix("document."),
+                input_filter=HasPrefix("document."),
             )
 
             # condition to activate the relevance classifier

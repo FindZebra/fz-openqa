@@ -12,11 +12,10 @@ class TestRetrieverSupervised(TestModel):
 
     def setUp(self) -> None:
         super(TestRetrieverSupervised, self).setUp()
-        heads = defaultdict(lambda: ClsHead(bert=self.bert, output_size=None))
-        self.model = RetrieverSupervised(bert=self.bert, tokenizer=self.tokenizer, heads=heads)
+        head = ClsHead(bert=self.bert, output_size=None)
+        self.model = RetrieverSupervised(bert=self.bert, tokenizer=self.tokenizer, head=head)
         self.model.eval()
 
-    @torch.no_grad()
     def test_step(self):
         scores = self.model.step(self.batch)
         # keys
@@ -55,7 +54,6 @@ class TestRetrieverSupervised(TestModel):
                    self.model._generate_targets(2, n_docs=4, device=torch.device('cpu'))]
         self.assertEqual(targets, expected_targets)
 
-    @torch.no_grad()
     def test_evaluate(self):
         """Call evaluate() and check that the logits match the generated targets."""
         output = self.model.evaluate(self.batch)

@@ -23,7 +23,7 @@ base:
 
 trainer:
   gpus: 8
-  accelerator: dp
+  strategy: dp
   min_epochs: 1
   max_epochs: 5000
   gradient_clip_val: 0.5

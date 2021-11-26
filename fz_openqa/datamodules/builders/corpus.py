@@ -12,7 +12,6 @@ from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 
-from ..pipes.sentence import GenerateSentences
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
@@ -23,20 +22,20 @@ from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import DropKeys
-from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
-from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes import UpdateWith
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.sentence import GenerateSentences
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,21 +43,30 @@ TXT_PATTERN = r"^.*\.txt$"
 
 
 class CorpusBuilder(HfDatasetBuilder):
-    # HuggingFace dataset id or local path to script
+    """
+    Builder for the Corpus Dataset.
+
+    Attributes
+    ----------
+    dset_script_id
+        HuggingFace dataset id or local path to script
+    dset_name
+        Dataset name
+    pt_attributes
+        name of the attributes that should be cast a Tensors
+    subset_size
+        number of data points per subset train/val/test
+    output columns
+        name of the columns
+    """
+
     dset_script_path_or_id = file_corpus.__file__
     dset_name: Optional[str] = None
-
-    # name of the attributes that will be converted to
-    # tensors in the preprocessing function
-    pt_attributes = [
+    pt_attributes: List[str] = [
         "document.input_ids",
         "document.attention_mask",
     ]
-
-    # number of data points per subset train/val/test
-    subset_size = [3]
-
-    # output columns
+    subset_size: List[int] = [3]
     column_names = [
         "document.text",
         "document.input_ids",
@@ -146,20 +154,22 @@ class CorpusBuilder(HfDatasetBuilder):
                 desc="Indexing documents",
             )
 
+        # define the pipe used for preprocessing
+        preprocessing = Sequential(
+            self.text_formatter.copy(text_key="text"),
+            Gate(self.to_sentences, GenerateSentences(), update=True),
+            self.get_tokenizer_pipe(),
+            Gate(
+                not self.to_sentences,
+                self.get_generate_passages_pipe(),
+                update=True,
+            ),
+            DropKeys(["offset_mapping"]),
+        )
+
         # process the whole dataset (tokenization + passage generation)
         dataset = dataset.map(
-            Sequential(
-                self.text_formatter.copy(text_key="text"),
-                UpdateWith(Gate(self.to_sentences, GenerateSentences())),
-                self.get_tokenizer_pipe(),
-                UpdateWith(
-                    Gate(
-                        not self.to_sentences,
-                        self.get_generate_passages_pipe(),
-                    )
-                ),
-                DropKeys(["offset_mapping"]),
-            ),
+            preprocessing,
             batched=True,
             batch_size=10,
             num_proc=self.num_proc,
@@ -170,6 +180,11 @@ class CorpusBuilder(HfDatasetBuilder):
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
+        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
+        # flatten and return
+        # todo: consumes too much memory
+        # dataset = dataset.flatten_indices()
+
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
@@ -178,9 +193,8 @@ class CorpusBuilder(HfDatasetBuilder):
             with_indices=True,
             desc="Indexing documents",
         )
-        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
-        # flatten and return
-        return dataset.flatten_indices()
+
+        return dataset
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -188,7 +202,7 @@ class CorpusBuilder(HfDatasetBuilder):
             size=self.passage_length,
             stride=self.passage_stride,
             start_tokens=self.get_prefix_tokens(),
-            end_tokens=[self.tokenizer.sep_token_id],
+            end_tokens=[self.tokenizer.sep_token_id] if self.add_special_tokens else [],
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )
@@ -197,12 +211,13 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, a shortcut with the Pipe
         Parallel is added to return the original attributes as well."""
 
-        add_spec_token_fn = partial(add_spec_token, DOC_TOKEN)
-        tokenizer_pipe = Sequential(
-            FilterKeys(lambda key: "text" in key),
-            Apply({"text": add_spec_token_fn}, element_wise=True)
-            if self.add_encoding_tokens
-            else None,
+        if self.add_encoding_tokens:
+            add_spec_token_fn = partial(add_spec_token, DOC_TOKEN)
+            add_spec_token_pipe = Apply({"text": add_spec_token_fn}, element_wise=True)
+        else:
+            add_spec_token_pipe = None
+        return Sequential(
+            add_spec_token_pipe,
             TokenizerPipe(
                 self.tokenizer,
                 max_length=self.max_length,
@@ -211,9 +226,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 add_special_tokens=False,
                 return_offsets_mapping=True,
             ),
+            input_filter=In(["text"]),
+            update=True,
         )
-
-        return Parallel(Identity(), tokenizer_pipe)
 
     def get_prefix_tokens(self):
         if self.add_encoding_tokens:

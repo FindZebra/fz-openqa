@@ -15,7 +15,7 @@ from fz_openqa import configs
 from fz_openqa.datamodules.__old.corpus_dm import MedQaCorpusDataModule
 from fz_openqa.datamodules.__old.meqa_dm import MedQaDataModule
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.builders.medqa import MedQABuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
@@ -43,7 +43,7 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = MedQABuilder(
+    dataset_builder = MedQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),

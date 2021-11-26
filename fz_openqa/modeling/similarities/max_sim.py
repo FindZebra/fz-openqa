@@ -25,7 +25,7 @@ class MaxSim(Similarity):
             # todo: check how this is implemented in the official repo,
             #  they do not return an NxM matrix
             interactions = torch.einsum("nph, mqh -> nmpq", query, document)
-            sim = interactions.max(dim=-1).values.sum(-1)
+            sim = interactions.max(dim=-1).values.SUM(-1)
         elif self.similarity_metric == "l2":
             raise NotImplementedError
         else:

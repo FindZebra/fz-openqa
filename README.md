@@ -1,8 +1,12 @@
-![FindZebra: rare disease search](fz-banner.png)
+<div align="center">
+
+ ![FindZebra: rare disease search](fz-banner.png)
 
 # Medical Open Domain Question Answering
 
-<a href="https://pytorch.org/get-started/locally/"><img alt="Python" src="https://img.shields.io/badge/-Python 3.7--3.9-blue?style=for-the-badge&logo=python&logoColor=white"></a>
+
+<p align="center">
+<a href="https://pytorch.org/get-started/locally/"><img alt="Python" src="https://img.shields.io/badge/-Python 3.9-blue?style=for-the-badge&logo=python&logoColor=white"></a>
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/-PyTorch 1.8+-ee4c2c?style=for-the-badge&logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?style=for-the-badge&logo=pytorchlightning&logoColor=white"></a>
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
@@ -11,6 +15,8 @@
 
 [![unit testing](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml/badge.svg)](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml)
 [![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
+
+ </div>
 
 ## Setup
 
@@ -358,7 +364,7 @@ Sample from the retriever lives and learn from the signal given by the reader co
 
 ## Tips and Tricks
 
- <details>
+<details>
 <summary>Disk usage</summary>
 
 Check the disk usage for each sub-directory. Useful to check the available. space on `/scratch`.
@@ -396,12 +402,21 @@ ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 <summary>Export `elasticsearch`</summary>
 
 Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
+
 ```bash
 export ES_HOME=/home/valv/libs/elasticsearch/elasticsearch-7.15.0
 export PATH="$ES_HOME/bin:$PATH"
 ```
 </details>
 
+ <details>
+<summary>Generate documentation</summary>
+
+```bash
+poetry run handsdown --exclude fz_openqa/configs -o docs
+```
+
+</details>
 ## Implemented papers
 
  1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)

@@ -5,5 +5,6 @@ from .corpus import FZxMedQaxWikiCorpusBuilder
 from .corpus import MedQaCorpusBuilder
 from .corpus import WikipediaCorpusBuilder
 from .hf_dataset import HfDatasetBuilder
-from .medqa import MedQABuilder
+from .medqa import ConcatMedQaBuilder
+from .medqa import MedQaBuilder
 from .openqa import OpenQaBuilder

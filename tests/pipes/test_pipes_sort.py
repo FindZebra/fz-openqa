@@ -6,6 +6,7 @@ import rich
 import torch
 
 from fz_openqa.datamodules.pipes import Sort
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -16,9 +17,9 @@ class TestSort(TestCase):
 
         assert self.check_if_values_are_the_same_length(batch)
         for cls in [lambda x: x, torch.tensor, np.array]:
-            for reversed in [False, True]:
+            for reverse in [False, True]:
                 self._test_sort_batch(
-                    {k: cls(v) for k, v in deepcopy(batch).items()}, reversed=reversed
+                    {k: cls(v) for k, v in deepcopy(batch).items()}, reverse=reverse
                 )
 
     def check_if_values_are_the_same_length(self, batch):
@@ -26,9 +27,9 @@ class TestSort(TestCase):
         same_length = all(len(x) == len(v0) for x in batch.values())
         return same_length
 
-    def _test_sort_batch(self, batch: Batch, reversed=True):
+    def _test_sort_batch(self, batch: Batch, reverse=True):
         # init the pipe
-        pipe = Sort(keys=["a"] if reversed else ["b"], reversed=reversed)
+        pipe = Sort(keys=["a"] if reverse else ["b"], reverse=reverse)
 
         # sort the batch
         reversed_batch = pipe(deepcopy(batch))
@@ -46,7 +47,7 @@ class TestSort(TestCase):
     def test_sort_with_filter(self):
         batch = {"a": [1, 2, 3, 4], "b": [4, 3, 2, 1], "c": [2, 5, 7, 3]}
 
-        pipe = Sort(keys=["a"], reversed=True, filter=lambda key: key in {"a", "b"})
+        pipe = Sort(keys=["a"], reverse=True, input_filter=In(["a", "b"]), update=True)
 
         # sort the batch
         reversed_batch = pipe(deepcopy(batch))
@@ -56,6 +57,6 @@ class TestSort(TestCase):
 
     def test_sort_multiple_keys(self):
         batch = {"a": [0, 0, 1, 1, 2, 2], "b": [5, 6, 3, 7, 1, 0], '_index_': [1, 2, 3, 4, 5, 6]}
-        pipe = Sort(keys=["a", "b"], reversed=True)
+        pipe = Sort(keys=["a", "b"], reverse=True)
         output = pipe(batch)
         self.assertEqual(output['_index_'], [5, 6, 4, 3, 2, 1])

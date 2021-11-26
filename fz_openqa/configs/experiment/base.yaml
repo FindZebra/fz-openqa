@@ -4,7 +4,9 @@ defaults:
   - override /trainer: minimal
   - override /model: ???
   - override /datamodule: openqa
-  - override /callbacks: checkpoint
+  - override /callbacks:
+    - checkpoint
+    - progress_bar
   - override /logger: wandb
 
 base:
@@ -14,7 +16,7 @@ base:
 
 trainer:
   gpus: 4
-  accelerator: dp
+  strategy: dp
   min_epochs: 1
   max_epochs: 10000
   gradient_clip_val: 0.5

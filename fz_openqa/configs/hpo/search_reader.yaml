@@ -44,7 +44,7 @@ experiment:
   datamodule.num_workers: ${base.cpus}
   trainer.max_epochs: 100
   trainer.gpus: ${base.gpus}
-  trainer.accelerator: dp
+  trainer.strategy: dp
 
 
 runner:

@@ -2,6 +2,8 @@
 
 defaults:
   - _self_
+  - sys: local
+  - trainer: minimal
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
