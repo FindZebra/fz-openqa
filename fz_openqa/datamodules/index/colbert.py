@@ -36,8 +36,6 @@ class ColbertIndex(FaissIndex):
         """
         Reused init from parent class (FaissIndex)
         """
-        tok2doc = []
-        self.tok2doc = tok2doc
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
@@ -89,6 +87,9 @@ class ColbertIndex(FaissIndex):
         self._index.add(vector)
 
         # store token index to original document
+        rich.print("Printing batch...")
+        pprint_batch(batch)
+        self.tok2doc = []
         for i in vector["index"]:
             ids = np.linspace(i, i, num=self.dim, dtype="int32").tolist()
             self.tok2doc.extend(ids)
