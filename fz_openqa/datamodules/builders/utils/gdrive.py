@@ -19,7 +19,7 @@ class Gdrive:
         api_version: str = "v3",
         scopes: List[str] = ["https://www.googleapis.com/auth/drive"],
     ):
-        super().__init__
+        super().__init__()
 
         self._instance = self._create_service(client_secret_file, api_name, api_version, scopes)
 

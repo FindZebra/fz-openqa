@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import tempfile
 from copy import copy
 from pathlib import Path
 from typing import Callable
@@ -10,17 +9,15 @@ from typing import Optional
 from typing import Union
 
 import rich
-from apiclient import errors
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
-from googleapiclient.http import MediaFileUpload
 from rich.progress import track
 
 from fz_openqa.datamodules.builders import DatasetBuilder
-from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders.utils.gdrive import Gdrive
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
@@ -137,7 +134,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
     def __init__(
         self,
         *,
-        dataset_builder: MedQABuilder,
+        dataset_builder: MedQaBuilder,
         query_articles: Callable = QueryWikiAPI(text_key="answer.text"),
         num_proc: int = 4,
         batch_size: int = 10,
@@ -170,7 +167,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         # Set up GoogleDrive Service
         if upload_to_drive:
-            # todo: implement as a separate module
             self.drive = Gdrive()
         else:
             self.drive = None

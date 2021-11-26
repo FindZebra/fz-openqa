@@ -24,7 +24,6 @@ def get_default_config():
         'use_subset': True,
         'max_length': 512,
         'num_proc': 2,
-        'verbose': False,
         'text_formatter': TextFormatter()
     }
 
@@ -131,7 +130,6 @@ class TestOpenQaBuilder(TestBuilder):
             'filter_unmatched': True,
             'num_proc': 2,
             'batch_size': 10,
-            'verbose': False,
         }
 
 
@@ -163,5 +161,4 @@ class TestConcatenatedOpenQaBuilder(TestBuilder):
             'filter_unmatched': True,
             'num_proc': 2,
             'batch_size': 10,
-            'verbose': False,
         }
