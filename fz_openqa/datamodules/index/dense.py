@@ -61,7 +61,7 @@ def iter_batches_with_indexes(
 DEFAULT_FAISS_KWARGS = {
     "metric_type": faiss.METRIC_L2,
     "n_list": 32,
-    "m": 16,
+    "n_subvectors": 16,
     "n_bits": 8,
 }
 
@@ -340,8 +340,8 @@ class FaissIndex(Index):
         ----------
         n_list
             The number of cells (space partition). Typical value is sqrt(N)
-        m
-            The number of sub-vector. Typically this is 8, 16, 32, etc.
+        n_subvectors
+            The number of sub-vectors. Typically this is 8, 16, 32, etc.
             Must be a divisor of the dimension
         n_bits
             Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
@@ -354,12 +354,12 @@ class FaissIndex(Index):
         rich.print(self.faiss_args)
         metric_type = self.faiss_args["metric_type"]
         n_list = self.faiss_args["n_list"]
-        m = self.faiss_args["m"]
+        n_subvectors = self.faiss_args["n_subvectors"]
         n_bits = self.faiss_args["n_bits"]
         dim = vectors.shape[-1]
-        assert dim % m == 0, "m must be a divisor of dim"
+        assert dim % n_subvectors == 0, "m must be a divisor of dim"
         quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, m, n_bits, metric_type)
+        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, n_subvectors, n_bits, metric_type)
 
         # train the index once using the 1st batch
         # todo: this is a hack, we should decorrelate batch_size of the dataloader

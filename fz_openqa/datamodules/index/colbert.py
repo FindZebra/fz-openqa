@@ -26,7 +26,7 @@ DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 DEFAULT_FAISS_KWARGS = {
     "metric_type": faiss.METRIC_L2,
     "n_list": 32,
-    "m": 16,
+    "n_subvectors": 16,
     "n_bits": 8,
 }
 
@@ -36,6 +36,8 @@ class ColbertIndex(FaissIndex):
         """
         Reused init from parent class (FaissIndex)
         """
+        tok2doc = []
+        self.tok2doc = tok2doc
         # call the super: build the index
         super(ColbertIndex, self).__init__(dataset=dataset, **kwargs)
 
@@ -51,7 +53,7 @@ class ColbertIndex(FaissIndex):
             Distance metric, most common is METRIC.L2
         n_list
             The number of cells (partitions). Typical values is sqrt(N)
-        m
+        n_subvectors
             The number of sub-vectors. Typically this is 8, 16, 32, etc.
         n_bits
             Bits per subvector. Typically 8, so that each sub-vector is encoded by 1 byte
@@ -64,13 +66,15 @@ class ColbertIndex(FaissIndex):
         assert len(vectors.shape) == 2
         metric_type = self.faiss_args["metric_type"]
         n_list = self.faiss_args["n_list"]
-        m = self.faiss_args["m"]
+        n_subvectors = self.faiss_args["n_subvectors"]
         n_bits = self.faiss_args["n_bits"]
         self.dim = vectors.shape[-1]
-        assert self.dim % m == 0, "m must be a divisor of dim"
+        assert self.dim % n_subvectors == 0, "m must be a divisor of dim"
 
         quantizer = faiss.IndexFlatL2(self.dim)
-        self._index = faiss.IndexIVFPQ(quantizer, self.dim, n_list, m, n_bits, metric_type)
+        self._index = faiss.IndexIVFPQ(
+            quantizer, self.dim, n_list, n_subvectors, n_bits, metric_type
+        )
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
         log.info(f"Index is trained: {self._index.is_trained}")
@@ -89,7 +93,6 @@ class ColbertIndex(FaissIndex):
         self._index.add(vector)
 
         # store token index to original document
-        self.tok2doc = []
         for idx in batch["__idx__"]:
             ids = np.linspace(idx, idx, num=self.dim, dtype="int32").tolist()
             self.tok2doc.extend(ids)
@@ -110,14 +113,14 @@ class ColbertIndex(FaissIndex):
         ----
         Scores are distances, i.e. the smaller the better
         """
-        rich.print(self.tok2doc)
         query = self.predict_queries(query)
         query = self.postprocess(query)
         vectors = query[self.vectors_column_name]
         scores, indices = self._index.search(vectors, k)
 
-        doc_indices = set(self.tok2doc[index] for index in indices.flatten("C"))
+        # todo: prepare doc_indices for SearchResult -> doesn't take a set as input
+        # doc_indices = set(self.tok2doc[index] for index in indices.flatten("C"))
 
         # todo: apply MaxSim to filter related documents further
 
-        return SearchResult(score=scores, index=doc_indices)
+        return SearchResult(score=scores, index=indices)

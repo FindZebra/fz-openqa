@@ -126,7 +126,7 @@ def run(config: DictConfig) -> None:
         dataset=corpus,
         model=model,
         trainer=trainer,
-        faiss_args={"metric_type": faiss.METRIC_L2, "n_list": 8, "m": 8, "n_bits": 8},
+        faiss_args={"metric_type": faiss.METRIC_L2, "n_list": 8, "n_subvectors": 8, "n_bits": 8},
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 1),
