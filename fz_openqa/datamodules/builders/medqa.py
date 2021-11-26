@@ -2,16 +2,19 @@ import logging
 from functools import partial
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 import dill  # type: ignore
 from datasets import DatasetDict
 from datasets import load_dataset
 
+from ...utils.datastruct import Eg
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
 from ..pipes.control.condition import In
 from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
+from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
@@ -27,6 +30,21 @@ from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
+
+
+class MinLength:
+    def __init__(self, key: str, min_length: int):
+        self.key = key
+        self.min_length = min_length
+
+    def __call__(self, row: Eg, **kwargs) -> bool:
+        x = row[self.key]
+        if isinstance(x, str):
+            return len(x) >= self.min_length
+        elif isinstance(x, list):
+            return all(len(y) >= self.min_length for y in x)
+        else:
+            raise TypeError(f"{self.key} is not a string or list")
 
 
 class MedQaBuilder(HfDatasetBuilder):
@@ -67,6 +85,10 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.attention_mask",
     ]
 
+    def __init__(self, *args, min_answer_length: Optional[int] = 3, **kwargs):
+        super(MedQaBuilder, self).__init__(*args, **kwargs)
+        self.min_answer_length = min_answer_length
+
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
@@ -78,6 +100,13 @@ class MedQaBuilder(HfDatasetBuilder):
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
+
+        # filter out answers that are too short
+        if self.min_answer_length is not None:
+            logger.info(f"Filtering out answers shorter than {self.min_answer_length} characters")
+            lengths = {k: len(d) for k, d in dataset.items()}
+            dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
+            logger.info(format_size_difference(lengths, dataset))
 
         # Tokenize the text fields (question and answers)
         if self.tokenizer:
