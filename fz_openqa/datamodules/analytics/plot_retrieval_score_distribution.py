@@ -1,27 +1,23 @@
+from __future__ import annotations
+
 import itertools
+from typing import Any
 from typing import Dict
 from typing import List
-from typing import Union
 
-import numpy as np
-import plotly.express as px
-import plotly.figure_factory as ff
 import plotly.graph_objects as go
-import rich
 from datasets import Dataset
-from datasets import DatasetDict
 
-from ..utils.datastruct import OpenQaDataset
-from ..utils.typing import HfDataset
 from .base import Analytic
-from fz_openqa.datamodules.utils.dataset import get_column_names
 
 
 class PlotScoreDistributions(Analytic):
     """Count the number of questions matched with positive documents"""
 
-    @staticmethod
-    def report_split(dset: Dataset) -> Dict:
+    requires_columns = ["document.retrieval_score", "document.match_score"]
+    output_file_name = "score_distribution_plot.html"
+
+    def process_dataset_split(self, dset: Dataset) -> List:
         """
         Report a specific split of the dataset.
         """
@@ -68,20 +64,8 @@ class PlotScoreDistributions(Analytic):
         neg_scores = {"negatives": val[1] for _, val in results.items()}
         return {**pos_scores, **neg_scores}
 
-    def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs):
-        """Gather retrieval scores of positive documents and plot distribution."""
-        assert "document.match_score" in get_column_names(dataset)
-        if isinstance(dataset, DatasetDict):
-            results = {split: self.report_split(dset) for split, dset in dataset.items()}
-            collated_res = self.collate_splits(results=results)
-
-        elif isinstance(dataset, Dataset):
-            results = {"all": self.report_split(dataset)}
-            collated_res = self.collate_splits(results=results)
-        else:
-            raise TypeError(f"Unsupported type {type(dataset)}")
-
-        fig = self.plot_split(results=collated_res)
-
-        # log results
-        self.save_as_html(fig, "score_distribution_plot.html")
+    def _process_results(self, results: Dict[str, Any]):
+        """Process the results of the analytic."""
+        results = self.collate_splits(results)
+        fig = self.plot_split(results=results)
+        self.save_as_html(fig)

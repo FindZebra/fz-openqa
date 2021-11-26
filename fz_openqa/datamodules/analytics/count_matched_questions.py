@@ -1,12 +1,11 @@
-import json
-from typing import Dict
-from typing import Union
+from __future__ import annotations
 
-import rich
+from typing import Dict
+from typing import List
+
 from datasets import Dataset
 from datasets import DatasetDict
 
-from ...utils.pretty import get_separator
 from ..utils.datastruct import OpenQaDataset
 from ..utils.typing import HfDataset
 from .base import Analytic
@@ -16,8 +15,10 @@ from fz_openqa.datamodules.utils.dataset import get_column_names
 class CountMatchedQuestions(Analytic):
     """Count the number of questions matched with positive documents"""
 
-    @staticmethod
-    def report_split(dset: Dataset) -> Dict:
+    requires_columns: List[str] = ["document.match_score"]
+    output_file_name: str = "count_matched_questions.json"
+
+    def process_dataset_split(self, dset: Dataset) -> Dict:
         """
         Report on a specific split of the dataset.
         """
@@ -33,23 +34,3 @@ class CountMatchedQuestions(Analytic):
             "ratio": count / n,
             "avg_score": sum(scores) / len(scores),
         }
-
-    def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs):
-        """Count the number of questions matched with positive documents."""
-        assert "document.match_score" in get_column_names(dataset)
-        if isinstance(dataset, DatasetDict):
-            results = {split: self.report_split(dset) for split, dset in dataset.items()}
-        elif isinstance(dataset, Dataset):
-            results = {"all": self.report_split(dataset)}
-        else:
-            raise TypeError(f"Unsupported type {type(dataset)}")
-
-        # log results
-        self.save_as_json(results, "count_matched_questions.json")
-
-        if self.verbose:
-            print(get_separator())
-            rich.print(f"=== {type(self).__name__} ===")
-            print(get_separator("."))
-            rich.print(json.dumps(results, indent=2))
-            print(get_separator())
