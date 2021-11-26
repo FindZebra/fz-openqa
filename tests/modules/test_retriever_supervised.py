@@ -12,8 +12,8 @@ class TestRetrieverSupervised(TestModel):
 
     def setUp(self) -> None:
         super(TestRetrieverSupervised, self).setUp()
-        heads = defaultdict(lambda: ClsHead(bert=self.bert, output_size=None))
-        self.model = RetrieverSupervised(bert=self.bert, tokenizer=self.tokenizer, heads=heads)
+        head = ClsHead(bert=self.bert, output_size=None)
+        self.model = RetrieverSupervised(bert=self.bert, tokenizer=self.tokenizer, head=head)
         self.model.eval()
 
     def test_step(self):

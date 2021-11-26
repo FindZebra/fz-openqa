@@ -80,20 +80,21 @@ class DataModule(LightningDataModule):
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
 
-    def prepare_data(self):
+    def prepare_data(self, **kwargs):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
-        self.builder()
+        pass  # todo: uncomment this
+        # logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
+        # self.builder(**kwargs)
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: Optional[str] = None, **kwargs):
         """
         Load data and preprocess the data.
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
         logger.info(f"Setting up with <{self.builder.__class__.__name__}>")
-        self.dataset = self.builder()
+        self.dataset = self.builder(**kwargs)
 
         # define the collate operator
         self.collate_pipe = self.builder.get_collate_pipe()

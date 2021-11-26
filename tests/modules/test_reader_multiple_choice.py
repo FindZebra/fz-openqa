@@ -11,8 +11,8 @@ from tests.modules.base import TestModel
 class TestReaderMultipleChoice(TestModel):
     def setUp(self) -> None:
         super(TestReaderMultipleChoice, self).setUp()
-        heads = defaultdict(lambda: ClsHead(bert=self.bert, output_size=None))
-        self.model = ReaderMultipleChoice(bert=self.bert, tokenizer=self.tokenizer, heads=heads)
+        head = ClsHead(bert=self.bert, output_size=None)
+        self.model = ReaderMultipleChoice(bert=self.bert, tokenizer=self.tokenizer, head=head)
         self.model.eval()
 
     def test_step(self):
@@ -81,10 +81,11 @@ class TestReaderMultipleChoice(TestModel):
             self.assertEqual(1, sum(tokens[k] == cls_id))
 
     def check_if_padding_last(self, tokens: torch.Tensor):
-        sep_id = self.tokenizer.sep_token_id
         pad_id = self.tokenizer.pad_token_id
         for k in range(tokens.shape[0]):
-            max_t = tokens.shape[1] + 1
-            first_pad_idx = min([i for i, t in enumerate(tokens[k]) if t == pad_id] + [max_t])
-            last_sep_idx = max([i for i, t in enumerate(tokens[k]) if t == sep_id])
-            self.assertGreater(first_pad_idx, last_sep_idx)
+            padding_indexes = [i for i, t in enumerate(tokens[k]) if t == pad_id]
+            if len(padding_indexes) > 0:
+                first_pad_idx = min(padding_indexes)
+                last_tokens = tokens[k][first_pad_idx:]
+                if len(last_tokens) > 0:
+                    self.assertTrue(all(int(pad_id) == int(t) for t in last_tokens))

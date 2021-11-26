@@ -3,6 +3,7 @@ from typing import List
 from typing import Optional
 
 import datasets
+import rich
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
@@ -50,6 +51,11 @@ def train(config: DictConfig) -> Optional[float]:
         datamodule.setup()
         return
 
+    # todo
+    datamodule.prepare_data()
+    datamodule.setup()
+    rich.print(datamodule.dataset)
+
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")
     model: LightningModule = instantiate(config.model, _recursive_=False)
@@ -96,7 +102,7 @@ def train(config: DictConfig) -> Optional[float]:
     # Evaluate Module on test set after training
     if not config.trainer.get("fast_dev_run"):
         log.info("Starting testing..")
-        trainer.test()
+        trainer.test(datamodule=datamodule)
 
     # Make sure everything closed properly
     log.info("Finalizing..")

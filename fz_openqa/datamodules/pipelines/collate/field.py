@@ -14,7 +14,6 @@ from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.batch_condition import HasKeys
@@ -48,6 +47,7 @@ class CollateField(Gate):
         *,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         exclude: Optional[List[str]] = None,
+        include_only: Optional[List[str]] = None,
         to_tensor: Optional[List[str]] = None,
         level: int = 0,
         **kwargs,
@@ -73,14 +73,31 @@ class CollateField(Gate):
         prefix = f"{field}."
         if exclude is None:
             exclude = []
+        if include_only is None:
+            include_only = []
         if to_tensor is None:
             to_tensor = []
+
+        # define the input filter
+        if len(include_only):
+            include_keys = [f"{prefix}{i}" for i in include_only]
+            include_only_cond = In(include_keys)
+        else:
+            include_only_cond = True
+
+        input_filter = Reduce(
+            HasPrefix(prefix),
+            include_only_cond,
+            *[Not(Contains(f"{prefix}{e}")) for e in exclude],
+            reduce_op=all,
+        )
 
         # pipe us to tensorize values
         if len(to_tensor):
             tensorizer_pipe = ApplyToAll(
                 op=to_tensor_op, allow_kwargs=False, input_filter=In(to_tensor)
             )
+            tensorizer_pipe = ApplyAsFlatten(tensorizer_pipe, level=level)
         else:
             tensorizer_pipe = None
 
@@ -110,6 +127,7 @@ class CollateField(Gate):
         pipe = Sequential(
             Collate(),
             body,
-            input_filter=Reduce(HasPrefix(prefix), *[Not(Contains(e)) for e in exclude]),
+            input_filter=input_filter,
         )
+
         super(CollateField, self).__init__(condition=HasKeyWithPrefix(prefix), pipe=pipe, **kwargs)

@@ -70,7 +70,7 @@ def format_row_nested_questions(
 
         # print documents attached to the question-answer pair
         repr += get_separator(".") + "\n"
-        repr += f"|-* {locator} - Documents: n={len(row['document.text'][i])}"
+        repr += f"|-* {locator} - Documents: n={len(row['document.input_ids'][i])}"
         if "document.match_score" in row:
             repr += (
                 f", n_positive={sum(row['document.match_score'][i] > 0)}, "
@@ -79,7 +79,7 @@ def format_row_nested_questions(
         repr += "\n"
 
         # for each document
-        for j in range(min(len(row["document.text"][i]), 3)):
+        for j in range(min(len(row["document.input_ids"][i]), 3)):
             match_on = row.get("document.match_on", None)
             match_on = match_on[i][j] if match_on is not None else None
             repr += f"|---* {locator} - Document #{1 + j}"

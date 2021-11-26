@@ -12,8 +12,8 @@ class TestCheckOnlyFirstDocPositive(TestCase):
 
         # negative examples
         batch = {'document.match_score': torch.tensor([[1, 1, 0], [1, 0, 0]])}
-        self.assertRaises(AssertionError, lambda : check_only_first_doc_positive(batch))
+        self.assertRaises(ValueError, lambda : check_only_first_doc_positive(batch))
         batch = {'document.match_score': torch.tensor([[0, 0, 0], [1, 0, 0]])}
-        self.assertRaises(AssertionError, lambda: check_only_first_doc_positive(batch))
+        self.assertRaises(ValueError, lambda: check_only_first_doc_positive(batch))
         batch = {'document.match_score': torch.tensor([[1, 0, 0], [0, 1, 0]])}
-        self.assertRaises(AssertionError, lambda: check_only_first_doc_positive(batch))
+        self.assertRaises(ValueError, lambda: check_only_first_doc_positive(batch))
