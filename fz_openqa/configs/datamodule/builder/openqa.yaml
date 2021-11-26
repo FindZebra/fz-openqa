@@ -9,6 +9,7 @@ n_retrieved_documents: ${datamodule.n_retrieved_documents}
 n_documents: ${datamodule.n_documents}
 max_pos_docs: ${datamodule.max_pos_docs}
 filter_unmatched: ${datamodule.filter_unmatched}
+select_mode: ${datamodule.select_mode}
 output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}

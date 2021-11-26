@@ -1,4 +1,7 @@
 defaults:
   - base
-  - head: cls
+  - head: colbert
   - override module: option_retriever
+
+
+hidden_size: 32

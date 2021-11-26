@@ -31,6 +31,7 @@ datamodule:
     test: 12
   max_pos_docs: 3
   filter_unmatched: False
+  select_mode: sample
   output_columns:
     - question.input_ids
     - question.attention_mask

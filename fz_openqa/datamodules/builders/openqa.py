@@ -1,5 +1,6 @@
 import json
 import logging
+from enum import Enum
 from functools import partial
 from typing import Any
 from typing import Dict
@@ -40,6 +41,11 @@ from fz_openqa.datamodules.utils.typing import HfDataset
 logger = logging.getLogger(__name__)
 
 
+class SelectMode(Enum):
+    FIRST = "first"
+    SAMPLE = "sample"
+
+
 class OpenQaBuilder(DatasetBuilder):
     _column_names = [
         "document.row_idx",
@@ -63,6 +69,7 @@ class OpenQaBuilder(DatasetBuilder):
         n_documents: Optional[Union[int, Dict]] = None,
         max_pos_docs: Optional[int] = None,
         filter_unmatched: bool = True,
+        select_mode: str = "all",
         num_proc: int = 2,
         batch_size: int = 100,
         output_columns: Optional[List[str]] = None,
@@ -85,6 +92,7 @@ class OpenQaBuilder(DatasetBuilder):
         self.output_columns = output_columns
         self.n_documents = n_documents or n_retrieved_documents
         self.max_pos_docs = max_pos_docs
+        self.select_mode = SelectMode(select_mode)
         self.map_args = {
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
@@ -288,6 +296,7 @@ class OpenQaBuilder(DatasetBuilder):
             self.n_documents,
             max_pos_docs=self.max_pos_docs,
             level=document_nesting_level,
+            select_mode=self.select_mode.value,
             shuffle=False,
         )
 
@@ -313,6 +322,7 @@ class OpenQaBuilder(DatasetBuilder):
         *,
         max_pos_docs: Optional[int],
         level: int = 1,
+        select_mode: str = "first",
         shuffle: bool = False,
     ) -> Optional[Pipe]:
         if n_documents == 0:
@@ -321,8 +331,8 @@ class OpenQaBuilder(DatasetBuilder):
         return SelectDocs(
             total=n_documents,
             max_pos_docs=max_pos_docs,
-            pos_select_mode="first",
-            neg_select_mode="first",
+            pos_select_mode=select_mode,
+            neg_select_mode=select_mode,
             strict=False,
             update=True,
             level=level,

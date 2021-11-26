@@ -17,6 +17,11 @@ class GradExpression(Enum):
     GATHER = "gather"
 
 
+class Similarity(Enum):
+    CLS = "cls"
+    COLBERT = "colbert"
+
+
 class OptionRetriever(Module):
     """
     A model for multiple-choice OpenQA.
@@ -51,6 +56,8 @@ class OptionRetriever(Module):
     def __init__(self, *args, grad_expr: GradExpression = GradExpression.SUM, **kwargs):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
+        head = next(iter(self.heads.values()))
+        self.similarity = Similarity(head.id)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -146,7 +153,14 @@ class OptionRetriever(Module):
 
     def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
-        return torch.einsum("boh, bodh -> bod", hq, hd)
+        if self.similarity == Similarity.CLS:
+            return torch.einsum("boh, bodh -> bod", hq, hd)
+        elif self.similarity == Similarity.COLBERT:
+            scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
+            max_scores, _ = scores.max(-1)
+            return max_scores.sum(-1)
+        else:
+            raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

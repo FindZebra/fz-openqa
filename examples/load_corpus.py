@@ -10,7 +10,9 @@ from omegaconf import DictConfig
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
-from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, MedWikipediaCorpusBuilder, FzCorpusBuilder
+from fz_openqa.datamodules.builders.corpus import FzCorpusBuilder
+from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders.corpus import MedWikipediaCorpusBuilder
 from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.pipes import TextFormatter
@@ -50,7 +52,7 @@ def run(config: DictConfig) -> None:
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=2,
-        analyses=[ReportCorpusStatistics(output_dir="./analyses")]
+        analyses=[ReportCorpusStatistics(output_dir="./analyses")],
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
