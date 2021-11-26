@@ -34,7 +34,7 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
                 {
                     "idx": datasets.Value("int32"),
                     "text": datasets.Value("string"),
-                    "title": datasets.Value("string"),
+                    "title": datasets.Value("string")
                 }
             ),
             supervised_keys=None,
@@ -61,13 +61,11 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, filepath: str):
         """Yields examples."""
 
-        with open(filepath, "r") as json_file:
-            json_list = list(json_file)
-            for idx, val in enumerate(json_list):
-                article = json.loads(val)
+        with open(filepath, "r") as f:
+            data = json.load(f)
+            for idx, article in enumerate(data):
                 yield idx, {
-                    "text": article["text"],
+                    "text": article['text'],
                     "title": article["title"],
-                    "question.idx": article["question.idx"],
                     "idx": idx,
                 }
