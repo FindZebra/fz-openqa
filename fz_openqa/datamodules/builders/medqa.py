@@ -80,15 +80,16 @@ class MedQaBuilder(HfDatasetBuilder):
         Tokenization and formatting as PyTorch tensors"""
 
         # Tokenize the text fields (question and answers)
-        dataset = dataset.map(
-            Parallel(
-                self.get_question_tokenizer_pipe(),
-                self.get_answer_tokenizer_pipe(),
-            ),
-            batched=True,
-            num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
-        )
+        if self.tokenizer:
+            dataset = dataset.map(
+                Parallel(
+                    self.get_question_tokenizer_pipe(),
+                    self.get_answer_tokenizer_pipe(),
+                ),
+                batched=True,
+                num_proc=self.num_proc,
+                desc="Tokenizing questions and answers",
+            )
 
         # add an index column
         dataset = dataset.map(

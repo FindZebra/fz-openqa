@@ -1,5 +1,4 @@
 defaults:
   - base_corpus
 
-_target_: fz_openqa.datamodules.builders.WikipediaCorpusBuilder
-_id: Wiki
+_target_: fz_openqa.datamodules.builders.MedWikipediaCorpusBuilder

@@ -9,8 +9,11 @@ from omegaconf import DictConfig
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.corpus import WikipediaCorpusBuilder
+from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
+from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, MedWikipediaCorpusBuilder, FzCorpusBuilder
+from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 logger = logging.getLogger(__name__)
@@ -30,13 +33,24 @@ def run(config: DictConfig) -> None:
     # initialize the tokenizer
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
+    # initialize text formatter
+    textformatter = TextFormatter(
+        lowercase=True,
+        remove_symbols=True,
+        remove_ref=True,
+        remove_hex=True,
+        remove_breaks=True,
+    )
+
     # initialize the data module
-    builder = WikipediaCorpusBuilder(
+    builder = MedWikipediaCorpusBuilder(
         tokenizer=tokenizer,
-        to_sentences=config.get("to_sentences", False),
-        use_subset=config.get("use_subset", True),
+        to_sentences=config.get("to_sentences", True),
+        text_formatter=textformatter,
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=2,
+        analyses=[ReportCorpusStatistics(output_dir="./analyses")]
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()

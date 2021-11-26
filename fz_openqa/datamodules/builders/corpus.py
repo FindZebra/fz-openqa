@@ -15,6 +15,7 @@ from datasets import load_dataset
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
+from fz_openqa.datamodules.generators import medwiki_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.generators import wiki_corpus
 from fz_openqa.datamodules.pipelines import collate
@@ -280,14 +281,14 @@ class FzCorpusBuilder(CorpusBuilder):
 
 
 class WikipediaCorpusBuilder(CorpusBuilder):
-    subset_size = [20]
-    dset_script_path_or_id = wiki_corpus.__file__
-
-
-class OriginalWikipediaCorpusBuilder(CorpusBuilder):
     subset_size = [10]
     dset_script_path_or_id = "wikipedia"
     dset_name = "20200501.en"
+
+
+class MedWikipediaCorpusBuilder(CorpusBuilder):
+    subset_size = [20]
+    dset_script_path_or_id = medwiki_corpus.__file__
 
 
 class FZxMedQaCorpusBuilder(CorpusBuilder):
@@ -309,7 +310,7 @@ class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
     dset_script_path_or_id: List = [
         fz_corpus.__file__,
         meqa_en_corpus.__file__,
-        wiki_corpus.__file__,
+        medwiki_corpus.__file__,
     ]
 
     def load_base_dataset(self) -> DatasetDict:
