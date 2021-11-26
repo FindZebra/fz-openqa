@@ -190,47 +190,5 @@ def run(config: DictConfig) -> None:
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)
 
 
-# todo: adapt max_sim to our code
-def max_similarity(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
-    """Compute the maximum similarity score between a query and a document.
-
-    Parameters
-    ----------
-    similarity_metric
-        Specify similarity: cosine or L2
-    query
-        Query representation as Tensor
-    document
-        Document representation as Tensor
-
-    Returns
-    -------
-
-    """
-    assert len(document.shape) == 3
-    assert len(query.shape) == 3
-
-    if similarity_metric == "cosine":
-        raise NotImplementedError
-    elif similarity_metric == "L2":
-        raise NotImplementedError
-    else:
-        raise ValueError(f"Unknown similarity metric: `{similarity_metric}`")
-
-
-def original_max_sim(similarity_metric: str, query: Tensor, document: Tensor) -> Tensor:
-    """
-    MaxSim score from original ColBERT repo
-    """
-    if similarity_metric == "cosine":
-        return (query @ document.permute(0, 2, 1)).max(2).values.sum(1)
-    elif similarity_metric == "l2":
-        return (
-            (-1.0 * ((query.unsqueeze(2) - document.unsqueeze(1)) ** 2).sum(-1))
-            .max(-1)
-            .values.sum(-1)
-        )
-
-
 if __name__ == "__main__":
     run()

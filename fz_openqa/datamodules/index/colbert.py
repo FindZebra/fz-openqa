@@ -17,6 +17,7 @@ from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
+from fz_openqa.modeling.similarities.max_sim import MaxSim
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
 
@@ -116,11 +117,12 @@ class ColbertIndex(FaissIndex):
         query = self.predict_queries(query)
         query = self.postprocess(query)
         vectors = query[self.vectors_column_name]
-        scores, indices = self._index.search(vectors, k)
+        distances, indices = self._index.search(vectors, k)
 
-        # todo: prepare doc_indices for SearchResult -> doesn't take a set as input
         # doc_indices = set(self.tok2doc[index] for index in indices.flatten("C"))
+        # todo: extract document_representations for retrieved documents
 
         # todo: apply MaxSim to filter related documents further
+        scores = MaxSim()
 
         return SearchResult(score=scores, index=indices)
