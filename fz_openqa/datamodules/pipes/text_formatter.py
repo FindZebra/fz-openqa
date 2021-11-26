@@ -21,7 +21,6 @@ class TextFormatter(Pipe):
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
-        remove_hex: bool = False,
         update: bool = True,
         **kwargs,
     ):
@@ -33,7 +32,6 @@ class TextFormatter(Pipe):
         self.lowercase = lowercase
         self.aggressive_cleaning = aggressive_cleaning
         self.remove_symbols = remove_symbols
-        self.remove_hex = remove_hex
 
     def clean(self, text: str) -> str:
 

@@ -15,8 +15,8 @@ pin_memory: True
 persistent_workers: False
 
 # global: dataset preprocessing
-add_encoding_tokens: true
-add_special_tokens: true
+add_encoding_tokens: false
+add_special_tokens: false
 use_subset: false
 num_proc: 4
 cache_dir: ${sys.cache_dir}
@@ -30,3 +30,14 @@ n_documents:
   test: 100
 max_pos_docs: 1
 filter_unmatched: true
+
+output_columns:
+  - question.input_ids
+  - question.attention_mask
+  - document.input_ids
+  - document.attention_mask
+  - document.row_idx
+  - document.match_score
+  - document.retrieval_score
+  - answer.target
+

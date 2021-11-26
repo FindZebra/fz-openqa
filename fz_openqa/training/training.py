@@ -19,7 +19,6 @@ from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import torch
-from fz_openqa.datamodules.pipes import UpdateWith
 from fz_openqa.datamodules.pipes.nesting import infer_batch_size
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
@@ -81,7 +80,7 @@ def train(config: DictConfig) -> Optional[float]:
             ]
         )
         update_fields = UpdateKeys(lambda v: isinstance(v, torch.Tensor))
-        pipe = UpdateWith(Sequential(drop_fields, update_fields))
+        pipe = Sequential(drop_fields, update_fields)
 
         for split, dataloader in dataloaders.items():
             with open(
