@@ -12,7 +12,7 @@ from .base import Analytic
 
 
 class PlotScoreDistributions(Analytic):
-    """Count the number of questions matched with positive documents"""
+    """Plot the distribution of retrieval scores for matched documents"""
 
     requires_columns = ["document.retrieval_score", "document.match_score"]
     output_file_name = "score_distribution_plot.html"
