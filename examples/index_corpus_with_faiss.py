@@ -136,6 +136,8 @@ def run(config: DictConfig) -> None:
         collate_pipe=corpus_builder.get_collate_pipe(),
         cache_dir=cache_dir,
     )
+    rich.print(index.is_indexed)
+    rich.print(index.ntotal)
 
     # setup search pipe (query the indexes from the corpus)
     search = SearchCorpus(index, k=3)

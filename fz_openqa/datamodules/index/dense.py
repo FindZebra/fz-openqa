@@ -212,6 +212,10 @@ class FaissIndex(Index):
     def is_indexed(self):
         return self._index is None or self._index.is_trained
 
+    @property
+    def ntotal(self):
+        return self._index is None or self._index.ntotal
+
     def build(self, dataset: Dataset, *, cache_dir=Optional[None], **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.

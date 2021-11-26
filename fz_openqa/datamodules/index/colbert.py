@@ -77,19 +77,21 @@ class ColbertIndex(FaissIndex):
         assert self._index.is_trained is True, "Index is not trained"
         log.info(f"Index is trained: {self._index.is_trained}")
 
-    def _add_batch_to_index(self, batch: Batch, idx: List[int], dtype=np.float32):
+    def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """
         # check indexes
-        self._check_index_consistency(idx)
+        # self._check_index_consistency(idx)
 
         # add vector to index
+        rich.print("Printing batch...")
+        pprint_batch(batch)
         vector = self._get_vector_from_batch(batch)
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 2, f"{vector} is not a 2D array"
         self._index.add(vector)
 
         # store token index to original document
-        for i in vector["index"]:
+        for i in batch["__idx__"]:
             ids = np.linspace(i, i, num=self.dim, dtype="int32").tolist()
             self.tok2doc.extend(ids)
         rich.print(f"[red]Total number of indices: {self._index.ntotal}")
