@@ -15,17 +15,15 @@ from ..pipes.nesting import Expand
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Lambda
+from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -44,6 +42,7 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.input_ids",
         "question.attention_mask",
         "question.idx",
+        "question.row_idx",
         "answer.input_ids",
         "answer.attention_mask",
         "answer.target",
@@ -109,7 +108,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -121,20 +120,28 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            add_special_tokens=self.add_special_tokens,
+            spec_token=QUERY_TOKEN,
             shape=None,
         )
 
     def get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
-            CollateField("question", tokenizer=self.tokenizer, level=0),
-            CollateField("answer", level=0, exclude=["input_ids", "attention_mask"]),
+            CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
+            ),
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
                 level=1,
-                exclude=["synonyms", "target", "cui", "synonyms", "text"],
+                include_only=["input_ids", "attention_mask"],
+                id="pad-answer-tokens",
             ),
         )
 
@@ -224,6 +231,27 @@ class ConcatMedQaBuilder(MedQaBuilder):
 
         return dataset
 
+    def get_concat_qa_pipe(self):
+        q_start_tokens = []
+        if self.add_special_tokens:
+            q_start_tokens.append(self.tokenizer.sep_token)
+        if self.add_encoding_tokens:
+            q_start_tokens.append(QUERY_TOKEN)
+
+        add_spec_tokens_pipe = Apply(
+            {"question.text": partial(add_spec_token, q_start_tokens)}, element_wise=True
+        )
+
+        return Sequential(
+            add_spec_tokens_pipe,
+            Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
+            ApplyAsFlatten(
+                ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
+                level=1,
+            ),
+            input_filter=In(["question.text", "answer.text"]),
+        )
+
     def get_qa_tokenizer_pipe(self):
         return FormatAndTokenize(
             prefix="question.",
@@ -231,7 +259,8 @@ class ConcatMedQaBuilder(MedQaBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            add_special_tokens=self.add_special_tokens,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -239,12 +268,21 @@ class ConcatMedQaBuilder(MedQaBuilder):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
-                "answer", level=0, exclude=["input_ids", "attention_mask", "cui", "synonyms"]
+                "question", exclude=["input_ids", "attention_mask"], level=0, id="collate-questions"
+            ),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
             ),
             CollateField(
                 "question",
                 tokenizer=self.tokenizer,
                 level=1,
+                include_only=["input_ids", "attention_mask"],
+                id="pad-nested-question-tokens",
             ),
         )
 
@@ -268,13 +306,3 @@ class ConcatMedQaBuilder(MedQaBuilder):
             repr += line
 
         return repr
-
-    def get_concat_qa_pipe(self):
-        return Sequential(
-            Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
-            ApplyAsFlatten(
-                ConcatTextFields(keys=["question.text", "answer.text"], new_key="question.text"),
-                level=1,
-            ),
-            input_filter=In(["question.text", "answer.text"]),
-        )

@@ -62,6 +62,7 @@ class SearchCorpus(ApplyAsFlatten):
         **kwargs,
     ):
         assert "input_filter" not in kwargs
+        self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
         pipe = SearchCorpusFlat(index, **kwargs)
         super().__init__(pipe, level=level, input_filter=input_filter)

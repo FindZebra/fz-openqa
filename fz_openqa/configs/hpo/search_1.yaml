@@ -1,0 +1,75 @@
+# @package _global_
+# kill all idle processes using:
+# > ps aux | grep ray:: | grep -v grep | awk '{print $2}' | xargs kill -9
+
+target_metric: validation/F1
+target_mode: max
+cache_dir: '/scratch/valv/cache/'
+exp_dir: '/scratch/valv/raytune/fz_openqa/'
+print_config: True
+server_address: null
+
+ray:
+  local_mode: False
+  configure_logging: False
+
+experiment:
+  experiment: retriever_only.yaml
+  sys: valv.yaml
+  cache_dir: ${cache_dir}
+  target_metric: ${target_metric}
+  target_mode: ${target_mode}
+  seed: null
+  print_config: False
+  verbose: True
+  ignore_warnings: True
+  trainer.progress_bar_refresh_rate: 0
+  trainer.checkpoint_callback: True
+  logger.wandb.group: ${runner.name}
+  callbacks: tune.yaml
+  datamodule.num_workers: 4
+  trainer.gpus: 1
+  trainer.max_epochs: 500
+
+space:
+  model.bert.pretrained_model_name_or_path:
+    _target_: ray.tune.choice
+    categories:
+      - 'bert-base-cased'
+      - 'dmis-lab/biobert-base-cased-v1.1'
+      - 'emilyalsentzer/Bio_ClinicalBERT'
+      - 'allenai/biomed_roberta_base'
+      - 'allenai/scibert_scivocab_uncased'
+      - 'allenai/scibert_scivocab_cased'
+  model.hidden_size:
+    _target_: ray.tune.choice
+    categories:
+      - 128
+      - 128
+      - 256
+
+
+runner:
+  name: search_1
+  resume: False
+  num_samples: 1 # tdo
+  metric: ${target_metric}
+  mode: ${target_mode}
+  resources_per_trial:
+    cpu: 1
+    gpu: 1
+  fail_fast: True
+  raise_on_failed_trial: False
+  #  checkpoint_freq: 0
+  #  checkpoint_at_end: False
+  local_dir: ${exp_dir}
+  #  progress_reporter:
+  #    _target_: ray.tune.CLIReporter
+  #    metric_columns: ['validation/loss', 'validation/F1']
+  # scheduler:
+  #   _target_: ray.tune.schedulers.AsyncHyperBandScheduler
+  #   max_t: 1000
+  #   grace_period: 10
+  # search_alg:
+  #   _target_: ray.tune.suggest.hyperopt.HyperOptSearch
+  #   points_to_evaluate: null

@@ -7,11 +7,8 @@ import torch
 from datasets import Split
 from torch import Tensor
 from torch.nn import functional as F
-from torchmetrics import MetricCollection
-from torchmetrics.classification import Accuracy
 
 from .base import Module
-from .metrics import SplitMetrics
 from .utils import check_only_first_doc_positive
 from .utils import expand_and_flatten
 from .utils import flatten_first_dims
@@ -52,17 +49,8 @@ class ReaderMultipleChoice(Module):
     def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
         fir both the answering model and the selection model"""
-        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
-
-        def init_answer_metric():
-            return MetricCollection([Accuracy(**metric_kwargs)], prefix=prefix)
-
-        self.answer_metrics = SplitMetrics(init_answer_metric)
-
-        def init_relevance_metric():
-            return MetricCollection([Accuracy(**metric_kwargs)], prefix=f"{prefix}relevance-")
-
-        self.relevance_metrics = SplitMetrics(init_relevance_metric)
+        self.answer_metrics = self._get_base_metrics(prefix=prefix)
+        self.relevance_metrics = self._get_base_metrics(prefix=f"{prefix}relevance-")
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
         """

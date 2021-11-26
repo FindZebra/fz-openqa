@@ -10,6 +10,10 @@ from pytorch_lightning import seed_everything
 
 import fz_openqa
 from fz_openqa import configs
+from fz_openqa.datamodules.analytics import RetrieverAccuracy
+from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
+from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
+from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
 from fz_openqa.datamodules.builders import ConcatMedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
@@ -79,6 +83,9 @@ def run(config):
         filter_unmatched=config.get("filter_unmatched", False),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 10),
+        analyses=[
+            RetrieverAccuracy(output_dir="./analyses", verbose=True),
+        ],
     )
 
     # define the data module

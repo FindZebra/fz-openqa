@@ -1,5 +1,6 @@
 import abc
 from collections import OrderedDict
+from copy import copy
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -19,11 +20,17 @@ class PipeProcessError(Exception):
     """Base class for other exceptions"""
 
     def __init__(self, meta_pipe: Pipe, pipe: Pipe, batch: Batch, **kwargs):
+
+        try:
+            batch_repr = repr_batch(batch)
+        except Exception:
+            batch_repr = type(batch)
+
         keys = _infer_keys(batch)
         msg = (
             f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)} with "
             f"batch of type {type(batch)} with keys={keys} "
-            f"and kwargs={kwargs}. Batch=\n{repr_batch(batch)}"
+            f"and kwargs={kwargs}. Batch=\n{batch_repr}"
         )
         super().__init__(msg)
 
@@ -99,7 +106,7 @@ class Parallel(Sequential):
 
         outputs = {}
         for pipe in self.pipes:
-            pipe_out = _call_pipe_and_handle_exception(pipe, batch, **kwargs, meta_pipe=self)
+            pipe_out = _call_pipe_and_handle_exception(pipe, copy(batch), **kwargs, meta_pipe=self)
 
             # check conflict between pipes
             o_keys = set(outputs.keys())
@@ -108,8 +115,8 @@ class Parallel(Sequential):
             for key in intersection:
                 msg = (
                     f"There is a conflict between pipes on key={key}\n"
-                    f"- outputs: {outputs[key]}\n"
-                    f"- pipe output: {pipe_out[key]}"
+                    f"\n{repr_batch(outputs, 'outputs', rich=False)}"
+                    f"\n{repr_batch(pipe_out, 'pipe output', rich=False)}"
                 )
                 assert check_equal_arrays(outputs[key], pipe_out[key]), msg
 

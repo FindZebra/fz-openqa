@@ -1,25 +1,30 @@
+from __future__ import annotations
+
+import functools
 import itertools
 from collections import Counter
 from typing import Dict
 from typing import List
-from typing import Union
 
 import plotly.express as px
 import rich
 from datasets import Dataset
-from datasets import DatasetDict
 
-from ..utils.datastruct import OpenQaDataset
-from ..utils.typing import HfDataset
 from .base import Analytic
-from fz_openqa.datamodules.utils.dataset import get_column_names
+from fz_openqa.utils.pretty import get_separator
 
 
-class PlotTop20MatchTriggers(Analytic):
+class PlotTopMatchTriggers(Analytic):
     """Count the number of questions matched with positive documents"""
 
-    @staticmethod
-    def report_split(dset: Dataset) -> Dict:
+    requires_columns = ["document.retrieval_score", "document.match_score"]
+    output_file_name = "top_match_triggers.html"
+
+    def __init__(self, *args, topn: int = 100, **kwargs):
+        super(PlotTopMatchTriggers, self).__init__(*args, **kwargs)
+        self.topn = topn
+
+    def process_dataset_split(self, dset: Dataset) -> Counter:
         """
         Report a specific split of the dataset.
         """
@@ -32,17 +37,15 @@ class PlotTop20MatchTriggers(Analytic):
         triggers = list(itertools.chain(*n_triggers))
 
         # Counter returns a dict for counting hashable objects
-        count_triggers = Counter(triggers)
+        return Counter(triggers)
 
-        return count_triggers
+    def plot_most_commons(self, labels: List[str], counts: List[int]):
+        """
+        Plot most common values.
+        """
 
-    @staticmethod
-    def plot_splits(label: List[str], count: List[int]):
-        """
-        Plot for all splits in a dataset.
-        """
         # create figure
-        fig = px.bar(y=count, x=label, text=count)
+        fig = px.bar(y=counts, x=labels, text=counts)
         fig.update_traces(textposition="outside", marker_color="rgb(102, 178, 255)")
         fig.update_yaxes(ticklabelposition="inside top", title="Count")
         fig.update_xaxes(title="Triggers")
@@ -50,28 +53,24 @@ class PlotTop20MatchTriggers(Analytic):
         return fig
 
     @staticmethod
-    def collate_results(train, val, test):
+    def collate_splits(results: Dict[str, Counter]) -> Counter:
         """ Collate results of splits """
-        counter = train + val + test
-        return counter.most_common(20)
+        rich.print(results)
+        return functools.reduce(lambda x, y: x + y, results.values())
 
-    def __call__(self, dataset: Union[HfDataset, OpenQaDataset], **kwargs):
-        """Gather retrieval scores of positive documents and plot distribution."""
-        assert "document.match_score" in get_column_names(dataset)
-        if isinstance(dataset, DatasetDict):
-            results = {split: self.report_split(dset) for split, dset in dataset.items()}
+    def _process_results(self, results: Dict):
+        """Process the results of the analytic."""
+        counter = self.collate_splits(results)
 
-            counter = self.collate_results(*results.values())
-            label, count = zip(*counter)
+        labels, counts = zip(*counter.most_common(self.topn))
+        if self.verbose:
+            print(get_separator())
+            rich.print(f"=== {type(self).__name__} ===")
+            print(get_separator("."))
+            c_length = max(len(str(c)) for c in counts)
+            for label, count in zip(labels, counts):
+                rich.print(f" count={str(count):{c_length}} label='{label}'")
+            print(get_separator())
 
-        elif isinstance(dataset, Dataset):
-            results = {"all": self.report_split(dataset)}
-            counter = results["all"].most_common(20)
-            label, count = zip(*counter)
-        else:
-            raise TypeError(f"Unsupported type {type(dataset)}")
-
-        fig = self.plot_splits(label=label, count=count)
-
-        # log results
-        self.save_as_html(fig, "top20_match_triggers.html")
+        fig = self.plot_most_commons(labels, counts)
+        self.save_as_html(fig)
