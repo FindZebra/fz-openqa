@@ -15,7 +15,7 @@ from fz_openqa.utils.pretty import get_separator
 
 
 class PlotTopMatchTriggers(Analytic):
-    """Count the number of questions matched with positive documents"""
+    """ Plot the top 20 triggers for matched documents"""
 
     requires_columns = ["document.retrieval_score", "document.match_score"]
     output_file_name = "top_match_triggers.html"
@@ -32,7 +32,7 @@ class PlotTopMatchTriggers(Analytic):
         n_pos = dset["document.match_score"]
 
         # Extract triggers for only positive matches
-        n_triggers = [y[0] for x, y in zip(n_pos, n_triggers) if sum(x) > 0]
+        n_triggers = [y[0] for x, y, z in zip(n_pos, n_triggers) if sum(x) > 0]
         # Flatten list
         triggers = list(itertools.chain(*n_triggers))
 
