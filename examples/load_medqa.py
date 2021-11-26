@@ -36,6 +36,7 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
+        min_answer_length=config.get("min_answer_length", 3),
         num_proc=2,
     )
     dm = DataModule(builder=builder)
@@ -45,9 +46,6 @@ def run(config: DictConfig) -> None:
 
     # access dataset
     rich.print(dm.dataset)
-
-    # sample a batch
-    _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":
