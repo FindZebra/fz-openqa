@@ -3,23 +3,12 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import numpy as np
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 from omegaconf import DictConfig
 
 from .typing import HfDataset
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
-
-
-def get_column_names(dataset: HfDataset) -> List[str]:
-    if isinstance(dataset, DatasetDict):
-        return list(set.union(*(set(d.column_names) for d in dataset.values())))
-    else:
-        return dataset.column_names
 
 
 def take_subset(dataset: HfDataset, subset_size: List[int]) -> HfDataset:
@@ -123,3 +112,21 @@ def filter_concatenated_questions_by_pos_docs(
     n_negatives = [total - n for n in n_positives]
     n_candidates = [min(npos, max_pos_docs) + nneg for npos, nneg in zip(n_positives, n_negatives)]
     return n_gold_positive > 0 and all(nc >= n_documents for nc in n_candidates)
+
+
+def get_column_names(dataset: HfDataset) -> List[str]:
+    if isinstance(dataset, DatasetDict):
+        names = [c for dset in dataset.values() for c in dset.column_names]
+        return list(set(names))
+    elif isinstance(dataset, Dataset):
+        return dataset.column_names
+    else:
+        raise TypeError(f"Unsupported dataset type: {type(dataset)}")
+
+
+def remove_columns(dataset: HfDataset, columns: Optional[List[str]]) -> HfDataset:
+    if columns is None:
+        return dataset
+    else:
+        cols = [c for c in get_column_names(dataset) if c not in columns]
+        return dataset.remove_columns(cols)

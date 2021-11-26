@@ -1,6 +1,4 @@
 defaults:
   - base
-  - head/cls@head_option
-  - head/cls@head_evidence
-  - head/cls@head_relevance
+  - head: cls
   - override module: reader_multiple_choice

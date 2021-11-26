@@ -202,7 +202,7 @@ class CorpusBuilder(HfDatasetBuilder):
             size=self.passage_length,
             stride=self.passage_stride,
             start_tokens=self.get_prefix_tokens(),
-            end_tokens=[self.tokenizer.sep_token_id],
+            end_tokens=[self.tokenizer.sep_token_id] if self.add_special_tokens else [],
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )

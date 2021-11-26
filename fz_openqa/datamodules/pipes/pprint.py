@@ -21,7 +21,14 @@ class PrintBatch(Pipe):
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
-        pprint_batch(batch, header=self.header)
+        header = self.header
+        if header is None:
+            header = "PrintBatch"
+        if self.id is not None:
+            header = f"{header} (id={self.id})"
+        pprint_batch(batch, header=header)
+        if len(kwargs):
+            rich.print(f"PrintBatch input kwargs = {kwargs}")
         return batch
 
     def _call_egs(self, examples: List[Eg], **kwargs) -> List[Eg]:

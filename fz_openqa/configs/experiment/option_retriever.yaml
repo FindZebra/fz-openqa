@@ -2,13 +2,12 @@
 
 defaults:
   - base
-  - override /model: reader
-
+  - override /model: option_retriever
+  - override /datamodule/builder: concat_openqa
 base:
   seed: null
-  target_metric: validation/reader/Accuracy
+  target_metric: validation/reader/logp
   target_mode: max
-
 
 trainer:
   gpus: 8
@@ -16,15 +15,22 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 100
-
-
+  val_check_interval: 200
+  flush_logs_every_n_steps: 1
 
 datamodule:
+  use_subset: false
   train_batch_size: 8
-  eval_batch_size: 16
-  n_documents: 10
-  max_pos_docs: 1
+  eval_batch_size: 128
+  num_workers: 16
+  builder:
+    batch_size: 20
+  n_documents:
+    train: 12
+    validation: 12
+    test: 12
+  max_pos_docs: 3
+  filter_unmatched: False
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -33,10 +39,8 @@ datamodule:
     - document.row_idx
     - document.match_score
     - document.retrieval_score
-    - answer.input_ids
-    - answer.attention_mask
     - answer.target
 
 logger:
   wandb:
-    group: reader-only # name your experiment here
+    group: option-retriever

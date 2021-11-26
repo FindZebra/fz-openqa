@@ -16,6 +16,7 @@ persistent_workers: False
 
 # global: dataset preprocessing
 add_encoding_tokens: true
+add_special_tokens: true
 use_subset: false
 num_proc: 4
 cache_dir: ${sys.cache_dir}

@@ -68,6 +68,9 @@ def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dic
         u += f"=== {header} ===\n"
         u += get_separator("-") + "\n"
 
+    if len(batch.keys()) == 0:
+        return u + "Batch (Empty)", {}
+
     u += f"Batch (shape={infer_batch_shape(batch)}):\n"
 
     data = []
@@ -77,7 +80,14 @@ def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dic
             shape, leaf_type = infer_shape(batch[k], return_leaf_type=True)
         except Exception as e:
             exceptions[k] = e
-        data += [{"key": k, "shape": str(shape), "leaf_type": str(leaf_type)}]
+        data += [
+            {
+                "key": k,
+                "shape": str(shape),
+                "type": type(batch[k]).__name__,
+                "leaf_type": str(leaf_type),
+            }
+        ]
 
     keys = list(data[0].keys())
     maxs = {k: max([len(d[k]) for d in data]) for k in keys}
@@ -89,20 +99,23 @@ def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dic
     _row_sep = (
         f"{_s}{row_in}{'_' * maxs['key']}"
         f"{_sep}{'_' * maxs['shape']}"
-        f"{_sep}{'_' * maxs['leaf_type']}{row_out}\n"
+        f"{_sep}{'_' * maxs['leaf_type']}"
+        f"{_sep}{'_' * maxs['type']}{row_out}\n"
     )
     u += _row_sep
     u += (
         f"{_s}{'key':{maxs['key']}}"
         f"{_sep}{'shape':{maxs['shape']}}"
-        f"{_sep}{'leaf_type':{maxs['leaf_type']}}\n"
+        f"{_sep}{'leaf_type':{maxs['leaf_type']}}"
+        f"{_sep}{'type':{maxs['type']}}\n"
     )
     u += _row_sep
     for row in data:
         u += (
             f"{_s}{row['key']:{maxs['key']}}"
             f"{_sep}{row['shape']:{maxs['shape']}}"
-            f"{_sep}{row['leaf_type']:{maxs['leaf_type']}}\n"
+            f"{_sep}{row['leaf_type']:{maxs['leaf_type']}}"
+            f"{_sep}{row['type']:{maxs['type']}}\n"
         )
 
     u += _row_sep
