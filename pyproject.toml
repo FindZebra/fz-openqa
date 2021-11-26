@@ -32,6 +32,7 @@ dill = { git = "https://github.com/emfdavid/dill.git" }
 parameterized = "^0.8.1"
 hypothesis = "^6.24.2"
 jsondiff = "^1.3.0"
+plotly = "^5.4.0"
 
 
 [tool.poetry.scripts]

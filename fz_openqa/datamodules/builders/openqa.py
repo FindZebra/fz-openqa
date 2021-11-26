@@ -33,27 +33,11 @@ from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import remove_columns
+from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
 
 logger = logging.getLogger(__name__)
-
-
-class OpenQaDataset(DatasetDict):
-    def __init__(self, *, dataset: DatasetDict, corpus: Dataset, index: Index):
-        super(OpenQaDataset, self).__init__(dataset)
-        self.corpus = corpus
-        self.index = index
-
-    def new(self, *, dataset: DatasetDict) -> "OpenQaDataset":
-        return OpenQaDataset(dataset=dataset, corpus=self.corpus, index=self.index)
-
-    def __repr__(self):
-        u = f"{self.__class__.__name__}:\n"
-        u += f" - dataset={super().__repr__()}\n"
-        u += f" - corpus={self.corpus}\n"
-        u += f" - index={self.index}\n"
-        return u
 
 
 class OpenQaBuilder(DatasetBuilder):
@@ -84,7 +68,7 @@ class OpenQaBuilder(DatasetBuilder):
         output_columns: Optional[List[str]] = None,
         **kwargs,
     ):
-        super(OpenQaBuilder, self).__init__(cache_dir=None)
+        super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
 
         # sub-builders
         self.dataset_builder = dataset_builder
@@ -136,12 +120,27 @@ class OpenQaBuilder(DatasetBuilder):
         args = json.dumps({k: str(v) for k, v in self.to_dict().items()}, indent=2)
         return f"{self.__class__.__name__}({args})"
 
-    def __call__(
-        self, format: Optional[str] = "torch", columns: Optional[str] = None, **kwargs
+    def _call(
+        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
     ) -> OpenQaDataset:
+        """
+        Build the OpenQA dataset using a base `dataset`, which questions are
+        mapped to a `corpus` using the `index`.
 
-        columns = columns or self.output_columns
+        Parameters
+        ----------
+        format
+            The format of the dataset (see `Dataset.set_format`)
+        columns
+            The columns to include in the output dataset.
+        kwargs
+            Additional arguments, unused here.
+        Returns
+        -------
+        OpenQaDataset
+            The `dataset` mapped to the `corpus` using the `index`
 
+        """
         # de-activate formatting for the dataset to avoid messing up
         # with the newly added columns in map_dataset
         dataset = self.dataset_builder(format=None)
