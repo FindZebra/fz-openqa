@@ -1,0 +1,4 @@
+_target_: ???
+
+output_dir: ${getcwd:}/analyses/
+verbose: true
