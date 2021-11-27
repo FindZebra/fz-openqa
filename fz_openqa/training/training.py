@@ -15,11 +15,11 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from rich.progress import track
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import DropKeys
+from fz_openqa.datamodules.pipes import DropKeys, PrintBatch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import torch
-from fz_openqa.datamodules.pipes.nesting import infer_batch_size
+from fz_openqa.datamodules.pipes.nesting import infer_batch_size, Nested
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.pretty import pprint_batch
@@ -56,45 +56,10 @@ def train(config: DictConfig) -> Optional[float]:
 
     # only preprocess the data if there is no trainer
     if config.get("trainer", None) is None:
+        log.info(f"Preprocessing the data <{config.datamodule._target_}>")
         datamodule.prepare_data()
         datamodule.setup()
 
-        corpus_name = str(config.datamodule.builder.corpus_builder._id)
-        cls_name = str(config.datamodule.relevance_classifier._id)
-        trial_path = os.getcwd()
-
-        dataloaders = {
-            "train": datamodule.train_dataloader(),
-            "val": datamodule.val_dataloader(),
-            "test": datamodule.test_dataloader(),
-        }
-
-        drop_fields = DropKeys(
-            keys=[
-                "answer.attention_mask",
-                "answer.input_ids",
-                "document.attention_mask",
-                "document.input_ids",
-                "question.attention_mask",
-                "question.input_ids",
-            ]
-        )
-        update_fields = UpdateKeys(lambda v: isinstance(v, torch.Tensor))
-        pipe = Sequential(drop_fields, update_fields)
-
-        for split, dataloader in dataloaders.items():
-            with open(
-                os.path.join(trial_path, f"{corpus_name}-{cls_name}-{split}.jsonl"), mode="w"
-            ) as fp:
-                for batch in track(
-                    dataloader, description=f"Iterating through the {split} dataset..."
-                ):
-
-                    batch = pipe(batch)
-
-                    for i in range(infer_batch_size(batch)):
-                        row = Pipe.get_eg(batch, idx=i)
-                        fp.write(f"{json.dumps(row)}\n")
         return
 
     # todo
