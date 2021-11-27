@@ -44,4 +44,3 @@ output_columns:
   - document.match_score
   - document.retrieval_score
   - answer.target
-

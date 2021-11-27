@@ -15,11 +15,13 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from rich.progress import track
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import DropKeys, PrintBatch
+from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import torch
-from fz_openqa.datamodules.pipes.nesting import infer_batch_size, Nested
+from fz_openqa.datamodules.pipes.nesting import infer_batch_size
+from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.pretty import pprint_batch

@@ -7,4 +7,3 @@
 - _target_: fz_openqa.datamodules.analytics.PlotScoreDistributions
   output_dir: ${getcwd:}/analyses/
   verbose: true
-
