@@ -63,7 +63,7 @@ def find_one(text: str, queries: Sequence[Any]) -> bool:
     )
 
 
-def find_all(text: str, queries: Sequence[List]) -> List:
+def find_all(text: str, queries: Sequence[List], lower_case_queries: bool = True) -> List:
     """Find all matching queries in the document.
     There are one returned item per match in the document."""
     assert isinstance(text, str), f"The input must be a string. Found {type(text)}"
