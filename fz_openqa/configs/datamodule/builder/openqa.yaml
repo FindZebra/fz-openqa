@@ -10,6 +10,7 @@ n_documents: ${datamodule.n_documents}
 max_pos_docs: ${datamodule.max_pos_docs}
 filter_unmatched: ${datamodule.filter_unmatched}
 output_columns: ${datamodule.output_columns}
+analyses: ${datamodule.analyses}
 
 num_proc: ${datamodule.num_proc}
 batch_size: 100
