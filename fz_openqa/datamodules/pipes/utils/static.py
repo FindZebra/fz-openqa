@@ -787,21 +787,20 @@ STOP_WORDS = [
 
 DISCARD_TUIs = [
     # Concepts & Ideas
-    "T169",
-    "T170",
-    "T080",
-    "T077",
-    "T082",
-    "T185",
-    "T077",
-    "T102",
-    "T078",
-    "T171",
-    "T080",
-    "T081",
-    "T089",
-    "T079"
+    "T169",  # Functional Concept
+    "T170",  # Intellectual Product
+    "T080",  # Qualitative Concept
+    "T077",  # Conceptual Entity
+    "T082",  # Spatial Concept
+    "T185",  # Classification
+    "T077",  # Conceptual Entity
+    "T102",  # Group Attribute
+    "T078",  # Idea or Concept
+    "T171",  # Language
+    "T081",  # Quantitative Concept
+    "T089",  # Regulation or Law
+    "T079",  # Temporal Concept
     # Activities & Behaviors
-    "T052",
-    "T057",
+    "T052",  # Activity
+    "T057",  # Occupational Activity
 ]
