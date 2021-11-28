@@ -3,7 +3,7 @@ defaults:
   - text_formatter: simple
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: exact_match
+  - relevance_classifier: metamap_match
   - analyses: standard
 
 _target_: fz_openqa.datamodules.DataModule
@@ -30,7 +30,7 @@ n_documents:
   validation: 100
   test: 100
 max_pos_docs: 1
-filter_unmatched: true
+filter_unmatched: false
 
 #analyses:
 #  - count_matched_questions
