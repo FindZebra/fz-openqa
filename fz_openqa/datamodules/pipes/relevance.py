@@ -186,7 +186,7 @@ class AliasBasedMatch(RelevanceClassifier):
 
     def __init__(
         self,
-        filter_tui: Optional[bool] = False,
+        filter_tui: Optional[bool] = True,
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         linker_name: str = "umls",
@@ -366,7 +366,9 @@ class AliasBasedMatch(RelevanceClassifier):
 
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
-                if not self.filter_acronyms:
+                if len(alias) <= 3:
+                    pass
+                elif not self.filter_acronyms:
                     yield alias.lower()
                 elif self.detect_acronym(alias):
                     pass
@@ -387,6 +389,7 @@ class MetaMapMatch(AliasBasedMatch):
         # join the aliases
         for pair, answer in zip_longest(pairs, answer_texts):
             answer_cuis = pair.answer.get(f"{self.answer_field}.cui", [])
+            # rich.print(f"[red]{answer_cuis}")
             e_aliases = set()
             if answer_cuis:
                 del answer_cuis[3:]
