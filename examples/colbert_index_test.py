@@ -185,8 +185,9 @@ def run(config: DictConfig) -> None:
     for i, idx in enumerate(doc_indices):
         rich.print(f"[red]Document {idx} with score {scores_flat[i]}:[/red] ")
         rich.print(f"[green]{batch['document.text'][idx]}[/green]")
+        # rich.print(f"[magenta]{batch['document.input_ids'][idx]}[/magenta]")
 
-    retrieved_input_ids = {"input_ids": batch["document.input_ids"][idx] for idx in doc_indices}
+    retrieved_input_ids = [batch["document.input_ids"][idx] for idx in doc_indices]
     rich.print(retrieved_input_ids.size)
     retrieved_att_mask = [batch["document.attention_mask"][idx] for idx in doc_indices]
     retrieved_docs = torch.cat(retrieved_input_ids, retrieved_att_mask)
