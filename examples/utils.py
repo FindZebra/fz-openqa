@@ -68,7 +68,7 @@ class ZeroShot(pl.LightningModule):
                 if self.head == "flat":
                     vec = h[:, 0, :]
                 elif self.head == "contextual":
-                    vec = h
+                    vec = h / h.norm(dim=2, keepdim=True)
                 else:
                     raise NotImplementedError
 

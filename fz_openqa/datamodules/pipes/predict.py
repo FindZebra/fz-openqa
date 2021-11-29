@@ -1,6 +1,7 @@
 import functools
 import logging
 import os.path
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -13,6 +14,7 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -33,12 +35,22 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import cast_values_to_numpy
+from fz_openqa.utils.functional import cast_values_to_torch
 from fz_openqa.utils.functional import is_index_contiguous
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 CACHE_FILE = Union[Path, str]
+
+
+class OutputFormat(Enum):
+    """
+    Enum for the output format of the predictions.
+    """
+
+    NUMPY = "numpy"
+    TORCH = "torch"
 
 
 class AddRowIdx(TorchDataset):
@@ -150,7 +162,12 @@ class Predict(Pipe):
 
     @torch.no_grad()
     def _call_batch(
-        self, batch: Batch, idx: List[int] = None, split: Optional[Split] = None, **kwargs
+        self,
+        batch: Batch,
+        idx: List[int] = None,
+        split: Optional[Split] = None,
+        format: OutputFormat = OutputFormat.NUMPY,
+        **kwargs,
     ) -> Batch:
         """
         Call the model on the batch or read the cached predictions.
@@ -163,6 +180,8 @@ class Predict(Pipe):
             The indices of the examples to process.
         split
             The split to process (Optional)
+        format
+            The format to return the predictions in.
         kwargs
             Additional keyword arguments passed to the model when not using the cache.
         Returns
@@ -179,17 +198,17 @@ class Predict(Pipe):
             )
             use_cache = False
         if use_cache:
-            return self._process_batch_with_cache(batch, idx=idx, split=split)
+            return self._process_batch_with_cache(batch, idx=idx, split=split, format=format)
         else:
             if self.requires_cache:
                 raise ValueError(
                     "This pipe explicitly requires calling "
                     "`pipe.cache()` before subsequent uses."
                 )
-            return self._process_batch_without_cache(batch, **kwargs)
+            return self._process_batch_without_cache(batch, format=format, **kwargs)
 
     def _process_batch_with_cache(
-        self, _: Optional[Batch], idx: List[int], split: Optional[Split]
+        self, _: Optional[Batch], idx: List[int], split: Optional[Split], format: OutputFormat
     ) -> Batch:
         """Process a batch using the cache file"""
         table = self.read_table(split)
@@ -200,16 +219,30 @@ class Predict(Pipe):
 
         else:
             rows = table.take(idx)
-        return cast_values_to_numpy(rows.to_pydict())
 
-    def _process_batch_without_cache(self, batch: Batch, **kwargs) -> Batch:
+        if format == OutputFormat.NUMPY:
+            return cast_values_to_numpy(rows.to_pydict())
+        elif format == OutputFormat.TORCH:
+            return cast_values_to_torch(rows.to_pydict())
+        else:
+            raise ValueError(f"Unknown format: {format}")
+
+    def _process_batch_without_cache(
+        self, batch: Batch, format: OutputFormat = OutputFormat.NUMPY, **kwargs
+    ) -> Batch:
         """Process the batch using the model and without the cache"""
         if isinstance(self.model, nn.Module):
             device = next(iter(self.model.parameters())).device
             batch = move_data_to_device(batch, device)
         # process with the model (Dense or Sparse)
         output = self.model(batch, **kwargs)
-        return cast_values_to_numpy(output)
+
+        if format == OutputFormat.NUMPY:
+            return cast_values_to_numpy(output)
+        elif format == OutputFormat.TORCH:
+            return cast_values_to_torch(output)
+        else:
+            raise ValueError(f"Unknown format: {format}")
 
     @functools.singledispatchmethod
     @torch.no_grad()

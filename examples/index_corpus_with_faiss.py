@@ -81,7 +81,7 @@ def run(config: DictConfig) -> None:
     zero_shot = config.get("zero_shot", True)
     if zero_shot:
         bert_id = config.get("bert", "google/bert_uncased_L-2_H-128_A-2")
-        model = ZeroShot(bert_id=bert_id)
+        model = ZeroShot(bert_id=bert_id, head="contextual")
         tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -140,7 +140,7 @@ def run(config: DictConfig) -> None:
     rich.print(index.ntotal)
 
     # setup search pipe (query the indexes from the corpus)
-    search = SearchCorpus(index, k=3)
+    search = SearchCorpus(index, k=5)
     # setup the fetch pipe (fetch all the other fields from the corpus)
     fetcher = FetchNestedDocuments(corpus_dataset=corpus_builder(), collate_pipe=collate_fn)
     query = collate_fn([corpus[i] for i in range(3)])
@@ -165,7 +165,9 @@ def run(config: DictConfig) -> None:
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
     # alternatively, you can iterate you can search for a whole dataloader:
-    outputs = index.search(corpus, k=3, collate_fn=collate_fn)
+    exit()
+    # todo: for V. fix that
+    outputs = index.search(corpus, k=3, collate_fn=collate_fn, trainer=trainer)
     for search_results in outputs:
         pprint_batch(vars(search_results), "search whole dataset - results")
         break
