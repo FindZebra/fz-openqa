@@ -27,6 +27,7 @@ from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.inference.checkpoint import CheckpointLoader
+from fz_openqa.modeling.similarities.max_sim import MaxSim
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
 
@@ -109,6 +110,7 @@ def run(config: DictConfig) -> None:
         n_samples = min(n_samples, len(corpus))
         corpus = corpus.select(range(n_samples))
     batch = corpus[:]
+    rich.print(type(batch["document.input_ids"]))
     rich.print(batch["document.row_idx"][5], batch["document.text"][5])
 
     # load the bert model model
@@ -182,10 +184,25 @@ def run(config: DictConfig) -> None:
     rich.print(doc_indices, scores_flat)
     for i, idx in enumerate(doc_indices):
         rich.print(f"[red]Document {idx} with score {scores_flat[i]}:[/red] ")
-        rich.print(f"[green]{corpus['document.text'][idx]}[/green]")
+        rich.print(f"[green]{batch['document.text'][idx]}[/green]")
+
+    retrieved_input_ids = {"input_ids": batch["document.input_ids"][idx] for idx in doc_indices}
+    rich.print(retrieved_input_ids.size)
+    retrieved_att_mask = [batch["document.attention_mask"][idx] for idx in doc_indices]
+    retrieved_docs = torch.cat(retrieved_input_ids, retrieved_att_mask)
+
+    rich.print(f"shape: {retrieved_docs.shape}, type: {type(retrieved_docs)}")
 
     # todo: extract document_representations for retrieved documents
+    retrieved_doc_reps = model(retrieved_input_ids, retrieved_att_mask).last_hidden_state
 
+    # convert to contiguous numpy array
+    retrieved_doc_reps = retrieved_doc_reps[:, 1:-1, :]
+    retrieved_doc_reps = retrieved_doc_reps.numpy()
+    retrieved_doc_reps = np.ascontiguousarray(retrieved_doc_reps)
+    retrieved_doc_reps = retrieved_doc_reps.reshape(-1, 128)
+
+    rich.print(f"Document representations: {retrieved_doc_reps.shape}")
     # apply MaxSim to filter related documents further
     # max_sim(similarity_metric="l2", query=xq, document=document_representations)
 
