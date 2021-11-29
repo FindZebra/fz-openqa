@@ -81,6 +81,7 @@ def run(config):
         n_documents=10,
         max_pos_docs=1,
         filter_unmatched=config.get("filter_unmatched", False),
+        select_mode=config.get("select_mode", "sample"),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 10),
         analyses=[

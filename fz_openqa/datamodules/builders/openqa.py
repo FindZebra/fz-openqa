@@ -69,7 +69,7 @@ class OpenQaBuilder(DatasetBuilder):
         n_documents: Optional[Union[int, Dict]] = None,
         max_pos_docs: Optional[int] = None,
         filter_unmatched: bool = True,
-        select_mode: str = "all",
+        select_mode: str = "first",
         num_proc: int = 2,
         batch_size: int = 100,
         output_columns: Optional[List[str]] = None,

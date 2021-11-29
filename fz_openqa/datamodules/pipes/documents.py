@@ -7,10 +7,15 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import rich
+import torch
 from datasets import Split
 from omegaconf import DictConfig
+from scipy.special import softmax
+from torch import Tensor
 
 from ...utils.pretty import pprint_batch
+from ...utils.shape import infer_shape
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
@@ -57,11 +62,13 @@ class SelectDocsOneEg(Pipe):
         strict: bool = True,
         shuffle: bool = False,
         score_key: str = "document.match_score",
+        retrieval_score_key: str = "document.retrieval_score",
         **kwargs,
     ):
         super(SelectDocsOneEg, self).__init__(**kwargs)
         self.total = total
         self.score_key = score_key
+        self.retrieval_score_key = retrieval_score_key
         self.max_pos_docs = max_pos_docs
         self.pos_select_mode = pos_select_mode
         self.neg_select_mode = neg_select_mode
@@ -90,19 +97,24 @@ class SelectDocsOneEg(Pipe):
         assert len(is_positive) >= total
 
         # get the positive indexes
+        # todo: check if prob select works as expected
         positive_idx = [i for i, x in enumerate(is_positive) if x]
+        pos_probs = self.get_probs(batch, positive_idx)
         selected_positive_idx = select_values(
             positive_idx,
             k=min(self.max_pos_docs, len(positive_idx)),
             mode=self.pos_select_mode,
+            probs=pos_probs,
         )
 
         # get the negative indexes
         negative_idx = [i for i, x in enumerate(is_positive) if not x]
+        neg_probs = self.get_probs(batch, negative_idx)
         selected_negative_idx = select_values(
             negative_idx,
             k=total - len(selected_positive_idx),
             mode=self.neg_select_mode,
+            probs=neg_probs,
         )
 
         # final index
@@ -123,8 +135,26 @@ class SelectDocsOneEg(Pipe):
         # re-index and return
         return {k: reindex(v, index) for k, v in batch.items()}
 
+    def get_probs(self, batch, idx):
+        scores = batch[self.retrieval_score_key][idx]
+        if len(scores):
+            if isinstance(scores, Tensor):
+                probs = torch.softmax(scores.to(torch.float64), dim=-1)
+            else:
+                probs = softmax(scores)
+
+            return probs
+        else:
+            return None
+
     def check_index_consistency(
-        self, index, *, negative_idx, positive_idx, selected_negative_idx, total
+        self,
+        index,
+        *,
+        negative_idx,
+        positive_idx,
+        selected_negative_idx,
+        total,
     ):
         if self.strict:
             # check output
@@ -152,6 +182,7 @@ class SelectDocsOneEg(Pipe):
                     "k": total - len(negative_idx),
                     "mode": self.pos_select_mode,
                 }
+                # todo: select with probs
                 selected_positive_idx = select_values(positive_idx, **args)
                 index = selected_positive_idx + selected_negative_idx
             else:
@@ -159,11 +190,13 @@ class SelectDocsOneEg(Pipe):
         return index
 
 
-def select_values(values: List[int], *, k: int, mode: str = "first") -> List[int]:
+def select_values(
+    values: List[int], *, k: int, mode: str = "first", probs: Optional[np.ndarray] = None
+) -> List[int]:
     if mode == "first":
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return [x for x in np.random.choice(copy(values), size=k, replace=False)]
+        return [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
     else:
         raise ValueError(f"Unknown mode {mode}")

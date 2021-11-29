@@ -29,7 +29,7 @@ datamodule:
     train: 12
     validation: 12
     test: 12
-  max_pos_docs: 3
+  max_pos_docs: 1
   filter_unmatched: False
   select_mode: sample
   output_columns:
