@@ -2,33 +2,49 @@ import logging
 from functools import partial
 from typing import Any
 from typing import Dict
+from typing import Optional
 
 import dill  # type: ignore
 from datasets import DatasetDict
 from datasets import load_dataset
 
+from ...utils.datastruct import Eg
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
 from ..pipes.control.condition import In
 from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
+from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Lambda
+from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
+
+
+class MinLength:
+    def __init__(self, key: str, min_length: int):
+        self.key = key
+        self.min_length = min_length
+
+    def __call__(self, row: Eg, **kwargs) -> bool:
+        x = row[self.key]
+        if isinstance(x, str):
+            return len(x) >= self.min_length
+        elif isinstance(x, list):
+            return all(len(y) >= self.min_length for y in x)
+        else:
+            raise TypeError(f"{self.key} is not a string or list")
 
 
 class MedQaBuilder(HfDatasetBuilder):
@@ -44,6 +60,7 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.input_ids",
         "question.attention_mask",
         "question.idx",
+        "question.row_idx",
         "answer.input_ids",
         "answer.attention_mask",
         "answer.target",
@@ -68,6 +85,10 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.attention_mask",
     ]
 
+    def __init__(self, *args, min_answer_length: Optional[int] = 3, **kwargs):
+        super(MedQaBuilder, self).__init__(*args, **kwargs)
+        self.min_answer_length = min_answer_length
+
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
         return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
@@ -80,16 +101,24 @@ class MedQaBuilder(HfDatasetBuilder):
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
+        # filter out answers that are too short
+        if self.min_answer_length is not None:
+            logger.info(f"Filtering out answers shorter than {self.min_answer_length} characters")
+            lengths = {k: len(d) for k, d in dataset.items()}
+            dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
+            logger.info(format_size_difference(lengths, dataset))
+
         # Tokenize the text fields (question and answers)
-        dataset = dataset.map(
-            Parallel(
-                self.get_question_tokenizer_pipe(),
-                self.get_answer_tokenizer_pipe(),
-            ),
-            batched=True,
-            num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
-        )
+        if self.tokenizer:
+            dataset = dataset.map(
+                Parallel(
+                    self.get_question_tokenizer_pipe(),
+                    self.get_answer_tokenizer_pipe(),
+                ),
+                batched=True,
+                num_proc=self.num_proc,
+                desc="Tokenizing questions and answers",
+            )
 
         # add an index column
         dataset = dataset.map(
@@ -109,7 +138,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -121,20 +150,28 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            add_special_tokens=self.add_special_tokens,
+            spec_token=QUERY_TOKEN,
             shape=None,
         )
 
     def get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
-            CollateField("question", tokenizer=self.tokenizer, level=0),
-            CollateField("answer", level=0, exclude=["input_ids", "attention_mask"]),
+            CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
+            ),
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
                 level=1,
-                exclude=["synonyms", "target", "cui", "synonyms", "text"],
+                include_only=["input_ids", "attention_mask"],
+                id="pad-answer-tokens",
             ),
         )
 
@@ -224,6 +261,27 @@ class ConcatMedQaBuilder(MedQaBuilder):
 
         return dataset
 
+    def get_concat_qa_pipe(self):
+        q_start_tokens = []
+        if self.add_special_tokens:
+            q_start_tokens.append(self.tokenizer.sep_token)
+        if self.add_encoding_tokens:
+            q_start_tokens.append(QUERY_TOKEN)
+
+        add_spec_tokens_pipe = Apply(
+            {"question.text": partial(add_spec_token, q_start_tokens)}, element_wise=True
+        )
+
+        return Sequential(
+            add_spec_tokens_pipe,
+            Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
+            ApplyAsFlatten(
+                ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
+                level=1,
+            ),
+            input_filter=In(["question.text", "answer.text"]),
+        )
+
     def get_qa_tokenizer_pipe(self):
         return FormatAndTokenize(
             prefix="question.",
@@ -231,7 +289,8 @@ class ConcatMedQaBuilder(MedQaBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=QUERY_TOKEN,
+            add_special_tokens=self.add_special_tokens,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -239,12 +298,21 @@ class ConcatMedQaBuilder(MedQaBuilder):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
-                "answer", level=0, exclude=["input_ids", "attention_mask", "cui", "synonyms"]
+                "question", exclude=["input_ids", "attention_mask"], level=0, id="collate-questions"
+            ),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
             ),
             CollateField(
                 "question",
                 tokenizer=self.tokenizer,
                 level=1,
+                include_only=["input_ids", "attention_mask"],
+                id="pad-nested-question-tokens",
             ),
         )
 
@@ -268,13 +336,3 @@ class ConcatMedQaBuilder(MedQaBuilder):
             repr += line
 
         return repr
-
-    def get_concat_qa_pipe(self):
-        return Sequential(
-            Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
-            ApplyAsFlatten(
-                ConcatTextFields(keys=["question.text", "answer.text"], new_key="question.text"),
-                level=1,
-            ),
-            input_filter=In(["question.text", "answer.text"]),
-        )

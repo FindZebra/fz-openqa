@@ -1,6 +1,6 @@
 defaults:
   - medqa@dataset_builder
-  - medqa_corpus@corpus_builder
+  - wikipedia_corpus@corpus_builder
 
 _target_: fz_openqa.datamodules.builders.OpenQaBuilder
 index_builder: ${datamodule.index_builder}
@@ -9,6 +9,7 @@ n_retrieved_documents: ${datamodule.n_retrieved_documents}
 n_documents: ${datamodule.n_documents}
 max_pos_docs: ${datamodule.max_pos_docs}
 filter_unmatched: ${datamodule.filter_unmatched}
+output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}
 batch_size: 100

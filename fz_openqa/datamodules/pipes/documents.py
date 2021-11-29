@@ -1,15 +1,16 @@
 import warnings
 from copy import copy
+from random import shuffle
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
 import numpy as np
-import rich
 from datasets import Split
 from omegaconf import DictConfig
 
+from ...utils.pretty import pprint_batch
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
@@ -28,6 +29,7 @@ class SelectDocs(Nested):
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = False,
+        shuffle: bool = False,
         prefix="document.",
         id="select-docs",
         **kwargs,
@@ -38,6 +40,7 @@ class SelectDocs(Nested):
             pos_select_mode=pos_select_mode,
             neg_select_mode=neg_select_mode,
             strict=strict,
+            shuffle=shuffle,
         )
 
         super(SelectDocs, self).__init__(pipe=pipe, input_filter=HasPrefix(prefix), id=id, **kwargs)
@@ -52,6 +55,7 @@ class SelectDocsOneEg(Pipe):
         pos_select_mode: str = "first",
         neg_select_mode: str = "first",
         strict: bool = True,
+        shuffle: bool = False,
         score_key: str = "document.match_score",
         **kwargs,
     ):
@@ -62,6 +66,7 @@ class SelectDocsOneEg(Pipe):
         self.pos_select_mode = pos_select_mode
         self.neg_select_mode = neg_select_mode
         self.strict = strict
+        self.shuffle = shuffle
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return input_keys
@@ -103,6 +108,24 @@ class SelectDocsOneEg(Pipe):
         # final index
         index = selected_positive_idx + selected_negative_idx
 
+        index = self.check_index_consistency(
+            index,
+            negative_idx=negative_idx,
+            positive_idx=positive_idx,
+            selected_negative_idx=selected_negative_idx,
+            total=total,
+        )
+
+        # shuffle
+        if self.shuffle:
+            shuffle(index)
+
+        # re-index and return
+        return {k: reindex(v, index) for k, v in batch.items()}
+
+    def check_index_consistency(
+        self, index, *, negative_idx, positive_idx, selected_negative_idx, total
+    ):
         if self.strict:
             # check output
             debug_str = (
@@ -132,18 +155,8 @@ class SelectDocsOneEg(Pipe):
                 selected_positive_idx = select_values(positive_idx, **args)
                 index = selected_positive_idx + selected_negative_idx
             else:
-                rich.print(
-                    f"=== SelectDocs: debugging ===\n"
-                    f"len(index)({len(index)})<total({total}). \n"
-                    f"n_selected_positive={len(selected_positive_idx)}, \n"
-                    f"n_selected_negative={len(selected_negative_idx)}, \n"
-                    f"n_positive={len(positive_idx)}, \n"
-                    f"n_negative={len(negative_idx)}"
-                )
                 raise NotImplementedError
-
-                # re-index and return
-        return {k: reindex(v, index) for k, v in batch.items()}
+        return index
 
 
 def select_values(values: List[int], *, k: int, mode: str = "first") -> List[int]:

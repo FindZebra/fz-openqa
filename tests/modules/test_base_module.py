@@ -3,7 +3,7 @@ from unittest import TestCase
 from fz_openqa.modeling.modules.base import Module
 
 
-class TestEvaluator(TestCase):
+class TestModule(TestCase):
     def test__filter_features_from_output(self):
         """test that only the key _feature_ is filtered out."""
         data = {'loss': None,

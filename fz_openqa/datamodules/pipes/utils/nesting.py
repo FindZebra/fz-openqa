@@ -28,9 +28,9 @@ def flatten_nested_(values: List[List], level=1, current_level=0) -> Iterable[An
             yield x
 
 
-def flatten_nested(values: List[List], level=1) -> List[Any]:
+def flatten_nested(values: Union[np.ndarray, Tensor, List[List]], level=1) -> List[Any]:
     """
-    Flatten a nested list of lists.
+    Flatten a nested array or list of lists.
 
     Parameters
     ----------
@@ -47,7 +47,14 @@ def flatten_nested(values: List[List], level=1) -> List[Any]:
         flatten list of values.
 
     """
-    return list(flatten_nested_(values, level=level))
+    if isinstance(values, Tensor):
+        return values.view(-1, *values.shape[level + 1 :])
+    elif isinstance(values, np.ndarray):
+        return values.reshape(-1, *values.shape[level + 1 :])
+    elif isinstance(values, list):
+        return list(flatten_nested_(values, level=level))
+    else:
+        raise TypeError(f"Unsupported type: {type(values)}")
 
 
 def nested_list(values: List[Any], *, shape: Union[Tuple[int], List[int]], level=0) -> List[Any]:
