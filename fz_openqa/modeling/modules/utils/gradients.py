@@ -7,6 +7,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from .utils import batch_cartesian_product
+from .utils import check_only_first_doc_positive
 
 
 class GradExpression(Enum):
@@ -71,11 +72,27 @@ def in_batch_grads(
     loss = -1 * (loss_reader + loss_retriever).mean(-1)
     return {
         "loss": loss,
-        "logp": q.logp_a_star.detach(),
-        "_logits_": q.logp_a.detach(),
-        "_targets_": targets.detach(),
+        "reader/logp": q.logp_a_star.detach(),
+        "_reader_logits_": q.logp_a.detach(),
+        "_reader_targets_": targets.detach(),
         "_doc_logits_": q.log_p_d__a_no_perm.detach(),
     }
+
+
+def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
+    """Compute the supervised retrieval loss"""
+    if not torch.all(match_score[..., 1:] == 0):
+        raise ValueError("Not all documents with index >0 are negative.")
+
+    loss_mask = match_score[:, :, 0] > 0
+    logits = partial_score[loss_mask]
+    targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
+    if logits.numel() > 0:
+        loss = F.cross_entropy(logits, targets)
+    else:
+        loss = 0.0
+
+    return {"retriever_loss": loss, "_retriever_logits_": logits, "_retriever_targets_": targets}
 
 
 def variational_grads(partial_score: Tensor, targets: Tensor, **kwargs):
@@ -91,8 +108,8 @@ def variational_grads(partial_score: Tensor, targets: Tensor, **kwargs):
 
     return {
         "loss": loss,
-        "logp": q.logp_a_star.detach(),
-        "_logits_": q.logp_a.detach(),
-        "_targets_": targets.detach(),
+        "reader/logp": q.logp_a_star.detach(),
+        "_reader_logits_": q.logp_a.detach(),
+        "_reader_targets_": targets.detach(),
         "_doc_logits_": q.log_p_d__a_no_perm.detach(),
     }

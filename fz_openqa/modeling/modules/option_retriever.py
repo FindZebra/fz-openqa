@@ -3,11 +3,14 @@ from typing import Any
 from typing import Optional
 
 import torch
+from datasets import Split
 from torch import Tensor
 
 from .utils.gradients import GradExpression
 from .utils.gradients import in_batch_grads
+from .utils.gradients import supervised_loss
 from .utils.gradients import variational_grads
+from .utils.utils import check_only_first_doc_positive
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
@@ -36,7 +39,7 @@ class OptionRetriever(Module):
     ]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "reader"
+    task_id: Optional[str] = None
 
     # metrics to display in the progress bar
     pbar_metrics = [
@@ -49,15 +52,26 @@ class OptionRetriever(Module):
     # require heads
     _required_heads = ["question", "document"]
 
-    def __init__(self, *args, grad_expr: GradExpression = GradExpression.VARIATIONAL, **kwargs):
+    def __init__(
+        self,
+        *args,
+        alpha: float = 0.01,
+        grad_expr: GradExpression = GradExpression.VARIATIONAL,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
+        self.alpha = alpha
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-        self.metrics = self._get_base_metrics(prefix=f"{prefix}")
+        self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
+
+        self.retriever_metrics = self._get_base_metrics(
+            prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
+        )
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
 
@@ -107,11 +121,20 @@ class OptionRetriever(Module):
         partial_score = self._compute_score(hd=hd, hq=hq)
 
         if self.grad_expr in [GradExpression.BATCH_GATHER, GradExpression.BATCH_SUM]:
-            return in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
+            step_output = in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
         elif self.grad_expr == GradExpression.VARIATIONAL:
-            return variational_grads(partial_score, targets, grad_expr=self.grad_expr)
+            step_output = variational_grads(partial_score, targets, grad_expr=self.grad_expr)
         else:
             raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
+
+        # auxiliary loss
+        supervised_loss_out = supervised_loss(partial_score, batch["document.match_score"])
+        supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
+        if self.alpha > 0:
+            step_output["loss"] += self.alpha * supervised_loss_
+        step_output.update(supervised_loss_out)
+
+        return step_output
 
     def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
@@ -130,9 +153,38 @@ class OptionRetriever(Module):
         """
 
         # average losses
-        for k in ["loss", "logp"]:
+        for k in ["loss", "reader/logp"]:
             y = output.get(k, None)
             if y is not None:
                 output[k] = y.mean()
 
         return output
+
+    def update_metrics(self, output: Batch, split: Split) -> None:
+        """update the metrics of the given split."""
+        logits, targets = (output.get(k, None) for k in ("_reader_logits_", "_reader_targets_"))
+        self.metrics.update(split, logits, targets)
+
+        retrieval_logits, retrieval_targets = (
+            output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
+        )
+        if retrieval_logits is not None:
+            self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
+
+    def reset_metrics(self, split: Optional[Split] = None) -> None:
+        """
+        Reset the metrics corresponding to `split` if provided, else
+        reset all the metrics.
+        """
+        self.metrics.reset(split)
+        self.retriever_metrics.reset(split)
+
+    def compute_metrics(self, split: Optional[Split] = None) -> Batch:
+        """
+        Compute the metrics for the given `split` else compute the metrics for all splits.
+        The metrics are return after computation.
+        """
+        return {
+            **self.metrics.compute(split),
+            **self.retriever_metrics.compute(split),
+        }
