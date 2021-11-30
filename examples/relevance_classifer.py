@@ -111,9 +111,8 @@ b4 = {
         gram per deciliter of alteration of serum albumin above or below 4.0 mg/dl, there is a 0.8 mg/dl increaseor
         decrease in protein-bound calcium and, thus, in total serum calcium levels. total and, particularly,
         ionized calcium levels are influenced by various hormone systems.parathyroid hormone.\xe2\x80\x82the
-        parathyroid cells rely on a h-protein\xe2\x80\x93coupled membrane receptor, designated the calcium-sensing
-        receptor (casr), to regulate pth secretion by sensing extracellular calciumlevels69 (fig. 38-28). pth
-        secretion also is stimulatedby low levels of 1,25-dihydroxy vit""",  # noqa: E501
+        parathyroid cells rely on a h-protein\xe2\x80\x93coupled membrane receptor, designated the calcium-sensing receptor (casr), to regulate pth secretion by sensing extracellular calciumlevels69 (fig. 38-28). pth secretion also is
+        stimulatedby low levels of 1,25-dihydroxy vit""",  # noqa: E501
 }
 
 b5 = {
@@ -318,7 +317,6 @@ b14 = {
          of a causeof syncope in approximately 50% of patients and also allows stratification of pati""",  # noqa: E501
 }
 
-
 exs = [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14]
 
 batch = Collate()(exs)
@@ -327,8 +325,7 @@ pprint_batch(batch, header="Input batch")
 with Status("Loading classifiers.."):
     classifiers = [
         ExactMatch(interpretable=True),
-        MetaMapMatch(interpretable=True, filter_tui=False, lazy_setup=False),
-        ScispaCyMatch(interpretable=True, filter_tui=False, lazy_setup=False),
+        ScispaCyMatch(interpretable=True, filter_tui=True, lazy_setup=False),
     ]
 
 with Status("Processing examples.."):
