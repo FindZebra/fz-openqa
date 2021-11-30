@@ -9,6 +9,8 @@ from fz_openqa.modeling.heads.base import Head
 
 
 class ClsHead(Head):
+    id: str = "cls"
+
     def __init__(
         self, *, bert: BertPreTrainedModel, output_size: Optional[int], normalize: bool = False
     ):

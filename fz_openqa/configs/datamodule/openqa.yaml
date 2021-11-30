@@ -30,3 +30,4 @@ n_documents:
   test: 100
 max_pos_docs: 1
 filter_unmatched: true
+select_mode: first
