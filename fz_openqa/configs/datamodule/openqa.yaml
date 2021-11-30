@@ -3,7 +3,7 @@ defaults:
   - text_formatter: simple
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: metamap_match
+  - relevance_classifier: exact_match
   - analyses: standard
 
 _target_: fz_openqa.datamodules.DataModule
