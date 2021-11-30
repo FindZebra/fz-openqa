@@ -82,6 +82,7 @@ class CustomMedQaGenerator(datasets.GeneratorBasedBuilder):
                 question = d["question"]
                 answer = d["answer"]
                 options = list(d["options"].values())
+                assert answer == d["options"][d["answer_idx"]]
 
                 # extract 4 options
                 assert len(options) == 5
@@ -89,6 +90,7 @@ class CustomMedQaGenerator(datasets.GeneratorBasedBuilder):
                 assert len(options) == 4
                 Random(i).shuffle(options)
                 options = [answer] + options[:3]
+                Random(i).shuffle(options)
                 assert len(options) == 4
                 target = options.index(answer)
                 yield i, {
