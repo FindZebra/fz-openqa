@@ -34,7 +34,7 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
                 {
                     "idx": datasets.Value("int32"),
                     "text": datasets.Value("string"),
-                    "title": datasets.Value("string")
+                    "title": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -65,7 +65,7 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
             data = json.load(f)
             for idx, article in enumerate(data):
                 yield idx, {
-                    "text": article['text'],
+                    "text": article["text"],
                     "title": article["title"],
                     "idx": idx,
                 }

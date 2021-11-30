@@ -16,7 +16,7 @@ from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import medqa
+from fz_openqa.datamodules.generators import medqa_us_custom
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
@@ -49,7 +49,7 @@ class MinLength:
 
 class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = medqa.__file__
+    dset_script_path_or_id = medqa_us_custom.__file__
 
     # nesting level of the question field
     nesting_level = 0
@@ -85,7 +85,7 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.attention_mask",
     ]
 
-    def __init__(self, *args, min_answer_length: Optional[int] = 3, **kwargs):
+    def __init__(self, *args, min_answer_length: Optional[int] = None, **kwargs):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
 
