@@ -211,7 +211,7 @@ class TestOptionRetriever(TestModel):
                 probs = output['_logits_'].detach().exp().numpy()
                 rich.print(f"{i} - loss={loss:.3f}, probs[0]={probs[0]}, probs[1]={probs[1]}")
                 doc_probs = output['_doc_logits_'].detach().exp()
-                doc_dist = (doc_probs - doc_targets).pow(2)
+                # doc_dist = (doc_probs - doc_targets).pow(2)
                 # rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
