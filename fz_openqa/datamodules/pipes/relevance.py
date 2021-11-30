@@ -263,47 +263,7 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _group_entities(doc: Doc) -> List[Span]:
-        """Splits doc text into grouped entities based on non-entity words.
-
-        Parameters
-        ----------
-        doc
-            (spacy.tokens.Doc): Doc object.
-
-        Returns
-        -------
-        List[Span]
-            spans of grouped entities
-        """
-        spans = []
-        # tokenize entities based on white space
-        entities = list(itertools.chain(*[ent.text.split() for ent in doc.ents]))
-        i = 0
-        # read through doc text
-        while i < doc.__len__():
-            if doc[i].text in entities:
-                j = i + 1
-                search = True
-                # read rest of doc text from found entity
-                while search and j < doc.__len__():
-                    if doc[j].text not in entities:
-                        # if word is not an entity append span of found entity to next found entity
-                        spans.append(Span(doc, doc[i].i, doc[j].i, label="Entity"))
-                        i = j
-                        search = False
-                    j += 1
-                # if last word in doc text is an entity
-                if search:
-                    spans.append(Span(doc, doc[i].i, doc.ents[-1].end, label="Entity"))
-            i += 1
-        # if all words in doc text is an entity
-        if entities and len(spans) < 1:
-            spans.append(Span(doc, doc.ents[0].start, doc.ents[-1].end, label="Entity"))
-        # filter a sequence of spans and remove duplicates or overlaps.
-        return filter_spans(spans)
-
-    def _load_spacy_model(self, model_name: str, linker_name: str = "umls", threshold: float = 0.5):
+    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.5):
         """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
         Doc is then processed in several different steps – the processing pipeline."""
 
@@ -326,8 +286,49 @@ class AliasBasedMatch(RelevanceClassifier):
             doc
                 (spacy.tokens.Doc): Doc object with processed entities.
             """
+
+            def _group_entities(doc: Doc) -> List[Span]:
+                """Splits doc text into grouped entities based on non-entity words.
+
+                Parameters
+                ----------
+                doc
+                    (spacy.tokens.Doc): Doc object.
+
+                Returns
+                -------
+                List[Span]
+                    spans of grouped entities
+                """
+                spans = []
+                # tokenize entities based on white space
+                entities = list(itertools.chain(*[ent.text.split() for ent in doc.ents]))
+                i = 0
+                # read through doc text
+                while i < doc.__len__():
+                    if doc[i].text in entities:
+                        j = i + 1
+                        search = True
+                        # read rest of doc text from found entity
+                        while search and j < doc.__len__():
+                            # if word is not an entity append span of found entity to next entity
+                            if doc[j].text not in entities:
+                                spans.append(Span(doc, doc[i].i, doc[j].i, label="Entity"))
+                                i = j
+                                search = False
+                            j += 1
+                        # if last word in doc text is an entity
+                        if search:
+                            spans.append(Span(doc, doc[i].i, doc.ents[-1].end, label="Entity"))
+                    i += 1
+                # if all words in doc text is an entity
+                if entities and len(spans) < 1:
+                    spans.append(Span(doc, doc.ents[0].start, doc.ents[-1].end, label="Entity"))
+                # filter a sequence of spans and remove duplicates or overlaps.
+                return filter_spans(spans)
+
             if doc.__len__() > 3:
-                doc.ents = self._group_entities(doc=doc)
+                doc.ents = _group_entities(doc=doc)
             else:
                 doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
             return doc
@@ -355,18 +356,33 @@ class AliasBasedMatch(RelevanceClassifier):
         )
         return model
 
-    def get_linked_entities(self, entity: [List, Entity]) -> Iterable[LinkedEntity]:
+    def _filter_entities(self, entity: Tuple, name: str) -> Entity:
+        _, score = entity  # ent: (str, score)
+        if name.count(" ") > 1:
+            return True
+        elif score == 1.0:
+            return True
+        else:
+            False
+
+    def _filter_aliases(self, entity_cui: str, entity_name: str) -> List[str]:
+        return [entity_name] + [
+            alias
+            for alias in self.linker.kb.cui_to_entity[entity_cui].aliases
+            if not re.search(alias, entity_name, re.IGNORECASE)
+        ]
+
+    def get_linked_entities(self, entity: Span) -> Iterable[LinkedEntity]:
         """ Extracts the linked entities by querying the Doc entity against the knowledge base"""
-        if not isinstance(entity, List):
-            entity = [cui_str for (cui_str, _) in entity._.kb_ents]
-        for cui_str in entity:
-            # cui_str, _ = cui  # ent: (str, score)
-            try:
-                tuis = self.linker.kb.cui_to_entity[cui_str].types
-                aliases = self.linker.kb.cui_to_entity[cui_str].aliases
-                yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
-            except KeyError:
-                pass
+        entities = filter(
+            lambda ent: self._filter_entities(entity=ent, name=entity.text), entity._.kb_ents
+        )
+        for cui in entities:
+            cui_str, _ = cui  # ent: (str, score)
+            tuis = self.linker.kb.cui_to_entity[cui_str].types
+            name = self.linker.kb.cui_to_entity[cui_str].canonical_name
+            aliases = self._filter_aliases(entity_cui=cui_str, entity_name=name)
+            yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
 
     def _extract_answer_text(self, pair: Pair) -> str:
         return pair.answer[f"{self.answer_field}.text"]
@@ -404,7 +420,6 @@ class AliasBasedMatch(RelevanceClassifier):
         if self.filter_tui:
             _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
             linked_entities = filter(_filter, linked_entities)
-
         for linked_entity in linked_entities:
             for alias in linked_entity.aliases:
                 if len(alias) <= 3:
@@ -430,7 +445,6 @@ class MetaMapMatch(AliasBasedMatch):
         # join the aliases
         for pair, answer in zip_longest(pairs, answer_texts):
             answer_cuis = pair.answer.get(f"{self.answer_field}.cui", [])
-            # rich.print(f"[red]{answer_cuis}")
             e_aliases = set()
             if answer_cuis:
                 del answer_cuis[3:]
@@ -458,11 +472,10 @@ class ScispaCyMatch(AliasBasedMatch):
         # join the aliases
         for pair, answer_doc in zip_longest(pairs, docs):
             answer_str = answer_doc.text
-            rich.print(f"[green]{answer_doc.text}")
-            rich.print(f"[green]{answer_doc.ents}")
+            e_aliases = set()
             for ent in answer_doc.ents:
                 linked_entities = self.get_linked_entities(ent)
-                e_aliases = set(self.extract_aliases(linked_entities))
+                e_aliases = set.union(set(self.extract_aliases(linked_entities)), e_aliases)
 
             answer_aliases = [answer_str] + list(e_aliases)
             # update the pair and return
