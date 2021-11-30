@@ -1,3 +1,4 @@
+import itertools
 import re
 from dataclasses import dataclass
 from functools import partial
@@ -20,6 +21,7 @@ from scispacy.linking_utils import Entity
 from spacy.language import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span
+from spacy.util import filter_spans
 
 from ...utils.functional import infer_batch_size
 from .base import Pipe
@@ -190,7 +192,7 @@ class AliasBasedMatch(RelevanceClassifier):
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         linker_name: str = "umls",
-        threshold: float = 0.45,
+        threshold: float = 0.55,
         lazy_setup: bool = True,
         spacy_kwargs: Optional[Dict] = None,
         **kwargs,
@@ -261,32 +263,73 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.45):
-        """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
+    def _group_entities(doc: Doc) -> List[Span]:
+        """Splits doc text into grouped entities based on non-entity words.
 
+        Parameters
+        ----------
+        doc
+            (spacy.tokens.Doc): Doc object.
+
+        Returns
+        -------
+        List[Span]
+            spans of grouped entities
+        """
+        spans = []
+        # tokenize entities based on white space
+        entities = list(itertools.chain(*[ent.text.split() for ent in doc.ents]))
+        i = 0
+        # read through doc text
+        while i < doc.__len__():
+            if doc[i].text in entities:
+                j = i + 1
+                search = True
+                # read rest of doc text from found entity
+                while search and j < doc.__len__():
+                    if doc[j].text not in entities:
+                        # if word is not an entity append span of found entity to next found entity
+                        spans.append(Span(doc, doc[i].i, doc[j].i, label="Entity"))
+                        i = j
+                        search = False
+                    j += 1
+                # if last word in doc text is an entity
+                if search:
+                    spans.append(Span(doc, doc[i].i, doc.ents[-1].end, label="Entity"))
+            i += 1
+        # if all words in doc text is an entity
+        if entities and len(spans) < 1:
+            spans.append(Span(doc, doc.ents[0].start, doc.ents[-1].end, label="Entity"))
+        # filter a sequence of spans and remove duplicates or overlaps.
+        return filter_spans(spans)
+
+    def _load_spacy_model(self, model_name: str, linker_name: str = "umls", threshold: float = 0.5):
+        """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
         Doc is then processed in several different steps – the processing pipeline."""
 
         @Language.component("__combineEntities__")
         def _combine_entities(doc: Doc) -> Doc:
-            """A spaCy pipeline component; a function that receives a Doc object, modifies it and returns it.
+            """Preprocess a spaCy doc
 
-            Note
-            ----
-            We force all medical entities into one entity to handle questions featuring multiple
-            entities (e.g. "elevated" + "glucose") to increase recall, i.e. we query the whole
-            answer string against the knowledge base instead of the individual entities.
+            if doc text holds more than 3 words
+                split doc text into entities based on non-entity words.
+            else
+                merge doc text into a single entity.
 
             Parameters
             ----------
-            doc : Doc
-                A Doc is a sequence of entities.
+            doc
+                (spacy.tokens.Doc): Doc object.
 
             Returns
-            -------
-            Doc
-                A Doc holding one entity
+            ----------
+            doc
+                (spacy.tokens.Doc): Doc object with processed entities.
             """
-            doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
+            if doc.__len__() > 3:
+                doc.ents = self._group_entities(doc=doc)
+            else:
+                doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
             return doc
 
         model = spacy.load(
@@ -301,12 +344,10 @@ class AliasBasedMatch(RelevanceClassifier):
         )
         model.add_pipe(
             "__combineEntities__",
-            first=True,
         )
         model.add_pipe(
             "scispacy_linker",
             config={
-                "k": 60,
                 "threshold": threshold,
                 "linker_name": linker_name,
                 "max_entities_per_mention": 3,
@@ -417,6 +458,8 @@ class ScispaCyMatch(AliasBasedMatch):
         # join the aliases
         for pair, answer_doc in zip_longest(pairs, docs):
             answer_str = answer_doc.text
+            rich.print(f"[green]{answer_doc.text}")
+            rich.print(f"[green]{answer_doc.ents}")
             for ent in answer_doc.ents:
                 linked_entities = self.get_linked_entities(ent)
                 e_aliases = set(self.extract_aliases(linked_entities))
