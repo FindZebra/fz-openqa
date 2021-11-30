@@ -36,7 +36,7 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
-        min_answer_length=config.get("min_answer_length", 3),
+        min_answer_length=config.get("min_answer_length", None),
         num_proc=2,
     )
     dm = DataModule(builder=builder)

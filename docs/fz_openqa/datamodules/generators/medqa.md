@@ -4,7 +4,7 @@
 
 - [Fz-openqa](../../../README.md#fz-openqa-index) / [Modules](../../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../../index.md#fz-openqa) / [Datamodules](../index.md#datamodules) / [Generators](index.md#generators) / Medqa
     - [MedQAConfig](#medqaconfig)
-    - [MedQaGenerator](#medqagenerator)
+    - [CustomMedQaGenerator](#medqagenerator)
 
 ## MedQAConfig
 
@@ -17,12 +17,12 @@ class MedQAConfig(datasets.BuilderConfig):
 
 BuilderConfig for MedQAxCorpus.
 
-## MedQaGenerator
+## CustomMedQaGenerator
 
 [[find in source code]](blob/master/fz_openqa/datamodules/generators/medqa.py#L27)
 
 ```python
-class MedQaGenerator(datasets.GeneratorBasedBuilder):
+class CustomMedQaGenerator(datasets.GeneratorBasedBuilder):
 ```
 
 MedQAxCorpus Dataset. Version 0.0.1
