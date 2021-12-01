@@ -3,7 +3,7 @@ defaults:
   - text_formatter: simple
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: exact_match
+  - relevance_classifier: scispacy_match
   - analyses: standard
 
 _target_: fz_openqa.datamodules.DataModule
@@ -18,7 +18,7 @@ persistent_workers: False
 # global: dataset preprocessing
 add_encoding_tokens: false
 add_special_tokens: false
-use_subset: false
+use_subset: True
 num_proc: 2
 cache_dir: ${sys.cache_dir}
 
