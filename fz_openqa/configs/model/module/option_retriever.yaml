@@ -1,3 +1,4 @@
 _target_: fz_openqa.modeling.modules.OptionRetriever
 
 grad_expr: variational
+alpha: 0

@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 
@@ -82,9 +83,10 @@ def in_batch_grads(
 def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
     """Compute the supervised retrieval loss"""
     if not torch.all(match_score[..., 1:] == 0):
-        raise ValueError("Not all documents with index >0 are negative.")
+        warnings.warn("Not all documents with index >0 are negative.")
 
-    loss_mask = match_score[:, :, 0] > 0
+    pos_docs = match_score > 0
+    loss_mask = (pos_docs[:, :, 0]) & (pos_docs[:, :, 1:].sum(-1) == 0)
     logits = partial_score[loss_mask]
     targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
     if logits.numel() > 0:

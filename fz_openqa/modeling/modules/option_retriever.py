@@ -168,7 +168,7 @@ class OptionRetriever(Module):
         retrieval_logits, retrieval_targets = (
             output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
         )
-        if retrieval_logits is not None:
+        if retrieval_logits is not None and retrieval_logits.numel() > 0:
             self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
