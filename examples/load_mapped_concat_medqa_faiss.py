@@ -128,6 +128,7 @@ def run(config):
             "pin_memory": config.get("pin_memory", True),
         },
         cache_dir=cache_dir,
+        persist_cache=True,
     )
 
     # define the OpenQA builder
@@ -139,11 +140,10 @@ def run(config):
         n_retrieved_documents=1000,
         n_documents=10,
         max_pos_docs=1,
-        filter_unmatched=True,
+        filter_unmatched=config.get("filter_unmatched", True),
         num_proc=4,
         batch_size=config.get("map_batch_size", 16000),
         select_mode=config.get("select_mode", "sample"),
-        persist_cache=True,
     )
 
     # define the data module

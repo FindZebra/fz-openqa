@@ -97,7 +97,6 @@ class SelectDocsOneEg(Pipe):
         assert len(is_positive) >= total
 
         # get the positive indexes
-        # todo: check if prob select works as expected
         positive_idx = [i for i, x in enumerate(is_positive) if x]
         pos_probs = self.get_probs(batch, positive_idx)
         selected_positive_idx = select_values(
@@ -197,6 +196,7 @@ def select_values(
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
+        samples = [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
+        return samples
     else:
         raise ValueError(f"Unknown mode {mode}")
