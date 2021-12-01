@@ -15,7 +15,6 @@ from typing import Tuple
 import numpy as np
 import rich
 import spacy
-from scispacy.abbreviation import AbbreviationDetector  # type: ignore
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy.language import Language
@@ -27,7 +26,6 @@ from ...utils.functional import infer_batch_size
 from .base import Pipe
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
-from fz_openqa.datamodules.pipes.utils.static import STOP_WORDS
 from fz_openqa.utils.datastruct import Batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
@@ -36,6 +34,7 @@ np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 @dataclass
 class LinkedEntity:
     entity: str
+    name: str
     tuis: List[str]
     aliases: List[str]
 
@@ -365,13 +364,6 @@ class AliasBasedMatch(RelevanceClassifier):
         else:
             False
 
-    def _filter_aliases(self, entity_cui: str, entity_name: str) -> List[str]:
-        return [entity_name] + [
-            alias
-            for alias in self.linker.kb.cui_to_entity[entity_cui].aliases
-            if not re.search(alias, entity_name, re.IGNORECASE)
-        ]
-
     def get_linked_entities(self, entity: Span) -> Iterable[LinkedEntity]:
         """ Extracts the linked entities by querying the Doc entity against the knowledge base"""
         entities = filter(
@@ -381,8 +373,8 @@ class AliasBasedMatch(RelevanceClassifier):
             cui_str, _ = cui  # ent: (str, score)
             tuis = self.linker.kb.cui_to_entity[cui_str].types
             name = self.linker.kb.cui_to_entity[cui_str].canonical_name
-            aliases = self._filter_aliases(entity_cui=cui_str, entity_name=name)
-            yield LinkedEntity(entity=str(entity), tuis=tuis, aliases=aliases)
+            aliases = self.linker.kb.cui_to_entity[cui_str].aliases
+            yield LinkedEntity(entity=str(entity), name=name, tuis=tuis, aliases=aliases)
 
     def _extract_answer_text(self, pair: Pair) -> str:
         return pair.answer[f"{self.answer_field}.text"]
@@ -413,6 +405,10 @@ class AliasBasedMatch(RelevanceClassifier):
     def _check_entity_tuis(ent: LinkedEntity, *, discard_list: List[str]) -> bool:
         return any(tui not in discard_list for tui in ent.tuis)
 
+    @staticmethod
+    def _filter_aliases(aliases: List[str], *, name: str) -> LinkedEntity:
+        return any(alias.lower() not in name.lower() for alias in aliases)
+
     def extract_aliases(self, linked_entities: Iterable[LinkedEntity]) -> Iterable[str]:
         """ Extract aliases of the linked entities"""
         # get the TUIs of linked entities to filter irrelevant ones
@@ -420,8 +416,13 @@ class AliasBasedMatch(RelevanceClassifier):
         if self.filter_tui:
             _filter = partial(self._check_entity_tuis, discard_list=DISCARD_TUIs)
             linked_entities = filter(_filter, linked_entities)
+
         for linked_entity in linked_entities:
-            for alias in linked_entity.aliases:
+            # filter alias if aliases part of entity name
+            _filter = partial(self._filter_aliases, name=linked_entity.name)
+            aliases = list(filter(_filter, linked_entity.aliases))
+            aliases.insert(0, linked_entity.name)
+            for alias in aliases:
                 if len(alias) <= 3:
                     pass
                 elif not self.filter_acronyms:
