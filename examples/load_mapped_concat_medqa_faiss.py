@@ -143,6 +143,7 @@ def run(config):
         num_proc=4,
         batch_size=config.get("map_batch_size", 16000),
         select_mode=config.get("select_mode", "sample"),
+        persist_cache=True,
     )
 
     # define the data module

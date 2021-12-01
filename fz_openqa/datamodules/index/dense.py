@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import pickle
+import shutil
+import tempfile
 from functools import singledispatchmethod
 from pathlib import Path
 from typing import Any
@@ -103,6 +105,7 @@ class FaissIndex(Index):
     index_name: str
     _vectors: Optional[pa.Table] = None
     tok2doc: Optional[List] = None
+    _master: bool = True
 
     def __init__(
         self,
@@ -118,7 +121,7 @@ class FaissIndex(Index):
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
-        persist_cache: bool = True,
+        persist_cache: bool = False,
         cache_dir: Optional[str] = None,
         **kwargs,
     ):
@@ -194,6 +197,8 @@ class FaissIndex(Index):
         # process pipe, used to process a batch with the model
         # warning: this is actually not used when using the trainer
         self.persist_cache = persist_cache
+        if persist_cache is False:
+            cache_dir = tempfile.mkdtemp(prefix=f"{cache_dir}/")
         self.cache_dir = cache_dir
         self.predict_docs = Predict(self.model)
         self.predict_queries = Predict(self.model)
@@ -362,7 +367,7 @@ class FaissIndex(Index):
             trainer=trainer,
             collate_fn=collate_fn,
             loader_kwargs=self.loader_kwargs,
-            persist=self.persist_cache,
+            persist=True,
             cache_dir=self.cache_dir,
         )
 
@@ -602,6 +607,7 @@ class FaissIndex(Index):
 
     def __setstate__(self, state):
         state["_index"] = faiss.deserialize_index(state["_index"])
+        state["_master"] = False
         self.__dict__.update(state)
 
     def _check_index_consistency(self, idx):
@@ -613,3 +619,7 @@ class FaissIndex(Index):
             f"\nindex_size={self._index.ntotal}, first_index={idx[0]}"
         )
         assert self._index.ntotal == idx[0], msg
+
+    def __del__(self):
+        if self._master and self.persist_cache is False:
+            shutil.rmtree(self.cache_dir)

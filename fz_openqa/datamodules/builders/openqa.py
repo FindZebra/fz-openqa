@@ -8,9 +8,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -70,7 +68,7 @@ class OpenQaBuilder(DatasetBuilder):
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
         n_retrieved_documents: int,
-        n_documents: Optional[Union[int, Dict]] = None,
+        n_documents: Optional[int | Dict] = None,
         max_pos_docs: Optional[int] = None,
         filter_unmatched: bool = True,
         select_mode: str = "first",
@@ -355,7 +353,7 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: Union[int, Dict],
+        n_documents: int | Dict,
         *,
         max_pos_docs: Optional[int],
         level: int = 1,
