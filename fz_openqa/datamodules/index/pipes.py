@@ -9,12 +9,12 @@ from datasets import Dataset
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import Eg
+from fz_openqa.utils.pretty import pprint_batch
 
 
 @dataclass
@@ -150,16 +150,23 @@ class FetchDocuments(Pipe):
         # todo: query dataset for unique indexes only {i: idx for i, idx in enumerate(indexes)}
         indexes = [int(idx) for idx in batch[self.index_key]]
 
+        # fetch documents
+        table = self.corpus_dataset.select(indexes, keep_in_memory=True)
+        if table.num_rows != len(indexes):
+            raise ValueError(
+                f"The returned table does not match with the length "
+                f"of the input index. Retrieved {table.num_rows} rows, "
+                f"expected {len(indexes)} rows."
+                f"corpus_size={len(self.corpus_dataset)}"
+            )
+
+        # convert as dicts or list of egs
         err_msg = (
             "There is a mismatch between the query indexes and the retrieved indexes, "
             "make sure you are using the same dataset."
         )
-
-        # fetch documents
-        table = self.corpus_dataset.select(indexes, keep_in_memory=True)
-
         if self.output_format == "list":
-            rows: List[Batch] = [dict(row) for row in table]
+            rows: List[Eg] = [dict(row) for row in table]
             assert indexes[0] == rows[0][self.index_key], err_msg
         elif self.output_format == "dict":
             rows: Batch = table[None:None]

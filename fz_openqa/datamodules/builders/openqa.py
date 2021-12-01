@@ -202,12 +202,6 @@ class OpenQaBuilder(DatasetBuilder):
         question_nesting_level = self.dataset_builder.nesting_level
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
-        map_kwargs = {
-            "num_proc": num_proc,
-            "batch_size": batch_size,
-            "batched": True,
-        }
-
         # cache the dataset using the index's model
         # for nested datasets, the dataset is flatten, so the index
         # in the flatten dataset corresponds to the flattened index
@@ -225,10 +219,10 @@ class OpenQaBuilder(DatasetBuilder):
                 level=question_nesting_level,
                 keys=["question.input_ids", "question.attention_mask"],
                 desc="Flattening dataset before caching",
-                **map_kwargs,
+                batched=True,
+                num_proc=num_proc,
+                batch_size=100,
             )
-
-            rich.print(f"[green]flat_dataset: {flat_dataset['train']._fingerprint}")
 
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
@@ -258,8 +252,16 @@ class OpenQaBuilder(DatasetBuilder):
             ]
         )
 
+        # adjust the batch size to account for the documents
+        map_kwargs = {
+            "num_proc": num_proc,
+            "batch_size": max(num_proc, batch_size // n_retrieved_documents),
+            "batched": True,
+        }
+
         # process the dataset with each block
         original_size = {k: len(dset) for k, dset in dataset.items()}
+
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(

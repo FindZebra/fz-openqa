@@ -154,6 +154,7 @@ class ApplyAsFlatten(Pipe):
         if self.update_idx:
             idx = kwargs.get("idx", None)
             if idx is not None:
+                kwargs = kwargs.copy()
                 idx = nest_idx(idx, input_shape)
                 kwargs["idx"] = idx
 

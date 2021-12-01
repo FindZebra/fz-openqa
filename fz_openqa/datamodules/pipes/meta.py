@@ -27,6 +27,7 @@ class PipeProcessError(Exception):
             batch_repr = type(batch)
 
         keys = _infer_keys(batch)
+        kwargs = {k: type(v) for k, v in kwargs.items()}
         msg = (
             f"Exception thrown by pipe: {type(pipe)} in meta pipe {type(meta_pipe)} with "
             f"batch of type {type(batch)} with keys={keys} "

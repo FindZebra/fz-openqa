@@ -63,6 +63,8 @@ def repr_batch(batch: Batch, header=None, rich: bool = False) -> str:
 
 
 def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dict[str, Exception]]:
+    if not isinstance(batch, dict):
+        return f"Batch is not a dict, type(batch)={type(batch)}", {}
     u = ""
     if header is not None:
         u += f"=== {header} ===\n"

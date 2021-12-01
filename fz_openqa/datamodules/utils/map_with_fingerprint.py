@@ -59,21 +59,16 @@ class MapWithFingerprint:
                 # todo: fix: faiss freezes when using multiprocessing
                 kwargs["num_proc"] = 1
 
+            # adjust the batch size to be at least `num_proc
+            kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])
+
             # fingerprint
             fingerprint = fingerprints.get(key, None)
-            logger.info(f"split={key}: fingerprint={fingerprint}")
-
-            pipe = self.pipe
-            if False:  # key == 'train':
-                pipe = Sequential(
-                    PrintBatch(f"{kwargs.get('desc')}:in"),
-                    pipe,
-                    PrintBatch(f"{kwargs.get('desc')}:out"),
-                )
+            logger.info(f"split={key}: new_fingerprint={fingerprint}")
 
             # process each split
             dataset[key] = dset.map(
-                partial(pipe, split=key),
+                partial(self.pipe, split=key),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,

@@ -28,6 +28,7 @@ class PrintBatch(Pipe):
             header = f"{header} (id={self.id})"
         pprint_batch(batch, header=header)
         if len(kwargs):
+            kwargs = {k: type(v) for k, v in kwargs.items() if v is not None}
             rich.print(f"PrintBatch input kwargs = {kwargs}")
         return batch
 
