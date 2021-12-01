@@ -22,7 +22,7 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from utils import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.builders import MedQaBuilder, ConcatMedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -51,8 +51,9 @@ def run(config):
 
     On the cluster, run:
     ```bash
-    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 +num_workers=10 +use_subset=False
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python \
+    examples/load_mapped_concat_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
     ```
     """
     print_config(config)
@@ -94,7 +95,7 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = MedQaBuilder(
+    dataset_builder = ConcatMedQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),

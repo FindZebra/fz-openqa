@@ -76,12 +76,13 @@ def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
     cache_dir = config.get("sys.cache_dir", default_cache_dir)
+    use_colbert = config.get("colbert", False)
 
     # load model
     zero_shot = config.get("zero_shot", True)
     if zero_shot:
         bert_id = config.get("bert", "google/bert_uncased_L-2_H-128_A-2")
-        model = ZeroShot(bert_id=bert_id, head="contextual")
+        model = ZeroShot(bert_id=bert_id, head="contextual" if use_colbert else "flat")
         tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -121,12 +122,18 @@ def run(config: DictConfig) -> None:
     rich.print(corpus)
 
     # init the index
-    logger.info(f"Initialize index <{ColbertIndex.__name__}>")
-    index = ColbertIndex(
+    IndexCls = ColbertIndex if use_colbert else FaissIndex
+    logger.info(f"Initialize index <{IndexCls.__name__}>")
+    index = IndexCls(
         dataset=corpus,
         model=model,
         trainer=trainer,
-        faiss_args={"metric_type": faiss.METRIC_L2, "n_list": 8, "n_subvectors": 8, "n_bits": 8},
+        faiss_args={
+            "metric_type": faiss.METRIC_INNER_PRODUCT,
+            "n_list": 8,
+            "n_subvectors": 8,
+            "n_bits": 8,
+        },
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 1),

@@ -14,6 +14,8 @@ from datasets import DatasetDict
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
 
@@ -61,9 +63,17 @@ class MapWithFingerprint:
             fingerprint = fingerprints.get(key, None)
             logger.info(f"split={key}: fingerprint={fingerprint}")
 
+            pipe = self.pipe
+            if False:  # key == 'train':
+                pipe = Sequential(
+                    PrintBatch(f"{kwargs.get('desc')}:in"),
+                    pipe,
+                    PrintBatch(f"{kwargs.get('desc')}:out"),
+                )
+
             # process each split
             dataset[key] = dset.map(
-                partial(self.pipe, split=key),
+                partial(pipe, split=key),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,

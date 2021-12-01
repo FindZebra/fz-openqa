@@ -16,7 +16,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import remove_columns
+from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -136,7 +136,7 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return remove_columns(dataset, columns=columns)
+        return keep_only_columns(dataset, columns=columns)
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]

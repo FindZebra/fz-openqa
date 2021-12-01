@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from enum import Enum
@@ -8,6 +10,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -26,6 +29,7 @@ from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
+from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
@@ -33,7 +37,7 @@ from fz_openqa.datamodules.pipes import SelectDocs
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import remove_columns
+from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -164,8 +168,8 @@ class OpenQaBuilder(DatasetBuilder):
         # remove columns that are not needed
 
         if columns is not None:
-            dataset = remove_columns(dataset, columns=columns)
-            corpus = remove_columns(corpus, columns=columns)
+            dataset = keep_only_columns(dataset, columns=columns)
+            corpus = keep_only_columns(corpus, columns=columns)
 
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
@@ -198,17 +202,35 @@ class OpenQaBuilder(DatasetBuilder):
         question_nesting_level = self.dataset_builder.nesting_level
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
-        if isinstance(index, FaissIndex):
-            if question_nesting_level > 0:
-                raise NotImplementedError
+        map_kwargs = {
+            "num_proc": num_proc,
+            "batch_size": batch_size,
+            "batched": True,
+        }
 
+        # cache the dataset using the index's model
+        # for nested datasets, the dataset is flatten, so the index
+        # in the flatten dataset corresponds to the flattened index
+        # in the call of SearchCorpus.
+        if isinstance(index, FaissIndex):
             collate_fn = CollateField(
                 "question",
                 tokenizer=self.tokenizer,
                 exclude=["metamap", "text"],
-                level=self.dataset_builder.nesting_level,
+                level=0,
             )
-            index.cache_query_dataset(dataset, collate_fn=collate_fn)
+
+            flat_dataset = self.flatten_dataset(
+                dataset,
+                level=question_nesting_level,
+                keys=["question.input_ids", "question.attention_mask"],
+                desc="Flattening dataset before caching",
+                **map_kwargs,
+            )
+
+            rich.print(f"[green]flat_dataset: {flat_dataset['train']._fingerprint}")
+
+            index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
@@ -242,10 +264,8 @@ class OpenQaBuilder(DatasetBuilder):
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
                 block,
-                batched=True,
                 cache_dir=self.dataset_builder.cache_dir,
-                num_proc=num_proc,
-                batch_size=batch_size,
+                **map_kwargs,
                 desc=f"[Mapping] {k}",
             )
             dataset = mapper(dataset)
@@ -273,6 +293,21 @@ class OpenQaBuilder(DatasetBuilder):
         logger.info(format_size_difference(original_size, dataset))
 
         return dataset
+
+    def flatten_dataset(
+        self,
+        dataset: Dataset | DatasetDict,
+        *,
+        level: int = 0,
+        keys: List[str] = None,
+        **map_kwargs,
+    ) -> Dataset:
+
+        dataset = keep_only_columns(dataset, keys)
+        if level == 0:
+            return dataset
+
+        return dataset.map(Flatten(level=level), **map_kwargs)
 
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""

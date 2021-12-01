@@ -9,6 +9,8 @@ from datasets import Dataset
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -65,7 +67,7 @@ class SearchCorpus(ApplyAsFlatten):
         self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
         pipe = SearchCorpusFlat(index, **kwargs)
-        super().__init__(pipe, level=level, input_filter=input_filter)
+        super().__init__(pipe, level=level, input_filter=input_filter, update_idx=True)
 
 
 class SearchCorpusFlat(Pipe):

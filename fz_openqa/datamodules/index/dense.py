@@ -49,9 +49,7 @@ from fz_openqa.utils.functional import is_index_contiguous
 logger = logging.getLogger(__name__)
 
 
-def iter_batches_with_indexes(
-    loader: Union[Generator, DataLoader]
-) -> Iterable[Tuple[List[int], Batch]]:
+def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[List[int], Batch]]:
     """
     Iterate over batches and return a tuple of the batch index and the batch itself.
     """
@@ -256,8 +254,9 @@ class FaissIndex(Index):
                 logger.info(f"Loading FaissIndex from cache: {cache_file}")
                 self._index = faiss.read_index(str(cache_file))
                 self._vectors = pq.read_table(str(vector_file), memory_map=True)
-                with open(tok2doc_file, "rb") as f:
-                    self.tok2doc = pickle.load(f)
+                if self.tok2doc is not None:
+                    with open(tok2doc_file, "rb") as f:
+                        self.tok2doc = pickle.load(f)
             else:
                 # build the index
                 self._build(dataset, cache_dir=cache_dir, vector_file=vector_file, **kwargs)
@@ -502,7 +501,7 @@ class FaissIndex(Index):
               as Batch instead of SearchResult
         """
         if self.trainer:
-            self.cache_query_dataset(query, collate_fn=collate_fn)
+            self.cache_query_dataset(query, collate_fn=collate_fn, trainer=self.trainer)
 
         loader = self._init_loader(query, collate_fn=collate_fn)
         loader = iter_batches_with_indexes(loader)
@@ -523,9 +522,17 @@ class FaissIndex(Index):
         return SearchResult(score=score, index=indices, dataset_size=self.dataset_size)
 
     def cache_query_dataset(
-        self, dataset: Union[Dataset, DatasetDict], *, collate_fn: Callable, **kwargs
+        self,
+        dataset: Union[Dataset, DatasetDict],
+        *,
+        collate_fn: Callable,
+        trainer: Trainer = None,
+        **kwargs,
     ):
-        self._cache_vectors(dataset, predict=self.predict_queries, collate_fn=collate_fn)
+        trainer = trainer or self.trainer
+        self._cache_vectors(
+            dataset, predict=self.predict_queries, collate_fn=collate_fn, trainer=trainer
+        )
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""

@@ -63,6 +63,9 @@ class ZeroShot(pl.LightningModule):
             if any(prefix in k for k in batch.keys()):
                 input_ids = batch[f"{prefix}.input_ids"]
                 attention_mask = batch[f"{prefix}.attention_mask"]
+                shape = input_ids.shape
+                input_ids = input_ids.view(-1, shape[-1])
+                attention_mask = attention_mask.view(-1, shape[-1])
                 h = self.bert(input_ids, attention_mask).last_hidden_state
 
                 if self.head == "flat":
@@ -72,6 +75,6 @@ class ZeroShot(pl.LightningModule):
                 else:
                     raise NotImplementedError
 
-                output[key_map[prefix]] = vec
+                output[key_map[prefix]] = vec.view(*shape[:-1], *vec.shape[1:])
 
         return output
