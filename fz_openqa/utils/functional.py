@@ -60,10 +60,39 @@ def cast_to_numpy(
     return x
 
 
+def cast_to_torch(
+    x: Any,
+    as_contiguous: bool = True,
+    dtype: Optional[torch.dtype] = None,
+    device: torch.device = torch.device("cpu"),
+) -> np.ndarray:
+    if isinstance(x, torch.Tensor):
+        pass
+    else:
+        x = torch.tensor(x, device=device, dtype=dtype)
+
+    if as_contiguous:
+        x = x.contiguous()
+
+    return x.to(device=device)
+
+
 def cast_values_to_numpy(
     batch: Batch, as_contiguous: bool = True, dtype: Optional[np.dtype] = None
 ) -> Batch:
     return {k: cast_to_numpy(v, as_contiguous=as_contiguous, dtype=dtype) for k, v in batch.items()}
+
+
+def cast_values_to_torch(
+    batch: Batch,
+    as_contiguous: bool = True,
+    dtype: Optional[np.dtype] = None,
+    device: torch.device = torch.device("cpu"),
+) -> Batch:
+    return {
+        k: cast_to_torch(v, as_contiguous=as_contiguous, dtype=dtype, device=device)
+        for k, v in batch.items()
+    }
 
 
 def always_true(*args, **kwargs):

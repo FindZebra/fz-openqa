@@ -1,6 +1,7 @@
 from copy import copy
 
 from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.es import ElasticSearchIndex
 
@@ -19,6 +20,10 @@ class IndexBuilder:
 
 class FaissIndexBuilder(IndexBuilder):
     cls = FaissIndex
+
+
+class ColbertIndexBuilder(IndexBuilder):
+    cls = ColbertIndex
 
 
 class ElasticSearchIndexBuilder(IndexBuilder):

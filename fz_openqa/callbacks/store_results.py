@@ -9,16 +9,19 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
 import rich
+from datasets.features import numpy_to_pyarrow_listarray
 from pytorch_lightning import Callback
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import cast_values_to_numpy
 from fz_openqa.utils.functional import iter_batch_rows
+from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -117,10 +120,15 @@ class StorePredictionsCallback(Callback):
 
     def _append_batch_to_cache(self, batch: Batch) -> None:
         """Append the batch to the cached `pyarrow.Table`"""
-        batch = cast_values_to_numpy(batch, as_contiguous=False)
-        df = pd.DataFrame(iter_batch_rows(batch))
-        # Convert from pandas to Arrow
-        table = pa.Table.from_pandas(df)
+        batch = cast_values_to_numpy(batch, as_contiguous=False, dtype=np.float32)
+
+        def cast_values(x: np.ndarray):
+            return numpy_to_pyarrow_listarray(x)
+
+        # build the pyarrow table
+        batch = {k: cast_values(v) for k, v in batch.items()}
+        table = pa.table(batch)
+
         # write to the cache file
         self._append_table_to_cache(table)
 
