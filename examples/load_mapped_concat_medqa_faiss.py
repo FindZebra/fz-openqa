@@ -142,6 +142,7 @@ def run(config):
         filter_unmatched=True,
         num_proc=4,
         batch_size=config.get("map_batch_size", 16000),
+        select_mode=config.get("select_mode", "sample"),
     )
 
     # define the data module
