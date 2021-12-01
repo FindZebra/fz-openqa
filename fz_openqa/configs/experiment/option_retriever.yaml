@@ -15,8 +15,7 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 200
-  flush_logs_every_n_steps: 1
+  val_check_interval: 300
 
 datamodule:
   use_subset: false

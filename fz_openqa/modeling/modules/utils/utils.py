@@ -7,14 +7,14 @@ from torch import Tensor
 from fz_openqa.utils.datastruct import Batch
 
 
-def check_only_first_doc_positive(batch: Batch, *, match_key="document.match_score"):
-    if not torch.all(batch[match_key][:, 0] > 0):
+def check_only_first_doc_positive(
+    batch: Batch, *, match_key="document.match_score", check_first_dim: bool = True
+) -> None:
+    if check_first_dim and not torch.all(batch[match_key][..., 0] > 0):
         msg = "Not all documents with index 0 are positive."
-        rich.print(batch[match_key][0, :])
         raise ValueError(msg)
-    if batch[match_key].shape[1] > 1:
-        if not torch.all(batch[match_key][:, 1:] == 0):
-            rich.print(batch[match_key][0, :])
+    if batch[match_key].shape[-1] > 1:
+        if not torch.all(batch[match_key][..., 1:] == 0):
             raise ValueError("Not all documents with index >0 are negative.")
 
 

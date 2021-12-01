@@ -4,4 +4,4 @@ defaults:
   - override module: option_retriever
 
 
-hidden_size: 32
+hidden_size: 64

@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from transformers import AdamW
 from transformers import BertPreTrainedModel
+from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.modules.base import Module
@@ -60,8 +61,11 @@ class Model(LightningModule):
         bert: Union[BertPreTrainedModel, DictConfig],
         module: Union[DictConfig, Module],
         head: Union[DictConfig, Module],
+        monitor_metric: Optional[str],
+        num_training_steps: int = 10000,
+        num_warmup_steps: int = 10000,
         lr: float = 0.001,
-        weight_decay: float = 0.0005,
+        weight_decay: float = 0.01,
         **kwargs,
     ):
         super().__init__()
@@ -72,6 +76,9 @@ class Model(LightningModule):
         self.save_hyperparameters()
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
+        assert self.hparams["monitor_metric"] == monitor_metric
+        assert self.hparams["num_training_steps"] == num_training_steps
+        assert self.hparams["num_warmup_steps"] == num_warmup_steps
 
         # instantiate the model
         self.module: Optional[Module] = maybe_instantiate(
@@ -159,17 +166,64 @@ class Model(LightningModule):
                 )
 
     def configure_optimizers(self):
-        """Choose what optimizers and learning-rate schedulers to use in your optimization.
-        Normally you'd need one. But in the case of GANs or similar you might have multiple.
-        See examples here:
-            https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html
-            #configure-optimizers
         """
-        return AdamW(
-            params=only_trainable(self.parameters()),
+        Configure the optimizer and the learning rate scheduler.
+        """
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        optimizer_grouped_parameters = [
+            {
+                "params": only_trainable(
+                    [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)]
+                ),
+                "weight_decay": self.hparams.weight_decay,
+            },
+            {
+                "params": only_trainable(
+                    [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
+                ),
+                "weight_decay": 0.0,
+            },
+        ]
+
+        # define the optimizer using the above groups
+        optimizer = AdamW(
+            optimizer_grouped_parameters,
             lr=self.hparams.lr,
             weight_decay=self.hparams.weight_decay,
+            correct_bias=False,
         )
+
+        # defile the learning rate scheduler
+        lr_scheduler = WarmupLinearSchedule(
+            optimizer,
+            num_training_steps=self.hparams.num_training_steps,
+            num_warmup_steps=self.hparams.num_warmup_steps,
+        )
+
+        lr_scheduler_config = {
+            # REQUIRED: The scheduler instance
+            "scheduler": lr_scheduler,
+            # The unit of the scheduler's step size, could also be 'step'.
+            # 'epoch' updates the scheduler on epoch end whereas 'step'
+            # updates it after a optimizer update.
+            "interval": "step",
+            # How many epochs/steps should pass between calls to
+            # `scheduler.step()`. 1 corresponds to updating the learning
+            # rate after every epoch/step.
+            "frequency": 1,
+            # Metric to to monitor for schedulers like `ReduceLROnPlateau`
+            "monitor": self.hparams.monitor_metric,
+            # If set to `True`, will enforce that the value specified 'monitor'
+            # is available when the scheduler is updated, thus stopping
+            # training if not found. If set to `False`, it will only produce a warning
+            "strict": True,
+            # If using the `LearningRateMonitor` callback to monitor the
+            # learning rate progress, this keyword can be used to specify
+            # a custom logged name
+            "name": None,
+        }
+
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
 
     def training_step_end(self, batch: Batch, **kwargs) -> Batch:
         return self._step_end(batch, split=Split.TRAIN)

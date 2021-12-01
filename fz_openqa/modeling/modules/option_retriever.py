@@ -3,18 +3,17 @@ from typing import Any
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
+from datasets import Split
 from torch import Tensor
 
-from .utils import batch_cartesian_product
-from .utils import flatten_first_dims
+from .utils.gradients import GradExpression
+from .utils.gradients import in_batch_grads
+from .utils.gradients import supervised_loss
+from .utils.gradients import variational_grads
+from .utils.utils import check_only_first_doc_positive
+from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
-
-
-class GradExpression(Enum):
-    SUM = "sum"
-    GATHER = "gather"
 
 
 class Similarity(Enum):
@@ -40,7 +39,7 @@ class OptionRetriever(Module):
     ]
 
     # prefix for the logged metrics
-    task_id: Optional[str] = "reader"
+    task_id: Optional[str] = None
 
     # metrics to display in the progress bar
     pbar_metrics = [
@@ -53,15 +52,26 @@ class OptionRetriever(Module):
     # require heads
     _required_heads = ["question", "document"]
 
-    def __init__(self, *args, grad_expr: GradExpression = GradExpression.SUM, **kwargs):
+    def __init__(
+        self,
+        *args,
+        alpha: float = 0.01,
+        grad_expr: GradExpression = GradExpression.VARIATIONAL,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
+        self.alpha = alpha
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-        self.metrics = self._get_base_metrics(prefix=f"{prefix}")
+        self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
+
+        self.retriever_metrics = self._get_base_metrics(
+            prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
+        )
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
 
@@ -110,46 +120,21 @@ class OptionRetriever(Module):
         # compute the score for each pair `f([q_j; a_j], d_jk)`
         partial_score = self._compute_score(hd=hd, hq=hq)
 
-        # repeat the scores for all combinations of documents: `\sigma \in S(M)`
-        score = batch_cartesian_product(partial_score)
-
-        # partial answer log-likelihood `\log p(a | q, D[\sigma], A)` for `\sigma \in S(M)`
-        logp_a__d = score.log_softmax(dim=1)
-        targets_ = targets.unsqueeze(1).expand(-1, score.shape[2])
-        # rich.print(f">> logp_a__d={logp_a__d.shape}, targets_={targets_.shape}")
-        logp_a_star__d = -F.cross_entropy(logp_a__d, targets_, reduction="none")
-
-        # document log-likelihood `\log p(\sigma(d_j) | a_j, q_j)`
-        normalizer = partial_score.logsumexp(dim=2, keepdim=True)
-        log_p_d__a = score - normalizer
-        log_p_d__a_no_perm = partial_score.log_softmax(dim=2)
-
-        # answer lower-bound: `\sum_\sigma \log p(a_\star | q, A)`
-        logp_a = (logp_a__d * log_p_d__a.exp()).sum(-1)
-        logp_a_star = torch.gather(logp_a, dim=1, index=targets[:, None]).squeeze(1)
-
-        # gradients / loss
-        loss_reader = logp_a_star__d
-        retriever_score = logp_a_star__d.unsqueeze(1) * log_p_d__a.sum(1, keepdim=True).exp()
-        part_loss_retriever = retriever_score.detach() * log_p_d__a
-        if self.grad_expr == GradExpression.SUM:
-            loss_retriever = part_loss_retriever.sum(1)
-        elif self.grad_expr == GradExpression.GATHER:
-            targets_ = targets[:, None, None].expand(-1, 1, part_loss_retriever.shape[2])
-            loss_retriever = part_loss_retriever.gather(dim=1, index=targets_).squeeze(1)
+        if self.grad_expr in [GradExpression.BATCH_GATHER, GradExpression.BATCH_SUM]:
+            step_output = in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
+        elif self.grad_expr == GradExpression.VARIATIONAL:
+            step_output = variational_grads(partial_score, targets, grad_expr=self.grad_expr)
         else:
-            raise ValueError(
-                f"Unknown GradExpression: {self.grad_expr}, " f"GradExpression={GradExpression}"
-            )
-        loss = -1 * (loss_reader + loss_retriever).mean(-1)
+            raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
 
-        return {
-            "loss": loss,
-            "logp": logp_a_star.detach(),
-            "_logits_": logp_a.detach(),
-            "_targets_": targets.detach(),
-            "_doc_logits_": log_p_d__a_no_perm.detach(),
-        }
+        # auxiliary loss
+        supervised_loss_out = supervised_loss(partial_score, batch["document.match_score"])
+        supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
+        if self.alpha > 0:
+            step_output["loss"] += self.alpha * supervised_loss_
+        step_output.update(supervised_loss_out)
+
+        return step_output
 
     def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
@@ -168,9 +153,38 @@ class OptionRetriever(Module):
         """
 
         # average losses
-        for k in ["loss", "logp"]:
+        for k in ["loss", "reader/logp"]:
             y = output.get(k, None)
             if y is not None:
                 output[k] = y.mean()
 
         return output
+
+    def update_metrics(self, output: Batch, split: Split) -> None:
+        """update the metrics of the given split."""
+        logits, targets = (output.get(k, None) for k in ("_reader_logits_", "_reader_targets_"))
+        self.metrics.update(split, logits, targets)
+
+        retrieval_logits, retrieval_targets = (
+            output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
+        )
+        if retrieval_logits is not None and retrieval_logits.numel() > 0:
+            self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
+
+    def reset_metrics(self, split: Optional[Split] = None) -> None:
+        """
+        Reset the metrics corresponding to `split` if provided, else
+        reset all the metrics.
+        """
+        self.metrics.reset(split)
+        self.retriever_metrics.reset(split)
+
+    def compute_metrics(self, split: Optional[Split] = None) -> Batch:
+        """
+        Compute the metrics for the given `split` else compute the metrics for all splits.
+        The metrics are return after computation.
+        """
+        return {
+            **self.metrics.compute(split),
+            **self.retriever_metrics.compute(split),
+        }
