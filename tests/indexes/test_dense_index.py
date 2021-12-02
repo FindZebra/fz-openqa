@@ -17,10 +17,11 @@ from tests.indexes.test_base_index import TestIndex
 class TestFaissIndex(TestIndex):
     """Test the faiss index without using the Trainer to process data with the model"""
     cls: Index.__class__ = FaissIndex
+    _model_head = "flat"
 
     def setUp(self) -> None:
         super().setUp()
-        self.model = ZeroShot(self._bert_id, head="flat")
+        self.model = ZeroShot(self._bert_id, head=self._model_head)
         self.model.eval()
 
         # limit the number of threads for faiss
@@ -32,8 +33,8 @@ class TestFaissIndex(TestIndex):
         shutil.rmtree(self.cache_dir)
 
     @staticmethod
-    def _init_index_with(*, corpus: Dataset, model=None, collate=None, **kwargs) -> Index:
-        return FaissIndex(dataset=corpus, model=model, batch_size=2,
+    def _init_index_with(index_cls: Index.__class__, *, corpus: Dataset, model=None, collate=None, **kwargs) -> Index:
+        return index_cls(dataset=corpus, model=model, batch_size=2,
                           model_output_keys=['_hq_', '_hd_'],
                           collate_pipe=collate,
                           faiss_args={
@@ -43,7 +44,7 @@ class TestFaissIndex(TestIndex):
                           **kwargs)
 
     def _init_index(self) -> Index:
-        return self._init_index_with(corpus=self.corpus, model=self.model,
+        return TestFaissIndex._init_index_with(self.cls, corpus=self.corpus, model=self.model,
                                      collate=self.corpus_collate, cache_dir=self.cache_dir)
 
     def test_dill_inspect(self):
@@ -60,6 +61,6 @@ class TestFaissIndexWithTrainer(TestFaissIndex):
     """Test the faiss index using the Trainer to accelerate processing the data with the model"""
 
     @staticmethod
-    def _init_index_with(**kwargs) -> Index:
+    def _init_index_with(*args, **kwargs) -> Index:
         trainer = Trainer(checkpoint_callback=False, logger=False)
-        return TestFaissIndex._init_index_with(trainer=trainer, **kwargs)
+        return TestFaissIndex._init_index_with(*args, trainer=trainer, **kwargs)

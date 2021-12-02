@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os.path
 import pickle
 import shutil
 import tempfile
@@ -614,7 +615,7 @@ class FaissIndex(Index):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        # state["model"] = None # todo: check this
+        # state["model"] = None
         state["trainer"] = None
         state["_index"] = faiss.serialize_index(state["_index"])
         return state
@@ -636,4 +637,4 @@ class FaissIndex(Index):
 
     def __del__(self):
         if self._master and self.persist_cache is False:
-            shutil.rmtree(self.cache_dir)
+            shutil.rmtree(self.cache_dir, ignore_errors=True)

@@ -31,7 +31,6 @@ class ColbertIndex(FaissIndex):
         # self._check_index_consistency(idx)
 
         # add vector to index
-        pprint_batch(batch, "_add_batch_to_index")
         vector = self._get_vector_from_batch(batch)
         assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
         assert len(vector.shape) == 3, f"{vector} is not a 3D array"
@@ -41,7 +40,6 @@ class ColbertIndex(FaissIndex):
         for idx in batch["__idx__"]:
             n_tokens = vector.shape[1]
             self.tok2doc += n_tokens * [idx]
-        rich.print(f"[red]Total number of indices: {self._index.ntotal}")
 
     def _search_batch(
         self,
@@ -63,9 +61,10 @@ class ColbertIndex(FaissIndex):
         bs, q_tokens, dim = q_vectors.shape
 
         # 2. query the token index
+        p = max(1, k // 2)  # k' in Colbert
         np_q_vectors = cast_to_numpy(q_vectors, as_contiguous=True)
         np_q_vectors = np_q_vectors.reshape(-1, dim)
-        distances, tok_indices = self._index.search(np_q_vectors, k)
+        distances, tok_indices = self._index.search(np_q_vectors, p)
 
         # 3. retrieve the document indices for each token idx
         # @idariis: excellent idea with the set of indices
@@ -77,7 +76,6 @@ class ColbertIndex(FaissIndex):
         doc_indices = defaultdict(list)
         for i in tok_indices_flat:
             doc_indices[self.tok2doc[i]] += [i]
-        doc_indices = OrderedDict(doc_indices)
 
         # 4. retrieve the vectors for each unique document index
         # the table _vectors (pyarrow) contains the document vectors

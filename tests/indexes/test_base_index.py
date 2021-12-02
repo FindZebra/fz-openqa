@@ -14,6 +14,15 @@ from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
 from fz_openqa.utils.train_utils import setup_safe_env
 
 
+def cast_to_array(x):
+    if isinstance(x, torch.Tensor):
+        return x.numpy()
+    elif isinstance(x, np.ndarray):
+        return x
+    else:
+        return np.array(x)
+
+
 class TestIndex(TestCase, ABC):
     # todo: test search_one
     _bert_id = "google/bert_uncased_L-2_H-128_A-2"
@@ -103,21 +112,23 @@ class TestIndex(TestCase, ABC):
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
         output = index.search(query, k=self.k)
-
         # check the output type
         self.assertIsInstance(output, SearchResult)
 
-        self.assertTrue((np.array(output.index) >= 0).all())
-        self.assertTrue((np.array(output.index) < len(self.corpus)).all())
+        # cast output
+        data = {'score': output.score, 'index': output.index}
+        data = {k: cast_to_array(v) for k, v in data.items()}
 
-        # check shape of the output
+        # check that the index values are in [0, len(self.dataset) - 1]
+        self.assertTrue((data['index'] >= 0).all())
+        self.assertTrue((data['index'] < len(self.corpus)).all())
+
         expected_shape = (len(self.dataset), self.k)
-        for key, output_shape in {'score': np.array(output.score).shape,
-                                  'index': np.array(output.index).shape}.items():
-            self.assertEqual(output_shape, expected_shape)
+        for key, d in data.items():
+            self.assertEqual(d.shape, expected_shape)
 
         # check the top-1 scores
-        for target, scores, idx in zip(self.retrieval_targets, output.score, output.index):
+        for target, scores, idx in zip(self.retrieval_targets, data['score'], data['index']):
             pred = np.argmax(scores, axis=-1)
             self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
             # check if output values are sorted
