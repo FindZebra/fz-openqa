@@ -18,13 +18,12 @@ import spacy
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy.language import Language
-from spacy.tokens import Doc
 from spacy.tokens.span import Span
-from spacy.util import filter_spans
 
 from ...utils.functional import infer_batch_size
 from .base import Pipe
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.utils.spacy_pipe_functions import merge_consecutive_entities  # type: ignore  # noqa: E501
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 
@@ -191,7 +190,7 @@ class AliasBasedMatch(RelevanceClassifier):
         filter_acronyms: Optional[bool] = True,
         model_name: Optional[str] = "en_core_sci_lg",
         linker_name: str = "umls",
-        threshold: float = 0.55,
+        threshold: float = 0.7,
         lazy_setup: bool = True,
         spacy_kwargs: Optional[Dict] = None,
         **kwargs,
@@ -262,67 +261,9 @@ class AliasBasedMatch(RelevanceClassifier):
         return model.get_pipe("scispacy_linker")
 
     @staticmethod
-    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.5):
+    def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.7):
         """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
         Doc is then processed in several different steps – the processing pipeline."""
-
-        @Language.component("__combineEntities__")
-        def _combine_entities(doc: Doc) -> Doc:
-            """Preprocess a spaCy doc
-
-            if doc text holds more than 3 words
-                split doc text into entities based on non-entity words.
-            else
-                merge doc text into a single entity.
-
-            Parameters
-            ----------
-            doc
-                (spacy.tokens.Doc): Doc object.
-
-            Returns
-            ----------
-            doc
-                (spacy.tokens.Doc): Doc object with processed entities.
-            """
-
-            def _group_entities(doc: Doc) -> List[Span]:
-                """Splits doc text into grouped entities based on non-entity words.
-
-                Parameters
-                ----------
-                doc
-                    (spacy.tokens.Doc): Doc object.
-
-                Returns
-                -------
-                List[Span]
-                    spans of grouped entities
-                """
-                spans = []
-                # tokenize entities based on white space
-                entities = list(itertools.chain(*[ent.text.split() for ent in doc.ents]))
-                # read through entities in doc text
-                for ent in doc.ents:
-                    # read rest of doc text from found entity
-                    for j in range(ent.start, doc.__len__()):
-                        # if word is not an entity append span of found entity to next entity
-                        if doc[j].text not in entities:
-                            spans.append(Span(doc, ent.start, doc[j].i, label="Entity"))
-                            break
-                    # if last word in doc text is an entity
-                    if doc[j].text in entities:
-                        spans.append(Span(doc, ent.start, doc.ents[-1].end, label="Entity"))
-                        break
-                # filter a sequence of spans and remove duplicates or overlaps.
-                return filter_spans(spans)
-
-            if doc.__len__() > 3:
-                doc.ents = _group_entities(doc=doc)
-            else:
-                doc.ents = [Span(doc, 0, doc.__len__(), label="Entity")]
-            return doc
-
         model = spacy.load(
             model_name,
             disable=[
@@ -334,7 +275,7 @@ class AliasBasedMatch(RelevanceClassifier):
             ],
         )
         model.add_pipe(
-            "__combineEntities__",
+            "merge_consecutive_entities",
         )
         model.add_pipe(
             "scispacy_linker",
@@ -346,7 +287,8 @@ class AliasBasedMatch(RelevanceClassifier):
         )
         return model
 
-    def _filter_entities(self, entity: Tuple, name: str) -> Entity:
+    @staticmethod
+    def _filter_entities(entity: Tuple, name: str) -> Entity:
         _, score = entity  # ent: (str, score)
         if name.count(" ") > 1:
             return True
