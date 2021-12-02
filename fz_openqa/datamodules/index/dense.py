@@ -51,6 +51,16 @@ from fz_openqa.utils.functional import is_index_contiguous
 logger = logging.getLogger(__name__)
 
 
+def display_file_size(key: str, fn: str, logger=None):
+    s = os.path.getsize(fn)
+    s /= 1024 ** 3
+    msg = f"{key}: {s:.3f} GB"
+    if logger is not None:
+        logger.info(msg)
+    else:
+        print(msg)
+
+
 def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[List[int], Batch]]:
     """
     Iterate over batches and return a tuple of the batch index and the batch itself.
@@ -65,7 +75,7 @@ def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[
 
 
 DEFAULT_FAISS_KWARGS = {
-    "type": "IVF",
+    "type": "IVFQ",
     "metric_type": faiss.METRIC_INNER_PRODUCT,
     "n_list": 32,
     "n_subvectors": 16,
@@ -89,8 +99,6 @@ class FaissIndex(Index):
     1. call `cache_query_dataset` before calling `search` on each batch`
     2. call `search` directly on the query `Dataset`
 
-    # todo: handle temporary cache_dir form here (persist=False)
-
     Parameters
     ----------
     model
@@ -105,7 +113,7 @@ class FaissIndex(Index):
     model: Callable = None
     index_name: str
     _vectors: Optional[pa.Table] = None
-    tok2doc: Optional[List] = None
+    _tok2doc: Optional[List] = None
     _master: bool = True
 
     def __init__(
@@ -262,18 +270,24 @@ class FaissIndex(Index):
                 logger.info(f"Loading FaissIndex from cache: {cache_file}")
                 self._index = faiss.read_index(str(cache_file))
                 self._vectors = pq.read_table(str(vector_file), memory_map=True)
-                if self.tok2doc is not None:
+                if self._tok2doc is not None:
                     with open(tok2doc_file, "rb") as f:
-                        self.tok2doc = pickle.load(f)
+                        self._tok2doc = pickle.load(f)
             else:
                 # build the index
                 self._build(dataset, cache_dir=cache_dir, vector_file=vector_file, **kwargs)
                 logger.info(f"Writing FaissIndex to cache: {cache_file}")
                 faiss.write_index(self._index, str(cache_file))
                 self._vectors = pq.read_table(str(vector_file), memory_map=True)
-                if self.tok2doc is not None:
+                if self._tok2doc is not None:
                     with open(tok2doc_file, "wb") as f:
-                        pickle.dump(self.tok2doc, f)
+                        pickle.dump(self._tok2doc, f)
+
+            # display file sizes
+            display_file_size("index", cache_file)
+            display_file_size("vectors", vector_file)
+            if self._tok2doc is not None:
+                display_file_size("tok2doc", tok2doc_file)
 
     def _build(self, dataset: Dataset, vector_file: Path | str, **kwargs):
         """
@@ -301,14 +315,16 @@ class FaissIndex(Index):
             logger.warning("No trainer provided. Using default loader.")
             trainer = Trainer(checkpoint_callback=False, logger=False)
 
+        self._vectors = None
         self._cache_vectors(
             dataset, predict=self.predict_docs, trainer=trainer, collate_fn=self.collate
         )
         loader_args["batch_size"] = self.faiss_train_size
 
-        # cache the vectors to a file
+        # cache the vectors to a file and delete the cache
         vectors = self.predict_docs.read_table(split=None)
         pq.write_table(vectors, vector_file)
+        self.predict_docs.delete_cached_files()
 
         # instantiate the base data loader
         loader = self._init_loader(dataset, collate_fn=self.collate, **loader_args)
@@ -365,7 +381,6 @@ class FaissIndex(Index):
         -------
         None
         """
-        self._vectors = None
         predict.invalidate_cache()
         predict.cache(
             dataset,
@@ -376,19 +391,20 @@ class FaissIndex(Index):
             cache_dir=self.cache_dir,
         )
 
-    def _init_index(self, batch):
+    def _init_index(self, batch: Batch):
         """
         Initialize the index
 
-        Parameters
+        Notes
         ----------
-        n_list
-            The number of cells (space partition). Typical value is sqrt(N)
-        n_subvectors
-            The number of sub-vectors. Typically this is 8, 16, 32, etc.
-            Must be a divisor of the dimension
-        n_bits
-            Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
+        `faiss_args` description:
+            n_list
+                The number of cells (space partition). Typical value is sqrt(N)
+            n_subvectors
+                The number of sub-vectors. Typically this is 8, 16, 32, etc.
+                Must be a divisor of the dimension
+            n_bits
+                Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
 
         """
         vectors = self._get_vector_from_batch(batch)
@@ -527,6 +543,8 @@ class FaissIndex(Index):
         loader = iter_batches_with_indexes(loader)
         for idx, batch in loader:
             yield self.search(batch, k=k, idx=idx, **kwargs)
+
+        self.predict_docs.delete_cached_files()
 
     def _search_dataset_dict(
         self, query: DatasetDict, *, k: int = 1, **kwargs

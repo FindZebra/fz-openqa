@@ -129,7 +129,7 @@ def run(config: DictConfig) -> None:
         model=model,
         trainer=trainer,
         faiss_args={
-            "type": "IVFQ",
+            "type": "flat",
             "metric_type": faiss.METRIC_INNER_PRODUCT,
             "n_list": 8,
             "n_subvectors": 8,
@@ -143,7 +143,7 @@ def run(config: DictConfig) -> None:
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder.get_collate_pipe(),
         cache_dir=cache_dir,
-        persist_cache=True,
+        persist_cache=config.get("persist_cache", False),
     )
     rich.print(index.is_indexed)
     rich.print(index.ntotal)
@@ -173,9 +173,7 @@ def run(config: DictConfig) -> None:
             score = eg["document.retrieval_score"][j]
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
-    # alternatively, you can iterate you can search for a whole dataloader:
-    exit()
-    # todo: for V. fix that
+    # alternatively, you can search for a whole dataloader:
     outputs = index.search(corpus, k=3, collate_fn=collate_fn, trainer=trainer)
     for search_results in outputs:
         pprint_batch(vars(search_results), "search whole dataset - results")

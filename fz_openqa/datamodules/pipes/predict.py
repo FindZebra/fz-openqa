@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import functools
 import logging
 import os.path
+import shutil
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -135,7 +138,7 @@ class Predict(Pipe):
     """
 
     model: Optional[pl.LightningModule] = None
-    cache_file: Optional[Union[CACHE_FILE, Dict[Split, CACHE_FILE]]] = None
+    cache_file: Optional[CACHE_FILE | Dict[Split, CACHE_FILE]] = None
     _loaded_table: Optional[pa.Table] = None
     _loaded_split: Optional[Split] = None
     _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
@@ -505,3 +508,16 @@ class Predict(Pipe):
         exclude = exclude or []
         exclude += ["cache_file", "cache_dir"]
         super(Predict, self).to_json_struct(exclude=exclude, **kwargs)
+
+    def delete_cached_files(self):
+        """Delete the cached files."""
+        if isinstance(self.cache_file, str):
+            shutil.rmtree(self.cache_file, ignore_errors=True)
+        elif isinstance(self.cache_file, dict):
+            for fn in self.cache_file.values():
+                shutil.rmtree(fn, ignore_errors=True)
+
+        else:
+            raise ValueError(f"cache_file must be a str or dict, got {type(self.cache_file)}")
+
+        self.cache_file = None

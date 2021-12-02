@@ -1,6 +1,8 @@
 from typing import Any
 
 import pytorch_lightning as pl
+from torch import nn
+from torch import tensor
 from transformers import AutoModel
 
 from fz_openqa.utils.datastruct import Batch
@@ -16,6 +18,7 @@ class ZeroShot(pl.LightningModule):
         self.bert = AutoModel.from_pretrained(bert_id)
         assert head in {"flat", "contextual"}
         self.head = head
+        self.is_colbert = nn.Parameter(tensor(head == "contextual"), requires_grad=False)
 
     def forward(self, batch: Batch, **kwargs) -> Any:
         output = {}

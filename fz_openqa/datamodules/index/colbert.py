@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 
 class ColbertIndex(FaissIndex):
-    tok2doc = []
+    _tok2doc = []
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """
@@ -39,7 +39,7 @@ class ColbertIndex(FaissIndex):
         # store token index to original document
         for idx in batch["__idx__"]:
             n_tokens = vector.shape[1]
-            self.tok2doc += n_tokens * [idx]
+            self._tok2doc += n_tokens * [idx]
 
     def _search_batch(
         self,
@@ -75,7 +75,7 @@ class ColbertIndex(FaissIndex):
         tok_indices_flat = tok_indices.flatten("C")
         doc_indices = defaultdict(list)
         for i in tok_indices_flat:
-            doc_indices[self.tok2doc[i]] += [i]
+            doc_indices[self._tok2doc[i]] += [i]
 
         # 4. retrieve the vectors for each unique document index
         # the table _vectors (pyarrow) contains the document vectors
@@ -87,7 +87,7 @@ class ColbertIndex(FaissIndex):
         # 5.1 get the set of document indices for each batch item
         # we start from a data structure [bs*q_tokens, k], convert it into
         # a structure [bs, q_tokens * k] and keep only the unique values across dim 1
-        retrieved_indices = [[self.tok2doc[i] for i in row] for row in tok_indices]
+        retrieved_indices = [[self._tok2doc[i] for i in row] for row in tok_indices]
         retrieved_indices = np.array(retrieved_indices).reshape(bs, -1)
         retrieved_indices = [list(set(row.tolist())) for row in retrieved_indices]
 

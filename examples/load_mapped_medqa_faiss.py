@@ -51,8 +51,8 @@ def run(config):
 
     On the cluster, run:
     ```bash
-    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 +num_workers=10 +use_subset=False
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
     ```
     """
     print_config(config)
@@ -127,6 +127,7 @@ def run(config):
             "pin_memory": config.get("pin_memory", True),
         },
         cache_dir=cache_dir,
+        persist_cache=True,
     )
 
     # define the OpenQA builder
@@ -139,8 +140,9 @@ def run(config):
         n_documents=10,
         max_pos_docs=1,
         filter_unmatched=True,
-        num_proc=4,
-        batch_size=100,
+        num_proc=config.get("num_proc", 4),
+        batch_size=config.get("map_batch_size", 4000),
+        select_mode=config.get("select_mode", "sample"),
     )
 
     # define the data module
