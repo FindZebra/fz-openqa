@@ -302,27 +302,18 @@ class AliasBasedMatch(RelevanceClassifier):
                 spans = []
                 # tokenize entities based on white space
                 entities = list(itertools.chain(*[ent.text.split() for ent in doc.ents]))
-                i = 0
-                # read through doc text
-                while i < doc.__len__():
-                    if doc[i].text in entities:
-                        j = i + 1
-                        search = True
-                        # read rest of doc text from found entity
-                        while search and j < doc.__len__():
-                            # if word is not an entity append span of found entity to next entity
-                            if doc[j].text not in entities:
-                                spans.append(Span(doc, doc[i].i, doc[j].i, label="Entity"))
-                                i = j
-                                search = False
-                            j += 1
-                        # if last word in doc text is an entity
-                        if search:
-                            spans.append(Span(doc, doc[i].i, doc.ents[-1].end, label="Entity"))
-                    i += 1
-                # if all words in doc text is an entity
-                if entities and len(spans) < 1:
-                    spans.append(Span(doc, doc.ents[0].start, doc.ents[-1].end, label="Entity"))
+                # read through entities in doc text
+                for ent in doc.ents:
+                    # read rest of doc text from found entity
+                    for j in range(ent.start, doc.__len__()):
+                        # if word is not an entity append span of found entity to next entity
+                        if doc[j].text not in entities:
+                            spans.append(Span(doc, ent.start, doc[j].i, label="Entity"))
+                            break
+                    # if last word in doc text is an entity
+                    if doc[j].text in entities:
+                        spans.append(Span(doc, ent.start, doc.ents[-1].end, label="Entity"))
+                        break
                 # filter a sequence of spans and remove duplicates or overlaps.
                 return filter_spans(spans)
 
