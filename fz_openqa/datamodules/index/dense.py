@@ -524,7 +524,7 @@ class FaissIndex(Index):
         """Query the index given a batch of data"""
         vector = self._get_vector_from_batch(query)
         score, indices = self._index.search(vector, k)
-        return SearchResult(score=score, index=indices, dataset_size=self.dataset_size)
+        return SearchResult(score=score, index=indices, dataset_size=self.dataset_size, k=k)
 
     def cache_query_dataset(
         self,

@@ -1,5 +1,4 @@
 import os
-import warnings
 from abc import ABC
 from unittest import TestCase
 
@@ -106,18 +105,14 @@ class TestIndex(TestCase, ABC):
         # check the output type
         self.assertIsInstance(output, SearchResult)
 
-
-        self.assertTrue((np.array(output.index)>=0).all())
-        self.assertTrue((np.array(output.index)<len(self.corpus)).all())
+        self.assertTrue((np.array(output.index) >= 0).all())
+        self.assertTrue((np.array(output.index) < len(self.corpus)).all())
 
         # check shape of the output
         expected_shape = (len(self.dataset), self.k)
         for key, output_shape in {'score': np.array(output.score).shape,
                                   'index': np.array(output.index).shape}.items():
-            if not output_shape == expected_shape:
-                # todo: use assert instead (fails for ES)
-                warnings.warn(f"The shape of the {key}={output_shape} does not "
-                              f"match the expected shape: {expected_shape}")
+            self.assertEqual(output_shape, expected_shape)
 
         # check the top-1 scores
         for target, scores, idx in zip(self.retrieval_targets, output.score, output.index):

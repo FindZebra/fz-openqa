@@ -118,7 +118,7 @@ class Index(Component):
                 tokens += [tokens_i]
         tokens = None if len(tokens) == 0 else tokens
         return SearchResult(
-            index=indexes, score=scores, tokens=tokens, dataset_size=self.dataset_size
+            index=indexes, score=scores, tokens=tokens, dataset_size=self.dataset_size, k=k
         )
 
     def get_example(self, query: Batch, index: int) -> Dict[str, Any]:

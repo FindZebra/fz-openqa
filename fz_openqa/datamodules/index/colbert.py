@@ -172,4 +172,6 @@ class ColbertIndex(FaissIndex):
         maxsim_doc_indices = torch.tensor(retrieved_indices, device=q_vectors.device)
         maxsim_doc_indices = maxsim_doc_indices.gather(dim=1, index=maxsim_indices)
 
-        return SearchResult(score=maxsim_scores, index=maxsim_doc_indices)
+        return SearchResult(
+            score=maxsim_scores, index=maxsim_doc_indices, dataset_size=self.dataset_size, k=k
+        )

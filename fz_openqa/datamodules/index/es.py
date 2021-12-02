@@ -164,7 +164,11 @@ class ElasticSearchIndex(Index):
             analyzed_tokens = None
 
         return SearchResult(
-            score=scores, index=indexes, tokens=analyzed_tokens, dataset_size=self.dataset_size
+            score=scores,
+            index=indexes,
+            tokens=analyzed_tokens,
+            dataset_size=self.dataset_size,
+            k=k,
         )
 
     def search_one(
