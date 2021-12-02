@@ -424,31 +424,6 @@ class AliasBasedMatch(RelevanceClassifier):
                     yield alias.lower()
 
 
-class MetaMapMatch(AliasBasedMatch):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
-        """Generate the field `pair.answer["aliases"]`"""
-        pairs = list(pairs)
-        # extract the answer and synonym texts from each Pair
-        answer_texts = map(self._extract_answer_text, pairs)
-
-        # join the aliases
-        for pair, answer in zip_longest(pairs, answer_texts):
-            answer_cuis = pair.answer.get(f"{self.answer_field}.cui", [])
-            e_aliases = set()
-            if answer_cuis:
-                del answer_cuis[3:]
-                linked_entities = self.get_linked_entities(answer_cuis)
-                e_aliases = set(self.extract_aliases(linked_entities))
-
-            answer_aliases = [answer] + list(e_aliases)
-            # update the pair and return
-            pair.answer[f"{self.answer_field}.aliases"] = answer_aliases
-            yield pair
-
-
 class ScispaCyMatch(AliasBasedMatch):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

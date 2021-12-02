@@ -9,7 +9,7 @@ from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import Exp
 from fz_openqa.datamodules.pipes import Collate, Sequential, PrintBatch
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix, Reduce
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
-from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
+from fz_openqa.datamodules.pipes.relevance import (ExactMatch,
                                                    ScispaCyMatch,
                                                    find_one, find_all, RelevanceClassifier)
 from fz_openqa.utils.functional import infer_batch_size
@@ -163,31 +163,6 @@ class TestRelevanceClassifier(TestCase):
         # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should find 0 matches
         self.assertEqual(output['document.match_score'][7][0], 0)
         # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should find 0 matches
-        self.assertEqual(output['document.match_score'][8][0], 0)
-
-
-    @unittest.skipUnless(MemoryRequirement(5)(), MemoryRequirement(5).explain())
-    def test_metamap_match(self):
-        classifier = MetaMapMatch(model_name="en_core_sci_sm", linker_name="umls")
-        classifier = self._wrap_classifier(classifier)
-        output = classifier(copy(self.batch))
-        # (b0) {answer.text : "Post polio syndrome (PPS)" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertEqual(output['document.match_score'][0][0], 0)
-        # (b1) {answer.text : "Thromboembolism" }. Should fail because no CUI tag or Synonyms is associated, thus, it's just an ExactMatch
-        self.assertEqual(output['document.match_score'][1][0], 0)
-        # (b2) {answer.text : "Cross-links between lysine residues" }. Should succeed, though no CUI tag is associated, however, synonym contains "Lysine" which triggers the postive document since we match an arbitrary literal string
-        self.assertEqual(output['document.match_score'][2][0], 0)
-        # (b3) {answer.text : "Gallbladder cancer" }. Should succeed, because the extract of aliases succeed to find 4 matches, e.g. match "Carcinoma of the gallbladder" to the document
-        self.assertEqual(output['document.match_score'][3][0], 0)
-        # (b4) {answer.text : "Psoriatic arthritis" }. Should succeed, because ExactMatch finds 4 matches to the answer.text to the document
-        self.assertEqual(output['document.match_score'][4][0], 3)
-        # (b5) {answer.text : "Tell the attending that he cannot fail to disclose this mistake" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
-        self.assertEqual(output['document.match_score'][5][0], 0)
-        # (b6) {answer.text : "Ask closed-ended questions and use a chaperone for future visits" }. The answer.text is too difficult to match to any passage of the corpus and extract meaning from so should succeed on 0 matches
-        self.assertEqual(output['document.match_score'][6][0], 0)
-        # (b7) {answer.text : "Obtain a urine analysis and urine culture" }. It's not possible to match the extracted meaning (aliases) to the document so should succeed on 0 matches
-        self.assertEqual(output['document.match_score'][7][0], 0)
-        # (b8) {answer.text : "Ketotifen eye drops" }. The document has nothing to do with "Ketofin", though "eye drops" is mentioned once or twice so should succeed on 0 matches
         self.assertEqual(output['document.match_score'][8][0], 0)
 
     @unittest.skipUnless(MemoryRequirement(5)(), MemoryRequirement(5).explain())
