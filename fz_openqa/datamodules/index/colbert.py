@@ -14,63 +14,16 @@ from datasets import Split
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.predict import OutputFormat
-from fz_openqa.datamodules.pipes.utils.nesting import flatten_nested
-from fz_openqa.datamodules.pipes.utils.nesting import nested_list
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import cast_to_numpy
 from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.pretty import pprint_batch
-from fz_openqa.utils.shape import infer_shape
 
 log = logging.getLogger(__name__)
-
-DEF_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
-DEFAULT_FAISS_KWARGS = {
-    "metric_type": faiss.METRIC_L2,
-    "n_list": 32,
-    "n_subvectors": 16,
-    "n_bits": 8,
-}
 
 
 class ColbertIndex(FaissIndex):
     tok2doc = []
-
-    def _init_index(self, batch):
-        """
-        Initialize the index and train on first batch of data
-
-        Parameters
-        ----------
-        vectors
-            The dataset to index.
-        metric_type
-            Distance metric, most common is METRIC.L2
-        n_list
-            The number of cells (partitions). Typical values is sqrt(N)
-        n_subvectors
-            The number of sub-vectors. Typically this is 8, 16, 32, etc.
-        n_bits
-            Bits per subvector. Typically 8, so that each sub-vector is encoded by 1 byte
-        dim
-            The dimension of the input vectors
-
-        """
-        vectors: np.ndarray = batch[self.vectors_column_name]
-        vectors = vectors.astype(np.float32)
-        assert len(vectors.shape) == 3
-        metric_type = self.faiss_args["metric_type"]
-        n_list = self.faiss_args["n_list"]
-        n_subvectors = self.faiss_args["n_subvectors"]
-        n_bits = self.faiss_args["n_bits"]
-        dim = vectors.shape[-1]
-        assert dim % n_subvectors == 0, "m must be a divisor of dim"
-
-        quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, n_subvectors, n_bits, metric_type)
-        self._index.train(vectors.reshape(-1, dim))
-        assert self._index.is_trained is True, "Index is not trained"
-        log.info(f"Index is trained: {self._index.is_trained}")
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """

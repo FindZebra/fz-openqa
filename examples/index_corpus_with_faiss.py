@@ -24,7 +24,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 
 import fz_openqa
-from utils import ZeroShot
+from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
@@ -129,6 +129,7 @@ def run(config: DictConfig) -> None:
         model=model,
         trainer=trainer,
         faiss_args={
+            "type": "IVFQ",
             "metric_type": faiss.METRIC_INNER_PRODUCT,
             "n_list": 8,
             "n_subvectors": 8,

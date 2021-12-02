@@ -5,8 +5,6 @@ from typing import Optional
 from typing import T
 from typing import Tuple
 
-import rich
-
 from fz_openqa.datamodules.pipes.utils.nesting import nested_list
 
 
@@ -42,7 +40,6 @@ class SearchResult:
 
         # pad to length
         pad_fn = partial(pad_to_length, fill_token=-1, length=self.k)
-        rich.print(self.index)
         self.index = list(map(pad_fn, self.index))
         pad_fn = partial(pad_to_length, fill_token=-1.0, length=self.k)
         self.score = list(map(pad_fn, self.score))

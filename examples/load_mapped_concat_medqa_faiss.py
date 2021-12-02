@@ -20,7 +20,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 
 import fz_openqa
-from utils import ZeroShot
+from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
 from fz_openqa.datamodules.builders import MedQaBuilder, ConcatMedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder

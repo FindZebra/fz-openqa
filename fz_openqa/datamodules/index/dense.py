@@ -22,7 +22,6 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -65,7 +64,8 @@ def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[
 
 
 DEFAULT_FAISS_KWARGS = {
-    "metric_type": faiss.METRIC_L2,
+    "type": "IVF",
+    "metric_type": faiss.METRIC_INNER_PRODUCT,
     "n_list": 32,
     "n_subvectors": 16,
     "n_bits": 8,
@@ -123,6 +123,7 @@ class FaissIndex(Index):
         collate_pipe: Pipe = None,
         persist_cache: bool = False,
         cache_dir: Optional[str] = None,
+        progress_bar: bool = False,
         **kwargs,
     ):
         """
@@ -190,6 +191,7 @@ class FaissIndex(Index):
         # trainer and dataloader
         self.trainer = trainer
         self.loader_kwargs = loader_kwargs or DEFAULT_LOADER_KWARGS
+        self.progress_bar = progress_bar
 
         # collate pipe use to convert dataset rows into a batch
         self.collate = collate_pipe or Collate()
@@ -296,7 +298,7 @@ class FaissIndex(Index):
         trainer = self.trainer
         if trainer is None:
             logger.warning("No trainer provided. Using default loader.")
-            Trainer(checkpoint_callback=False, logger=False)
+            trainer = Trainer(checkpoint_callback=False, logger=False)
 
         self._cache_vectors(
             dataset, predict=self.predict_docs, trainer=trainer, collate_fn=self.collate
@@ -312,7 +314,9 @@ class FaissIndex(Index):
 
         # process batches: this returns a generator, so batches will be processed
         # as they are consumed in the following loop
-        processed_batches = self._process_batches(loader, predict=self.predict_docs)
+        processed_batches = self._process_batches(
+            loader, predict=self.predict_docs, progress_bar=self.progress_bar
+        )
 
         # build an iterator over the processed batches
         it = iter_batches_with_indexes(processed_batches)
@@ -387,16 +391,27 @@ class FaissIndex(Index):
 
         """
         vectors = self._get_vector_from_batch(batch)
-        assert len(vectors.shape) == 2
-        rich.print(self.faiss_args)
-        metric_type = self.faiss_args["metric_type"]
-        n_list = self.faiss_args["n_list"]
-        n_subvectors = self.faiss_args["n_subvectors"]
-        n_bits = self.faiss_args["n_bits"]
+        # reshape as 2D array
+        vectors = vectors.reshape((-1, vectors.shape[-1]))
+
+        # init the faiss index
         dim = vectors.shape[-1]
-        assert dim % n_subvectors == 0, "m must be a divisor of dim"
-        quantizer = faiss.IndexFlatL2(dim)
-        self._index = faiss.IndexIVFPQ(quantizer, dim, n_list, n_subvectors, n_bits, metric_type)
+        index_type = self.faiss_args["type"]
+        metric_type = self.faiss_args["metric_type"]
+        if index_type == "IVFQ":
+            n_list = self.faiss_args["n_list"]
+            n_subvectors = self.faiss_args["n_subvectors"]
+            n_bits = self.faiss_args["n_bits"]
+
+            assert dim % n_subvectors == 0, "m must be a divisor of dim"
+            quantizer = faiss.IndexFlatL2(dim)
+            self._index = faiss.IndexIVFPQ(
+                quantizer, dim, n_list, n_subvectors, n_bits, metric_type
+            )
+        elif index_type == "flat":
+            self._index = faiss.IndexFlat(dim, metric_type)
+        else:
+            raise ValueError(f"Unknown index type {index_type}")
 
         # train the index once using the 1st batch
         # todo: this is a hack, we should decorrelate batch_size of the dataloader
@@ -415,7 +430,6 @@ class FaissIndex(Index):
         """
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
-        print("Done training!")
 
     def _add_batch_to_index(self, batch: Batch, idx: List[int]):
         """
@@ -559,7 +573,7 @@ class FaissIndex(Index):
         loader: DataLoader,
         *,
         predict: Predict,
-        progress_bar: bool = True,
+        progress_bar: bool = False,
     ) -> Iterable[Batch]:
 
         """

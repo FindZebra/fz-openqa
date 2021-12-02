@@ -11,6 +11,7 @@ from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
+from fz_openqa.utils.train_utils import setup_safe_env
 
 
 class TestIndex(TestCase, ABC):
@@ -24,6 +25,7 @@ class TestIndex(TestCase, ABC):
         """setup a toy dataset where retrieval outcomes are expected."""
 
         torch.set_grad_enabled(False)
+        setup_safe_env()
         os.environ['TOKENIZERS_PARALLELISM'] = "false"
         # init a tokenizer and bert
         self.tokenizer = AutoTokenizer.from_pretrained(self._bert_id)
