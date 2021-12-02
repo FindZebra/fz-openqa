@@ -1,25 +1,24 @@
 defaults:
   - builder: openqa
-  - text_formatter: simple
+  - text_formatter: simple_lowercase
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: scispacy_match
-  - analyses: standard
+  - relevance_classifier: exact_match
 
 _target_: fz_openqa.datamodules.DataModule
 
 # datamodule args
 train_batch_size: 10
 eval_batch_size: 20
-num_workers: 2
+num_workers: 4
 pin_memory: True
 persistent_workers: False
 
 # global: dataset preprocessing
-add_encoding_tokens: false
-add_special_tokens: false
-use_subset: True
-num_proc: 2
+add_encoding_tokens: true
+add_special_tokens: true
+use_subset: false
+num_proc: 4
 cache_dir: ${sys.cache_dir}
 
 
@@ -30,17 +29,5 @@ n_documents:
   validation: 100
   test: 100
 max_pos_docs: 1
-filter_unmatched: false
-
-#analyses:
-#  - count_matched_questions
-
-output_columns:
-  - question.input_ids
-  - question.attention_mask
-  - document.input_ids
-  - document.attention_mask
-  - document.row_idx
-  - document.match_score
-  - document.retrieval_score
-  - answer.target
+filter_unmatched: true
+select_mode: first
