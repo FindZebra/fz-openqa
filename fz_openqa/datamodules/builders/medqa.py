@@ -2,11 +2,13 @@ import logging
 from functools import partial
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import dill  # type: ignore
 from datasets import DatasetDict
 from datasets import load_dataset
+from datasets.arrow_dataset import concatenate_datasets
 
 from ...utils.datastruct import Eg
 from ..pipelines.collate.field import CollateField
@@ -16,7 +18,9 @@ from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import medqa_us_custom
+from fz_openqa.datamodules.generators import file_medqa
+from fz_openqa.datamodules.generators import medqa_tw_official
+from fz_openqa.datamodules.generators import medqa_us_official
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
@@ -49,7 +53,7 @@ class MinLength:
 
 class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = medqa_us_custom.__file__
+    dset_script_path_or_id = file_medqa.__file__
 
     # nesting level of the question field
     nesting_level = 0
@@ -336,3 +340,24 @@ class ConcatMedQaBuilder(MedQaBuilder):
             repr += line
 
         return repr
+
+
+class MedQAEnBuilder(MedQaBuilder):
+    subset_size = [3]
+    dset_script_path_or_id: List = medqa_us_official.__file__
+
+
+class MedQATwBuilder(MedQaBuilder):
+    subset_size = [3]
+    dset_script_path_or_id: List = medqa_tw_official.__file__
+
+
+class EnxTwMedQABuilder(HfDatasetBuilder):
+    subset_size = [3]
+    dset_script_path_or_id: List = [medqa_us_official.__file__, medqa_tw_official.__file__]
+
+    def load_base_dataset(self) -> DatasetDict:
+        assert self.dset_script_path_or_id is None
+        kwargs = {"cache_dir": self.cache_dir}
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        return concatenate_datasets(dsets)
