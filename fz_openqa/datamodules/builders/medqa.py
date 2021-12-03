@@ -20,6 +20,7 @@ from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_medqa
 from fz_openqa.datamodules.generators import medqa_tw_official
+from fz_openqa.datamodules.generators import medqa_us_custom
 from fz_openqa.datamodules.generators import medqa_us_official
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
@@ -342,17 +343,17 @@ class ConcatMedQaBuilder(MedQaBuilder):
         return repr
 
 
-class MedQAEnBuilder(MedQaBuilder):
+class MedQaEnBuilder(MedQaBuilder):
     subset_size = [3]
-    dset_script_path_or_id: List = medqa_us_official.__file__
+    dset_script_path_or_id = medqa_us_official.__file__
 
 
-class MedQATwBuilder(MedQaBuilder):
+class MedQaTwBuilder(MedQaBuilder):
     subset_size = [3]
-    dset_script_path_or_id: List = medqa_tw_official.__file__
+    dset_script_path_or_id = medqa_tw_official.__file__
 
 
-class EnxTwMedQABuilder(HfDatasetBuilder):
+class EnxTwMedQaBuilder(HfDatasetBuilder):
     subset_size = [3]
     dset_script_path_or_id: List = [medqa_us_official.__file__, medqa_tw_official.__file__]
 

@@ -52,6 +52,12 @@ class OfficialMedQaGenerator(datasets.GeneratorBasedBuilder):
             citation=_CITATION,
         )
 
+    @staticmethod
+    def _get_drive_url(url):
+        base_url = "https://drive.google.com/uc?id="
+        split_url = url.split("/")
+        return base_url + split_url[5]
+
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
         downloaded_files = {
