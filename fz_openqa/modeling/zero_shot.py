@@ -1,6 +1,8 @@
 from typing import Any
+from typing import Optional
 
 import pytorch_lightning as pl
+import torch
 from torch import nn
 from torch import tensor
 from transformers import AutoModel
@@ -12,13 +14,19 @@ class ZeroShot(pl.LightningModule):
     """A simple BERT model for testing in a zero-shot setting."""
 
     def __init__(
-        self, bert_id: str = "dmis-lab/biobert-base-cased-v1.2", head: str = "flat", **kwargs
+        self,
+        bert_id: str = "dmis-lab/biobert-base-cased-v1.2",
+        head: str = "flat",
+        limit_size: Optional[int] = None,
+        **kwargs,
     ):
         super(ZeroShot, self).__init__()
         self.bert = AutoModel.from_pretrained(bert_id)
         assert head in {"flat", "contextual"}
         self.head = head
+        self.limit_size = limit_size
         self.is_colbert = nn.Parameter(tensor(head == "contextual"), requires_grad=False)
+        self._limit_size = nn.Parameter(tensor(limit_size), requires_grad=False)
 
     def forward(self, batch: Batch, **kwargs) -> Any:
         output = {}
@@ -35,7 +43,13 @@ class ZeroShot(pl.LightningModule):
                 if self.head == "flat":
                     vec = h[:, 0, :]
                 elif self.head == "contextual":
+
+                    if self.limit_size is not None:
+                        a = h[..., : self.limit_size - 1]
+                        b = h[..., self.limit_size - 1 :].mean(-1, keepdim=True)
+                        h = torch.cat([a, b], dim=-1)
                     vec = h / h.norm(dim=2, keepdim=True)
+
                 else:
                     raise NotImplementedError
 

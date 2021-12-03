@@ -14,6 +14,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.json_struct import flatten_json_struct
 
@@ -90,8 +91,17 @@ class SearchResult:
         index: Array2d,
         tokens: Optional[List[List[str]]] = None,
         dataset_size: Optional[int] = None,
+        format: Optional[OutputFormat] = None,
         k: int,
     ):
+        if format == OutputFormat.NUMPY:
+            score = np.array(score)
+            index = np.array(index)
+        elif format == OutputFormat.TENSOR:
+            score = torch.tensor(score)
+            index = torch.tensor(index)
+        else:
+            raise ValueError(f"Unsupported format: {format}")
 
         self.score = score
         self.index = index

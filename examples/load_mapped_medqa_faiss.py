@@ -71,7 +71,7 @@ def run(config):
     # load model
     zero_shot = config.get("zero_shot", True)
     if zero_shot:
-        model = ZeroShot(head="contextual" if use_colbert else "flat")
+        model = ZeroShot(head="contextual" if use_colbert else "flat", limit_size=32)
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
         if config.get("verbose", False):
@@ -128,6 +128,8 @@ def run(config):
         },
         cache_dir=cache_dir,
         persist_cache=True,
+        progress_bar=True,
+        faiss_train_size=1000 if use_colbert else 10000,
     )
 
     # define the OpenQA builder

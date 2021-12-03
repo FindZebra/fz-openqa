@@ -1,34 +1,30 @@
 import logging
 from collections import defaultdict
-from collections import OrderedDict
 from copy import deepcopy
 from typing import List
 from typing import Optional
 
-import faiss
 import numpy as np
-import rich
 import torch
 from datasets import Split
 
+from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import cast_to_numpy
 from fz_openqa.utils.json_struct import apply_to_json_struct
-from fz_openqa.utils.pretty import pprint_batch
 
 log = logging.getLogger(__name__)
 
 
 class ColbertIndex(FaissIndex):
     _tok2doc = []
+    _use_tok2doc: bool = True
 
     def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
         """ Add one batch of data to the index """
-        # check indexes
-        # self._check_index_consistency(idx)
 
         # add vector to index
         vector = self._get_vector_from_batch(batch)
@@ -40,6 +36,15 @@ class ColbertIndex(FaissIndex):
         for idx in batch["__idx__"]:
             n_tokens = vector.shape[1]
             self._tok2doc += n_tokens * [idx]
+
+    def _check_full_index_consistency(self):
+        # todo: implement
+        pass
+
+        # if not self._index.ntotal * doc_len == self._vectors.num_rows:
+        #     raise ValueError(f"The number of vectors in the index ({self._index.ntotal}) is "
+        #                      f"not equal to the number of vectors in "
+        #                      f"the dataset ({self._vectors.num_rows})")
 
     def _search_batch(
         self,
@@ -66,9 +71,8 @@ class ColbertIndex(FaissIndex):
         np_q_vectors = np_q_vectors.reshape(-1, dim)
         distances, tok_indices = self._index.search(np_q_vectors, p)
 
-        # 3. retrieve the document indices for each token idx
-        # @idariis: excellent idea with the set of indices
-        # here a create a dictionary with the document_id as key and
+        # 3. retrieve the document indices for each token idx.
+        # Create a dictionary with the document_id as key and
         # the token ids as values, it allows to
         #    1. get the set of documents
         #    2. get the list of token ids attached to each document
@@ -92,7 +96,6 @@ class ColbertIndex(FaissIndex):
         retrieved_indices = [list(set(row.tolist())) for row in retrieved_indices]
 
         # 5.2 pad the values to the same length `p`
-        # @Idariis: I think they use something different in the paper
         max_len = max([len(row) for row in retrieved_indices])
         pad_length = max(k, max_len)
 
@@ -107,7 +110,6 @@ class ColbertIndex(FaissIndex):
         # 6. dispatch the document vectors to their corresponding token idx
         d_vectors = [[doc2vec[i] for i in row] for row in retrieved_indices]
         d_vectors = torch.tensor(d_vectors, dtype=q_vectors.dtype, device=q_vectors.device)
-        _, p, d_tokens, dim = d_vectors.shape
 
         # 7. apply max sim to the retrieved vectors
         scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
@@ -124,5 +126,9 @@ class ColbertIndex(FaissIndex):
         maxsim_doc_indices = maxsim_doc_indices.gather(dim=1, index=maxsim_indices)
 
         return SearchResult(
-            score=maxsim_scores, index=maxsim_doc_indices, dataset_size=self.dataset_size, k=k
+            score=maxsim_scores,
+            index=maxsim_doc_indices,
+            dataset_size=self.dataset_size,
+            k=k,
+            format=OutputFormat.NUMPY,
         )

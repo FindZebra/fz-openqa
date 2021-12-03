@@ -407,9 +407,8 @@ class Predict(Pipe):
         return self._loaded_table
 
     @staticmethod
-    def read_table_from_cache_file(cache_file: str) -> pa.Table:
-        read_args = {"memory_map": True}
-        return pq.read_table(cache_file, **read_args)
+    def read_table_from_cache_file(cache_file: str, memory_map: bool = False) -> pa.Table:
+        return pq.read_table(cache_file, memory_map=memory_map)
 
     @staticmethod
     def init_loader(
@@ -511,6 +510,9 @@ class Predict(Pipe):
 
     def delete_cached_files(self):
         """Delete the cached files."""
+        logger.info(f"Deleting cached vectors {self.cache_file}")
+        self._loaded_table = None
+        self._loaded_splits = None
         if isinstance(self.cache_file, str):
             shutil.rmtree(self.cache_file, ignore_errors=True)
         elif isinstance(self.cache_file, dict):

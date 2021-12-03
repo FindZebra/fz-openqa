@@ -47,11 +47,12 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
+from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
 
-def display_file_size(key: str, fn: str, logger=None):
+def display_file_size(key: str, fn: Path | str, logger=None):
     s = os.path.getsize(fn)
     s /= 1024 ** 3
     msg = f"{key}: {s:.3f} GB"
@@ -115,6 +116,7 @@ class FaissIndex(Index):
     _vectors: Optional[pa.Table] = None
     _tok2doc: Optional[List] = None
     _master: bool = True
+    _use_tok2doc: bool = False
 
     def __init__(
         self,
@@ -238,7 +240,19 @@ class FaissIndex(Index):
     def ntotal(self):
         return self._index is None or self._index.ntotal
 
-    def build(self, dataset: Dataset, *, cache_dir=Optional[None], **kwargs):
+    @property
+    def index_file(self):
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / index.faiss"
+
+    @property
+    def vector_file(self):
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / vectors.arrow"
+
+    @property
+    def tok2doc_file(self):
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / tok2doc.pkl"
+
+    def build(self, dataset: Dataset, **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
 
@@ -246,8 +260,6 @@ class FaissIndex(Index):
         ----------
         dataset
             The dataset to index.
-        cache_dir
-            The directory to store the cache in.
         kwargs
             Additional arguments to pass to `_build`
         Returns
@@ -255,41 +267,36 @@ class FaissIndex(Index):
         None
 
         """
-        if cache_dir is None or self.index_name is None:
-            # skip caching if not cache_dir is provided
-            logger.info("No cache_dir provided. Building index without caching")
-            self._build(dataset, cache_dir=cache_dir, **kwargs)
 
+        if self.index_file.exists():
+            self._load_from_cache()
         else:
-            cache_file = Path(cache_dir) / "indexes" / f"{self.index_name} / index"
-            vector_file = Path(cache_dir) / "indexes" / f"{self.index_name} / vectors.arrow"
-            tok2doc_file = Path(cache_dir) / "indexes" / f"{self.index_name} / tok2doc.pkl"
-            cache_file.parent.mkdir(parents=True, exist_ok=True)
-            if cache_file.exists():
-                # load the index from the cache
-                logger.info(f"Loading FaissIndex from cache: {cache_file}")
-                self._index = faiss.read_index(str(cache_file))
-                self._vectors = pq.read_table(str(vector_file), memory_map=True)
-                if self._tok2doc is not None:
-                    with open(tok2doc_file, "rb") as f:
-                        self._tok2doc = pickle.load(f)
-            else:
-                # build the index
-                self._build(dataset, cache_dir=cache_dir, vector_file=vector_file, **kwargs)
-                logger.info(f"Writing FaissIndex to cache: {cache_file}")
-                faiss.write_index(self._index, str(cache_file))
-                self._vectors = pq.read_table(str(vector_file), memory_map=True)
-                if self._tok2doc is not None:
-                    with open(tok2doc_file, "wb") as f:
-                        pickle.dump(self._tok2doc, f)
+            # build the index
+            self.index_file.parent.mkdir(parents=True, exist_ok=True)
+            self._build(dataset, vector_file=self.vector_file, **kwargs)
+            logger.info(f"Writing FaissIndex to cache: {self.index_file}")
+            faiss.write_index(self._index, str(self.index_file))
+            self._vectors = pq.read_table(str(self.vector_file))
+            if self._use_tok2doc:
+                with open(self.tok2doc_file, "wb") as f:
+                    pickle.dump(self._tok2doc, f)
 
-            # display file sizes
-            display_file_size("index", cache_file)
-            display_file_size("vectors", vector_file)
-            if self._tok2doc is not None:
-                display_file_size("tok2doc", tok2doc_file)
+        # display file sizes
+        display_file_size("index", self.index_file)
+        display_file_size("vectors", self.vector_file)
+        if self._use_tok2doc:
+            display_file_size("tok2doc", self.tok2doc_file)
 
-    def _build(self, dataset: Dataset, vector_file: Path | str, **kwargs):
+    def _load_from_cache(self):
+        # load the index from the cache
+        logger.info(f"Loading FaissIndex from cache: {self.index_file}")
+        self._index = faiss.read_index(str(self.index_file))
+        self._vectors = pq.read_table(str(self.vector_file))
+        if self._use_tok2doc:
+            with open(self.tok2doc_file, "rb") as f:
+                self._tok2doc = pickle.load(f)
+
+    def _build(self, dataset: Dataset, **kwargs):
         """
         Build the index using the model and the dataset.
         Iterate over each batch and add the vectors to the index.
@@ -309,7 +316,6 @@ class FaissIndex(Index):
         """
 
         # if a trainer is not available, use the default one
-        loader_args = {}
         trainer = self.trainer
         if trainer is None:
             logger.warning("No trainer provided. Using default loader.")
@@ -319,42 +325,51 @@ class FaissIndex(Index):
         self._cache_vectors(
             dataset, predict=self.predict_docs, trainer=trainer, collate_fn=self.collate
         )
-        loader_args["batch_size"] = self.faiss_train_size
 
         # cache the vectors to a file and delete the cache
-        vectors = self.predict_docs.read_table(split=None)
-        pq.write_table(vectors, vector_file)
-        self.predict_docs.delete_cached_files()
+        # vectors: pa.Table = self.predict_docs.read_table(split=None)
+        # logger.info(f"Writing vectors to {vector_file}")
+        # pq.write_table(vectors, vector_file, compression="SNAPPY")
+        shutil.copy(self.predict_docs.cache_file, self.vector_file)
+        vectors = pq.read_table(str(self.vector_file))
 
-        # instantiate the base data loader
-        loader = self._init_loader(dataset, collate_fn=self.collate, **loader_args)
-
-        # process batches: this returns a generator, so batches will be processed
-        # as they are consumed in the following loop
-        processed_batches = self._process_batches(
-            loader, predict=self.predict_docs, progress_bar=self.progress_bar
+        # load the vectors form the table
+        it = iter(
+            self._process_batches(
+                vectors, progress_bar=self.progress_bar, batch_size=self.faiss_train_size
+            )
         )
 
-        # build an iterator over the processed batches
-        it = iter_batches_with_indexes(processed_batches)
-
         # init the faiss index and add the 1st batch
-        idx, batch = next(it)
+        batch = next(it)
         self._init_index(batch)
-        self._add_batch_to_index(batch, idx)
+        self._add_batch_to_index(batch)
 
         # iterate through the remaining batches and add them to the index
         while True:
             try:
-                idx, batch = next(it)
-                self._add_batch_to_index(batch, idx=idx)
-            except Exception:
+                batch = next(it)
+                self._add_batch_to_index(batch)
+            except StopIteration:
                 break
 
         logger.info(
             f"Index is_trained={self._index.is_trained}, "
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
+
+        self._check_full_index_consistency()
+        self.predict_docs.delete_cached_files()
+        # todo
+        self._index.nprobe = 10
+
+    def _check_full_index_consistency(self):
+        if not self._index.ntotal == self._vectors.num_rows:
+            raise ValueError(
+                f"The number of vectors in the index ({self._index.ntotal}) is "
+                f"not equal to the number of vectors in "
+                f"the dataset ({self._vectors.num_rows})"
+            )
 
     def _cache_vectors(
         self,
@@ -431,8 +446,6 @@ class FaissIndex(Index):
             raise ValueError(f"Unknown index type {index_type}")
 
         # train the index once using the 1st batch
-        # todo: this is a hack, we should decorrelate batch_size of the dataloader
-        #  and faiss_train_size
         self._train(vectors)
 
     def _train(self, vectors):
@@ -448,10 +461,11 @@ class FaissIndex(Index):
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
 
-    def _add_batch_to_index(self, batch: Batch, idx: List[int]):
+    def _add_batch_to_index(self, batch: Batch):
         """
         Add one batch of data to the index
         """
+        idx = batch[IDX_COL]
         self._check_index_consistency(idx)
 
         # add the vectors to the index
@@ -550,7 +564,6 @@ class FaissIndex(Index):
         self, query: DatasetDict, *, k: int = 1, **kwargs
     ) -> Dict[Split, Iterator[SearchResult]]:
         """This method is called if `query` is of type DatasetDict"""
-        # todo : reimplement
         return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
 
     def _query_index(self, query: Batch, *, k: int) -> SearchResult:
@@ -574,8 +587,11 @@ class FaissIndex(Index):
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""
-        vector: np.ndarray = batch[self.vectors_column_name]
-        vector = vector.astype(self._dtype)
+        vector: np.ndarray | List = batch[self.vectors_column_name]
+        if isinstance(vector, list):
+            vector = np.array(vector, dtype=self._dtype)
+        else:
+            vector = vector.astype(self._dtype)
         return vector
 
     def _init_loader(self, dataset, *, collate_fn: Callable, **kwargs):
@@ -588,6 +604,29 @@ class FaissIndex(Index):
         )
 
     def _process_batches(
+        self,
+        vectors: pa.Table,
+        *,
+        batch_size: int,
+        progress_bar: bool = False,
+    ) -> Iterable[Batch]:
+        loader = vectors.to_batches(max_chunksize=batch_size)
+        # def _iter_batches(vectors, batch_size):
+        #     for i in range(0, vectors.num_rows, batch_size):
+        #         yield vectors[i:i + batch_size]
+        #
+        # loader = iter(_iter_batches(vectors, batch_size))
+
+        if progress_bar:
+            desc = f"Ingest Faiss index (batch_size={batch_size})"
+            loader = track(loader, description=desc, total=vectors.num_rows // batch_size)
+
+        for i, batch in enumerate(loader):
+            batch = batch.to_pydict()
+            batch = self.postprocess(batch)
+            yield batch
+
+    def _process_batches_from_loader(
         self,
         loader: DataLoader,
         *,
@@ -635,13 +674,17 @@ class FaissIndex(Index):
         state = self.__dict__.copy()
         # state["model"] = None
         state["trainer"] = None
-        state["_index"] = faiss.serialize_index(state["_index"])
+        # state["_index"] = faiss.serialize_index(state["_index"])
+        for key in ["_index", "_tok2doc", "_vectors"]:
+            if key in state:
+                state.pop(key)
         return state
 
     def __setstate__(self, state):
-        state["_index"] = faiss.deserialize_index(state["_index"])
+        # state["_index"] = faiss.deserialize_index(state["_index"])
         state["_master"] = False
         self.__dict__.update(state)
+        self._load_from_cache()
 
     def _check_index_consistency(self, idx):
         """Make sure the new idx are consistent with the `_index`"""
