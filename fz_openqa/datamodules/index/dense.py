@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os.path
-import pickle
 import shutil
 import tempfile
 from functools import singledispatchmethod
@@ -29,7 +28,6 @@ from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
-from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import SequentialSampler
 
@@ -45,15 +43,15 @@ from fz_openqa.datamodules.pipes.meta import Sequential
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
 from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
 
-def display_file_size(key: str, fn: Path | str, logger=None):
+def display_file_size(key: str, fn: PathLike, logger=None):
     s = os.path.getsize(fn)
     s /= 1024 ** 3
     msg = f"{key}: {s:.3f} GB"
@@ -114,11 +112,8 @@ class FaissIndex(Index):
     _index: FaissSwigIndex = None
     model: Callable = None
     index_name: str
-    _vectors: Optional[pa.Table] = None
-    _in_memory_vectors: Optional[Tensor] = None
-    _emb2pid: Optional[Tensor] = None
+    _vectors_table: Optional[pa.Table] = None
     _master: bool = True
-    _use_emb2pid: bool = False
 
     def __init__(
         self,
@@ -131,6 +126,7 @@ class FaissIndex(Index):
         trainer: Optional[Trainer] = None,
         faiss_args: Dict[str, Any] = None,
         faiss_train_size: int = 1000,
+        in_memory: bool = True,
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
         collate_pipe: Pipe = None,
@@ -159,6 +155,8 @@ class FaissIndex(Index):
             Additional arguments to pass to the Faiss index.
         faiss_train_size
             Number of data points to train the index on.
+        in_memory:
+            Whether to store the index in memory or load using pyarrow (only for Colbert)
         model_output_keys
             Names of the accepted model output keys (vector to use for indexing).
         loader_kwargs
@@ -196,6 +194,7 @@ class FaissIndex(Index):
         self.model = model
         self.faiss_args = faiss_args
         self.faiss_train_size = faiss_train_size
+        self.in_memory = in_memory
         self.trainer = trainer
 
         # column names
@@ -250,10 +249,6 @@ class FaissIndex(Index):
     def vector_file(self):
         return Path(self.cache_dir) / "indexes" / f"{self.index_name} / vectors.arrow"
 
-    @property
-    def tok2doc_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / tok2doc.pkl"
-
     def build(self, dataset: Dataset, **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
@@ -271,32 +266,29 @@ class FaissIndex(Index):
         """
 
         if self.index_file.exists():
-            self._load_from_cache()
+            self._read_index()
         else:
             # build the index
             self.index_file.parent.mkdir(parents=True, exist_ok=True)
             self._build(dataset, vector_file=self.vector_file, **kwargs)
-            logger.info(f"Writing FaissIndex to cache: {self.index_file}")
-            faiss.write_index(self._index, str(self.index_file))
-            self._vectors = pq.read_table(str(self.vector_file))
-            if self._use_emb2pid:
-                with open(self.tok2doc_file, "wb") as f:
-                    pickle.dump(self._emb2pid, f)
+            self._write_index()
 
         # display file sizes
         display_file_size("index", self.index_file)
         display_file_size("vectors", self.vector_file)
-        if self._use_emb2pid:
-            display_file_size("tok2doc", self.tok2doc_file)
 
-    def _load_from_cache(self):
-        # load the index from the cache
-        logger.info(f"Loading FaissIndex from cache: {self.index_file}")
+    def _write_index(self):
+        logger.info(f"Writing {type(self).__name__} [to]: {self.index_file}")
+        faiss.write_index(self._index, str(self.index_file))
+
+    def _read_index(self):
+        logger.info(f"Reading {type(self).__name__} from: {self.index_file}")
         self._index = faiss.read_index(str(self.index_file))
-        self._vectors = pq.read_table(str(self.vector_file))
-        if self._use_emb2pid:
-            with open(self.tok2doc_file, "rb") as f:
-                self._emb2pid = pickle.load(f)
+
+    def _read_vectors_table(self):
+        logger.info(f"Reading vectors table from: {self.vector_file}")
+        vectors = pq.read_table(str(self.vector_file))
+        return vectors
 
     def _build(self, dataset: Dataset, **kwargs):
         """
@@ -323,17 +315,17 @@ class FaissIndex(Index):
             logger.warning("No trainer provided. Using default loader.")
             trainer = Trainer(checkpoint_callback=False, logger=False)
 
-        self._vectors = None
+        # process the dataset using the model and cache the vectors
         self._cache_vectors(
-            dataset, predict=self.predict_docs, trainer=trainer, collate_fn=self.collate
+            dataset,
+            predict=self.predict_docs,
+            trainer=trainer,
+            collate_fn=self.collate,
+            target_file=self.vector_file,
         )
 
-        # cache the vectors to a file and delete the cache
-        # vectors: pa.Table = self.predict_docs.read_table(split=None)
-        # logger.info(f"Writing vectors to {vector_file}")
-        # pq.write_table(vectors, vector_file, compression="SNAPPY")
-        shutil.copy(self.predict_docs.cache_file, self.vector_file)
-        vectors = pq.read_table(str(self.vector_file))
+        # read the vectors from the cache as a pyarrow table
+        vectors: pa.Table = self._read_vectors_table()
 
         # load the vectors form the table
         it = iter(
@@ -360,19 +352,6 @@ class FaissIndex(Index):
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
 
-        self._check_full_index_consistency()
-        self.predict_docs.delete_cached_files()
-        # todo
-        self._index.nprobe = 10
-
-    def _check_full_index_consistency(self):
-        if not self._index.ntotal == self._vectors.num_rows:
-            raise ValueError(
-                f"The number of vectors in the index ({self._index.ntotal}) is "
-                f"not equal to the number of vectors in "
-                f"the dataset ({self._vectors.num_rows})"
-            )
-
     def _cache_vectors(
         self,
         dataset: Dataset | DatasetDict,
@@ -380,6 +359,8 @@ class FaissIndex(Index):
         predict: Predict,
         trainer: Trainer,
         collate_fn: Callable,
+        cache_dir: Optional[Path] = None,
+        target_file: Optional[PathLike] = None,
     ):
         """
         Compute and cache the vectors for the entire dataset.
@@ -393,6 +374,8 @@ class FaissIndex(Index):
             The trainer to use to compute the vectors.
         collate_fn
             The pipe used to collate rows from the dataset
+        target_file
+            The path to save the vectors to.
 
         Returns
         -------
@@ -405,7 +388,8 @@ class FaissIndex(Index):
             collate_fn=collate_fn,
             loader_kwargs=self.loader_kwargs,
             persist=True,
-            cache_dir=self.cache_dir,
+            cache_dir=cache_dir,
+            target_file=target_file,
         )
 
     def _init_index(self, batch: Batch):
@@ -447,6 +431,9 @@ class FaissIndex(Index):
         else:
             raise ValueError(f"Unknown index type {index_type}")
 
+        # set n_probe
+        self._index.nprobe = self.faiss_args.get("n_probe", 10)
+
         # train the index once using the 1st batch
         self._train(vectors)
 
@@ -467,14 +454,13 @@ class FaissIndex(Index):
         """
         Add one batch of data to the index
         """
-        idx = batch[IDX_COL]
-        self._check_index_consistency(idx)
+        # idx = batch[IDX_COL]
+        # self._check_index_consistency(idx)
 
         # add the vectors to the index
         vectors = self._get_vector_from_batch(batch)
         assert isinstance(vectors, np.ndarray), f"vector {type(vectors)} is not a numpy array"
-        assert len(vectors.shape) == 2, f"{vectors} is not a 2D array"
-        self._index.add(vectors)
+        self._index.add(vectors.reshape(-1, vectors.shape[-1]))
 
     @singledispatchmethod
     def search(
@@ -584,7 +570,12 @@ class FaissIndex(Index):
     ):
         trainer = trainer or self.trainer
         self._cache_vectors(
-            dataset, predict=self.predict_queries, collate_fn=collate_fn, trainer=trainer
+            dataset,
+            predict=self.predict_queries,
+            collate_fn=collate_fn,
+            trainer=trainer,
+            cache_dir=self.cache_dir,
+            **kwargs,
         )
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
@@ -677,7 +668,7 @@ class FaissIndex(Index):
         # state["model"] = None
         state["trainer"] = None
         # state["_index"] = faiss.serialize_index(state["_index"])
-        for key in ["_index", "_tok2doc", "_vectors"]:
+        for key in ["_index", "_emb2pid", "_vectors_table", "_vectors"]:
             if key in state:
                 state.pop(key)
         return state
@@ -686,7 +677,6 @@ class FaissIndex(Index):
         # state["_index"] = faiss.deserialize_index(state["_index"])
         state["_master"] = False
         self.__dict__.update(state)
-        self._load_from_cache()
 
     def _check_index_consistency(self, idx):
         """Make sure the new idx are consistent with the `_index`"""

@@ -1,4 +1,5 @@
 from numbers import Number
+from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
@@ -30,3 +31,6 @@ def filter_prefix(d: Dict[str, Any], prefix: str):
 
 def contains_prefix(key, output):
     return any(key in k for k in output.keys())
+
+
+PathLike = Union[str, Path]

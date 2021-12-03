@@ -144,6 +144,7 @@ def run(config: DictConfig) -> None:
         collate_pipe=corpus_builder.get_collate_pipe(),
         cache_dir=cache_dir,
         persist_cache=config.get("persist_cache", False),
+        in_memory=config.get("in_memory", True),
     )
     rich.print(index.is_indexed)
     rich.print(index.ntotal)

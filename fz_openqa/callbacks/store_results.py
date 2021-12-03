@@ -1,6 +1,4 @@
 import logging
-import os
-import tempfile
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -10,18 +8,15 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 from datasets.features import numpy_to_pyarrow_listarray
 from pytorch_lightning import Callback
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.functional import cast_values_to_numpy
-from fz_openqa.utils.functional import iter_batch_rows
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -38,28 +33,15 @@ class StorePredictionsCallback(Callback):
 
     def __init__(
         self,
-        cache_dir: Optional[str] = None,
         store_fields: Optional[List[str]] = None,
-        cache_name: Optional[str] = None,
-        persist: bool = True,
+        cache_file: Optional[PathLike] = None,
     ):
-        if cache_dir is None:
-            # todo: set proper default cache path
-            cache_dir = ".cache/fz-openqa/"
+        if cache_file is None:
+            cache_file = uuid.uuid4().hex
+            cache_file = f"{cache_file}.arrow"
 
-        self.cache_dir = Path(cache_dir) / "predictions"
-
-        if not self.cache_dir.exists():
-            self.cache_dir.mkdir(parents=True)
-
-        if persist is False:
-            raise NotImplementedError
-            self.cache_dir = tempfile.TemporaryDirectory(dir=self.cache_dir)
-            rich.print(f">> cache_dir={self.cache_dir}")
-
-        if cache_name is None:
-            cache_name = uuid.uuid4().hex
-        self.cache_name = f"{cache_name}.arrow"
+        self.cache_file = Path(cache_file)
+        self.cache_file.parent.mkdir(parents=True, exist_ok=True)
 
         if store_fields is None:
             store_fields = []
@@ -94,17 +76,10 @@ class StorePredictionsCallback(Callback):
     def _reset(self):
         """get a new temporary cache file and close any existing writer."""
         self._close_writer()
-        if self.cache_name is None:
-            self.cache_file = tempfile.TemporaryFile(dir=self.cache_dir)
-        else:
-            self.cache_file = os.path.join(self.cache_dir, self.cache_name)
 
     @property
     def is_written(self):
-        if self.cache_name is None:
-            return False
-        else:
-            return os.path.exists(self.cache_file)
+        return self.cache_file.exists()
 
     def _close_writer(self):
         """close any existing writer"""

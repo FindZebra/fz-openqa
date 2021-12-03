@@ -2,32 +2,25 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict
-from copy import deepcopy
 from typing import List
 from typing import Optional
 from typing import Tuple
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.parquet as pq
 import rich
 import torch
 from datasets import Split
-from torch import Tensor
 
-from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.functional import cast_to_numpy
-from fz_openqa.utils.json_struct import apply_to_json_struct
 
 log = logging.getLogger(__name__)
 
 
-def log_mem_size(x, key, logger=None):
+def log_mem_size(x, msg, logger=None):
     if isinstance(x, torch.Tensor):
         mem_size = x.element_size() * x.nelement()
     elif isinstance(x, np.ndarray):
@@ -36,41 +29,69 @@ def log_mem_size(x, key, logger=None):
         raise TypeError(f"Unsupported type {type(x)}")
     mem_size /= 1024 ** 2
     if logger is None:
-        rich.print(f"# {key} mem. size={mem_size:.3f} MB")
+        rich.print(f"{msg} mem. size={mem_size:.3f} MB")
     else:
-        logger.info(f"# {key} mem. size={mem_size:.3f} MB")
+        logger.info(f"{msg} mem. size={mem_size:.3f} MB")
 
 
 class ColbertIndex(FaissIndex):
-    _emb2pid: np.ndarray = None
-    _use_emb2pid: bool = True
+    """
+    Implementiation of the Colbert index.
 
-    def _add_batch_to_index(self, batch: Batch, dtype=np.float32):
-        """ Add one batch of data to the index """
+    Notes
+    -----
+    Assumes the documents to be of the same length!
 
-        # add vector to index
-        vector = self._get_vector_from_batch(batch)
-        assert isinstance(vector, np.ndarray), f"vector {type(vector)} is not a numpy array"
-        assert len(vector.shape) == 3, f"{vector} is not a 3D array"
-        self._index.add(vector.reshape(-1, vector.shape[-1]))
+    """
 
-        # store token index to original document
-        for idx in batch["__idx__"]:
-            n_tokens = vector.shape[1]
-            pids = np.array(n_tokens * [idx], dtype=np.long)
-            if self._emb2pid is None:
-                self._emb2pid = pids
+    _emb2pid: Optional[np.ndarray] = None
+    _vectors: Optional[np.ndarray] = None
+
+    @property
+    def vectors_table(self) -> pa.Table:
+        if self._vectors_table is None:
+            self._vectors_table = self._read_vectors_table()
+        return self._vectors_table
+
+    @property
+    def vectors(self) -> np.ndarray:
+        if self._vectors is None:
+            vectors_table = self.vectors_table
+            self._vectors = self._read_vectors_from_table(vectors_table)
+            log_mem_size(self._vectors, "Loaded Colbert vectors", logger=log)
+        return self._vectors
+
+    @property
+    def emb2pid(self):
+        if self._emb2pid is None:
+            self._emb2pid = self._build_emb2pid_from_vectors(self.vectors_table)
+        return self._emb2pid
+
+    def _iter_vectors(self, vectors_table: pa.Table, max_chunksize=1000) -> np.ndarray:
+        for batch in vectors_table.to_batches(max_chunksize=max_chunksize):
+            yield self._get_vectors_from_record_batch(batch)
+
+    def _read_vectors_from_table(self, vectors_table: pa.Table, max_chunksize=1000) -> np.ndarray:
+        vectors = None
+        for vectors_chunk in self._iter_vectors(vectors_table, max_chunksize=max_chunksize):
+            if vectors is None:
+                vectors = vectors_chunk
             else:
-                self._emb2pid = np.concatenate([self._emb2pid, pids])
+                vectors = np.concatenate([vectors, vectors_chunk], axis=0)
+        return vectors
 
-    def _check_full_index_consistency(self):
-        # todo: implement
-        pass
+    def _build_emb2pid_from_vectors(self, vectors_table: pa.Table) -> np.ndarray:
+        emb2pid = np.arange(vectors_table.num_rows, dtype=np.long)
+        one_vec = next(iter(self._iter_vectors(vectors_table, max_chunksize=1)))
+        vector_length = one_vec.shape[1]
+        emb2pid = np.repeat(emb2pid[:, None], vector_length, axis=1)
+        return np.ascontiguousarray(emb2pid.reshape(-1))
 
-        # if not self._index.ntotal * doc_len == self._vectors.num_rows:
-        #     raise ValueError(f"The number of vectors in the index ({self._index.ntotal}) is "
-        #                      f"not equal to the number of vectors in "
-        #                      f"the dataset ({self._vectors.num_rows})")
+    def _get_vectors_from_record_batch(self, batch: pa.RecordBatch) -> np.ndarray:
+        batch = batch.to_pydict()
+        batch = self.postprocess(batch)
+        vec = batch[self.vectors_column_name]
+        return np.array(vec, dtype=np.float32)
 
     @torch.no_grad()
     def _search_batch(
@@ -88,31 +109,29 @@ class ColbertIndex(FaissIndex):
         """
 
         # 0. load vectors
-        documents = pq.read_table(str(self.vector_file), memory_map=True)
-        documents = self.postprocess(documents[None:None].to_pydict())
-        documents = np.array(documents[self.vectors_column_name], dtype=np.float32)
-        rich.print(f">> documents:{documents.shape}")
-        log_mem_size(documents, "documents")
+        if self.in_memory:
+            documents = self.vectors
+            emb2pid = self.emb2pid
+        else:
+            documents = self.vectors_table
+            emb2pid = self.emb2pid
 
         # 1. get query vector
         query = self.predict_queries(query, format=OutputFormat.NUMPY, idx=idx, split=split)
         query = self.postprocess(query)
-        q_vectors: np.ndarray = query[self.vectors_column_name]
-        rich.print(f">> q_vectors:{q_vectors.shape}, k={k}, type={type(q_vectors)}")
+        q_vectors: np.ndarray = query[self.vectors_column_name].astype(np.float32)
+        start = time.time()
 
         # 2. query the token index
         tok_scores, tok_indices = self._query_to_embedding_ids(q_vectors, max(1, k // 2))
 
         # 3. get the corresponding document ids
-        pids = self._emb2pid[tok_indices]
+        pids = emb2pid[tok_indices]
         pids = self._get_unique_pids(pids)
 
         # 4. retrieve the vectors for each unique document index
         # the table _vectors (pyarrow) contains the document vectors
-        start = time.time()
         d_vectors = self._retrieve_pid_vectors(pids, vectors=documents, dtype=q_vectors.dtype)
-        rich.print(f">> vectors:{d_vectors.shape}, retrieval_time={time.time() - start:.3f} s")
-        log_mem_size(d_vectors, "vectors")
 
         # 7. apply max sim to the retrieved vectors
         scores = np.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
@@ -130,6 +149,11 @@ class ColbertIndex(FaissIndex):
         maxsim_scores = np.take_along_axis(scores, maxsim_idx, axis=1)
         maxsim_pids = np.take_along_axis(pids, maxsim_idx, axis=1)
 
+        log.info(
+            f"Colbert: "
+            f"retrieval_time={time.time() - start:.3f}s, "
+            f"k={k}, d_vectors={d_vectors.shape}"
+        )
         return SearchResult(
             score=maxsim_scores,
             index=maxsim_pids,
@@ -160,7 +184,7 @@ class ColbertIndex(FaissIndex):
             unique_pids[unique_pids < 0] = 0
 
             # retrieve unique document vectors and cast as array
-            unique_pid_vectors = self._vectors.take(unique_pids).to_pydict()
+            unique_pid_vectors = self._vectors_table.take(unique_pids).to_pydict()
             unique_pid_vectors = self.postprocess(unique_pid_vectors)[self.vectors_column_name]
             unique_pid_vectors = np.array(unique_pid_vectors, dtype=dtype)
 

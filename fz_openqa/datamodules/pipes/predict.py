@@ -12,13 +12,11 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Sized
-from typing import Tuple
 from typing import Union
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -37,6 +35,7 @@ from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import cast_values_to_numpy
 from fz_openqa.utils.functional import cast_values_to_torch
@@ -260,6 +259,7 @@ class Predict(Pipe):
         cache_dir: Optional[str] = None,
         split: Optional[Split] = None,
         persist: bool = True,
+        target_file: Optional[PathLike] = None,
     ) -> CACHE_FILE:
         """
         Cache the predictions of the model on the dataset.
@@ -281,6 +281,9 @@ class Predict(Pipe):
         persist
             (Optional) Whether to persist the cache file(s) for subsequent runs.
             If set to False, the cache file is deleted when the session ends (tempfile).
+        target_file
+            (Optional) The path to the cache file to use.
+            If set to None, a new cache file is created in cache_dir.
         Returns
         Union[Path, str, tempfile.TemporaryFile]
             The path to the cache file
@@ -297,10 +300,12 @@ class Predict(Pipe):
             {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
         )
 
+        # setup the cache file
+        if target_file is None:
+            target_file = Path(cache_dir) / type(self).__name__.lower() / f"{fingerprint}.arrow"
+
         # init a callback to store predictions and add it to the Trainer
-        callback = StorePredictionsCallback(
-            cache_name=fingerprint, cache_dir=cache_dir, persist=persist
-        )
+        callback = StorePredictionsCallback(cache_file=target_file)
 
         # define a collate_fn to process the dataset
         if callback.is_written:
@@ -513,7 +518,7 @@ class Predict(Pipe):
         logger.info(f"Deleting cached vectors {self.cache_file}")
         self._loaded_table = None
         self._loaded_splits = None
-        if isinstance(self.cache_file, str):
+        if isinstance(self.cache_file, PathLike):
             shutil.rmtree(self.cache_file, ignore_errors=True)
         elif isinstance(self.cache_file, dict):
             for fn in self.cache_file.values():
