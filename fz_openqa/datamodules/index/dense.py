@@ -29,6 +29,7 @@ from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
+from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import SequentialSampler
 
@@ -114,9 +115,10 @@ class FaissIndex(Index):
     model: Callable = None
     index_name: str
     _vectors: Optional[pa.Table] = None
-    _tok2doc: Optional[List] = None
+    _in_memory_vectors: Optional[Tensor] = None
+    _emb2pid: Optional[Tensor] = None
     _master: bool = True
-    _use_tok2doc: bool = False
+    _use_emb2pid: bool = False
 
     def __init__(
         self,
@@ -277,14 +279,14 @@ class FaissIndex(Index):
             logger.info(f"Writing FaissIndex to cache: {self.index_file}")
             faiss.write_index(self._index, str(self.index_file))
             self._vectors = pq.read_table(str(self.vector_file))
-            if self._use_tok2doc:
+            if self._use_emb2pid:
                 with open(self.tok2doc_file, "wb") as f:
-                    pickle.dump(self._tok2doc, f)
+                    pickle.dump(self._emb2pid, f)
 
         # display file sizes
         display_file_size("index", self.index_file)
         display_file_size("vectors", self.vector_file)
-        if self._use_tok2doc:
+        if self._use_emb2pid:
             display_file_size("tok2doc", self.tok2doc_file)
 
     def _load_from_cache(self):
@@ -292,9 +294,9 @@ class FaissIndex(Index):
         logger.info(f"Loading FaissIndex from cache: {self.index_file}")
         self._index = faiss.read_index(str(self.index_file))
         self._vectors = pq.read_table(str(self.vector_file))
-        if self._use_tok2doc:
+        if self._use_emb2pid:
             with open(self.tok2doc_file, "rb") as f:
-                self._tok2doc = pickle.load(f)
+                self._emb2pid = pickle.load(f)
 
     def _build(self, dataset: Dataset, **kwargs):
         """

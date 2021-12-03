@@ -163,7 +163,8 @@ def run(config: DictConfig) -> None:
     pprint_batch(output, "search result")
     output = {**query, **fetcher(output)}
     pprint_batch(output, "query + search results")
-    for i in range(infer_batch_size(query)):
+    stride = infer_batch_size(query)
+    for i in range(min(stride, 3)):
         eg = Pipe.get_eg(output, idx=i)
         rich.print(get_separator())
         rich.print(f"query #{i + 1}: [cyan]{eg['question.text']}")

@@ -26,7 +26,7 @@ class ZeroShot(pl.LightningModule):
         self.head = head
         self.limit_size = limit_size
         self.is_colbert = nn.Parameter(tensor(head == "contextual"), requires_grad=False)
-        self._limit_size = nn.Parameter(tensor(limit_size), requires_grad=False)
+        self._limit_size = nn.Parameter(tensor(limit_size or 0), requires_grad=False)
 
     def forward(self, batch: Batch, **kwargs) -> Any:
         output = {}

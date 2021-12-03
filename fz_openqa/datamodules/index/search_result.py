@@ -94,10 +94,12 @@ class SearchResult:
         format: Optional[OutputFormat] = None,
         k: int,
     ):
-        if format == OutputFormat.NUMPY:
+        if format is None:
+            pass
+        elif format == OutputFormat.NUMPY:
             score = np.array(score)
             index = np.array(index)
-        elif format == OutputFormat.TENSOR:
+        elif format == OutputFormat.TORCH:
             score = torch.tensor(score)
             index = torch.tensor(index)
         else:
