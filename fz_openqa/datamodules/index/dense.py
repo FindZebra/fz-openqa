@@ -22,13 +22,17 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
+import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from rich.progress import track
+from torch import Tensor
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
@@ -41,6 +45,7 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.meta import Sequential
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
+from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import PathLike
@@ -81,6 +86,42 @@ DEFAULT_FAISS_KWARGS = {
     "n_subvectors": 16,
     "n_bits": 8,
 }
+
+
+class ArrowDataset(TorchDataset):
+    """A small helper class to handle pyarrow tables."""
+
+    def __init__(
+        self,
+        table: pa.Table,
+        keys: Optional[List[str]],
+        output_format: Optional[OutputFormat] = None,
+    ):
+        self.table = table
+        self.keys = keys
+        self.output_format = output_format
+
+    def __len__(self):
+        return self.table.num_rows
+
+    def __getitem__(self, idx):
+        row = self.table[idx : idx + 1]
+        row = row.to_pydict()
+
+        values = (row.get(k, None) for k in self.keys)
+        v = next(iter(v for v in values if v is not None))
+        v = v[0]
+
+        if self.output_format is None:
+            pass
+        elif self.output_format == OutputFormat.NUMPY:
+            v = np.array(v, dtype=np.float32)
+        elif self.output_format == OutputFormat.TORCH:
+            v = torch.tensor(v, dtype=torch.float32)
+        else:
+            raise ValueError(f"Unknown output format {self.output_format}")
+
+        return v
 
 
 class FaissIndex(Index):
@@ -212,7 +253,7 @@ class FaissIndex(Index):
         # warning: this is actually not used when using the trainer
         self.persist_cache = persist_cache
         if persist_cache is False:
-            cache_dir = tempfile.mkdtemp(prefix=f"{cache_dir}/")
+            cache_dir = tempfile.mkdtemp(dir=cache_dir)
         self.cache_dir = cache_dir
         self.predict_docs = Predict(self.model)
         self.predict_queries = Predict(self.model)
@@ -288,6 +329,7 @@ class FaissIndex(Index):
     def _read_vectors_table(self):
         logger.info(f"Reading vectors table from: {self.vector_file}")
         vectors = pq.read_table(str(self.vector_file))
+        logger.info(f"columns: {vectors.column_names}")
         return vectors
 
     def _build(self, dataset: Dataset, **kwargs):
@@ -322,15 +364,19 @@ class FaissIndex(Index):
             trainer=trainer,
             collate_fn=self.collate,
             target_file=self.vector_file,
+            persist=True,
         )
 
         # read the vectors from the cache as a pyarrow table
-        vectors: pa.Table = self._read_vectors_table()
+        cached_vectors: pa.Table = self._read_vectors_table()
 
         # load the vectors form the table
         it = iter(
-            self._process_batches(
-                vectors, progress_bar=self.progress_bar, batch_size=self.faiss_train_size
+            self._iter_vectors(
+                cached_vectors,
+                progress_bar=self.progress_bar,
+                batch_size=self.faiss_train_size,
+                num_workers=4,
             )
         )
 
@@ -361,6 +407,7 @@ class FaissIndex(Index):
         collate_fn: Callable,
         cache_dir: Optional[Path] = None,
         target_file: Optional[PathLike] = None,
+        **kwargs,
     ):
         """
         Compute and cache the vectors for the entire dataset.
@@ -387,12 +434,12 @@ class FaissIndex(Index):
             trainer=trainer,
             collate_fn=collate_fn,
             loader_kwargs=self.loader_kwargs,
-            persist=True,
             cache_dir=cache_dir,
             target_file=target_file,
+            **kwargs,
         )
 
-    def _init_index(self, batch: Batch):
+    def _init_index(self, vectors: np.ndarray):
         """
         Initialize the index
 
@@ -408,7 +455,6 @@ class FaissIndex(Index):
                 Bits per sub-vector. This is typically 8, so that each sub-vec is encoded by 1 byte.
 
         """
-        vectors = self._get_vector_from_batch(batch)
         # reshape as 2D array
         vectors = vectors.reshape((-1, vectors.shape[-1]))
 
@@ -432,12 +478,12 @@ class FaissIndex(Index):
             raise ValueError(f"Unknown index type {index_type}")
 
         # set n_probe
-        self._index.nprobe = self.faiss_args.get("n_probe", 10)
+        self._index.nprobe = self.faiss_args.get("nprobe", 16)
 
         # train the index once using the 1st batch
         self._train(vectors)
 
-    def _train(self, vectors):
+    def _train(self, vectors: np.ndarray):
         """
         Train faiss index on data
 
@@ -450,16 +496,12 @@ class FaissIndex(Index):
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
 
-    def _add_batch_to_index(self, batch: Batch):
+    def _add_batch_to_index(self, vectors: np.ndarray):
         """
         Add one batch of data to the index
         """
-        # idx = batch[IDX_COL]
-        # self._check_index_consistency(idx)
 
         # add the vectors to the index
-        vectors = self._get_vector_from_batch(batch)
-        assert isinstance(vectors, np.ndarray), f"vector {type(vectors)} is not a numpy array"
         self._index.add(vectors.reshape(-1, vectors.shape[-1]))
 
     @singledispatchmethod
@@ -575,6 +617,7 @@ class FaissIndex(Index):
             collate_fn=collate_fn,
             trainer=trainer,
             cache_dir=self.cache_dir,
+            persist=False,
             **kwargs,
         )
 
@@ -596,64 +639,31 @@ class FaissIndex(Index):
             dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs, wrap_indices=False
         )
 
-    def _process_batches(
+    def _iter_vectors(
         self,
-        vectors: pa.Table,
-        *,
-        batch_size: int,
+        vectors_table: pa.Table,
         progress_bar: bool = False,
-    ) -> Iterable[Batch]:
-        loader = vectors.to_batches(max_chunksize=batch_size)
-        # def _iter_batches(vectors, batch_size):
-        #     for i in range(0, vectors.num_rows, batch_size):
-        #         yield vectors[i:i + batch_size]
-        #
-        # loader = iter(_iter_batches(vectors, batch_size))
+        batch_size=1000,
+        output_format: OutputFormat = OutputFormat.NUMPY,
+        num_workers=0,
+    ) -> np.ndarray | Tensor:
+        """Iterate over vectors from a table"""
+
+        vectors_table = vectors_table.remove_column(vectors_table.column_names.index(IDX_COL))
+        loader = DataLoader(
+            ArrowDataset(vectors_table, keys=self.model_output_keys, output_format=output_format),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+        )
+
+        it = iter(loader)
 
         if progress_bar:
-            desc = f"Ingest Faiss index (batch_size={batch_size})"
-            loader = track(loader, description=desc, total=vectors.num_rows // batch_size)
+            desc = f"Loading vectors (batch_size={batch_size})"
+            it = track(it, description=desc, total=vectors_table.num_rows // batch_size)
 
-        for i, batch in enumerate(loader):
-            batch = batch.to_pydict()
-            batch = self.postprocess(batch)
-            yield batch
-
-    def _process_batches_from_loader(
-        self,
-        loader: DataLoader,
-        *,
-        predict: Predict,
-        progress_bar: bool = False,
-    ) -> Iterable[Batch]:
-
-        """
-        This method iterates over batches, which for each batch:
-        1. process the batch using the model (or load from cache)
-        2. postprocess the output of the model (renaming keys, filtering keys, etc)
-
-        This function processes batches as they are loaded from the dataloader.
-        """
-
-        # Make sue the loader is not shuffled
-        assert isinstance(
-            loader.sampler, SequentialSampler
-        ), "Cannot handle DataLoader with shuffle=True."
-
-        # add a progress bar, assume that vectors are cached if the Trainer was provided
-        if progress_bar:
-            desc = "Ingest Faiss index"
-            if self.trainer is not None:
-                desc += " (loading vectors from cache)"
-            loader = track(loader, description=desc)
-
-        # wrap the loader to return the indexes along the batch
-        loader = iter_batches_with_indexes(loader)
-
-        # process batches sequentially
-        for idx, batch in loader:
-            batch = predict(batch, idx=idx)
-            batch = self.postprocess(batch)
+        for batch in it:
             yield batch
 
     def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:

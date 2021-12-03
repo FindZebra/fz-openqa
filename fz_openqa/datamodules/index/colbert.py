@@ -6,16 +6,21 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
+import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
 import rich
 import torch
+import torch.nn.functional as F
 from datasets import Split
+from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.utils.datastruct import Batch
+
+# required to allow searching faiss with tensors
 
 log = logging.getLogger(__name__)
 
@@ -28,10 +33,15 @@ def log_mem_size(x, msg, logger=None):
     else:
         raise TypeError(f"Unsupported type {type(x)}")
     mem_size /= 1024 ** 2
+    prec = "MB"
+    if mem_size > 1024:
+        mem_size /= 1024
+        prec = "GB"
+    msg = f"{msg} mem. size={mem_size:.3f} {prec}, shape={x.shape}, dtype={x.dtype}"
     if logger is None:
-        rich.print(f"{msg} mem. size={mem_size:.3f} MB")
+        rich.print(msg)
     else:
-        logger.info(f"{msg} mem. size={mem_size:.3f} MB")
+        logger.info(msg)
 
 
 class ColbertIndex(FaissIndex):
@@ -44,8 +54,8 @@ class ColbertIndex(FaissIndex):
 
     """
 
-    _emb2pid: Optional[np.ndarray] = None
-    _vectors: Optional[np.ndarray] = None
+    _emb2pid: Optional[Tensor] = None
+    _vectors: Optional[Tensor] = None
 
     @property
     def vectors_table(self) -> pa.Table:
@@ -54,7 +64,7 @@ class ColbertIndex(FaissIndex):
         return self._vectors_table
 
     @property
-    def vectors(self) -> np.ndarray:
+    def vectors(self) -> Tensor:
         if self._vectors is None:
             vectors_table = self.vectors_table
             self._vectors = self._read_vectors_from_table(vectors_table)
@@ -62,36 +72,44 @@ class ColbertIndex(FaissIndex):
         return self._vectors
 
     @property
-    def emb2pid(self):
+    def emb2pid(self) -> Tensor:
         if self._emb2pid is None:
             self._emb2pid = self._build_emb2pid_from_vectors(self.vectors_table)
         return self._emb2pid
 
-    def _iter_vectors(self, vectors_table: pa.Table, max_chunksize=1000) -> np.ndarray:
-        for batch in vectors_table.to_batches(max_chunksize=max_chunksize):
-            yield self._get_vectors_from_record_batch(batch)
-
-    def _read_vectors_from_table(self, vectors_table: pa.Table, max_chunksize=1000) -> np.ndarray:
+    @torch.no_grad()
+    def _read_vectors_from_table(self, vectors_table: pa.Table, max_chunksize=10000) -> Tensor:
+        log.info(f"Reading {vectors_table.num_rows} vectors")
+        num_workers = 4 if vectors_table.num_rows > max_chunksize else 0
+        i = 0
         vectors = None
-        for vectors_chunk in self._iter_vectors(vectors_table, max_chunksize=max_chunksize):
+        for vectors_chunk in self._iter_vectors(
+            vectors_table,
+            batch_size=max_chunksize,
+            progress_bar=self.progress_bar,
+            output_format=OutputFormat.TORCH,
+            num_workers=num_workers,
+        ):
             if vectors is None:
-                vectors = vectors_chunk
-            else:
-                vectors = np.concatenate([vectors, vectors_chunk], axis=0)
+                vectors = torch.zeros(
+                    (vectors_table.num_rows, *vectors_chunk.shape[1:]), dtype=torch.float32
+                )
+
+            vectors[i : i + vectors_chunk.shape[0]] = vectors_chunk
+            i += vectors_chunk.shape[0]
+
         return vectors
 
-    def _build_emb2pid_from_vectors(self, vectors_table: pa.Table) -> np.ndarray:
+    @torch.no_grad()
+    def _build_emb2pid_from_vectors(self, vectors_table: pa.Table) -> Tensor:
         emb2pid = np.arange(vectors_table.num_rows, dtype=np.long)
-        one_vec = next(iter(self._iter_vectors(vectors_table, max_chunksize=1)))
-        vector_length = one_vec.shape[1]
+        if self._vectors is not None:
+            one_vec = self._vectors[0]
+        else:
+            one_vec = next(iter(self._iter_vectors(vectors_table, batch_size=1, num_workers=0)))[0]
+        vector_length = one_vec.shape[0]
         emb2pid = np.repeat(emb2pid[:, None], vector_length, axis=1)
-        return np.ascontiguousarray(emb2pid.reshape(-1))
-
-    def _get_vectors_from_record_batch(self, batch: pa.RecordBatch) -> np.ndarray:
-        batch = batch.to_pydict()
-        batch = self.postprocess(batch)
-        vec = batch[self.vectors_column_name]
-        return np.array(vec, dtype=np.float32)
+        return torch.from_numpy(emb2pid.reshape(-1)).contiguous()
 
     @torch.no_grad()
     def _search_batch(
@@ -116,100 +134,101 @@ class ColbertIndex(FaissIndex):
             documents = self.vectors_table
             emb2pid = self.emb2pid
 
+        # place faiss index to GPUs
+        rich.print(f">> devices={torch.cuda.device_count()}")
+
         # 1. get query vector
-        query = self.predict_queries(query, format=OutputFormat.NUMPY, idx=idx, split=split)
+        query = self.predict_queries(query, format=OutputFormat.TORCH, idx=idx, split=split)
         query = self.postprocess(query)
-        q_vectors: np.ndarray = query[self.vectors_column_name].astype(np.float32)
+        q_vectors: Tensor = query[self.vectors_column_name]
         start = time.time()
+        log.info(f"Searching queries: {q_vectors.shape}")
 
         # 2. query the token index
-        tok_scores, tok_indices = self._query_to_embedding_ids(q_vectors, max(1, k // 2))
+        p = min(10, max(1, k // 2))
+        tok_indices = self._query_to_embedding_ids(q_vectors, p)
+        log.info(f"faiss={time.time() - start:.3f}s, tok_indices={tok_indices.shape}")
 
         # 3. get the corresponding document ids
         pids = emb2pid[tok_indices]
         pids = self._get_unique_pids(pids)
+        log.info(f"unique_pids={time.time() - start:.3f}s, pids={pids.shape}")
 
         # 4. retrieve the vectors for each unique document index
         # the table _vectors (pyarrow) contains the document vectors
         d_vectors = self._retrieve_pid_vectors(pids, vectors=documents, dtype=q_vectors.dtype)
+        log.info(f"retrieved d_vectors={time.time() - start:.3f}s, d_vectors={d_vectors.shape}")
+        log_mem_size(d_vectors, "document vectors", logger=log)
 
         # 7. apply max sim to the retrieved vectors
-        scores = np.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
+        scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
         # max. over the documents tokens, for each query token
-        scores = np.amax(scores, axis=-1)
+        scores, _ = scores.max(axis=-1)
         # avg over all query tokens
         scores = scores.mean(axis=-1)
         # set the score to -inf for the negative pids
-        scores[pids < 0] = -np.inf
+        scores[pids < 0] = -torch.inf
+        log.info(f"computed scores={time.time() - start:.3f}s, scores={d_vectors.shape}")
 
         # 8. take the top-k results given the MaxSim score
         maxsim_idx = np.argsort(-scores, axis=-1)[:, :k]
 
         # 9. fetch the corresponding document indices and return
-        maxsim_scores = np.take_along_axis(scores, maxsim_idx, axis=1)
-        maxsim_pids = np.take_along_axis(pids, maxsim_idx, axis=1)
+        maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
+        maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
 
-        log.info(
-            f"Colbert: "
-            f"retrieval_time={time.time() - start:.3f}s, "
-            f"k={k}, d_vectors={d_vectors.shape}"
-        )
+        log.info(f"retrieval_time={time.time() - start:.3f}s, k={k}")
         return SearchResult(
             score=maxsim_scores,
             index=maxsim_pids,
             dataset_size=self.dataset_size,
+            format=OutputFormat.NUMPY,
             k=k,
         )
 
-    def _get_unique_pids(self, pids, fill_value=-1):
-        # pids = np.unique(pids, axis=1)
-        upids = [np.unique(r) for r in pids]
+    @torch.no_grad()
+    def _get_unique_pids(self, pids: Tensor, fill_value=-1) -> Tensor:
+        upids = [torch.unique(r) for r in pids]
         max_length = max(len(r) for r in upids)
 
         def _pad(r):
-            return np.pad(r, (0, max_length - len(r)), mode="constant", constant_values=fill_value)
+            return F.pad(r, (0, max_length - len(r)), value=fill_value)
 
-        return np.concatenate([_pad(p)[None] for p in upids])
+        return torch.cat([_pad(p)[None] for p in upids])
 
+    @torch.no_grad()
     def _retrieve_pid_vectors(
-        self, pids: np.ndarray, *, vectors: pa.Table | np.ndarray, dtype: np.dtype
-    ) -> np.ndarray:
+        self, pids: Tensor, *, vectors: pa.Table | np.ndarray | Tensor, dtype: torch.dtype
+    ) -> Tensor:
         """Retrieve the vectors for the given pids."""
         if isinstance(vectors, pa.Table):
             batch_size, depth = pids.shape
 
             # flatten and get unique documents
-            pids = pids.reshape(-1)
-            unique_pids, indices = np.unique(pids, return_inverse=True)
+            pids = pids.view(-1)
+            unique_pids, indices = torch.unique(pids, return_inverse=True)
             unique_pids[unique_pids < 0] = 0
 
             # retrieve unique document vectors and cast as array
-            unique_pid_vectors = self._vectors_table.take(unique_pids).to_pydict()
+            unique_pid_vectors = self._vectors_table.take(unique_pids.numpy()).to_pydict()
             unique_pid_vectors = self.postprocess(unique_pid_vectors)[self.vectors_column_name]
-            unique_pid_vectors = np.array(unique_pid_vectors, dtype=dtype)
+            unique_pid_vectors = torch.tensor(unique_pid_vectors, dtype=dtype)
 
             # reshape and return
             pid_vectors = unique_pid_vectors[indices]
-            return pid_vectors.reshape(
-                (
-                    batch_size,
-                    depth,
-                )
-                + pid_vectors.shape[1:]
-            )
-        elif isinstance(vectors, np.ndarray):
+            return pid_vectors.view(batch_size, depth, *pid_vectors.shape[1:])
+        elif isinstance(vectors, (np.ndarray, Tensor)):
             return vectors[pids]
         else:
             raise TypeError(f"vectors type {type(vectors)} not supported")
 
-    def _query_to_embedding_ids(
-        self, Q: np.ndarray, faiss_depth: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    @torch.no_grad()
+    def _query_to_embedding_ids(self, Q: Tensor, faiss_depth: int) -> Tuple[Tensor, Tensor]:
         """Query the faiss index for each embedding vector"""
         num_queries, embeddings_per_query, dim = Q.shape
         Q = Q.reshape(-1, Q.shape[-1])
-        scores, embedding_ids = self._index.search(Q, faiss_depth)
+        _, embedding_ids = self._index.search(Q, faiss_depth)
 
-        scores = scores.reshape(num_queries, -1)
-        embedding_ids = embedding_ids.reshape(num_queries, -1)
-        return scores, embedding_ids
+        embedding_ids = torch.tensor(embedding_ids)
+        embedding_ids = embedding_ids.view(num_queries, -1)
+        return embedding_ids

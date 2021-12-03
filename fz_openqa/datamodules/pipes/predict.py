@@ -18,6 +18,7 @@ from typing import Union
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -305,9 +306,9 @@ class Predict(Pipe):
         # create a temporary directory to store the cache file if persist is False
         self.persist = persist
         if self.persist is False:
+            # todo: improve or remove persist=False behaviour
             assert target_file is None, "target_file cannot be set when using persist=False"
-            prefix = f"{cache_dir}/" if cache_dir else None
-            cache_dir = tempfile.mkdtemp(prefix)
+            cache_dir = tempfile.mkdtemp(dir=cache_dir)
         self.cache_dir = cache_dir
 
         # setup the cache file
@@ -512,8 +513,9 @@ class Predict(Pipe):
 
     def __del__(self):
         if self._master:
-            if self.persist:
-                shutil.rmtree(self.cache_dir, ignore_errors=True)
+            if hasattr(self, "persist") and hasattr(self, "cache_dir"):
+                if self.persist is False and self.cache_dir is not None:
+                    shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def to_json_struct(self, exclude: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
         """

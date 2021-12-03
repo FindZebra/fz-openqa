@@ -1,6 +1,8 @@
 import os
 import sys
 
+import faiss
+
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -52,13 +54,15 @@ def run(config):
     On the cluster, run:
     ```bash
     CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 \
+    +num_workers=10 +use_subset=False +colbert=True
+
     ```
     """
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
@@ -116,6 +120,16 @@ def run(config):
 
     # define the index builder
     IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
+
+    faiss_args = {
+        "type": "IVFQ",
+        "metric_type": faiss.METRIC_INNER_PRODUCT,
+        "n_list": 100,
+        "n_subvectors": 16,
+        "n_bits": 8,
+        "nprobe": 16,
+    }
+
     index_builder = IndexCls(
         model=model,
         trainer=trainer,
@@ -130,6 +144,8 @@ def run(config):
         persist_cache=True,
         progress_bar=True,
         faiss_train_size=1000 if use_colbert else 10000,
+        faiss_args=faiss_args,
+        in_memory=config.get("in_memory", True),
     )
 
     # define the OpenQA builder
@@ -138,7 +154,7 @@ def run(config):
         corpus_builder=corpus_builder,
         index_builder=index_builder,
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=1000,
+        n_retrieved_documents=config.get("n_retrieved_documents", 1000),
         n_documents=10,
         max_pos_docs=1,
         filter_unmatched=True,

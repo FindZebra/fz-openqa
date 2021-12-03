@@ -255,6 +255,9 @@ class OpenQaBuilder(DatasetBuilder):
             "num_proc": num_proc,
             "batch_size": max(num_proc, batch_size // n_retrieved_documents),
             "batched": True,
+            # avoid: pyarrow.lib.ArrowInvalid: Invalid null value
+            # https://github.com/huggingface/datasets/issues/2831
+            "writer_batch_size": 2000,
         }
 
         # process the dataset with each block
