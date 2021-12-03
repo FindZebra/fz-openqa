@@ -11,6 +11,7 @@ from torch import Tensor
 
 Eg = Dict[str, Union[bool, str, Number, Tensor, List, np.ndarray]]
 Batch = Dict[str, Union[bool, Number, Tensor, List, np.ndarray]]
+PathLike = Union[str, Path]
 
 
 def infer_device_from_batch(batch: Batch):
@@ -31,6 +32,3 @@ def filter_prefix(d: Dict[str, Any], prefix: str):
 
 def contains_prefix(key, output):
     return any(key in k for k in output.keys())
-
-
-PathLike = Union[str, Path]

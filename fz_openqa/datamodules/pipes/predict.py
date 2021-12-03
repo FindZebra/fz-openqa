@@ -4,6 +4,7 @@ import functools
 import logging
 import os.path
 import shutil
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -138,6 +139,7 @@ class Predict(Pipe):
 
     model: Optional[pl.LightningModule] = None
     cache_file: Optional[CACHE_FILE | Dict[Split, CACHE_FILE]] = None
+    _master: bool = True
     _loaded_table: Optional[pa.Table] = None
     _loaded_split: Optional[Split] = None
     _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
@@ -299,6 +301,14 @@ class Predict(Pipe):
         fingerprint = get_fingerprint(
             {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
         )
+
+        # create a temporary directory to store the cache file if persist is False
+        self.persist = persist
+        if self.persist is False:
+            assert target_file is None, "target_file cannot be set when using persist=False"
+            prefix = f"{cache_dir}/" if cache_dir else None
+            cache_dir = tempfile.mkdtemp(prefix)
+        self.cache_dir = cache_dir
 
         # setup the cache file
         if target_file is None:
@@ -497,6 +507,13 @@ class Predict(Pipe):
         self.__dict__.update(state)
         for k in self._pickle_exclude:
             self.__dict__[k] = None
+
+        self._master = False
+
+    def __del__(self):
+        if self._master:
+            if self.persist:
+                shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def to_json_struct(self, exclude: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
         """
