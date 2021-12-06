@@ -122,12 +122,12 @@ def run(config):
     IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
 
     faiss_args = {
-        "type": "IVFQ",
+        "factory": config.get("factory", "IVF100,PQ16,RFlat"),
         "metric_type": faiss.METRIC_INNER_PRODUCT,
-        "n_list": 100,
-        "n_subvectors": 16,
-        "n_bits": 8,
-        "nprobe": 16,
+        # "n_list": 100,
+        # "n_subvectors": 16,
+        # "n_bits": 8,
+        "nprobe": 32,
     }
 
     index_builder = IndexCls(

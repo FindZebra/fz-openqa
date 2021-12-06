@@ -129,11 +129,8 @@ def run(config: DictConfig) -> None:
         model=model,
         trainer=trainer,
         faiss_args={
-            "type": "flat",
+            "factory": config.get("factory", "Flat"),
             "metric_type": faiss.METRIC_INNER_PRODUCT,
-            "n_list": 8,
-            "n_subvectors": 8,
-            "n_bits": 8,
         },
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),

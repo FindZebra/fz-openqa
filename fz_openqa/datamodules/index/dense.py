@@ -4,6 +4,7 @@ import logging
 import os.path
 import shutil
 import tempfile
+import warnings
 from functools import singledispatchmethod
 from pathlib import Path
 from typing import Any
@@ -87,11 +88,8 @@ def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[
 
 
 DEFAULT_FAISS_KWARGS = {
-    "type": "IVFQ",
+    "factory": "IVF100,PQ16x8",
     "metric_type": faiss.METRIC_INNER_PRODUCT,
-    "n_list": 32,
-    "n_subvectors": 16,
-    "n_bits": 8,
 }
 
 
@@ -393,7 +391,11 @@ class FaissIndex(Index):
         self._add_batch_to_index(batch)
 
         if self.progress_bar:
-            it = track(it, total=len(cached_vectors) // self.faiss_train_size - 1)
+            it = track(
+                it,
+                total=len(cached_vectors) // self.faiss_train_size - 1,
+                description=f"Building {type(self).__name__}",
+            )
 
         # iterate through the remaining batches and add them to the index
         while True:
@@ -471,26 +473,39 @@ class FaissIndex(Index):
 
         # init the faiss index
         dim = vectors.shape[-1]
-        index_type = self.faiss_args["type"]
+        factory_str = self.faiss_args.get("factory", None)
         metric_type = self.faiss_args["metric_type"]
-        if index_type == "IVFQ":
-            n_list = self.faiss_args["n_list"]
-            n_subvectors = self.faiss_args["n_subvectors"]
-            n_bits = self.faiss_args["n_bits"]
-
-            assert dim % n_subvectors == 0, "m must be a divisor of dim"
-            quantizer = faiss.IndexFlatL2(dim)
-            self._index = faiss.IndexIVFPQ(
-                quantizer, dim, n_list, n_subvectors, n_bits, metric_type
-            )
-        elif index_type == "flat":
-            self._index = faiss.IndexFlat(dim, metric_type)
+        logger.info(f"Initializing faiss index with {factory_str}")
+        if factory_str is not None:
+            self._index = faiss.index_factory(dim, factory_str, metric_type)
         else:
-            raise ValueError(f"Unknown index type {index_type}")
+            warnings.warn(
+                "Building index without specifying a factory is deprecated.", DeprecationWarning
+            )
+            index_type = self.faiss_args["type"]
+            if index_type == "IVFQ":
+                n_list = self.faiss_args["n_list"]
+                n_subvectors = self.faiss_args["n_subvectors"]
+                n_bits = self.faiss_args["n_bits"]
+
+                assert dim % n_subvectors == 0, "m must be a divisor of dim"
+                quantizer = faiss.IndexFlatL2(dim)
+                self._index = faiss.IndexIVFPQ(
+                    quantizer, dim, n_list, n_subvectors, n_bits, metric_type
+                )
+            elif index_type == "flat":
+                self._index = faiss.IndexFlat(dim, metric_type)
+            else:
+                raise ValueError(f"Unknown index type {index_type}")
 
         # move index to GPU if available
-        if faiss.get_num_gpus() > 0:
+        n_gpus = faiss.get_num_gpus()
+        if n_gpus > 0:
+            logger.info(f"Moving faiss index to GPU n_gpus={n_gpus}")
             self._index = faiss.index_cpu_to_all_gpus(self._index)
+
+        rich.print(f">>> index: {self._index}")
+        rich.print(vars(self._index))
 
         # set n_probe
         self._index.nprobe = self.faiss_args.get("nprobe", 16)
