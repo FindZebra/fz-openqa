@@ -17,7 +17,7 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import faiss
+import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -33,7 +33,6 @@ from rich.progress import track
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
-from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.base import Index
@@ -59,11 +58,19 @@ logger = logging.getLogger(__name__)
 def display_file_size(key: str, fn: PathLike, logger=None):
     s = os.path.getsize(fn)
     s /= 1024 ** 3
-    msg = f"{key}: {s:.3f} GB"
+    msg = f"{key} - disk_size={s:.3f} GB"
     if logger is not None:
         logger.info(msg)
     else:
         print(msg)
+
+
+def _memory_mapped_arrow_table_from_file(filename: str) -> pa.Table:
+    """see table.py in datasets"""
+    memory_mapped_stream = pa.memory_map(filename)
+    opened_stream = pa.ipc.open_stream(memory_mapped_stream)
+    pa_table = opened_stream.read_all()
+    return pa_table
 
 
 def iter_batches_with_indexes(loader: Generator | DataLoader) -> Iterable[Tuple[List[int], Batch]]:
@@ -284,11 +291,11 @@ class FaissIndex(Index):
 
     @property
     def index_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / index.faiss"
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "index.faiss"
 
     @property
     def vector_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name} / vectors.arrow"
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "vectors.arrow"
 
     def build(self, dataset: Dataset, **kwargs):
         """
@@ -315,20 +322,21 @@ class FaissIndex(Index):
             self._write_index()
 
         # display file sizes
-        display_file_size("index", self.index_file)
-        display_file_size("vectors", self.vector_file)
+        display_file_size("index", self.index_file, logger=logger)
+        display_file_size("vectors", self.vector_file, logger=logger)
 
     def _write_index(self):
-        logger.info(f"Writing {type(self).__name__} [to]: {self.index_file}")
+        logger.info(f"Writing {type(self).__name__} [to]: {self.index_file.absolute()}")
         faiss.write_index(self._index, str(self.index_file))
 
     def _read_index(self):
-        logger.info(f"Reading {type(self).__name__} from: {self.index_file}")
+        logger.info(f"Reading {type(self).__name__} from: {self.index_file.absolute()}")
         self._index = faiss.read_index(str(self.index_file))
 
     def _read_vectors_table(self):
-        logger.info(f"Reading vectors table from: {self.vector_file}")
-        vectors = pq.read_table(str(self.vector_file))
+        logger.info(f"Reading vectors table from: {self.vector_file.absolute()}")
+        with pa.memory_map(str(self.vector_file), "rb") as source:
+            vectors = pa.ipc.open_file(source).read_all()
         logger.info(f"columns: {vectors.column_names}")
         return vectors
 
@@ -374,9 +382,8 @@ class FaissIndex(Index):
         it = iter(
             self._iter_vectors(
                 cached_vectors,
-                progress_bar=self.progress_bar,
                 batch_size=self.faiss_train_size,
-                num_workers=4,
+                output_format=OutputFormat.TORCH,
             )
         )
 
@@ -384,6 +391,9 @@ class FaissIndex(Index):
         batch = next(it)
         self._init_index(batch)
         self._add_batch_to_index(batch)
+
+        if self.progress_bar:
+            it = track(it, total=len(cached_vectors) // self.faiss_train_size - 1)
 
         # iterate through the remaining batches and add them to the index
         while True:
@@ -393,6 +403,7 @@ class FaissIndex(Index):
             except StopIteration:
                 break
 
+        self._train_ends()
         logger.info(
             f"Index is_trained={self._index.is_trained}, "
             f"size={self._index.ntotal}, type={type(self._index)}"
@@ -439,7 +450,7 @@ class FaissIndex(Index):
             **kwargs,
         )
 
-    def _init_index(self, vectors: np.ndarray):
+    def _init_index(self, vectors: Tensor):
         """
         Initialize the index
 
@@ -456,7 +467,7 @@ class FaissIndex(Index):
 
         """
         # reshape as 2D array
-        vectors = vectors.reshape((-1, vectors.shape[-1]))
+        vectors = vectors.view((-1, vectors.shape[-1])).contiguous()
 
         # init the faiss index
         dim = vectors.shape[-1]
@@ -477,11 +488,20 @@ class FaissIndex(Index):
         else:
             raise ValueError(f"Unknown index type {index_type}")
 
+        # move index to GPU if available
+        if faiss.get_num_gpus() > 0:
+            self._index = faiss.index_cpu_to_all_gpus(self._index)
+
         # set n_probe
         self._index.nprobe = self.faiss_args.get("nprobe", 16)
 
         # train the index once using the 1st batch
         self._train(vectors)
+
+    def _train_ends(self):
+        """move the index back to CPU if it was moved to GPU"""
+        if isinstance(self._index, faiss.IndexReplicas):
+            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
 
     def _train(self, vectors: np.ndarray):
         """
@@ -492,7 +512,11 @@ class FaissIndex(Index):
         vector
             vector from batch
 
+        Notes
+        ----------
+        This crashes if using faiss!=1.6.5
         """
+        logger.info(f"Training index with {vectors.shape[0]} vectors")
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
 
@@ -644,27 +668,38 @@ class FaissIndex(Index):
         vectors_table: pa.Table,
         progress_bar: bool = False,
         batch_size=1000,
+        desc: str = "Loading vectors",
         output_format: OutputFormat = OutputFormat.NUMPY,
-        num_workers=0,
+        **kwargs,
     ) -> np.ndarray | Tensor:
-        """Iterate over vectors from a table"""
+        """
+        Iterate over vectors from a table
+        """
+        logger.info("Init vector iterator")
 
-        vectors_table = vectors_table.remove_column(vectors_table.column_names.index(IDX_COL))
-        loader = DataLoader(
-            ArrowDataset(vectors_table, keys=self.model_output_keys, output_format=output_format),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers,
-        )
+        def iter_batches(vectors_table, batch_size: int):
+            for i in range(0, vectors_table.num_rows, batch_size):
+                batch = vectors_table[i : i + batch_size]
+                yield batch.to_pydict()
 
-        it = iter(loader)
+        it = iter(iter_batches(vectors_table, batch_size))
 
         if progress_bar:
-            desc = f"Loading vectors (batch_size={batch_size})"
+            desc = f"{desc} (batch_size={batch_size})"
             it = track(it, description=desc, total=vectors_table.num_rows // batch_size)
 
         for batch in it:
-            yield batch
+            batch = self.postprocess(batch)
+            vectors = batch[self.vectors_column_name]
+            if output_format is None:
+                pass
+            elif output_format == OutputFormat.NUMPY:
+                vectors = np.array(vectors, dtype=self._dtype)
+            elif output_format == OutputFormat.TORCH:
+                vectors = torch.tensor(vectors, dtype=torch.float32)
+            else:
+                raise ValueError(f"Unknown output format: {output_format}")
+            yield vectors
 
     def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:
         """Format the output of the model"""
@@ -678,7 +713,7 @@ class FaissIndex(Index):
         # state["model"] = None
         state["trainer"] = None
         # state["_index"] = faiss.serialize_index(state["_index"])
-        for key in ["_index", "_emb2pid", "_vectors_table", "_vectors"]:
+        for key in ["_index", "_emb2pid", "_vectors_table", "_vectors", "_max_sim", "_is_gpu"]:
             if key in state:
                 state.pop(key)
         return state

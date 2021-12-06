@@ -396,7 +396,7 @@ class Predict(Pipe):
         # run the trainer predict method, model.forward() is called
         # for each batch and store into the callback cache
         trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
-
+        callback.close_writer()
         cache_file = callback.cache_file
         trainer.callbacks.remove(callback)
         return cache_file
@@ -423,8 +423,11 @@ class Predict(Pipe):
         return self._loaded_table
 
     @staticmethod
-    def read_table_from_cache_file(cache_file: str, memory_map: bool = False) -> pa.Table:
-        return pq.read_table(cache_file, memory_map=memory_map)
+    def read_table_from_cache_file(cache_file: str) -> pa.Table:
+        with pa.memory_map(str(cache_file), "rb") as source:
+            table = pa.ipc.open_file(source).read_all()
+
+        return table
 
     @staticmethod
     def init_loader(
