@@ -4,6 +4,7 @@ from typing import List
 from typing import Optional
 
 import dill
+import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index
@@ -123,7 +124,6 @@ class FetchDocuments(Pipe):
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = None,
         index_key: str = "document.row_idx",
-        output_format: str = "dict",
         id: str = "fetch-documents-pipe",
         **kwargs,
     ):
@@ -138,44 +138,53 @@ class FetchDocuments(Pipe):
         self.keys = keys
         self.collate_pipe = collate_pipe or Collate()
         self.index_key = index_key
-        self.output_format = output_format
 
     def output_keys(self, input_keys: List[str]) -> List[str]:
         return self.corpus_dataset.column_names
 
-    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+    def _call_batch(self, batch: Batch, max_chunk_size: int = 500, **kwargs) -> Batch:
         # todo: check dataset fingerprint (checking 1st index for now)
 
         # get the `dataset` indexes
         # todo: query dataset for unique indexes only {i: idx for i, idx in enumerate(indexes)}
         indexes = [int(idx) for idx in batch[self.index_key]]
 
-        # fetch documents
-        table = self.corpus_dataset.select(indexes, keep_in_memory=True)
-        if table.num_rows != len(indexes):
+        rows = self._fetch_rows(indexes, max_chunk_size=max_chunk_size)
+        new_indexes = rows[self.index_key]
+        if not new_indexes == indexes:
             raise ValueError(
-                f"The returned table does not match with the length "
-                f"of the input index. Retrieved {table.num_rows} rows, "
-                f"expected {len(indexes)} rows."
-                f"corpus_size={len(self.corpus_dataset)}"
+                f"The number of returned rows does not match with the input index. "
+                f"Retrieved {len(new_indexes)} indexes, expected {len(indexes)}."
+                f"First 10 retrieved indexes: {new_indexes[:10]}. "
+                f"First 10 indexes: {indexes[:10]}. "
+                f"Try using a smaller batch size."
             )
-
-        # convert as dicts or list of egs
-        err_msg = (
-            "There is a mismatch between the query indexes and the retrieved indexes, "
-            "make sure you are using the same dataset."
-        )
-        if self.output_format == "list":
-            rows: List[Eg] = [dict(row) for row in table]
-            assert indexes[0] == rows[0][self.index_key], err_msg
-        elif self.output_format == "dict":
-            rows: Batch = table[None:None]
-            assert indexes[0] == rows[self.index_key][0], err_msg
-        else:
-            raise ValueError(f"Unknown output format: {self.output_format}")
 
         # collate and return
         return self.collate_pipe(rows)
+
+    def _fetch_rows(self, indexes: List[int], max_chunk_size: int = 500) -> Batch:
+        """
+        Fetch rows from the corpus dataset given a list of indexes.
+
+        Notes
+        -----
+        `Dataset.select` fails when the index is too large. Chunk the indexes to avoid this issue.
+        """
+
+        rows = None
+        # fetch documents
+        for i in range(0, len(indexes), max_chunk_size):
+            index_i = indexes[i : i + max_chunk_size]
+            table = self.corpus_dataset.select(index_i, keep_in_memory=True)
+            batch: Batch = table[None:None]
+            if rows is None:
+                rows = batch
+            else:
+                for k, v in batch.items():
+                    rows[k] += v
+
+        return rows
 
 
 class FetchNestedDocuments(ApplyAsFlatten):

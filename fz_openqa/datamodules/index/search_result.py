@@ -77,6 +77,19 @@ def replace_neg_values(arr: Array, *, new_value_range: Tuple[int, int]) -> Array
         raise TypeError(f"Unsupported type: {type(arr)}")
 
 
+def concat_arrays(*a: Array) -> Array:
+    arr_type = type(a[0])
+    assert all(isinstance(x, arr_type) for x in a)
+    if arr_type == list:
+        return sum(a, [])
+    elif arr_type == np.ndarray:
+        return np.concatenate(a, axis=0)
+    elif arr_type == Tensor:
+        return torch.cat(a, dim=0)
+    else:
+        raise TypeError(f"Unsupported type: {type(a[0])}")
+
+
 class SearchResult:
     """
     A small class to help handling the search results.
@@ -125,6 +138,20 @@ class SearchResult:
         # replace zero_index
         if self.dataset_size is not None:
             self.index = replace_neg_values(self.index, new_value_range=(0, self.dataset_size - 1))
+
+    def __add__(self, other):
+        if not isinstance(other, SearchResult):
+            raise TypeError(f"Unsupported type: {type(other)}")
+
+        self.score = concat_arrays(self.score, other.score)
+        self.index = concat_arrays(self.index, other.index)
+        if self.tokens is not None:
+            self.tokens = concat_arrays(self.tokens, other.tokens)
+
+        return self
+
+    def __repr__(self):
+        return f"{type(self).__name__}(score={self.score.shape}, index={self.index.shape})"
 
     def _fill_rdn(self, args) -> Tuple[int, float]:
         """replace negative index values"""
