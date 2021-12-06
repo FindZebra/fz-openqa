@@ -253,11 +253,11 @@ class OpenQaBuilder(DatasetBuilder):
         # adjust the batch size to account for the documents
         map_kwargs = {
             "num_proc": num_proc,
-            "batch_size": max(num_proc, batch_size // n_retrieved_documents),
+            "batch_size": batch_size,
             "batched": True,
             # avoid: pyarrow.lib.ArrowInvalid: Invalid null value
             # https://github.com/huggingface/datasets/issues/2831
-            "writer_batch_size": 2000,
+            "writer_batch_size": 5000,
         }
 
         # process the dataset with each block
@@ -270,6 +270,8 @@ class OpenQaBuilder(DatasetBuilder):
                 cache_dir=self.dataset_builder.cache_dir,
                 **map_kwargs,
                 desc=f"[Mapping] {k}",
+                debug=False,
+                id=k,
             )
             dataset = mapper(dataset)
 

@@ -57,6 +57,13 @@ def run(config):
     sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 \
     +num_workers=10 +use_subset=False +colbert=True
 
+
+    CUDA_VISIBLE_DEVICES=4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=4 +batch_size=1000 \
+    +num_workers=10 +use_subset=False +corpus_subset=False +colbert=True \
+    +factory=\'IVF100,PQ16x8\' \
+    +n_retrieved_documents=1000 +map_batch_size=100
+
     ```
     """
     print_config(config)
@@ -122,7 +129,7 @@ def run(config):
     IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
 
     faiss_args = {
-        "factory": config.get("factory", "IVF100,PQ16,RFlat"),
+        "factory": config.get("factory", "IVF100,PQ16x8"),
         "metric_type": faiss.METRIC_INNER_PRODUCT,
         # "n_list": 100,
         # "n_subvectors": 16,
@@ -159,7 +166,7 @@ def run(config):
         max_pos_docs=1,
         filter_unmatched=True,
         num_proc=config.get("num_proc", 4),
-        batch_size=config.get("map_batch_size", 8000),
+        batch_size=config.get("map_batch_size", 100),
         select_mode=config.get("select_mode", "sample"),
     )
 

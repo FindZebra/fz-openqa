@@ -142,7 +142,7 @@ def run(config):
         max_pos_docs=1,
         filter_unmatched=config.get("filter_unmatched", True),
         num_proc=4,
-        batch_size=config.get("map_batch_size", 16000),
+        batch_size=config.get("map_batch_size", 100),
         select_mode=config.get("select_mode", "sample"),
     )
 
