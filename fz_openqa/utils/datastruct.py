@@ -1,3 +1,4 @@
+from enum import Enum
 from numbers import Number
 from pathlib import Path
 from typing import Any
@@ -32,3 +33,12 @@ def filter_prefix(d: Dict[str, Any], prefix: str):
 
 def contains_prefix(key, output):
     return any(key in k for k in output.keys())
+
+
+class OutputFormat(Enum):
+    """
+    Enum for the output format of the predictions.
+    """
+
+    NUMPY = "numpy"
+    TORCH = "torch"

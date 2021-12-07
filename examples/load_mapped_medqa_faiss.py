@@ -60,7 +60,7 @@ def run(config):
 
     CUDA_VISIBLE_DEVICES=4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
     sys=titan trainer.strategy=dp trainer.gpus=4 +batch_size=1000 \
-    +num_workers=10 +use_subset=False +corpus_subset=False +colbert=True \
+    +num_workers=10 +use_subset=True +corpus_subset=True +colbert=True \
     +factory=\'IVF100,PQ16x8\' \
     +n_retrieved_documents=1000 +map_batch_size=100
 

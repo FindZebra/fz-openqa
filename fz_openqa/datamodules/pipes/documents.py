@@ -181,7 +181,6 @@ class SelectDocsOneEg(Pipe):
                     "k": total - len(negative_idx),
                     "mode": self.pos_select_mode,
                 }
-                # todo: select with probs
                 selected_positive_idx = select_values(positive_idx, **args)
                 index = selected_positive_idx + selected_negative_idx
             else:

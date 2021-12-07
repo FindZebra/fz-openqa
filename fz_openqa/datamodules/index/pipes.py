@@ -13,6 +13,7 @@ from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.utils.array import concat_arrays
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import Eg
 from fz_openqa.utils.pretty import pprint_batch
@@ -182,7 +183,7 @@ class FetchDocuments(Pipe):
                 rows = batch
             else:
                 for k, v in batch.items():
-                    rows[k] += v
+                    rows[k] = concat_arrays(rows[k], v)
 
         return rows
 

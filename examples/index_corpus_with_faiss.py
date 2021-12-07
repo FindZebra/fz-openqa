@@ -128,6 +128,7 @@ def run(config: DictConfig) -> None:
         dataset=corpus,
         model=model,
         trainer=trainer,
+        faiss_train_size=config.get("faiss_train_size", 1000),
         faiss_args={
             "factory": config.get("factory", "Flat"),
             "metric_type": faiss.METRIC_INNER_PRODUCT,

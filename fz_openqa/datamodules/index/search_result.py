@@ -14,11 +14,14 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
-from fz_openqa.datamodules.pipes.predict import OutputFormat
+from fz_openqa.utils.array import Array
+from fz_openqa.utils.array import concat_arrays
+from fz_openqa.utils.array import FormatArray
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.json_struct import flatten_json_struct
 
-Array = Union[List[List], np.ndarray, Tensor]
+
 Array2d = Union[List[List[Any]], np.ndarray, Tensor]
 
 
@@ -77,19 +80,6 @@ def replace_neg_values(arr: Array, *, new_value_range: Tuple[int, int]) -> Array
         raise TypeError(f"Unsupported type: {type(arr)}")
 
 
-def concat_arrays(*a: Array) -> Array:
-    arr_type = type(a[0])
-    assert all(isinstance(x, arr_type) for x in a)
-    if arr_type == list:
-        return sum(a, [])
-    elif arr_type == np.ndarray:
-        return np.concatenate(a, axis=0)
-    elif arr_type == Tensor:
-        return torch.cat(a, dim=0)
-    else:
-        raise TypeError(f"Unsupported type: {type(a[0])}")
-
-
 class SearchResult:
     """
     A small class to help handling the search results.
@@ -107,22 +97,16 @@ class SearchResult:
         format: Optional[OutputFormat] = None,
         k: int,
     ):
-        if format is None:
-            pass
-        elif format == OutputFormat.NUMPY:
-            score = np.array(score)
-            index = np.array(index)
-        elif format == OutputFormat.TORCH:
-            score = torch.tensor(score)
-            index = torch.tensor(index)
-        else:
-            raise ValueError(f"Unsupported format: {format}")
 
         self.score = score
         self.index = index
         self.tokens = tokens
         self.dataset_size = dataset_size
         self.k = k
+
+        formatter = FormatArray(format)
+        self.score = formatter(self.score)
+        self.index = formatter(self.index)
 
         # check batch lengths
         assert len(self.score) == len(self.index)
