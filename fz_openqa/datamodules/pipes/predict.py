@@ -5,7 +5,6 @@ import logging
 import os.path
 import shutil
 import tempfile
-from enum import Enum
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -15,10 +14,7 @@ from typing import Optional
 from typing import Sized
 from typing import Union
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -32,30 +28,25 @@ from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
+from fz_openqa.callbacks.store_results import select_field_from_output
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.functional import cast_values_to_numpy
-from fz_openqa.utils.functional import cast_values_to_torch
-from fz_openqa.utils.functional import is_index_contiguous
+from fz_openqa.utils.functional import cast_to_numpy
+from fz_openqa.utils.functional import cast_to_torch
+from fz_openqa.utils.tensor_arrow import get_dtype
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 CACHE_FILE = Union[Path, str]
-
-
-class OutputFormat(Enum):
-    """
-    Enum for the output format of the predictions.
-    """
-
-    NUMPY = "numpy"
-    TORCH = "torch"
+PREDICT_VECTOR_NAME = "vector"
 
 
 class AddRowIdx(TorchDataset):
@@ -71,6 +62,24 @@ class AddRowIdx(TorchDataset):
         batch = self.dataset[item]
         batch[IDX_COL] = item
         return batch
+
+
+class LightningWrapper(LightningModule):
+    def __init__(self, model: Callable):
+        super().__init__()
+        self.model = model
+
+    def forward(self, *args, **kwargs) -> Any:
+        return self.model(*args, **kwargs)
+
+    def training_step(self, batch, batch_idx):
+        return self.forward(batch)
+
+    def validation_step(self, batch, batch_idx):
+        return self.forward(batch)
+
+    def test_step(self, batch, batch_idx):
+        return self.forward(batch)
 
 
 class Predict(Pipe):
@@ -141,24 +150,44 @@ class Predict(Pipe):
     model: Optional[pl.LightningModule] = None
     cache_file: Optional[CACHE_FILE | Dict[Split, CACHE_FILE]] = None
     _master: bool = True
-    _loaded_table: Optional[pa.Table] = None
+    _loaded_table: Optional[TensorArrowTable] = None
     _loaded_split: Optional[Split] = None
     _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
+    _vector_key: str = PREDICT_VECTOR_NAME
 
-    def __init__(self, model: pl.LightningModule, requires_cache: bool = False, **kwargs):
+    def __init__(
+        self,
+        model: pl.LightningModule | nn.Module | Callable,
+        model_output_keys: List[str],
+        output_dtype: str = "float32",
+        requires_cache: bool = False,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
         model
             The model to use for predictions.
+        model_output_keys
+             The keys of the model to output to the cache. Only one field is stored at a time.
+             For instance ["question.vector", "document.vector"] will store the
+             question when available and the document otherwise.
+        output_dtype
+            The dtype of output predictions and cache file.
         requires_cache
             If True, the cache file must be set before calling `__call__`.
         kwargs
             Additional keyword arguments passed to `Pipe`.
         """
         super(Predict, self).__init__(**kwargs)
+
+        if not isinstance(model, pl.LightningModule):
+            model = LightningWrapper(model)
+
         self.model = model
         self.requires_cache = requires_cache
+        self.model_output_keys = model_output_keys
+        self.dtype = output_dtype
 
     def invalidate_cache(self):
         """Reset the cache"""
@@ -218,20 +247,9 @@ class Predict(Pipe):
     ) -> Batch:
         """Process a batch using the cache file"""
         table = self.read_table(split)
-        if is_index_contiguous(idx):
-            msg = "The table is smaller than the max. of the input index."
-            assert table.num_rows > max(idx), msg
-            rows = table[min(idx) : max(idx) + 1]
+        vectors = table[idx]
 
-        else:
-            rows = table.take(idx)
-
-        if format == OutputFormat.NUMPY:
-            return cast_values_to_numpy(rows.to_pydict())
-        elif format == OutputFormat.TORCH:
-            return cast_values_to_torch(rows.to_pydict())
-        else:
-            raise ValueError(f"Unknown format: {format}")
+        return self._format_output(vectors, format=format)
 
     def _process_batch_without_cache(
         self, batch: Batch, format: OutputFormat = OutputFormat.NUMPY, **kwargs
@@ -240,15 +258,21 @@ class Predict(Pipe):
         if isinstance(self.model, nn.Module):
             device = next(iter(self.model.parameters())).device
             batch = move_data_to_device(batch, device)
-        # process with the model (Dense or Sparse)
-        output = self.model(batch, **kwargs)
 
+        # process with the model (Dense or Sparse)
+        model_output = self.model(batch, **kwargs)
+        vectors = select_field_from_output(model_output, self.model_output_keys)
+        return self._format_output(vectors, format=format)
+
+    def _format_output(self, vectors: torch.Tensor, format: OutputFormat) -> Batch:
         if format == OutputFormat.NUMPY:
-            return cast_values_to_numpy(output)
+            vectors = cast_to_numpy(vectors, dtype=get_dtype("numpy", self.dtype))
         elif format == OutputFormat.TORCH:
-            return cast_values_to_torch(output)
+            vectors = cast_to_torch(vectors, dtype=get_dtype("torch", self.dtype))
         else:
             raise ValueError(f"Unknown format: {format}")
+
+        return {PREDICT_VECTOR_NAME: vectors}
 
     @functools.singledispatchmethod
     @torch.no_grad()
@@ -300,7 +324,13 @@ class Predict(Pipe):
 
         # define a unique fingerprint for the cache file
         fingerprint = get_fingerprint(
-            {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
+            {
+                "model": get_fingerprint(self.model),
+                "model_output_keys": self.model_output_keys,
+                "dtype": self.dtype,
+                "split": split,
+                "dataset": dataset._fingerprint,
+            }
         )
 
         # create a temporary directory to store the cache file if persist is False
@@ -316,7 +346,11 @@ class Predict(Pipe):
             target_file = Path(cache_dir) / type(self).__name__.lower() / f"{fingerprint}.arrow"
 
         # init a callback to store predictions and add it to the Trainer
-        callback = StorePredictionsCallback(cache_file=target_file)
+        callback = StorePredictionsCallback(
+            cache_file=target_file,
+            accepted_fields=self.model_output_keys,
+            dtype=self.dtype,
+        )
 
         # define a collate_fn to process the dataset
         if callback.is_written:
@@ -401,7 +435,7 @@ class Predict(Pipe):
         trainer.callbacks.remove(callback)
         return cache_file
 
-    def read_table(self, split: Optional[Split]) -> pa.Table:
+    def read_table(self, split: Optional[Split]) -> TensorArrowTable:
         """Returns the cached `pyarrow.Table` for the given split"""
 
         if isinstance(self.cache_file, dict):
@@ -422,12 +456,8 @@ class Predict(Pipe):
 
         return self._loaded_table
 
-    @staticmethod
-    def read_table_from_cache_file(cache_file: str) -> pa.Table:
-        with pa.memory_map(str(cache_file), "rb") as source:
-            table = pa.ipc.open_file(source).read_all()
-
-        return table
+    def read_table_from_cache_file(self, cache_file: str) -> TensorArrowTable:
+        return TensorArrowTable(cache_file, dtype=self.dtype)
 
     @staticmethod
     def init_loader(

@@ -21,49 +21,46 @@ from typing import Union
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
-import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
-from rich.progress import track
 from torch import Tensor
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset as TorchDataset
+from tqdm.rich import tqdm
 
-from fz_openqa.callbacks.store_results import IDX_COL
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
-from fz_openqa.datamodules.pipes.basic import FilterKeys
-from fz_openqa.datamodules.pipes.basic import RenameKeys
 from fz_openqa.datamodules.pipes.collate import Collate
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.meta import Sequential
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
-from fz_openqa.datamodules.pipes.predict import OutputFormat
 from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.functional import is_index_contiguous
+from fz_openqa.utils.tensor_arrow import get_dtype
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
 
 
-def display_file_size(key: str, fn: PathLike, logger=None):
-    s = os.path.getsize(fn)
-    s /= 1024 ** 3
-    msg = f"{key} - disk_size={s:.3f} GB"
-    if logger is not None:
-        logger.info(msg)
+def display_file_size(key: str, fn: PathLike, print_fn=None):
+    fn = Path(fn)
+    if fn.is_dir():
+        for f in fn.iterdir():
+            display_file_size(f"{fn} / {f}", f, print_fn)
     else:
-        print(msg)
+        s = os.path.getsize(fn)
+        s /= 1024 ** 3
+        msg = f"{key} - disk_size={s:.3f} GB"
+        if print_fn is None:
+            print_fn = print
+        print_fn(msg)
 
 
 def _memory_mapped_arrow_table_from_file(filename: str) -> pa.Table:
@@ -93,42 +90,6 @@ DEFAULT_FAISS_KWARGS = {
 }
 
 
-class ArrowDataset(TorchDataset):
-    """A small helper class to handle pyarrow tables."""
-
-    def __init__(
-        self,
-        table: pa.Table,
-        keys: Optional[List[str]],
-        output_format: Optional[OutputFormat] = None,
-    ):
-        self.table = table
-        self.keys = keys
-        self.output_format = output_format
-
-    def __len__(self):
-        return self.table.num_rows
-
-    def __getitem__(self, idx):
-        row = self.table[idx : idx + 1]
-        row = row.to_pydict()
-
-        values = (row.get(k, None) for k in self.keys)
-        v = next(iter(v for v in values if v is not None))
-        v = v[0]
-
-        if self.output_format is None:
-            pass
-        elif self.output_format == OutputFormat.NUMPY:
-            v = np.array(v, dtype=np.float32)
-        elif self.output_format == OutputFormat.TORCH:
-            v = torch.tensor(v, dtype=torch.float32)
-        else:
-            raise ValueError(f"Unknown output format {self.output_format}")
-
-        return v
-
-
 class FaissIndex(Index):
     """
     A dense index using Faiss. This class allows storing document vectors (one-dimensional)
@@ -153,13 +114,19 @@ class FaissIndex(Index):
         The name of the index. Must be unique for each configuration.
     """
 
-    vectors_column_name = "__vectors__"
-    _dtype: np.dtype = np.float32
     _index: FaissSwigIndex = None
     model: Callable = None
     index_name: str
-    _vectors_table: Optional[pa.Table] = None
+    _vectors_table: Optional[TensorArrowTable] = None
     _master: bool = True
+    _pickle_exclude_list: List[str] = [
+        "_index",
+        "_emb2pid",
+        "_vectors_table",
+        "_vectors",
+        "_max_sim",
+        "_is_gpu",
+    ]
 
     def __init__(
         self,
@@ -172,6 +139,7 @@ class FaissIndex(Index):
         trainer: Optional[Trainer] = None,
         faiss_args: Dict[str, Any] = None,
         faiss_train_size: int = 1000,
+        dtype: str = "float32",
         in_memory: bool = True,
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
@@ -201,6 +169,8 @@ class FaissIndex(Index):
             Additional arguments to pass to the Faiss index.
         faiss_train_size
             Number of data points to train the index on.
+        dtype:
+            The dtype of the vectors.
         in_memory:
             Whether to store the index in memory or load using pyarrow (only for Colbert)
         model_output_keys
@@ -230,6 +200,7 @@ class FaissIndex(Index):
         self._fingerprint = get_fingerprint(
             {
                 "model": self._model_fingerprint,
+                "dtype": dtype,
                 "dataset": self._dataset_fingerprint,
                 "faiss": self._faiss_fingerprint,
             }
@@ -239,6 +210,7 @@ class FaissIndex(Index):
         # model and params
         self.model = model
         self.faiss_args = faiss_args
+        self.dtype = dtype
         self.faiss_train_size = faiss_train_size
         self.in_memory = in_memory
         self.trainer = trainer
@@ -260,12 +232,11 @@ class FaissIndex(Index):
         if persist_cache is False:
             cache_dir = tempfile.mkdtemp(dir=cache_dir)
         self.cache_dir = cache_dir
-        self.predict_docs = Predict(self.model)
-        self.predict_queries = Predict(self.model)
-
-        # postprocessing: rename the model outputs `model_output_keys` to `vectors_column_name`
-        self.postprocess = self.get_rename_output_names_pipe(
-            inputs=self.model_output_keys, output=self.vectors_column_name
+        self.predict_docs = Predict(
+            self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
+        )
+        self.predict_queries = Predict(
+            self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
         )
 
         # call the super: build the index
@@ -293,7 +264,7 @@ class FaissIndex(Index):
 
     @property
     def vector_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "vectors.arrow"
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "vectors.tsarrow"
 
     def build(self, dataset: Dataset, **kwargs):
         """
@@ -320,8 +291,8 @@ class FaissIndex(Index):
             self._write_index()
 
         # display file sizes
-        display_file_size("index", self.index_file, logger=logger)
-        display_file_size("vectors", self.vector_file, logger=logger)
+        display_file_size("index", self.index_file, print_fn=logger.info)
+        display_file_size("vectors", self.vector_file, print_fn=logger.info)
 
     def _write_index(self):
         logger.info(f"Writing {type(self).__name__} [to]: {self.index_file.absolute()}")
@@ -331,12 +302,9 @@ class FaissIndex(Index):
         logger.info(f"Reading {type(self).__name__} from: {self.index_file.absolute()}")
         self._index = faiss.read_index(str(self.index_file))
 
-    def _read_vectors_table(self):
+    def _read_vectors_table(self) -> TensorArrowTable:
         logger.info(f"Reading vectors table from: {self.vector_file.absolute()}")
-        with pa.memory_map(str(self.vector_file), "rb") as source:
-            vectors = pa.ipc.open_file(source).read_all()
-        logger.info(f"columns: {vectors.column_names}")
-        return vectors
+        return TensorArrowTable(self.vector_file, dtype=self.dtype)
 
     def _build(self, dataset: Dataset, **kwargs):
         """
@@ -374,42 +342,54 @@ class FaissIndex(Index):
         )
 
         # read the vectors from the cache as a pyarrow table
-        cached_vectors: pa.Table = self._read_vectors_table()
+        cached_vectors: TensorArrowTable = self._read_vectors_table()
 
         # load the vectors form the table
-        it = iter(
-            self._iter_vectors(
-                cached_vectors,
-                batch_size=self.faiss_train_size,
-                output_format=OutputFormat.TORCH,
-            )
+        it = iter(cached_vectors.to_batches(self.faiss_train_size))
+
+        # define the progress bar
+        train_size = min(cached_vectors.num_rows, self.faiss_train_size)
+        pbar = self._get_pbar(
+            total=cached_vectors.num_rows // train_size,
+            desc=f"Building {type(self).__name__} (batch_size={train_size})",
         )
 
         # init the faiss index and add the 1st batch
-        batch = next(it)
-        self._init_index(batch)
-        self._add_batch_to_index(batch)
-
-        if self.progress_bar:
-            it = track(
-                it,
-                total=len(cached_vectors) // self.faiss_train_size - 1,
-                description=f"Building {type(self).__name__}",
-            )
+        vectors = next(it)
+        self._init_index(vectors)
+        if pbar is not None:
+            pbar.update(1)
+        self._add_batch_to_index(vectors)
 
         # iterate through the remaining batches and add them to the index
         while True:
             try:
-                batch = next(it)
-                self._add_batch_to_index(batch)
+                vectors = next(it)
+                # rich.print(f"> vectors: {vectors.shape}")
+                self._add_batch_to_index(vectors)
+                if pbar is not None:
+                    pbar.update(1)
             except StopIteration:
                 break
+
+        if pbar is not None:
+            pbar.close()
 
         self._train_ends()
         logger.info(
             f"Index is_trained={self._index.is_trained}, "
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
+
+    def _get_pbar(self, *args, **kwargs):
+        if self.progress_bar:
+            pbar = tqdm(*args, **kwargs)
+        else:
+
+            def pbar(*args, **kwargs):
+                return None
+
+        return pbar
 
     def _cache_vectors(
         self,
@@ -504,9 +484,6 @@ class FaissIndex(Index):
             logger.info(f"Moving faiss index to GPU n_gpus={n_gpus}")
             self._index = faiss.index_cpu_to_all_gpus(self._index)
 
-        rich.print(f">>> index: {self._index}")
-        rich.print(vars(self._index))
-
         # set n_probe
         self._index.nprobe = self.faiss_args.get("nprobe", 16)
 
@@ -518,7 +495,7 @@ class FaissIndex(Index):
         if isinstance(self._index, faiss.IndexReplicas):
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
 
-    def _train(self, vectors: np.ndarray):
+    def _train(self, vectors: torch.Tensor):
         """
         Train faiss index on data
 
@@ -532,16 +509,20 @@ class FaissIndex(Index):
         This crashes if using faiss!=1.6.5
         """
         logger.info(f"Training index with {vectors.shape[0]} vectors")
+
+        # todo: check if casting is necessary
+        vectors = vectors.to(torch.float32)
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
 
-    def _add_batch_to_index(self, vectors: np.ndarray):
+    def _add_batch_to_index(self, vectors: torch.Tensor):
         """
         Add one batch of data to the index
         """
 
         # add the vectors to the index
-        self._index.add(vectors.reshape(-1, vectors.shape[-1]))
+        vectors = vectors.to(torch.float32)
+        self._index.add(vectors.view(-1, vectors.shape[-1]))
 
     @singledispatchmethod
     def search(
@@ -606,7 +587,6 @@ class FaissIndex(Index):
 
         """
         query = self.predict_queries(query, idx=idx, split=split)
-        query = self.postprocess(query)
         return self._query_index(query, k=k)
 
     def _search_dataset(
@@ -662,11 +642,7 @@ class FaissIndex(Index):
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""
-        vector: np.ndarray | List = batch[self.vectors_column_name]
-        if isinstance(vector, list):
-            vector = np.array(vector, dtype=self._dtype)
-        else:
-            vector = vector.astype(self._dtype)
+        vector: np.ndarray | List = batch[Predict._vector_key]
         return vector
 
     def _init_loader(self, dataset, *, collate_fn: Callable, **kwargs):
@@ -678,57 +654,12 @@ class FaissIndex(Index):
             dataset, collate_fn=collate_fn, loader_kwargs=loader_kwargs, wrap_indices=False
         )
 
-    def _iter_vectors(
-        self,
-        vectors_table: pa.Table,
-        progress_bar: bool = False,
-        batch_size=1000,
-        desc: str = "Loading vectors",
-        output_format: OutputFormat = OutputFormat.NUMPY,
-        **kwargs,
-    ) -> np.ndarray | Tensor:
-        """
-        Iterate over vectors from a table
-        """
-        logger.info("Init vector iterator")
-
-        def iter_batches(vectors_table, batch_size: int):
-            for i in range(0, vectors_table.num_rows, batch_size):
-                batch = vectors_table[i : i + batch_size]
-                yield batch.to_pydict()
-
-        it = iter(iter_batches(vectors_table, batch_size))
-
-        if progress_bar:
-            desc = f"{desc} (batch_size={batch_size})"
-            it = track(it, description=desc, total=vectors_table.num_rows // batch_size)
-
-        for batch in it:
-            batch = self.postprocess(batch)
-            vectors = batch[self.vectors_column_name]
-            if output_format is None:
-                pass
-            elif output_format == OutputFormat.NUMPY:
-                vectors = np.array(vectors, dtype=self._dtype)
-            elif output_format == OutputFormat.TORCH:
-                vectors = torch.tensor(vectors, dtype=torch.float32)
-            else:
-                raise ValueError(f"Unknown output format: {output_format}")
-            yield vectors
-
-    def get_rename_output_names_pipe(self, inputs: List[str], output: str) -> Pipe:
-        """Format the output of the model"""
-        return Sequential(
-            RenameKeys({key: output for key in inputs}),
-            FilterKeys(In([output, IDX_COL])),
-        )
-
     def __getstate__(self):
         state = self.__dict__.copy()
         # state["model"] = None
         state["trainer"] = None
         # state["_index"] = faiss.serialize_index(state["_index"])
-        for key in ["_index", "_emb2pid", "_vectors_table", "_vectors", "_max_sim", "_is_gpu"]:
+        for key in self._pickle_exclude_list:
             if key in state:
                 state.pop(key)
         return state
@@ -737,16 +668,6 @@ class FaissIndex(Index):
         # state["_index"] = faiss.deserialize_index(state["_index"])
         state["_master"] = False
         self.__dict__.update(state)
-
-    def _check_index_consistency(self, idx):
-        """Make sure the new idx are consistent with the `_index`"""
-        msg = f"Indexes are not contiguous (i.e. 1, 2, 3, 4),\nindexes={idx}"
-        assert is_index_contiguous(idx), msg
-        msg = (
-            f"The stored index and the indexes are not contiguous, "
-            f"\nindex_size={self._index.ntotal}, first_index={idx[0]}"
-        )
-        assert self._index.ntotal == idx[0], msg
 
     def __del__(self):
         if self._master and self.persist_cache is False:

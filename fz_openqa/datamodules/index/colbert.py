@@ -19,8 +19,10 @@ from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
-from fz_openqa.datamodules.pipes.predict import OutputFormat
+from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 # required to allow searching faiss with tensors
 
@@ -60,10 +62,10 @@ class ColbertIndex(FaissIndex):
     _vectors: Optional[Tensor] = None
     _max_sim: Optional[MaxSim, nn.DataParallel] = None
     _is_gpu: bool = False
-    _dtype = torch.float16
+    _max_add_per_gpu = 1 << 25
 
     @property
-    def vectors_table(self) -> pa.Table:
+    def vectors_table(self) -> TensorArrowTable:
         if self._vectors_table is None:
             self._vectors_table = self._read_vectors_table()
         return self._vectors_table
@@ -83,37 +85,25 @@ class ColbertIndex(FaissIndex):
         return self._emb2pid
 
     @torch.no_grad()
-    def _read_vectors_from_table(self, vectors_table: pa.Table, batch_size=10000) -> Tensor:
-        log.info(f"Reading {vectors_table.num_rows} vectors")
-        i = 0
-        vectors = None
-        for vectors_chunk in self._iter_vectors(
-            vectors_table,
-            batch_size=batch_size,
-            progress_bar=self.progress_bar,
-            output_format=OutputFormat.TORCH,
-            pin_memory=True,
-        ):
-            if vectors is None:
-                vectors = torch.zeros(
-                    (vectors_table.num_rows, *vectors_chunk.shape[1:]), dtype=self._dtype
-                )
-
-            vectors[i : i + vectors_chunk.shape[0]] = vectors_chunk
-            i += vectors_chunk.shape[0]
-
+    def _read_vectors_from_table(self, vectors_table: TensorArrowTable) -> Tensor:
+        log.info(f"Reading {vectors_table.num_rows} vectors from {vectors_table.path}")
+        start_time = time.time()
+        vectors = vectors_table[0 : len(vectors_table)]
+        log.info(
+            f"Read {vectors_table.num_rows} vectors. Elapsed time: {time.time() - start_time:.3f}s"
+        )
         return vectors
 
     @torch.no_grad()
-    def _build_emb2pid_from_vectors(self, vectors_table: pa.Table) -> Tensor:
-        emb2pid = np.arange(vectors_table.num_rows, dtype=np.long)
+    def _build_emb2pid_from_vectors(self, vectors_table: TensorArrowTable) -> Tensor:
+        emb2pid = torch.arange(vectors_table.num_rows, dtype=torch.long)
         if self._vectors is not None:
             one_vec = self._vectors[0]
         else:
-            one_vec = next(iter(self._iter_vectors(vectors_table, batch_size=1, num_workers=0)))[0]
+            one_vec = vectors_table[0]
         vector_length = one_vec.shape[0]
-        emb2pid = np.repeat(emb2pid[:, None], vector_length, axis=1)
-        return torch.from_numpy(emb2pid.reshape(-1)).contiguous()
+        emb2pid = emb2pid[:, None].expand(-1, vector_length)
+        return emb2pid.reshape(-1).contiguous()
 
     @torch.no_grad()
     def _search_batch(
@@ -129,8 +119,7 @@ class ColbertIndex(FaissIndex):
 
         # 1. get query vector
         query = self.predict_queries(query, format=OutputFormat.TORCH, idx=idx, split=split)
-        query = self.postprocess(query)
-        q_vectors: Tensor = query[self.vectors_column_name]
+        q_vectors: Tensor = query[Predict._vector_key]
 
         # 2. get faiss index, and potentially move to gpu
         n_gpus = faiss.get_num_gpus()
@@ -142,7 +131,9 @@ class ColbertIndex(FaissIndex):
                 log.info(f"Moving faiss index to gpu {faiss_gpus}")
                 nprobe = self._index.nprobe
                 self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=faiss_gpus)
-                self._index.nprobe = nprobe
+                faiss.GpuParameterSpace().set_index_parameter(
+                    self._index, "nprobe", nprobe
+                )  # type: ignore
 
         # 3. build the MaxSim object
         if self._max_sim is None:
@@ -154,9 +145,8 @@ class ColbertIndex(FaissIndex):
 
         # 4. query faiss (faiss index + MaxSim Dataparallel)
         eff_batch_size = faiss_batch_size * max(1, n_gpus)
-        log.info(f"Searching queries: {q_vectors.shape}, with batch size {eff_batch_size}")
+        log.debug(f"Searching queries: {q_vectors.shape}, with batch size {eff_batch_size}")
         search_results = None
-        q_vectors = q_vectors.to(self._dtype)
         for i in range(0, q_vectors.shape[0], eff_batch_size):
             q_vec = q_vectors[i : i + eff_batch_size]
             r = self._search_vectors(q_vec, k=k, index=self._index, max_sim=self._max_sim)
@@ -188,18 +178,18 @@ class ColbertIndex(FaissIndex):
         p = min(10, max(1, k // 2))
         topk_indices = self._query_to_embedding_ids(q_vectors, p, index=index)
         faiss_time = time.time()
-        log.info(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
+        log.debug(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
 
         # apply max sim
         if isinstance(max_sim, nn.DataParallel):
             q_vectors = q_vectors.to("cuda")
             topk_indices = topk_indices.to("cuda")
 
-        log.info(f"Querying maxsim: {q_vectors.shape}, device={q_vectors.device}")
+        log.debug(f"Querying maxsim: {q_vectors.shape}, device={q_vectors.device}")
         maxsim_pids, maxsim_scores = max_sim(q_vectors, topk_indices, k=k)
-        log.info(f"max_sim={time.time() - faiss_time:.3f}s, topk_indices={topk_indices.shape}")
+        log.debug(f"max_sim={time.time() - faiss_time:.3f}s, topk_indices={topk_indices.shape}")
 
-        log.info(
+        log.debug(
             f"retrieval_time={time.time() - start:.3f}s, k={k}, maxsim_pids={maxsim_pids.shape}"
         )
         return SearchResult(
@@ -223,9 +213,7 @@ class ColbertIndex(FaissIndex):
             unique_pids[unique_pids < 0] = 0
 
             # retrieve unique document vectors and cast as array
-            unique_pid_vectors = self._vectors_table.take(unique_pids.numpy()).to_pydict()
-            unique_pid_vectors = self.postprocess(unique_pid_vectors)[self.vectors_column_name]
-            unique_pid_vectors = torch.tensor(unique_pid_vectors, dtype=dtype)
+            unique_pid_vectors = self._vectors_table[unique_pids]
 
             # reshape and return
             pid_vectors = unique_pid_vectors[indices]

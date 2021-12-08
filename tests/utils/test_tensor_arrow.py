@@ -13,7 +13,7 @@ import torch
 from parameterized import parameterized_class, parameterized
 
 from fz_openqa.utils.datastruct import PathLike
-from fz_openqa.utils.tensor_arrow import TensorArrowWriter, TORCH_DTYPES, TensorArrowReader
+from fz_openqa.utils.tensor_arrow import TensorArrowWriter, TORCH_DTYPES, TensorArrowTable
 
 DSET_SIZE: int = 1000
 
@@ -41,7 +41,7 @@ class TestTensorArrow(unittest.TestCase):
         # write vectors
         self._write(self.root, self.dtype_writer, self.vec_shape)
         # setup reader
-        self.reader = TensorArrowReader(self.root, dtype=self.dtype_reader)
+        self.reader = TensorArrowTable(self.root, dtype=self.dtype_reader)
 
     def _write(self, path: PathLike, dtype: str, vec_shape: List[int]):
         with TensorArrowWriter(path, dtype=dtype) as store:

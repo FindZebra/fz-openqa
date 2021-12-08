@@ -87,7 +87,7 @@ def run(config: DictConfig) -> None:
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
     trainer: Optional[Trainer] = instantiate(
-        config.trainer, callbacks=[StorePredictionsCallback(store_fields=["document.row_idx"])]
+        config.trainer, callbacks=[StorePredictionsCallback(accepted_fields=["document.row_idx"])]
     )
     if isinstance(trainer, (dict, DictConfig)):
         logger.info("No Trainer was provided. PyTorch Lightning acceleration cannot be used.")

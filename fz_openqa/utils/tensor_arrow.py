@@ -124,11 +124,19 @@ class TensorArrowBase:
 
 class TensorArrowWriter(TensorArrowBase):
     _writer: Optional[ArrowWriters] = None
-    _curr_index: int = 0
+    _curr_vec_index: int
+    _curr_row_index: int
 
     def __enter__(self):
-        self.path.mkdir(parents=True, exist_ok=True)
+        self.open()
+        return self
 
+    def _reset(self):
+        self._curr_vec_index = 0
+        self._curr_row_index = 0
+
+    def open(self):
+        self.path.mkdir(parents=True, exist_ok=True)
         paths = {
             "vectors": self.vectors_path,
             "index": self.index_path,
@@ -139,8 +147,8 @@ class TensorArrowWriter(TensorArrowBase):
                 [("start", pa.int64()), ("stop", pa.int64()), ("shape", pa.list_(pa.int32(), -1))]
             ),
         }
+        self._reset()
         self._writer = ArrowWriters(paths, schemas).open()
-        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
@@ -149,11 +157,24 @@ class TensorArrowWriter(TensorArrowBase):
 
     def close(self):
         self._writer.close()
+        return self
 
     @torch.no_grad()
-    def write(self, tensor: torch.Tensor):
+    def write(self, tensor: torch.Tensor, idx: Optional[List[int]] = None):
         if self._writer is None:
             raise RuntimeError("Writer not initialized")
+
+        if idx is not None:
+            if not is_contiguous_index(idx):
+                raise ValueError(
+                    "Index must be contiguous (i.e. x[i+1] = x[i] +1)." f"Received: {idx}"
+                )
+
+            if idx[0] != self._curr_row_index:
+                raise ValueError(
+                    f"Index must follows with stored indexes. "
+                    f"idx[0]={idx[0]}, len(indexes)= {self._curr_row_index}"
+                )
 
         # infer the shape of the tensor
         shape = tensor.shape[1:]
@@ -161,7 +182,7 @@ class TensorArrowWriter(TensorArrowBase):
         stride = np.prod(shape)
         num_elements = tensor.numel()
         # flatten the tensor
-        array = tensor.view(-1)
+        array = tensor.reshape(-1)
 
         # cast to pyarrow RecordBatch
         array = array.detach().cpu().numpy()
@@ -171,7 +192,7 @@ class TensorArrowWriter(TensorArrowBase):
 
         # Create the index RecordBatch
         start = np.arange(
-            self._curr_index, self._curr_index + stride * batch_size, stride, dtype=np.int64
+            self._curr_vec_index, self._curr_vec_index + stride * batch_size, stride, dtype=np.int64
         )
         end = start + stride
         shape = np.array(shape, dtype=np.int16)
@@ -182,7 +203,8 @@ class TensorArrowWriter(TensorArrowBase):
         )
 
         self._writer.write({"vectors": vectors_batch, "index": index_batch})
-        self._curr_index += num_elements
+        self._curr_vec_index += num_elements
+        self._curr_row_index += batch_size
 
 
 def is_contiguous_index(item: list | np.ndarray | torch.Tensor) -> bool:
@@ -195,7 +217,21 @@ def is_contiguous_index(item: list | np.ndarray | torch.Tensor) -> bool:
         raise TypeError(f"{type(item)} is not supported")
 
 
-class TensorArrowReader(TensorArrowBase):
+class TensorArrowTable(TensorArrowBase):
+    """
+    An Arrow table optimized for Tensors. This allows for:
+    1. zero-copy reads of arbitrary-shaped tensors
+    2. Fast random access using HuggingFace's `MappedMemoryTable`
+
+    Notes
+    -----
+    Limitations:
+    1. The table can only handle one column of tensors. But this should be easy to extend.
+    2. The table can only handle tensors with the same shape, padding of the vectors
+       to the mqx. shape need to be implemented to support different shapes.
+
+    """
+
     _index: Optional[torch.Tensor] = None
     _shapes: Optional[torch.Tensor] = None
     _vectors: Optional[MemoryMappedTable] = None
@@ -223,9 +259,9 @@ class TensorArrowReader(TensorArrowBase):
         shapes = index_table.column(columns.index("shape"))
         self._shapes = torch.tensor(shapes.to_pylist())
         if torch.all(self._shapes == self._shapes[:1]):
-            logger.info("Using a single shape for all vectors")
             self._equal_shapes = True
             self._shapes = self._shapes[0]
+            logger.info(f"Al shapes are equal. Using a single reference shape: {self._shapes}.")
 
     @property
     def vectors(self) -> MemoryMappedTable:
@@ -314,9 +350,9 @@ class TensorArrowReader(TensorArrowBase):
             vectors = vectors[0]
         return vectors
 
-    def to_batches(self, max_chunk_size: int = None) -> Iterator[torch.Tensor]:
-        for i in range(0, len(self), max_chunk_size):
-            yield self[i : i + max_chunk_size]
+    def to_batches(self, max_chunksize: int = 1000) -> Iterator[torch.Tensor]:
+        for i in range(0, self.num_rows, max_chunksize):
+            yield self[i : i + max_chunksize]
 
     def parallel_fetch(
         self, indexes: Iterable[ARRAY_INDEX], num_workers: int = 4

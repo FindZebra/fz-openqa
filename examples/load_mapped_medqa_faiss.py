@@ -54,15 +54,17 @@ def run(config):
     On the cluster, run:
     ```bash
     CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 \
-    +num_workers=10 +use_subset=False +colbert=True
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 \
+    +num_workers=10 +use_subset=True +corpus_subset=False +colbert=True \
+    +factory=\'IVF100,PQ16x8\' \
+    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
 
 
     CUDA_VISIBLE_DEVICES=4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
     sys=titan trainer.strategy=dp trainer.gpus=4 +batch_size=1000 \
-    +num_workers=10 +use_subset=True +corpus_subset=True +colbert=True \
+    +num_workers=10 +use_subset=False +corpus_subset=False +colbert=True \
     +factory=\'IVF100,PQ16x8\' \
-    +n_retrieved_documents=1000 +map_batch_size=100
+    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
 
     ```
     """
@@ -152,6 +154,7 @@ def run(config):
         progress_bar=True,
         faiss_train_size=1000 if use_colbert else 10000,
         faiss_args=faiss_args,
+        dtype=config.get("dtype", "float32"),
         in_memory=config.get("in_memory", True),
     )
 

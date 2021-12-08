@@ -143,6 +143,7 @@ def run(config: DictConfig) -> None:
         cache_dir=cache_dir,
         persist_cache=config.get("persist_cache", False),
         in_memory=config.get("in_memory", True),
+        dtype=config.get("dtype", "float32"),
         progress_bar=True,
     )
     rich.print(index.is_indexed)

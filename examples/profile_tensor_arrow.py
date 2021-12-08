@@ -13,7 +13,7 @@ import torch
 from tqdm.rich import tqdm
 
 from fz_openqa.datamodules.index.dense import display_file_size
-from fz_openqa.utils.tensor_arrow import TensorArrowReader
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 from fz_openqa.utils.tensor_arrow import TensorArrowWriter
 from fz_openqa.utils.tensor_arrow import TORCH_DTYPES
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         display_file_size(str(f), f, print_fn=rich.print)
 
     # read all tensors
-    reader = TensorArrowReader(path, dtype=dtype)
+    reader = TensorArrowTable(path, dtype=dtype)
     rich.print(f"Written num_rows={reader.num_rows}, bytes={dataset_nbytes >> 20} MB")
     index = store._load_table(reader.index_path)
     vectors = store._load_table(store.vectors_path)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     # memory profiling
     mem_before = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
-    reader = TensorArrowReader(path, dtype=dtype)
+    reader = TensorArrowTable(path, dtype=dtype)
     mem_after = psutil.Process(os.getpid()).memory_info().rss >> 20
     rich.print(f"RAM memory used: {(mem_after - mem_before):.3f} MB")
 
