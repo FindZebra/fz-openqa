@@ -1,4 +1,5 @@
 import json
+from random import Random
 
 import datasets
 
@@ -24,7 +25,7 @@ _HOMEPAGE = ""
 _CITATION = ""
 
 
-class OfficialMedQaGenerator(datasets.GeneratorBasedBuilder):
+class CustomMedQaTwGenerator(datasets.GeneratorBasedBuilder):
     """MedQAxCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
@@ -42,7 +43,6 @@ class OfficialMedQaGenerator(datasets.GeneratorBasedBuilder):
                 {
                     "question.idx": datasets.Value("int32"),
                     "question.text": datasets.Value("string"),
-                    "question.metamap": datasets.Sequence(datasets.Value("string")),
                     "answer.target": datasets.Value("int32"),
                     "answer.text": datasets.Sequence(datasets.Value("string")),
                 }
@@ -76,10 +76,26 @@ class OfficialMedQaGenerator(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, filepath, split):
         """Yields examples."""
         with open(filepath, "r") as f:
-            for i, d in enumerate(json.load(f)["data"]):
-                # adjust values
-                d["question.idx"] = d.pop("question_id")
-                d["answer.target"] = d.pop("answer_idx")
-                d["answer.text"] = d.pop("answer_options")
-                d["question.text"] = d.pop("question")
-                yield i, d
+            for i, line in enumerate(f.readlines()):
+                d = json.loads(line)
+                # get raw data
+                question = d["question"]
+                answer = d["answer"]
+                options = list(d["options"].values())
+                assert answer == d["options"][d["answer_idx"]]
+
+                # extract 4 options
+                # assert len(options) == 5
+                # options.remove(answer)
+                assert len(options) == 4
+                Random(i).shuffle(options)
+                options = [answer] + options[:3]
+                Random(i).shuffle(options)
+                assert len(options) == 4
+                target = options.index(answer)
+                yield i, {
+                    "question.idx": i,
+                    "question.text": question,
+                    "answer.target": target,
+                    "answer.text": options,
+                }

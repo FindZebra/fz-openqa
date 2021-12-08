@@ -7,7 +7,7 @@ from datasets import Dataset, DatasetDict, Split
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaEnBuilder, MedQaBuilder, ConcatMedQaBuilder, MedQaTwBuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilder, MedQaTwBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
@@ -91,7 +91,6 @@ class TestMedQaBuilder(TestBuilder):
 
 class TestMedQaTwBuilder(TestBuilder):
     cls = MedQaTwBuilder
-
 
 class TestMedQaCorpusBuilder(TestBuilder):
     config_override = {'max_length': None, 'passage_length': 200, 'passage_stride': 200}

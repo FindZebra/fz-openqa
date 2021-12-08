@@ -18,10 +18,8 @@ from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import file_medqa
-from fz_openqa.datamodules.generators import medqa_tw_official
+from fz_openqa.datamodules.generators import medqa_tw_custom
 from fz_openqa.datamodules.generators import medqa_us_custom
-from fz_openqa.datamodules.generators import medqa_us_official
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
@@ -54,7 +52,7 @@ class MinLength:
 
 class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = file_medqa.__file__
+    dset_script_path_or_id = medqa_us_custom.__file__
 
     # nesting level of the question field
     nesting_level = 0
@@ -343,22 +341,17 @@ class ConcatMedQaBuilder(MedQaBuilder):
         return repr
 
 
-class MedQaEnBuilder(MedQaBuilder):
-    subset_size = [3]
-    dset_script_path_or_id = medqa_us_official.__file__
-
-
 class MedQaTwBuilder(MedQaBuilder):
     subset_size = [3]
-    dset_script_path_or_id = medqa_tw_official.__file__
+    dset_script_path_or_id = medqa_tw_custom.__file__
 
 
-class EnxTwMedQaBuilder(HfDatasetBuilder):
+class EnxTwMedQaBuilder(MedQaBuilder):
     subset_size = [3]
-    dset_script_path_or_id: List = [medqa_us_official.__file__, medqa_tw_official.__file__]
+    dset_script_path_or_id: List = [medqa_us_custom.__file__, medqa_tw_custom.__file__]
 
     def load_base_dataset(self) -> DatasetDict:
-        assert self.dset_script_path_or_id is None
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        return concatenate_datasets(dsets)
+        dsets = [load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        print(dsets[0]["train"])
+        return concatenate_datasets([dsets[0]["train"], dsets[1]["train"]])
