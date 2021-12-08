@@ -3,17 +3,22 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from typing import Optional, List
 
+import dill
 import numpy as np
-import rich
 import torch
 from parameterized import parameterized_class, parameterized
 
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowWriter, TORCH_DTYPES, TensorArrowReader
+
 DSET_SIZE: int = 1000
+
+warnings.filterwarnings("ignore")
+
 
 @parameterized_class(('dtype_writer', 'dtype_reader', 'vec_shape'), [
     ('float32', 'float32', [10, ]),
@@ -65,9 +70,12 @@ class TestTensorArrow(unittest.TestCase):
         (np.array([10, 11, 12]),),
         (np.random.randint(0, DSET_SIZE, size=10),),
     ])
-    def test_read(self, indices: int | slice | np.ndarray):
+    def test_indexing(self, indices: int | slice | np.ndarray):
         retrieved_tsr = self.reader[indices]
         original_tsr = self.tensors[indices]
         self.assertEqual(retrieved_tsr.shape, original_tsr.shape)
         self.assertTrue(torch.allclose(retrieved_tsr, original_tsr.to(retrieved_tsr)))
         self.assertEqual(retrieved_tsr.dtype, self.reader.dtype('torch'))
+
+    def test_pickle(self):
+        self.assertTrue(dill.pickles(self.reader))

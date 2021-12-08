@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing as mp
 import shutil
 from pathlib import Path
 from typing import BinaryIO
 from typing import Dict
+from typing import Iterable
+from typing import Iterator
+from typing import List
 from typing import Optional
+from typing import Union
 
 import numpy as np
 import pyarrow as pa
-import rich
 import torch
 from datasets.features import numpy_to_pyarrow_listarray
 from datasets.table import MemoryMappedTable
@@ -42,7 +46,15 @@ PA_DTYPES = {
     "int8": pa.int8(),
 }
 
+FORMAT_DTYPES = {"torch": TORCH_DTYPES, "numpy": NUMPY_DTYPES, "pyarrow": PA_DTYPES}
+
 TENSOR_COL = "tensor"
+
+ARRAY_INDEX = Union[int, slice, list, np.ndarray]
+
+
+def get_dtype(format: str, dtype: str) -> str:
+    return FORMAT_DTYPES[format][dtype]
 
 
 class ArrowWriters:
@@ -107,8 +119,7 @@ class TensorArrowBase:
         return MemoryMappedTable.from_file(str(path))
 
     def dtype(self, format: str):
-        dtypes = {"torch": TORCH_DTYPES, "numpy": NUMPY_DTYPES, "pyarrow": PA_DTYPES}
-        return dtypes[format][self._dtype]
+        return get_dtype(format, self._dtype)
 
 
 class TensorArrowWriter(TensorArrowBase):
@@ -175,6 +186,7 @@ class TensorArrowWriter(TensorArrowBase):
 
 
 def is_contiguous_index(item: list | np.ndarray | torch.Tensor) -> bool:
+    """check if x[i+1] = x[i] + 1"""
     if isinstance(item, list):
         return [i + 1 for i in item[:-1]] == item[1:]
     elif isinstance(item, (np.ndarray, torch.Tensor)):
@@ -187,10 +199,14 @@ class TensorArrowReader(TensorArrowBase):
     _index: Optional[torch.Tensor] = None
     _shapes: Optional[torch.Tensor] = None
     _vectors: Optional[MemoryMappedTable] = None
+    _no_pickle_list: List[str] = ["_index", "_shapes", "_vectors"]
     _equal_shapes: bool = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._load_all()
+
+    def _load_all(self):
         self._build_index()
         self._vectors = self._load_table(self.vectors_path)
 
@@ -228,14 +244,17 @@ class TensorArrowReader(TensorArrowBase):
     def nbytes(self) -> int:
         return self.vectors.nbytes + self._load_table(self.index_path).nbytes
 
-    def shapes(self, item: int | slice | list | np.ndarray) -> torch.Tensor:
+    def shapes(self, item: ARRAY_INDEX) -> torch.Tensor:
         if self._equal_shapes:
             return self._shapes
         else:
             return self._shapes[item]
 
+    def __call__(self, index: ARRAY_INDEX) -> torch.Tensor:
+        return self.__getitem__(index)
+
     @torch.no_grad()
-    def __getitem__(self, item: int | slice | list | np.ndarray) -> Optional[torch.Tensor]:
+    def __getitem__(self, item: ARRAY_INDEX) -> Optional[torch.Tensor]:
         is_int = False
         is_slice = False
         if isinstance(item, int):
@@ -294,3 +313,25 @@ class TensorArrowReader(TensorArrowBase):
         if is_int:
             vectors = vectors[0]
         return vectors
+
+    def to_batches(self, max_chunk_size: int = None) -> Iterator[torch.Tensor]:
+        for i in range(0, len(self), max_chunk_size):
+            yield self[i : i + max_chunk_size]
+
+    def parallel_fetch(
+        self, indexes: Iterable[ARRAY_INDEX], num_workers: int = 4
+    ) -> Iterable[torch.Tensor]:
+        pool = mp.Pool(num_workers)
+        return pool.imap(self.__getitem__, indexes)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for k in self._no_pickle_list:
+            state.pop(k, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        for k in self._no_pickle_list:
+            self.__dict__[k] = None
+        self._load_all()
