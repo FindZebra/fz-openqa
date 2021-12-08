@@ -14,6 +14,7 @@ from typing import Union
 
 import numpy as np
 import pyarrow as pa
+import rich
 import torch
 from datasets.features import numpy_to_pyarrow_listarray
 from datasets.table import MemoryMappedTable
@@ -55,6 +56,14 @@ ARRAY_INDEX = Union[int, slice, list, np.ndarray]
 
 def get_dtype(format: str, dtype: str) -> str:
     return FORMAT_DTYPES[format][dtype]
+
+
+def pad_dim_zero(v: torch.Tensor, max_length: int, pad_value: torch.Tensor):
+    if len(v) >= max_length:
+        return v[:max_length]
+    else:
+        filling = pad_value.expand(max_length - len(v), *v.shape[1:])
+        return torch.cat([v, filling])
 
 
 class ArrowWriters:
@@ -227,13 +236,17 @@ class TensorArrowTable(TensorArrowBase):
     -----
     Limitations:
     1. The table can only handle one column of tensors. But this should be easy to extend.
-    2. The table can only handle tensors with the same shape, padding of the vectors
-       to the mqx. shape need to be implemented to support different shapes.
+    2. The table can only handle tensors with the same shape, or with varying dim zero.
 
+    Future work:
+    -----------
+    1. todo: Cleanup the behaviour for non-equal shapes
+    2. todo: Extend non-equal shapes handling to other dims than zero
     """
 
     _index: Optional[torch.Tensor] = None
     _shapes: Optional[torch.Tensor] = None
+    _shared_shape: Optional[torch.Tensor] = None
     _vectors: Optional[MemoryMappedTable] = None
     _no_pickle_list: List[str] = ["_index", "_shapes", "_vectors"]
     _equal_shapes: bool = False
@@ -245,6 +258,10 @@ class TensorArrowTable(TensorArrowBase):
     def _load_all(self):
         self._build_index()
         self._vectors = self._load_table(self.vectors_path)
+
+    @staticmethod
+    def are_shapes_equal(shapes: torch.Tensor):
+        return torch.all(shapes == shapes[:1])
 
     @torch.no_grad()
     def _build_index(self):
@@ -258,10 +275,31 @@ class TensorArrowTable(TensorArrowBase):
 
         shapes = index_table.column(columns.index("shape"))
         self._shapes = torch.tensor(shapes.to_pylist())
-        if torch.all(self._shapes == self._shapes[:1]):
+
+        if self.are_shapes_equal(self._shapes):
             self._equal_shapes = True
-            self._shapes = self._shapes[0]
-            logger.info(f"Al shapes are equal. Using a single reference shape: {self._shapes}.")
+            self._shared_shape = self._shapes[0]
+            logger.info(f"All shapes are equal. Using a the reference shape: {self._shared_shape}.")
+
+        else:
+            n_unique_per_dims = [
+                len(torch.unique(self._shapes[:, i])) for i in range(self._shapes.shape[1])
+            ]
+            dim_unequal_numel = [i for i, n in enumerate(n_unique_per_dims) if n != 1]
+            if len(dim_unequal_numel) > 1:
+                raise NotImplementedError("Cannot handle with more than one varying dimensions")
+            dim_unequal_numel = dim_unequal_numel[0]
+            if dim_unequal_numel != 0:
+                raise NotImplementedError(
+                    f"Cannot handle varying dimension other " f"than dim 0, dim={dim_unequal_numel}"
+                )
+
+            # set the shapes as [-1, *dims]
+            self._shared_shape = self._shapes[0].clone()
+            self._shared_shape[0] = -1
+            logger.info(
+                f"Not all shapes are equal. Using the reference shape: {self._shared_shape}."
+            )
 
     @property
     def vectors(self) -> MemoryMappedTable:
@@ -279,12 +317,6 @@ class TensorArrowTable(TensorArrowBase):
     @property
     def nbytes(self) -> int:
         return self.vectors.nbytes + self._load_table(self.index_path).nbytes
-
-    def shapes(self, item: ARRAY_INDEX) -> torch.Tensor:
-        if self._equal_shapes:
-            return self._shapes
-        else:
-            return self._shapes[item]
 
     def __call__(self, index: ARRAY_INDEX) -> torch.Tensor:
         return self.__getitem__(index)
@@ -313,28 +345,39 @@ class TensorArrowTable(TensorArrowBase):
         batch_size = len(index)
 
         # get the shape
-        if not self._equal_shapes:
-            raise NotImplementedError("Not implemented yet")
-        shape = self.shapes(item)
+        shape = self._shared_shape.clone()
+        vec_shapes = self._shapes[item].clone()
 
-        # get all indexes and gather the vectors
         if is_slice:
+            # if vectors are contiguous, query the table using a single call
             start = index[0, 0]
             stop = index[-1, -1]
-
             vectors = self.vectors.fast_slice(offset=start, length=stop - start)
 
             vectors = vectors[TENSOR_COL]
             vectors = vectors.to_numpy()
             vectors = torch.from_numpy(vectors)
+
+            if not self._equal_shapes:
+                # if the vectors are not of the same shape, split into separate vectors
+                vectors = list(self._extract_non_equally_shaped_vectors(vectors, shapes=vec_shapes))
         else:
             vectors = []
             for start, stop in index:
+                # query the table using a call for each vector
                 vec = self._vectors.fast_slice(start, length=stop - start)
                 vec = vec[TENSOR_COL]
                 vec = vec.to_numpy()
                 vec = torch.from_numpy(vec)
                 vectors.append(vec)
+
+        if isinstance(vectors, list):
+            if not self._equal_shapes:
+                # potentially pad the vectors to max shape
+                vectors = self._pad_vectors_to_max_length(vectors, shape=self._shared_shape)
+                shape[0] = len(vectors[0])
+
+            # concatenate the vectors
             vectors = torch.cat([v[None] for v in vectors], dim=0)
 
         # reshape the vectors and cast
@@ -348,6 +391,23 @@ class TensorArrowTable(TensorArrowBase):
 
         if is_int:
             vectors = vectors[0]
+        return vectors
+
+    def _extract_non_equally_shaped_vectors(self, vector, shapes):
+        i = 0
+        for shape in shapes:
+            numel = shape.prod()
+
+            vec = vector[i : i + numel]
+            i += numel
+            yield vec
+
+    def _pad_vectors_to_max_length(self, vectors, shape):
+        vectors = [v.view(*shape) for v in vectors]
+        max_length = max([v.shape[0] for v in vectors])
+        pad_value = vectors[0][:1].clone()
+        pad_value.fill_(torch.nan)
+        vectors = [pad_dim_zero(v, max_length, pad_value) for v in vectors]
         return vectors
 
     def to_batches(self, max_chunksize: int = 1000) -> Iterator[torch.Tensor]:
