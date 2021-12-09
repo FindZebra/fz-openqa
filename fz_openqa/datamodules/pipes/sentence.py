@@ -46,6 +46,8 @@ class GenerateSentences(Pipe):
         output = defaultdict(list)
         for idx, text in zip(examples["idx"], examples["text"]):
             for sent_idx, sentence in enumerate(text.split(delimiter)):
+                if len(sentence) == 0:
+                    continue
                 output["idx"].append(idx)
                 output["sentence_idx"].append(sent_idx)
                 output["text"].append(sentence)

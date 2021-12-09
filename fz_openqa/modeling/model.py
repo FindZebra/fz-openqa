@@ -60,7 +60,7 @@ class Model(LightningModule):
         tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
         module: Union[DictConfig, Module],
-        head: Union[DictConfig, Module],
+        head: Union[DictConfig, Module] = None,
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
         num_warmup_steps: int = 10000,
