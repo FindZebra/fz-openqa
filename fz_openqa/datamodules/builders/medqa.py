@@ -350,8 +350,14 @@ class EnxTwMedQaBuilder(MedQaBuilder):
     subset_size = [3]
     dset_script_path_or_id: List = [medqa_us_custom.__file__, medqa_tw_custom.__file__]
 
+    @staticmethod
+    def _load_dataset(script, **kwargs):
+        dataset = load_dataset(script, **kwargs)
+        if isinstance(dataset, DatasetDict):
+            dataset = concatenate_datasets(list(dataset.values()))
+        return dataset
+
     def load_base_dataset(self) -> DatasetDict:
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        print(dsets[0]["train"])
-        return concatenate_datasets([dsets[0]["train"], dsets[1]["train"]])
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        return concatenate_datasets(dsets)

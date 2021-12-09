@@ -177,6 +177,7 @@ class TestOptionRetriever(TestModel):
 
         output = self.model._reduce_step_output(data)
         for key in output:
+            print(output[key])
             self.assertEqual(output[key], 0.5)
 
     @torch.enable_grad()
