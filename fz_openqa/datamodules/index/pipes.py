@@ -4,7 +4,6 @@ from typing import List
 from typing import Optional
 
 import dill
-import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index
@@ -15,8 +14,6 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.array import concat_arrays
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import Eg
-from fz_openqa.utils.pretty import pprint_batch
 
 
 @dataclass

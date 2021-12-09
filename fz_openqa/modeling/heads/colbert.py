@@ -1,12 +1,7 @@
-from typing import Optional
-
 import torch.nn.functional as F
-from torch import nn
 from torch import Tensor
-from transformers import BertPreTrainedModel
 
 from fz_openqa.modeling.heads import ClsHead
-from fz_openqa.modeling.heads.base import Head
 
 
 class ColbertHead(ClsHead):

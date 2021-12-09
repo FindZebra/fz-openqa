@@ -2,6 +2,7 @@ import os
 from abc import ABC
 from unittest import TestCase
 
+import datasets
 import numpy as np
 import torch
 from datasets import Dataset
@@ -11,7 +12,7 @@ from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
-from fz_openqa.utils.train_utils import setup_safe_env
+from fz_openqa.utils.train_utils import setup_safe_env, silent_huggingface
 
 
 def cast_to_array(x):
@@ -34,6 +35,8 @@ class TestIndex(TestCase, ABC):
         """setup a toy dataset where retrieval outcomes are expected."""
 
         torch.set_grad_enabled(False)
+        silent_huggingface()
+        datasets.set_caching_enabled(False)
         setup_safe_env()
         os.environ['TOKENIZERS_PARALLELISM'] = "false"
         # init a tokenizer and bert

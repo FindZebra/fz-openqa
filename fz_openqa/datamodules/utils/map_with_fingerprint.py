@@ -2,6 +2,7 @@ import json
 import logging
 from functools import partial
 from pathlib import Path
+from time import time
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -80,12 +81,14 @@ class MapWithFingerprint:
                 )
 
             # process each split
+            start_time = time()
             dataset[key] = dset.map(
                 partial(pipe, split=key),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,
             )
+            logger.info(f"{self.id}, {key}: elapsed_time={time() - start_time:.2f}")
 
         if {"__all__"} == set(dataset.keys()):
             dataset = dataset.pop("__all__")

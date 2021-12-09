@@ -153,12 +153,13 @@ class Predict(Pipe):
     _loaded_table: Optional[TensorArrowTable] = None
     _loaded_split: Optional[Split] = None
     _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
-    _vector_key: str = PREDICT_VECTOR_NAME
+    output_key: str = PREDICT_VECTOR_NAME
 
     def __init__(
         self,
         model: pl.LightningModule | nn.Module | Callable,
         model_output_keys: List[str],
+        output_key: str = PREDICT_VECTOR_NAME,
         output_dtype: str = "float32",
         requires_cache: bool = False,
         **kwargs,
@@ -172,6 +173,8 @@ class Predict(Pipe):
              The keys of the model to output to the cache. Only one field is stored at a time.
              For instance ["question.vector", "document.vector"] will store the
              question when available and the document otherwise.
+        output_key
+            The name of the column containing the cache vector.
         output_dtype
             The dtype of output predictions and cache file.
         requires_cache
@@ -187,6 +190,7 @@ class Predict(Pipe):
         self.model = model
         self.requires_cache = requires_cache
         self.model_output_keys = model_output_keys
+        self.output_key = output_key
         self.dtype = output_dtype
 
     def invalidate_cache(self):
@@ -272,7 +276,7 @@ class Predict(Pipe):
         else:
             raise ValueError(f"Unknown format: {format}")
 
-        return {PREDICT_VECTOR_NAME: vectors}
+        return {self.output_key: vectors}
 
     @functools.singledispatchmethod
     @torch.no_grad()

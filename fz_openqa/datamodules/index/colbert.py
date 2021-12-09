@@ -4,7 +4,6 @@ import logging
 import time
 from typing import List
 from typing import Optional
-from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
@@ -50,11 +49,14 @@ def log_mem_size(x, msg, logger=None):
 
 class ColbertIndex(FaissIndex):
     """
-    Implementation of the Colbert index.
+    Implementation of the Colbert index. This implementation supports multi-GPU.
+    Half of the GPUs are allocated to faiss, and the other half to the MaxSim operator.
 
     Notes
     -----
-    Assumes the documents to be of the same length!
+    Future work:
+    1. todo: Handle documents of different lengths (check the original repo
+    2. todo: Handle sampling vectors from the TensorArrowTable without holding them in memory
 
     """
 
@@ -86,7 +88,11 @@ class ColbertIndex(FaissIndex):
 
     @torch.no_grad()
     def _read_vectors_from_table(self, vectors_table: TensorArrowTable) -> Tensor:
-        log.info(f"Reading {vectors_table.num_rows} vectors from {vectors_table.path}")
+        mem_size = vectors_table.nbytes // 1024 ** 3
+        log.info(
+            f"Reading {vectors_table.num_rows} vectors ({mem_size:.3f} GB) "
+            f"from {vectors_table.path}"
+        )
         start_time = time.time()
         vectors = vectors_table[0 : len(vectors_table)]
         log.info(
@@ -119,14 +125,12 @@ class ColbertIndex(FaissIndex):
 
         # 1. get query vector
         query = self.predict_queries(query, format=OutputFormat.TORCH, idx=idx, split=split)
-        q_vectors: Tensor = query[Predict._vector_key]
+        q_vectors: Tensor = query[Predict.output_key]
 
         # 2. get faiss index, and potentially move to gpu
         n_gpus = faiss.get_num_gpus()
-        gpus = list(range(n_gpus))
-        faiss_gpus = gpus[n_gpus // 2 :]
-        maxsim_gpus = gpus[: n_gpus // 2]
-        if n_gpus > 0:
+        faiss_gpus, maxsim_gpus = self._allocate_gpus(n_gpus)
+        if len(faiss_gpus) > 0:
             if not isinstance(self._index, IndexReplicas):
                 log.info(f"Moving faiss index to gpu {faiss_gpus}")
                 nprobe = self._index.nprobe
@@ -138,7 +142,7 @@ class ColbertIndex(FaissIndex):
         # 3. build the MaxSim object
         if self._max_sim is None:
             self._max_sim = MaxSim(self.vectors, self.emb2pid)
-            if n_gpus > 0:
+            if len(maxsim_gpus) > 0:
                 log.info(f"Moving MaxSim to gpu {maxsim_gpus}")
                 self._max_sim = nn.DataParallel(self._max_sim, device_ids=maxsim_gpus)
                 self._max_sim.to("cuda")
@@ -157,6 +161,19 @@ class ColbertIndex(FaissIndex):
                 search_results += r
 
         return search_results
+
+    def _allocate_gpus(self, n_gpus):
+        gpus = list(range(n_gpus))
+        if n_gpus > 1:
+            faiss_gpus = gpus[n_gpus // 2 :]
+            maxsim_gpus = gpus[: n_gpus // 2]
+        elif n_gpus == 1:
+            faiss_gpus = gpus
+            maxsim_gpus = []
+        else:
+            faiss_gpus = []
+            maxsim_gpus = []
+        return faiss_gpus, maxsim_gpus
 
     @torch.no_grad()
     def _search_vectors(
@@ -186,7 +203,9 @@ class ColbertIndex(FaissIndex):
             topk_indices = topk_indices.to("cuda")
 
         log.debug(f"Querying maxsim: {q_vectors.shape}, device={q_vectors.device}")
-        maxsim_pids, maxsim_scores = max_sim(q_vectors, topk_indices, k=k)
+        batch = {"q_vectors": q_vectors, "topk_indices": topk_indices}
+        max_sim_out = max_sim(batch, k=k)
+        maxsim_pids, maxsim_scores = max_sim_out["pids"], max_sim_out["scores"]
         log.debug(f"max_sim={time.time() - faiss_time:.3f}s, topk_indices={topk_indices.shape}")
 
         log.debug(
@@ -234,9 +253,8 @@ class ColbertIndex(FaissIndex):
         embedding_ids = embedding_ids.view(num_queries, -1)
         return embedding_ids.to(Q.device)
 
-    def __del__(self):
-        super(ColbertIndex, self).__del__()
-        self._max_sim = None
+    # def __del__(self):
+    #     super(ColbertIndex, self).__del__()
 
 
 class MaxSim(nn.Module):
@@ -246,9 +264,17 @@ class MaxSim(nn.Module):
         self.register_buffer("emb2pid", emb2pid)
 
     @torch.no_grad()
-    def forward(
-        self, q_vectors: Tensor, topk_indices: Tensor, k: int, chunk_size: int = 1000
-    ) -> Tuple[Tensor, Tensor]:
+    def forward(self, batch: Batch = None, *, k: int, chunk_size: int = 1000) -> Batch:
+        if batch is None:
+            # todo: return emtpy tensor
+            maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
+            maxsim_scores = torch.empty(
+                (0, k), dtype=self.vectors.dtype, device=self.vectors.device
+            )
+            return {"pids": maxsim_pids, "scores": maxsim_scores}
+        q_vectors: Tensor = batch["q_vectors"]
+        topk_indices: Tensor = batch["topk_indices"]
+
         # 1. get the corresponding document ids
         pids = self.emb2pid[topk_indices]
         pids = self._get_unique_pids(pids)
@@ -260,14 +286,15 @@ class MaxSim(nn.Module):
         for i in range(0, pids.shape[1], chunk_size):
             scores[:, i : i + chunk_size] = self._score(pids[:, i : i + chunk_size], q_vectors)
 
-        # 8. take the top-k results given the MaxSim score
+        # 3. take the top-k results given the MaxSim score
         k = min(k, scores.shape[-1])
         scores = scores.to(torch.float32)
         _, maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True)
-        # 9. fetch the corresponding document indices and return
+        # 4. fetch the corresponding document indices and return
         maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
         maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
-        return maxsim_pids, maxsim_scores
+
+        return {"pids": maxsim_pids, "scores": maxsim_scores}
 
     def _score(self, pids, q_vectors):
         d_vectors = self._retrieve_pid_vectors(pids)

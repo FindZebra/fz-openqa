@@ -185,7 +185,7 @@ class TestOptionRetriever(TestModel):
     @torch.enable_grad()
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
-        VERBOSE = True
+        VERBOSE = False
         if VERBOSE:
             np.set_printoptions(precision=3, suppress=True)
 

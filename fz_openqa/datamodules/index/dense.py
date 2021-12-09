@@ -42,8 +42,6 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.functional import is_index_contiguous
-from fz_openqa.utils.tensor_arrow import get_dtype
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
@@ -329,7 +327,11 @@ class FaissIndex(Index):
         trainer = self.trainer
         if trainer is None:
             logger.warning("No trainer provided. Using default loader.")
-            trainer = Trainer(checkpoint_callback=False, logger=False)
+            trainer = Trainer(
+                checkpoint_callback=False,
+                logger=False,
+                progress_bar_refresh_rate=int(self.progress_bar),
+            )
 
         # process the dataset using the model and cache the vectors
         self._cache_vectors(
@@ -349,9 +351,10 @@ class FaissIndex(Index):
 
         # define the progress bar
         train_size = min(cached_vectors.num_rows, self.faiss_train_size)
-        pbar = self._get_pbar(
+        pbar = tqdm(
             total=cached_vectors.num_rows // train_size,
             desc=f"Building {type(self).__name__} (batch_size={train_size})",
+            disable=not self.progress_bar,
         )
 
         # init the faiss index and add the 1st batch
@@ -380,16 +383,6 @@ class FaissIndex(Index):
             f"Index is_trained={self._index.is_trained}, "
             f"size={self._index.ntotal}, type={type(self._index)}"
         )
-
-    def _get_pbar(self, *args, **kwargs):
-        if self.progress_bar:
-            pbar = tqdm(*args, **kwargs)
-        else:
-
-            def pbar(*args, **kwargs):
-                return None
-
-        return pbar
 
     def _cache_vectors(
         self,
@@ -642,7 +635,7 @@ class FaissIndex(Index):
 
     def _get_vector_from_batch(self, batch: Batch) -> np.ndarray:
         """Get and cast the vector from the batch"""
-        vector: np.ndarray | List = batch[Predict._vector_key]
+        vector: np.ndarray | List = batch[Predict.output_key]
         return vector
 
     def _init_loader(self, dataset, *, collate_fn: Callable, **kwargs):

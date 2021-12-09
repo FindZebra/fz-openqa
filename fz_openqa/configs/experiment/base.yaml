@@ -5,8 +5,8 @@ defaults:
   - override /model: ???
   - override /datamodule: openqa
   - override /callbacks:
-    - checkpoint
-    - progress_bar
+      - checkpoint
+      - progress_bar
   - override /logger: wandb
 
 base:

@@ -21,7 +21,6 @@ from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.json_struct import apply_to_json_struct
 from fz_openqa.utils.json_struct import flatten_json_struct
 
-
 Array2d = Union[List[List[Any]], np.ndarray, Tensor]
 
 

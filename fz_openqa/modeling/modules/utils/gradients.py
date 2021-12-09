@@ -2,13 +2,11 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 
-import rich
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
 from .utils import batch_cartesian_product
-from .utils import check_only_first_doc_positive
 
 
 class GradExpression(Enum):

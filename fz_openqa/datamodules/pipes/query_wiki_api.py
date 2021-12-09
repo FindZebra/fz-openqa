@@ -3,10 +3,8 @@ from typing import Callable
 from typing import List
 from typing import Union
 
-import rich
 import wikipedia
 
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.utils.datastruct import Batch
 
 

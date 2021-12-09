@@ -14,7 +14,6 @@ from typing import Union
 
 import numpy as np
 import pyarrow as pa
-import rich
 import torch
 from datasets.features import numpy_to_pyarrow_listarray
 from datasets.table import MemoryMappedTable

@@ -38,7 +38,7 @@ class TestFaissIndex(TestIndex):
                           model_output_keys=['_hq_', '_hd_'],
                           collate_pipe=collate,
                           faiss_args={
-                              "type": "flat",
+                              "factory": "Flat",
                               "metric_type": faiss.METRIC_INNER_PRODUCT},
                           persist_cache=False,
                           **kwargs)
@@ -55,12 +55,3 @@ class TestFaissIndex(TestIndex):
 
     def test_search(self):
         self._test_search()
-
-
-class TestFaissIndexWithTrainer(TestFaissIndex):
-    """Test the faiss index using the Trainer to accelerate processing the data with the model"""
-
-    @staticmethod
-    def _init_index_with(*args, **kwargs) -> Index:
-        trainer = Trainer(checkpoint_callback=False, logger=False)
-        return TestFaissIndex._init_index_with(*args, trainer=trainer, **kwargs)

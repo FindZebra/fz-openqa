@@ -7,15 +7,12 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
-import rich
 import torch
 from datasets import Split
 from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
-from ...utils.pretty import pprint_batch
-from ...utils.shape import infer_shape
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
