@@ -7,15 +7,12 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
-import rich
 import torch
 from datasets import Split
 from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
-from ...utils.pretty import pprint_batch
-from ...utils.shape import infer_shape
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
@@ -97,7 +94,6 @@ class SelectDocsOneEg(Pipe):
         assert len(is_positive) >= total
 
         # get the positive indexes
-        # todo: check if prob select works as expected
         positive_idx = [i for i, x in enumerate(is_positive) if x]
         pos_probs = self.get_probs(batch, positive_idx)
         selected_positive_idx = select_values(
@@ -182,7 +178,6 @@ class SelectDocsOneEg(Pipe):
                     "k": total - len(negative_idx),
                     "mode": self.pos_select_mode,
                 }
-                # todo: select with probs
                 selected_positive_idx = select_values(positive_idx, **args)
                 index = selected_positive_idx + selected_negative_idx
             else:
@@ -197,6 +192,7 @@ def select_values(
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
+        samples = [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
+        return samples
     else:
         raise ValueError(f"Unknown mode {mode}")

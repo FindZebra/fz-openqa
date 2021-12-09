@@ -49,10 +49,13 @@ class LeafType:
 
     def __repr__(self):
         if self.is_subtype:
-            return (
-                f"{type(list())} {min(self.lengths)} to {max(self.lengths)} items, "
-                f"value_types={self._repr_types(self.types)}"
-            )
+            if len(self.lengths):
+                return (
+                    f"{type(list())} {min(self.lengths)} to {max(self.lengths)} items, "
+                    f"value_types={self._repr_types(self.types)}"
+                )
+            else:
+                return f"Empty, value_types={self._repr_types(self.types)}"
         else:
             return self._repr_types(self.types)
 

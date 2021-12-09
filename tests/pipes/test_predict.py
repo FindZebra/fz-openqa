@@ -6,7 +6,6 @@ from unittest import TestCase
 
 import numpy as np
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import DatasetDict
 from transformers import AutoTokenizer
@@ -43,7 +42,7 @@ class TestPredict(TestCase):
 
         # trainer
         self.trainer = pl.Trainer(checkpoint_callback=False,
-                                  logger=False)
+                                  logger=False, progress_bar_refresh_rate=0)
 
         self.cache_dir = str(tempfile.mkdtemp())
 
@@ -64,7 +63,7 @@ class TestPredict(TestCase):
         collate_fn = dataset_builder.get_collate_pipe()
 
         # init the predict pipe
-        pipe = Predict(model=self.model, requires_cache=True)
+        pipe = self._init_pipe(self.model)
 
         # cache the pipe
         pipe.cache(
@@ -84,13 +83,20 @@ class TestPredict(TestCase):
                                   batched=True,
                                   with_indices=True,
                                   num_proc=2,
-                                  batch_size=5)
+                                  batch_size=5,
+                                  keep_in_memory=True)
 
         # compare both methods
         for i in range(len(new_dataset)):
             row = cast_values_to_numpy(new_dataset[i], dtype=np.float32)
             exp_row = cast_values_to_numpy(get_batch_eg(expected, idx=i), dtype=np.float32)
-            self.assertTrue((row["vector"] == exp_row["vector"]).all())
+            self.assertTrue((row["new_vector"] == exp_row["vector"]).all())
+
+    def _init_pipe(self, model):
+        return Predict(model=model,
+                       requires_cache=True,
+                       model_output_keys=["vector"],
+                       output_key="new_vector")
 
     def test_cached_predict_dataset_dict(self):
         """Test that the output of the pipe with caching is
@@ -105,7 +111,7 @@ class TestPredict(TestCase):
         collate_fn = dataset_builder.get_collate_pipe()
 
         # init the predict pipe
-        pipe = Predict(model=self.model, requires_cache=True)
+        pipe = self._init_pipe(self.model)
 
         # cache the pipe
         cache_paths = pipe.cache(
@@ -131,7 +137,8 @@ class TestPredict(TestCase):
                                                    batched=True,
                                                    with_indices=True,
                                                    num_proc=2,
-                                                   batch_size=5) for split, dset in
+                                                   batch_size=5,
+                                                   keep_in_memory=True) for split, dset in
                                    dataset.items()})
 
         # compare both methods
@@ -141,4 +148,4 @@ class TestPredict(TestCase):
             for i in range(len(new_dset)):
                 row = cast_values_to_numpy(new_dset[i], dtype=np.float32)
                 exp_row = cast_values_to_numpy(get_batch_eg(expected_dset, idx=i), dtype=np.float32)
-                self.assertTrue((row["vector"] == exp_row["vector"]).all())
+                self.assertTrue((row["new_vector"] == exp_row["vector"]).all())

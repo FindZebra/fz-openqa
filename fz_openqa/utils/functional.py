@@ -42,9 +42,7 @@ def batch_reduce(x, op=torch.sum):
     return op(x.view(x.size(0), -1), dim=1)
 
 
-def cast_to_numpy(
-    x: Any, as_contiguous: bool = True, dtype: Optional[np.dtype] = None
-) -> np.ndarray:
+def cast_to_numpy(x: Any, as_contiguous: bool = True, dtype: Optional[str] = None) -> np.ndarray:
     if isinstance(x, torch.Tensor):
         x = x.detach().to(device="cpu").numpy()
         if dtype is not None:
@@ -60,10 +58,42 @@ def cast_to_numpy(
     return x
 
 
+def cast_to_torch(
+    x: Any,
+    as_contiguous: bool = True,
+    dtype: Optional[str] = None,
+    device: torch.device = torch.device("cpu"),
+) -> np.ndarray:
+    if isinstance(x, torch.Tensor):
+        pass
+    elif isinstance(x, np.ndarray):
+        x = torch.from_numpy(x)
+        x = x.to(device=device, dtype=dtype)
+    else:
+        x = torch.tensor(x, device=device, dtype=dtype)
+
+    if as_contiguous:
+        x = x.contiguous()
+
+    return x.to(device=device)
+
+
 def cast_values_to_numpy(
-    batch: Batch, as_contiguous: bool = True, dtype: Optional[np.dtype] = None
+    batch: Batch, as_contiguous: bool = False, dtype: Optional[str] = None
 ) -> Batch:
     return {k: cast_to_numpy(v, as_contiguous=as_contiguous, dtype=dtype) for k, v in batch.items()}
+
+
+def cast_values_to_torch(
+    batch: Batch,
+    as_contiguous: bool = True,
+    dtype: Optional[str] = None,
+    device: torch.device = torch.device("cpu"),
+) -> Batch:
+    return {
+        k: cast_to_torch(v, as_contiguous=as_contiguous, dtype=dtype, device=device)
+        for k, v in batch.items()
+    }
 
 
 def always_true(*args, **kwargs):

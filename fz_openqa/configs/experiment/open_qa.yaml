@@ -9,8 +9,8 @@ defaults:
   - override /model/bert: bio_bert.yaml
   - override /datamodule: fz_x_medqa_grouped.yaml
   - override /callbacks:
-    - index_corpus.yaml
-    - default.yaml
+      - index_corpus.yaml
+      - default.yaml
   - override /logger: wandb.yaml
   - override /corpus: fz.yaml
 

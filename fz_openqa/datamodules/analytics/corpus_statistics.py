@@ -1,7 +1,6 @@
 from typing import Dict
 from typing import List
 
-import rich
 from datasets import Dataset
 
 from .base import Analytic

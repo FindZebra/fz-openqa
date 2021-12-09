@@ -51,7 +51,7 @@ class FetchAndClassifyDocuments(Sequential):
                 Sequential(
                     FetchDocuments(
                         corpus_dataset=corpus_dataset, keys=[f"{classifier.document_field}.text"]
-                    )
+                    ),
                 ),
                 input_filter=In([f"{classifier.document_field}.row_idx"]),
                 update=True,

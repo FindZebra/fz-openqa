@@ -1,9 +1,18 @@
-import logging
 import os
+import sys
+
+from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+
+current_dir = os.path.dirname(os.path.realpath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+import logging
 from pathlib import Path
 from typing import Optional
 
 import datasets
+import faiss
 import hydra
 import rich
 import torch
@@ -15,13 +24,15 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 
 import fz_openqa
+from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
+from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import SearchCorpus
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -65,16 +76,23 @@ def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
     cache_dir = config.get("sys.cache_dir", default_cache_dir)
+    use_colbert = config.get("colbert", False)
 
     # load model
-    loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
-    if config.get("verbose", False):
-        loader.print_config()
-    model = loader.load_model(last=config.get("last", False))
+    zero_shot = config.get("zero_shot", True)
+    if zero_shot:
+        bert_id = config.get("bert", "google/bert_uncased_L-2_H-128_A-2")
+        model = ZeroShot(bert_id=bert_id, head="contextual" if use_colbert else "flat")
+        tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
+    else:
+        loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
+        if config.get("verbose", False):
+            loader.print_config()
+        model = loader.load_model(last=config.get("last", False))
+        tokenizer = loader.tokenizer
     model.eval()
     model.freeze()
     logger.info(f"Model {type(model)} loaded")
-    logger.info(f"Model fingerprint: {get_fingerprint(model.module.bert)}")
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
@@ -86,9 +104,10 @@ def run(config: DictConfig) -> None:
     # set up the corpus builder
     logger.info(f"Initialize corpus <{MedQaCorpusBuilder.__name__}>")
     corpus_builder = MedQaCorpusBuilder(
-        tokenizer=loader.tokenizer,
+        tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         use_subset=config.get("use_subset", True),
+        add_encoding_tokens=not zero_shot,
         cache_dir=cache_dir,
         num_proc=config.get("num_proc", 2),
     )
@@ -96,43 +115,57 @@ def run(config: DictConfig) -> None:
     # build the corpus and take a subset
     corpus = corpus_builder()
     collate_fn = corpus_builder.get_collate_pipe()
-    n_samples = config.get("n_samples", 10)
+    n_samples = config.get("n_samples", 1000)
     if n_samples is not None and n_samples > 0:
         n_samples = min(n_samples, len(corpus))
         corpus = corpus.select(range(n_samples))
     rich.print(corpus)
 
     # init the index
-    logger.info(f"Initialize index <{FaissIndex.__name__}>")
-    index = FaissIndex(
+    IndexCls = ColbertIndex if use_colbert else FaissIndex
+    logger.info(f"Initialize index <{IndexCls.__name__}>")
+    index = IndexCls(
         dataset=corpus,
         model=model,
         trainer=trainer,
+        faiss_train_size=config.get("faiss_train_size", 1000),
+        faiss_args={
+            "factory": config.get("factory", "Flat"),
+            "metric_type": faiss.METRIC_INNER_PRODUCT,
+        },
         loader_kwargs={
-            "batch_size": config.get("batch_size", 2),
+            "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 1),
             "pin_memory": config.get("pin_memory", True),
         },
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder.get_collate_pipe(),
         cache_dir=cache_dir,
+        persist_cache=config.get("persist_cache", False),
+        in_memory=config.get("in_memory", True),
+        dtype=config.get("dtype", "float32"),
+        progress_bar=True,
     )
+    rich.print(index.is_indexed)
+    rich.print(index.ntotal)
 
     # setup search pipe (query the indexes from the corpus)
-    search = SearchCorpus(index, k=3, model=model)
+    search = SearchCorpus(index, k=5)
     # setup the fetch pipe (fetch all the other fields from the corpus)
     fetcher = FetchNestedDocuments(corpus_dataset=corpus_builder(), collate_pipe=collate_fn)
     query = collate_fn([corpus[i] for i in range(3)])
-
-    # search for one batch
-    output = search(query)
     query: Batch = {str(k).replace("document.", "question."): v for k, v in query.items()}
 
+    # search for one batch
+    pprint_batch(query, "query")
+    output = search(query)
+
     # format the output
-    pprint_batch(output, "query output")
+    pprint_batch(output, "search result")
     output = {**query, **fetcher(output)}
-    pprint_batch(output, "query output + all fields")
-    for i in range(infer_batch_size(query)):
+    pprint_batch(output, "query + search results")
+    stride = infer_batch_size(query)
+    for i in range(min(stride, 3)):
         eg = Pipe.get_eg(output, idx=i)
         rich.print(get_separator())
         rich.print(f"query #{i + 1}: [cyan]{eg['question.text']}")
@@ -142,8 +175,8 @@ def run(config: DictConfig) -> None:
             score = eg["document.retrieval_score"][j]
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
-    # alternatively, you can iterate you can search for a whole dataloader:
-    outputs = index.search(corpus, k=3, collate_fn=collate_fn)
+    # alternatively, you can search for a whole dataloader:
+    outputs = index.search(corpus, k=3, collate_fn=collate_fn, trainer=trainer)
     for search_results in outputs:
         pprint_batch(vars(search_results), "search whole dataset - results")
         break

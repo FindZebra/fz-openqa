@@ -3,11 +3,11 @@ progress_bar:
   leave: True
   theme:
     _target_: pytorch_lightning.callbacks.progress.rich_progress.RichProgressBarTheme
-    description:  "#5e60ce"
+    description: "#5e60ce"
     progress_bar: "#80ffdb"
-    progress_bar_finished:  "#48bfe3"
-    progress_bar_pulse:  "#6930c3"
+    progress_bar_finished: "#48bfe3"
+    progress_bar_pulse: "#6930c3"
     batch_progress: "white"
-    time:  "grey54"
+    time: "grey54"
     processing_speed: "#48bfe3"
-    metrics:  "white"
+    metrics: "white"

@@ -1,10 +1,8 @@
-from typing import Any
 from typing import Dict
 
 import rich
 import torch
 
-from fz_openqa.datamodules.corpus_dm import HgDataset
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -25,7 +23,7 @@ def gen_example_query(tokenizer):
     return {f"question.{k}": v for k, v in query.items()}
 
 
-def display_search_results(corpus: HgDataset, queries: Dict, results: Dict):
+def display_search_results(corpus, queries: Dict, results: Dict):
     pprint_batch(results)
     print(get_separator())
     for idx, (qst, row_idxs, scores, tokens) in enumerate(

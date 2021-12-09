@@ -1,5 +1,10 @@
+from __future__ import annotations
+
 import functools
 import logging
+import os.path
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -9,10 +14,7 @@ from typing import Optional
 from typing import Sized
 from typing import Union
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -26,19 +28,25 @@ from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import SequentialSampler
 
 from fz_openqa.callbacks.store_results import IDX_COL
+from fz_openqa.callbacks.store_results import select_field_from_output
 from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
+from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.functional import cast_values_to_numpy
-from fz_openqa.utils.functional import is_index_contiguous
+from fz_openqa.utils.functional import cast_to_numpy
+from fz_openqa.utils.functional import cast_to_torch
+from fz_openqa.utils.tensor_arrow import get_dtype
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 CACHE_FILE = Union[Path, str]
+PREDICT_VECTOR_NAME = "vector"
 
 
 class AddRowIdx(TorchDataset):
@@ -54,6 +62,24 @@ class AddRowIdx(TorchDataset):
         batch = self.dataset[item]
         batch[IDX_COL] = item
         return batch
+
+
+class LightningWrapper(LightningModule):
+    def __init__(self, model: Callable):
+        super().__init__()
+        self.model = model
+
+    def forward(self, *args, **kwargs) -> Any:
+        return self.model(*args, **kwargs)
+
+    def training_step(self, batch, batch_idx):
+        return self.forward(batch)
+
+    def validation_step(self, batch, batch_idx):
+        return self.forward(batch)
+
+    def test_step(self, batch, batch_idx):
+        return self.forward(batch)
 
 
 class Predict(Pipe):
@@ -122,25 +148,50 @@ class Predict(Pipe):
     """
 
     model: Optional[pl.LightningModule] = None
-    cache_file: Optional[Union[CACHE_FILE, Dict[Split, CACHE_FILE]]] = None
-    _loaded_table: Optional[pa.Table] = None
+    cache_file: Optional[CACHE_FILE | Dict[Split, CACHE_FILE]] = None
+    _master: bool = True
+    _loaded_table: Optional[TensorArrowTable] = None
     _loaded_split: Optional[Split] = None
     _pickle_exclude = ["model", "_loaded_table", "_loaded_split"]
+    output_key: str = PREDICT_VECTOR_NAME
 
-    def __init__(self, model: pl.LightningModule, requires_cache: bool = False, **kwargs):
+    def __init__(
+        self,
+        model: pl.LightningModule | nn.Module | Callable,
+        model_output_keys: List[str],
+        output_key: str = PREDICT_VECTOR_NAME,
+        output_dtype: str = "float32",
+        requires_cache: bool = False,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
         model
             The model to use for predictions.
+        model_output_keys
+             The keys of the model to output to the cache. Only one field is stored at a time.
+             For instance ["question.vector", "document.vector"] will store the
+             question when available and the document otherwise.
+        output_key
+            The name of the column containing the cache vector.
+        output_dtype
+            The dtype of output predictions and cache file.
         requires_cache
             If True, the cache file must be set before calling `__call__`.
         kwargs
             Additional keyword arguments passed to `Pipe`.
         """
         super(Predict, self).__init__(**kwargs)
+
+        if not isinstance(model, pl.LightningModule):
+            model = LightningWrapper(model)
+
         self.model = model
         self.requires_cache = requires_cache
+        self.model_output_keys = model_output_keys
+        self.output_key = output_key
+        self.dtype = output_dtype
 
     def invalidate_cache(self):
         """Reset the cache"""
@@ -150,7 +201,12 @@ class Predict(Pipe):
 
     @torch.no_grad()
     def _call_batch(
-        self, batch: Batch, idx: List[int] = None, split: Optional[Split] = None, **kwargs
+        self,
+        batch: Batch,
+        idx: List[int] = None,
+        split: Optional[Split] = None,
+        format: OutputFormat = OutputFormat.NUMPY,
+        **kwargs,
     ) -> Batch:
         """
         Call the model on the batch or read the cached predictions.
@@ -163,6 +219,8 @@ class Predict(Pipe):
             The indices of the examples to process.
         split
             The split to process (Optional)
+        format
+            The format to return the predictions in.
         kwargs
             Additional keyword arguments passed to the model when not using the cache.
         Returns
@@ -179,37 +237,46 @@ class Predict(Pipe):
             )
             use_cache = False
         if use_cache:
-            return self._process_batch_with_cache(batch, idx=idx, split=split)
+            return self._process_batch_with_cache(batch, idx=idx, split=split, format=format)
         else:
             if self.requires_cache:
                 raise ValueError(
                     "This pipe explicitly requires calling "
                     "`pipe.cache()` before subsequent uses."
                 )
-            return self._process_batch_without_cache(batch, **kwargs)
+            return self._process_batch_without_cache(batch, format=format, **kwargs)
 
     def _process_batch_with_cache(
-        self, _: Optional[Batch], idx: List[int], split: Optional[Split]
+        self, _: Optional[Batch], idx: List[int], split: Optional[Split], format: OutputFormat
     ) -> Batch:
         """Process a batch using the cache file"""
         table = self.read_table(split)
-        if is_index_contiguous(idx):
-            msg = "The table is smaller than the max. of the input index."
-            assert table.num_rows > max(idx), msg
-            rows = table[min(idx) : max(idx) + 1]
+        vectors = table[idx]
 
-        else:
-            rows = table.take(idx)
-        return cast_values_to_numpy(rows.to_pydict())
+        return self._format_output(vectors, format=format)
 
-    def _process_batch_without_cache(self, batch: Batch, **kwargs) -> Batch:
+    def _process_batch_without_cache(
+        self, batch: Batch, format: OutputFormat = OutputFormat.NUMPY, **kwargs
+    ) -> Batch:
         """Process the batch using the model and without the cache"""
         if isinstance(self.model, nn.Module):
             device = next(iter(self.model.parameters())).device
             batch = move_data_to_device(batch, device)
+
         # process with the model (Dense or Sparse)
-        output = self.model(batch, **kwargs)
-        return cast_values_to_numpy(output)
+        model_output = self.model(batch, **kwargs)
+        vectors = select_field_from_output(model_output, self.model_output_keys)
+        return self._format_output(vectors, format=format)
+
+    def _format_output(self, vectors: torch.Tensor, format: OutputFormat) -> Batch:
+        if format == OutputFormat.NUMPY:
+            vectors = cast_to_numpy(vectors, dtype=get_dtype("numpy", self.dtype))
+        elif format == OutputFormat.TORCH:
+            vectors = cast_to_torch(vectors, dtype=get_dtype("torch", self.dtype))
+        else:
+            raise ValueError(f"Unknown format: {format}")
+
+        return {self.output_key: vectors}
 
     @functools.singledispatchmethod
     @torch.no_grad()
@@ -223,6 +290,7 @@ class Predict(Pipe):
         cache_dir: Optional[str] = None,
         split: Optional[Split] = None,
         persist: bool = True,
+        target_file: Optional[PathLike] = None,
     ) -> CACHE_FILE:
         """
         Cache the predictions of the model on the dataset.
@@ -244,6 +312,9 @@ class Predict(Pipe):
         persist
             (Optional) Whether to persist the cache file(s) for subsequent runs.
             If set to False, the cache file is deleted when the session ends (tempfile).
+        target_file
+            (Optional) The path to the cache file to use.
+            If set to None, a new cache file is created in cache_dir.
         Returns
         Union[Path, str, tempfile.TemporaryFile]
             The path to the cache file
@@ -257,17 +328,45 @@ class Predict(Pipe):
 
         # define a unique fingerprint for the cache file
         fingerprint = get_fingerprint(
-            {"model": get_fingerprint(self.model), "split": split, "dataset": dataset._fingerprint}
+            {
+                "model": get_fingerprint(self.model),
+                "model_output_keys": self.model_output_keys,
+                "dtype": self.dtype,
+                "split": split,
+                "dataset": dataset._fingerprint,
+            }
         )
+
+        # create a temporary directory to store the cache file if persist is False
+        self.persist = persist
+        if self.persist is False:
+            # todo: improve or remove persist=False behaviour
+            assert target_file is None, "target_file cannot be set when using persist=False"
+            cache_dir = tempfile.mkdtemp(dir=cache_dir)
+        self.cache_dir = cache_dir
+
+        # setup the cache file
+        if target_file is None:
+            target_file = Path(cache_dir) / type(self).__name__.lower() / f"{fingerprint}.arrow"
 
         # init a callback to store predictions and add it to the Trainer
         callback = StorePredictionsCallback(
-            cache_name=fingerprint, cache_dir=cache_dir, persist=persist
+            cache_file=target_file,
+            accepted_fields=self.model_output_keys,
+            dtype=self.dtype,
         )
 
         # define a collate_fn to process the dataset
         if callback.is_written:
             logger.info(f"Loading pre-computed vectors from {callback.cache_file}")
+            cached_table = self.read_table_from_cache_file(callback.cache_file)
+            if not len(cached_table) == len(dataset):
+                raise ValueError(
+                    f"Dataset of length={len(dataset)} not matching "
+                    f"the cache with length={len(cached_table)}. "
+                    f"Consider deleting and re-computing these vectors.\n"
+                    f"path={os.path.abspath(callback.cache_file)}"
+                )
         else:
             # process the whole dataset using Trainer
             self._process(
@@ -335,32 +434,34 @@ class Predict(Pipe):
         # run the trainer predict method, model.forward() is called
         # for each batch and store into the callback cache
         trainer.predict(model=self.model, dataloaders=loader, return_predictions=False)
-
+        callback.close_writer()
         cache_file = callback.cache_file
         trainer.callbacks.remove(callback)
         return cache_file
 
-    def read_table(self, split: Optional[Split]) -> pa.Table:
+    def read_table(self, split: Optional[Split]) -> TensorArrowTable:
         """Returns the cached `pyarrow.Table` for the given split"""
 
         if isinstance(self.cache_file, dict):
             assert split is not None, "Split must be provided when using a dict of cache files."
 
-        read_args = {"memory_map": True}
         if split is None:
             assert not isinstance(
                 self.cache_file, dict
             ), "Split must be provided to access the table."
             if self._loaded_table is None:
-                self._loaded_table = pq.read_table(self.cache_file, **read_args)
+                self._loaded_table = self.read_table_from_cache_file(self.cache_file)
         elif split == self._loaded_split and self._loaded_table is not None:
             pass
         else:
             cache = self.cache_file[split]
-            self._loaded_table = pq.read_table(cache, **read_args)
+            self._loaded_table = self.read_table_from_cache_file(cache)
             self._loaded_split = split
 
         return self._loaded_table
+
+    def read_table_from_cache_file(self, cache_file: str) -> TensorArrowTable:
+        return TensorArrowTable(cache_file, dtype=self.dtype)
 
     @staticmethod
     def init_loader(
@@ -445,6 +546,14 @@ class Predict(Pipe):
         for k in self._pickle_exclude:
             self.__dict__[k] = None
 
+        self._master = False
+
+    def __del__(self):
+        if self._master:
+            if hasattr(self, "persist") and hasattr(self, "cache_dir"):
+                if self.persist is False and self.cache_dir is not None:
+                    shutil.rmtree(self.cache_dir, ignore_errors=True)
+
     def to_json_struct(self, exclude: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
         """
         Override `to_json_struct` to exclude the cache location from the fingerprint.
@@ -459,3 +568,19 @@ class Predict(Pipe):
         exclude = exclude or []
         exclude += ["cache_file", "cache_dir"]
         super(Predict, self).to_json_struct(exclude=exclude, **kwargs)
+
+    def delete_cached_files(self):
+        """Delete the cached files."""
+        logger.info(f"Deleting cached vectors {self.cache_file}")
+        self._loaded_table = None
+        self._loaded_splits = None
+        if isinstance(self.cache_file, PathLike):
+            shutil.rmtree(self.cache_file, ignore_errors=True)
+        elif isinstance(self.cache_file, dict):
+            for fn in self.cache_file.values():
+                shutil.rmtree(fn, ignore_errors=True)
+
+        else:
+            raise ValueError(f"cache_file must be a str or dict, got {type(self.cache_file)}")
+
+        self.cache_file = None

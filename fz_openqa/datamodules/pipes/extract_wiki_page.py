@@ -1,8 +1,5 @@
-import itertools
 from typing import Dict
 from typing import List
-
-import rich
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -10,7 +7,8 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class ExtractWikiPage(Pipe):
-    def __init__(self, *, wiki_data: HfDataset, wiki_index: Dict, query_key: str):
+    def __init__(self, *, wiki_data: HfDataset, wiki_index: Dict, query_key: str, **kwargs):
+        super().__init__(**kwargs)
         # Wikipedia dump to extract page content
         self.wiki_data = wiki_data
         # Index to look up Wikipedia pages and extract page content

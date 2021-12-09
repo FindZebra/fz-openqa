@@ -36,7 +36,6 @@ from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
 
-
 logger = logging.getLogger(__name__)
 
 TXT_PATTERN = r"^.*\.txt$"

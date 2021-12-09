@@ -1,8 +1,8 @@
 import os
-import warnings
 from abc import ABC
 from unittest import TestCase
 
+import datasets
 import numpy as np
 import torch
 from datasets import Dataset
@@ -12,6 +12,16 @@ from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
+from fz_openqa.utils.train_utils import setup_safe_env, silent_huggingface
+
+
+def cast_to_array(x):
+    if isinstance(x, torch.Tensor):
+        return x.numpy()
+    elif isinstance(x, np.ndarray):
+        return x
+    else:
+        return np.array(x)
 
 
 class TestIndex(TestCase, ABC):
@@ -25,6 +35,9 @@ class TestIndex(TestCase, ABC):
         """setup a toy dataset where retrieval outcomes are expected."""
 
         torch.set_grad_enabled(False)
+        silent_huggingface()
+        datasets.set_caching_enabled(False)
+        setup_safe_env()
         os.environ['TOKENIZERS_PARALLELISM'] = "false"
         # init a tokenizer and bert
         self.tokenizer = AutoTokenizer.from_pretrained(self._bert_id)
@@ -102,25 +115,23 @@ class TestIndex(TestCase, ABC):
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
         output = index.search(query, k=self.k)
-
         # check the output type
         self.assertIsInstance(output, SearchResult)
 
+        # cast output
+        data = {'score': output.score, 'index': output.index}
+        data = {k: cast_to_array(v) for k, v in data.items()}
 
-        self.assertTrue((np.array(output.index)>=0).all())
-        self.assertTrue((np.array(output.index)<len(self.corpus)).all())
+        # check that the index values are in [0, len(self.dataset) - 1]
+        self.assertTrue((data['index'] >= 0).all())
+        self.assertTrue((data['index'] < len(self.corpus)).all())
 
-        # check shape of the output
         expected_shape = (len(self.dataset), self.k)
-        for key, output_shape in {'score': np.array(output.score).shape,
-                                  'index': np.array(output.index).shape}.items():
-            if not output_shape == expected_shape:
-                # todo: use assert instead (fails for ES)
-                warnings.warn(f"The shape of the {key}={output_shape} does not "
-                              f"match the expected shape: {expected_shape}")
+        for key, d in data.items():
+            self.assertEqual(d.shape, expected_shape)
 
         # check the top-1 scores
-        for target, scores, idx in zip(self.retrieval_targets, output.score, output.index):
+        for target, scores, idx in zip(self.retrieval_targets, data['score'], data['index']):
             pred = np.argmax(scores, axis=-1)
             self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
             # check if output values are sorted

@@ -1,8 +1,6 @@
 import os
 import sys
 
-import faiss
-
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -24,7 +22,7 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.builders import MedQaBuilder, ConcatMedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -53,25 +51,15 @@ def run(config):
 
     On the cluster, run:
     ```bash
-    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 \
-    +num_workers=10 +use_subset=True +corpus_subset=False +colbert=True \
-    +factory=\'IVF100,PQ16x8\' \
-    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
-
-
-    CUDA_VISIBLE_DEVICES=4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
-    sys=titan trainer.strategy=dp trainer.gpus=4 +batch_size=1000 \
-    +num_workers=10 +use_subset=False +corpus_subset=False +colbert=True \
-    +factory=\'IVF100,PQ16x8\' \
-    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
-
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python \
+    examples/load_mapped_concat_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
     ```
     """
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
@@ -84,7 +72,7 @@ def run(config):
     # load model
     zero_shot = config.get("zero_shot", True)
     if zero_shot:
-        model = ZeroShot(head="contextual" if use_colbert else "flat", limit_size=32)
+        model = ZeroShot(head="contextual" if use_colbert else "flat")
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
         if config.get("verbose", False):
@@ -107,7 +95,7 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = MedQaBuilder(
+    dataset_builder = ConcatMedQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
@@ -129,16 +117,6 @@ def run(config):
 
     # define the index builder
     IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
-
-    faiss_args = {
-        "factory": config.get("factory", "IVF100,PQ16x8"),
-        "metric_type": faiss.METRIC_INNER_PRODUCT,
-        # "n_list": 100,
-        # "n_subvectors": 16,
-        # "n_bits": 8,
-        "nprobe": 32,
-    }
-
     index_builder = IndexCls(
         model=model,
         trainer=trainer,
@@ -151,11 +129,6 @@ def run(config):
         },
         cache_dir=cache_dir,
         persist_cache=True,
-        progress_bar=True,
-        faiss_train_size=1000 if use_colbert else 10000,
-        faiss_args=faiss_args,
-        dtype=config.get("dtype", "float32"),
-        in_memory=config.get("in_memory", True),
     )
 
     # define the OpenQA builder
@@ -164,11 +137,11 @@ def run(config):
         corpus_builder=corpus_builder,
         index_builder=index_builder,
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=config.get("n_retrieved_documents", 1000),
+        n_retrieved_documents=1000,
         n_documents=10,
         max_pos_docs=1,
-        filter_unmatched=True,
-        num_proc=config.get("num_proc", 4),
+        filter_unmatched=config.get("filter_unmatched", True),
+        num_proc=4,
         batch_size=config.get("map_batch_size", 100),
         select_mode=config.get("select_mode", "sample"),
     )

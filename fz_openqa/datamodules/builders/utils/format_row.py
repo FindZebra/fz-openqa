@@ -79,7 +79,7 @@ def format_row_nested_questions(
         repr += "\n"
 
         # for each document
-        for j in range(min(len(row["document.input_ids"][i]), 3)):
+        for j in range(min(len(row["document.input_ids"][i]), 5)):
             match_on = row.get("document.match_on", None)
             match_on = match_on[i][j] if match_on is not None else None
             repr += f"|---* {locator} - Document #{1 + j}"
