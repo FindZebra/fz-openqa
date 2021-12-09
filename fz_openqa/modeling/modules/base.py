@@ -83,15 +83,12 @@ class Module(nn.Module, ABC):
     # maximum input size
     max_length = 512  # todo: infer
 
-    # require heads
-    _required_heads = ["default"]
-
     def __init__(
         self,
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
-        head: Union[DictConfig, Head],
+        head: Union[DictConfig, Head] = None,
         prefix: str = "",
     ):
         """Initialize a Metric for each split=train/validation/test"""
@@ -99,16 +96,10 @@ class Module(nn.Module, ABC):
         tokenizer = maybe_instantiate(tokenizer)
         self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
 
-        for k in self._required_heads:
-            assert k in self._required_heads, f"Head {k} is required."
-
-        head = maybe_instantiate(head, bert=self.bert)
-        self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
+        if head is not None:
+            head = maybe_instantiate(head, bert=self.bert)
+            self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
         self._init_metrics(prefix=prefix)
-
-        # check that required heads are initialized
-        msg = f"{self._required_heads} heads must be provided. Found {list(self.heads.keys())}"
-        assert set(self._required_heads).issubset(set(self.heads.keys())), msg
 
     def _backbone(
         self,

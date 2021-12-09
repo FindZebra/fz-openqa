@@ -1,0 +1,59 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /model: medqa_reader
+  - override /model/bert: bert.yaml
+  - override /sys: local.yaml
+
+base:
+  seed: null
+  target_metric: validation/reader/Accuracy
+  target_mode: max
+
+
+trainer:
+  gpus: 0
+  checkpoint_callback: False
+  strategy: dp
+  min_epochs: 1
+  max_epochs: 1000
+  accumulate_grad_batches: 4
+  val_check_interval: 100
+
+
+datamodule:
+  use_subset: True
+  train_batch_size: 10
+  eval_batch_size: 20
+  num_proc: 1
+  num_workers: 1
+  n_documents: 3
+
+
+datamodule.corpus_builder:
+  passage_length: 100
+  passage_stride: 100
+
+model:
+  hidden_size: null
+
+
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+    - answer.input_ids
+    - answer.attention_mask
+    - answer.target
+
+logger: null
+callbacks: null
+
+#logger:
+#  wandb:
+#    group: medqa-reader-only # name your experiment here
