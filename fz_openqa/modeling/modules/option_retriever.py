@@ -10,7 +10,6 @@ from .utils.gradients import GradExpression
 from .utils.gradients import in_batch_grads
 from .utils.gradients import supervised_loss
 from .utils.gradients import variational_grads
-from .utils.utils import check_only_first_doc_positive
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
@@ -74,38 +73,48 @@ class OptionRetriever(Module):
         )
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
-
-        d_shape = batch["document.input_ids"].shape
-        q_shape = batch["question.input_ids"].shape
-        if not d_shape[:2] == q_shape[:2]:
-            raise ValueError(
-                f"Expected 2 first dimensions to be equal, "
-                f"got documents of shape: {d_shape} and "
-                f"questions of shape{q_shape}"
+        q_shape = d_shape = None
+        output = {}
+        if "document.input_ids" in batch:
+            d_shape = batch["document.input_ids"].shape
+            # flatten the batch_size and n_options and n_docs dimensions
+            d_batch = flatten_first_dims(
+                batch,
+                n_dims=3,
+                keys=["document.input_ids", "document.attention_mask"],
             )
 
-        # flatten the batch_size and n_options and n_docs dimensions
-        d_batch = flatten_first_dims(
-            batch,
-            n_dims=3,
-            keys=["document.input_ids", "document.attention_mask"],
-        )
+            # process the document with the backbone
+            hd = self._backbone(d_batch, prefix="document", head="document", **kwargs)
+            # reshape and return
+            hd = hd.reshape(*d_shape[:3], *hd.shape[1:])
+            output["_hd_"] = hd
 
-        # flatten the batch_size and n_options dimensions
-        q_batch = flatten_first_dims(
-            batch,
-            n_dims=2,
-            keys=["question.input_ids", "question.attention_mask"],
-        )
+        if "question.input_ids" in batch:
+            q_shape = batch["question.input_ids"].shape
+            # flatten the batch_size and n_options dimensions
+            q_batch = flatten_first_dims(
+                batch,
+                n_dims=2,
+                keys=["question.input_ids", "question.attention_mask"],
+            )
 
-        # process the document with the backbones
-        hd = self._backbone(d_batch, prefix="document", head="document", **kwargs)
-        hq = self._backbone(q_batch, prefix="question", head="question", **kwargs)
+            # process the document with the backbone
+            hq = self._backbone(q_batch, prefix="question", head="question", **kwargs)
 
-        # reshape and return
-        hd = hd.reshape(*d_shape[:3], *hd.shape[1:])
-        hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
-        return {"_hd_": hd, "_hq_": hq}
+            # reshape and return
+            hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
+            output["_hq_"] = hq
+
+        if all(d is not None for d in (d_shape, q_shape)):
+            if not d_shape[:2] == q_shape[:2]:
+                raise ValueError(
+                    f"Expected 2 first dimensions to be equal, "
+                    f"got documents of shape: {d_shape} and "
+                    f"questions of shape{q_shape}"
+                )
+
+        return output
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
         """

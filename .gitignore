@@ -11,6 +11,7 @@ elasticsearch-*
 compiled-dataset-*.jsonl
 .fingerprints/
 .fingerprint/
+vectors/
 
 # Editors
 .vscode/

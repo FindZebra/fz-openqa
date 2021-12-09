@@ -12,6 +12,7 @@ from ...utils.shape import infer_batch_shape
 from .base import Pipe
 from .utils.nesting import expand_and_repeat
 from .utils.nesting import flatten_nested
+from .utils.nesting import nest_idx
 from .utils.nesting import nested_list
 from .utils.nesting import reconcat
 from fz_openqa.datamodules.pipes.basic import ApplyToAll
@@ -129,11 +130,13 @@ class ApplyAsFlatten(Pipe):
         self,
         pipe: Pipe,
         level: int = 1,
+        update_idx: bool = True,
         **kwargs,
     ):
         super(ApplyAsFlatten, self).__init__(**kwargs)
         self.pipe = pipe
         self.level = level
+        self.update_idx = update_idx
         if level > 0:
             self.flatten = Flatten(level=level)
             self.nest = Nest(shape=None)
@@ -146,6 +149,15 @@ class ApplyAsFlatten(Pipe):
         input_shape = infer_batch_shape(batch)[: self.flatten.level + 1]
 
         batch = self.flatten(batch)
+
+        # compute the new index
+        if self.update_idx:
+            idx = kwargs.get("idx", None)
+            if idx is not None:
+                kwargs = kwargs.copy()
+                idx = nest_idx(idx, input_shape)
+                kwargs["idx"] = idx
+
         # apply the batch to the flattened batch
         batch = self.pipe(batch, **kwargs)
         # reshape back to the input_shape

@@ -6,8 +6,6 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
-
 from ...utils.json_struct import apply_to_json_struct
 from .base import Pipe
 from .control.condition import Condition

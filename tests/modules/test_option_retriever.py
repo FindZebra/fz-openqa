@@ -1,3 +1,4 @@
+import unittest
 from copy import deepcopy
 from functools import partial
 
@@ -171,6 +172,8 @@ class TestOptionRetriever(TestModel):
         self.assertEqual([self.batch_size, self.n_options],
                          list(output['_hq_'].shape[:2]))
 
+
+    @unittest.skip("not implemented")
     def test__reduce_step_output(self):
         data = {"loss": torch.tensor([0.4, 0.6]),
                 "logp": torch.tensor([0.4, 0.6])}
@@ -182,7 +185,7 @@ class TestOptionRetriever(TestModel):
     @torch.enable_grad()
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
-        VERBOSE = True
+        VERBOSE = False
         if VERBOSE:
             np.set_printoptions(precision=3, suppress=True)
 

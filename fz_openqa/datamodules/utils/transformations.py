@@ -6,10 +6,6 @@ from typing import Union
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.tokenizers.static import ANS_TOKEN
-from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.tokenizers.static import QUERY_TOKEN
-
 
 def add_spec_token(
     special_token: Union[str, List[str]],

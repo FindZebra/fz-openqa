@@ -2,6 +2,7 @@ import json
 import logging
 from functools import partial
 from pathlib import Path
+from time import time
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -14,6 +15,8 @@ from datasets import DatasetDict
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
 
@@ -26,11 +29,18 @@ class MapWithFingerprint:
     """
 
     def __init__(
-        self, pipe: Pipe, batched=True, cache_dir: str = None, _id: str = None, **map_kwargs: Any
+        self,
+        pipe: Pipe,
+        batched=True,
+        cache_dir: str = None,
+        id: str = None,
+        debug: bool = False,
+        **map_kwargs: Any,
     ):
-        self._id = _id
+        self.id = id
         self.pipe = pipe
         self.cache_dir = cache_dir
+        self.debug = debug
         self.map_kwargs = {"batched": batched, **map_kwargs}
 
     def __call__(self, dataset: HfDataset) -> HfDataset:
@@ -57,17 +67,28 @@ class MapWithFingerprint:
                 # todo: fix: faiss freezes when using multiprocessing
                 kwargs["num_proc"] = 1
 
+            # adjust the batch size to be at least `num_proc
+            kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])
+
             # fingerprint
             fingerprint = fingerprints.get(key, None)
-            logger.info(f"split={key}: fingerprint={fingerprint}")
+            logger.info(f"split={key}: new_fingerprint={fingerprint}")
+
+            pipe = self.pipe
+            if self.debug:
+                pipe = Sequential(
+                    PrintBatch(f"{self.id} : input"), pipe, PrintBatch(f"{self.id} : output")
+                )
 
             # process each split
+            start_time = time()
             dataset[key] = dset.map(
-                partial(self.pipe, split=key),
+                partial(pipe, split=key),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,
             )
+            logger.info(f"{self.id}, {key}: elapsed_time={time() - start_time:.2f}")
 
         if {"__all__"} == set(dataset.keys()):
             dataset = dataset.pop("__all__")

@@ -1,6 +1,5 @@
 from typing import List
 
-import rich
 import torch
 from torch import Tensor
 

@@ -1,15 +1,11 @@
 from typing import Any
-from typing import Callable
 from typing import List
-from typing import Optional
 from typing import Tuple
 from typing import Union
 
 import numpy as np
-import rich
 from torch import Tensor
 
-from ...utils.functional import always_true
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
