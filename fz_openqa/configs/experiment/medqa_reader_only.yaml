@@ -2,7 +2,8 @@
 
 defaults:
   - base
-  - override /datamodule: mop_openqa
+  - override /datamodule: openqa
+  - override /datamodule/builder: concat_openqa
   - override /model: medqa_reader
   - override /model/bert: mini.yaml
   - override /sys: local.yaml
@@ -29,7 +30,6 @@ datamodule:
   eval_batch_size: 8
   num_proc: 4
   num_workers: 4
-  n_documents: 3
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -41,6 +41,22 @@ datamodule:
     - answer.input_ids
     - answer.attention_mask
     - answer.target
+
+  # documents
+  n_retrieved_documents: 20
+  n_documents: 3
+  filter_unmatched: false
+
+  # encoding tokens
+  add_encoding_tokens: true
+  add_special_tokens: true
+
+  # builder options
+  builder:
+    corpus_builder:
+      to_sentences: false
+      use_subset: True
+
 
 
 logger: null
