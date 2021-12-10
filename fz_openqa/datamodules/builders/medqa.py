@@ -273,6 +273,9 @@ class ConcatMedQaBuilder(MedQaBuilder):
         )
 
         return Sequential(
+            self.text_formatter.copy(
+                text_key=["question.text", "answer.text"]
+            ),  # <- added this line here
             add_spec_tokens_pipe,
             Expand(axis=1, n=self.n_options, update=True, input_filter=In(["question.text"])),
             ApplyAsFlatten(
@@ -285,7 +288,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
     def get_qa_tokenizer_pipe(self):
         return FormatAndTokenize(
             prefix="question.",
-            text_formatter=self.text_formatter,
+            text_formatter=None,  # <- changed here
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
