@@ -2,6 +2,7 @@ from typing import List
 from typing import Optional
 
 import rich
+from transformers import PreTrainedTokenizerFast
 
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -51,12 +52,18 @@ class PrintText(Pipe):
     """
 
     def __init__(
-        self, text_key: str, limit: Optional[int] = None, header: Optional[str] = None, **kwargs
+        self,
+        text_key: str,
+        limit: Optional[int] = None,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        header: Optional[str] = None,
+        **kwargs,
     ):
         super(PrintText, self).__init__(**kwargs)
         self.text_key = text_key
         self.limit = limit
         self.header = header
+        self.tokenizer = tokenizer
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -69,6 +76,8 @@ class PrintText(Pipe):
         else:
             print(f"=== {self.header} : {self.text_key} ===")
         for txt in txts:
+            if self.tokenizer:
+                txt = self.tokenizer.decode(txt)
             print(txt)
         print(get_separator())
 

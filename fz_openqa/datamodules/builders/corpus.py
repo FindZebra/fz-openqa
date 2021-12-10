@@ -12,6 +12,8 @@ from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 
+from ..pipelines.preprocessing import FormatAndTokenize
+from ..pipelines.preprocessing.text import CleanupSpecialTokens
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
@@ -19,18 +21,18 @@ from fz_openqa.datamodules.generators import medwiki_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
-from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import PrintText
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
@@ -155,15 +157,27 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
+            PrintBatch("CorpusPreprocessor::in"),
             self.text_formatter.copy(text_key="text"),
-            Gate(self.to_sentences, GenerateSentences(), update=True),
+            # yield sentences from each document
+            Gate(self.to_sentences, self.get_generate_sentences_pipe(), update=True),
+            # tokenize, only add special tokens if sentence mode is on
             self.get_tokenizer_pipe(),
+            # if not sentence mode, generate equal length-passages and add the special
+            # tokens to each passage,
+            PrintBatch("CorpusPreprocessor::tokenizer"),
             Gate(
                 not self.to_sentences,
                 self.get_generate_passages_pipe(),
                 update=True,
             ),
+            # cleanup remaining special tokens in the text
+            CleanupSpecialTokens("text", self.tokenizer, update=True),
+            # todo: only for debugging
             DropKeys(["offset_mapping"]),
+            PrintBatch("CorpusPreprocessor::out"),
+            PrintText("text", limit=3, header="corpus text"),
+            PrintText("input_ids", limit=3, header="corpus text", tokenizer=self.tokenizer),
         )
 
         # process the whole dataset (tokenization + passage generation)
@@ -173,7 +187,12 @@ class CorpusBuilder(HfDatasetBuilder):
             batch_size=10,
             num_proc=self.num_proc,
             desc="Tokenizing documents and extracting overlapping passages",
+            # todo: only for debugging
+            keep_in_memory=True,
         )
+
+        # todo: only for debugging
+        exit()
 
         # append the prefix "document."
         for attr in dataset.column_names:
@@ -195,37 +214,36 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return dataset
 
+    def get_generate_sentences_pipe(self):
+        return GenerateSentences()
+
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
         return GeneratePassages(
             size=self.passage_length,
             stride=self.passage_stride,
             start_tokens=self.get_prefix_tokens(),
-            end_tokens=[self.tokenizer.sep_token_id] if self.add_special_tokens else [],
+            end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
             verbose=self.verbose,
         )
 
     def get_tokenizer_pipe(self):
-        """Build a pipe to tokenize raw documents, a shortcut with the Pipe
-        Parallel is added to return the original attributes as well."""
-
-        if self.add_encoding_tokens:
-            add_spec_token_fn = partial(add_spec_token, DOC_TOKEN)
-            add_spec_token_pipe = Apply({"text": add_spec_token_fn}, element_wise=True)
-        else:
-            add_spec_token_pipe = None
-        return Sequential(
-            add_spec_token_pipe,
-            TokenizerPipe(
-                self.tokenizer,
-                max_length=self.max_length,
-                fields=["text"],
-                return_token_type_ids=False,
-                add_special_tokens=False,
-                return_offsets_mapping=True,
-            ),
-            input_filter=In(["text"]),
+        """Build a pipe to tokenize raw documents, special and encoding tokens
+        are added only in `to_sentence` mode."""
+        add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
+        add_special_tokens = self.to_sentences and self.add_special_tokens
+        return FormatAndTokenize(
+            prefix=None,
+            key="text",
+            text_formatter=None,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
+            add_special_tokens=add_special_tokens,
+            add_encoding_tokens=add_encoding_tokens,
+            return_offsets_mapping=True,
+            spec_token=DOC_TOKEN,
+            shape=None,
             update=True,
         )
 
@@ -236,6 +254,9 @@ class CorpusBuilder(HfDatasetBuilder):
         else:
             start_tokens = [self.tokenizer.cls_token_id]
         return start_tokens
+
+    def get_suffix_tokens(self):
+        return [self.tokenizer.sep_token_id] if self.add_special_tokens else []
 
     def get_collate_pipe(self) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
