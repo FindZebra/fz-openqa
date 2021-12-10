@@ -54,22 +54,22 @@ class MedQaReader(Module):
     def _forward(self, batch: Batch, targets, **kwargs) -> Batch:
         # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
         # checks inputs, set parameters and concat the questions with the documents
-        pprint_batch(batch)
+        # pprint_batch(batch)
         # self.bert.tokenizer
         # concatenate questions and documents such that there is no padding between Q and D
         qd_batch = self._concat_questions_and_documents(batch, fields=["question", "document"])
         # pprint_batch(qd_batch)
         # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
-        rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
-        rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
-        rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
-        rich.print(
-            f"[red] {[qd_batch['input_ids'][0][i].tolist() for i in range(4)]}"
-        )  # noqa: E501
-        rich.print(
-            f"[red] {[self.tokenizer.decode(qd_batch['input_ids'][0][i].tolist()) for i in range(4)]}"  # noqa: E501
-        )
-        exit()
+        # rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
+        # rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
+        # rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
+        # rich.print(
+        #     f"[red] {[qd_batch['input_ids'][0][i].tolist() for i in range(4)]}"
+        # )  # noqa: E501
+        # rich.print(
+        #     f"[red] {[self.tokenizer.decode(qd_batch['input_ids'][0][i].tolist()) for i in range(4)]}"  # noqa: E501
+        # )
+        # exit()
         # rich.print(f"[red] {answer_targets.shape}")
         # pprint_batch(qd_batch)
 

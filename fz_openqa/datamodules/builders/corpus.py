@@ -157,7 +157,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
-            PrintBatch("CorpusPreprocessor::in"),
+            # PrintBatch("CorpusPreprocessor::in"),
             self.text_formatter.copy(text_key="text"),
             # yield sentences from each document
             Gate(self.to_sentences, self.get_generate_sentences_pipe(), update=True),
@@ -165,7 +165,7 @@ class CorpusBuilder(HfDatasetBuilder):
             self.get_tokenizer_pipe(),
             # if not sentence mode, generate equal length-passages and add the special
             # tokens to each passage,
-            PrintBatch("CorpusPreprocessor::tokenizer"),
+            # PrintBatch("CorpusPreprocessor::tokenizer"),
             Gate(
                 not self.to_sentences,
                 self.get_generate_passages_pipe(),
@@ -175,9 +175,9 @@ class CorpusBuilder(HfDatasetBuilder):
             CleanupSpecialTokens("text", self.tokenizer, update=True),
             # todo: only for debugging
             DropKeys(["offset_mapping"]),
-            PrintBatch("CorpusPreprocessor::out"),
-            PrintText("text", limit=3, header="corpus text"),
-            PrintText("input_ids", limit=3, header="corpus text", tokenizer=self.tokenizer),
+            # PrintBatch("CorpusPreprocessor::out"),
+            # PrintText("text", limit=3, header="corpus text"),
+            # PrintText("input_ids", limit=3, header="corpus text", tokenizer=self.tokenizer),
         )
 
         # process the whole dataset (tokenization + passage generation)
@@ -192,7 +192,7 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
         # todo: only for debugging
-        exit()
+        # exit()
 
         # append the prefix "document."
         for attr in dataset.column_names:
