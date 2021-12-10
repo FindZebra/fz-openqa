@@ -2,8 +2,9 @@
 
 defaults:
   - base
+  - override /datamodule: mop_openqa
   - override /model: medqa_reader
-  - override /model/bert: bert.yaml
+  - override /model/bert: mini.yaml
   - override /sys: local.yaml
 
 base:
@@ -19,26 +20,16 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 100
+  val_check_interval: 8
 
 
 datamodule:
   use_subset: True
-  train_batch_size: 10
-  eval_batch_size: 20
-  num_proc: 1
-  num_workers: 1
+  train_batch_size: 4
+  eval_batch_size: 8
+  num_proc: 4
+  num_workers: 4
   n_documents: 3
-
-
-datamodule.corpus_builder:
-  passage_length: 100
-  passage_stride: 100
-
-model:
-  hidden_size: null
-
-
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -50,6 +41,7 @@ model:
     - answer.input_ids
     - answer.attention_mask
     - answer.target
+
 
 logger: null
 callbacks: null

@@ -93,8 +93,8 @@ class Module(nn.Module, ABC):
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
-        tokenizer = maybe_instantiate(tokenizer)
-        self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
+        self.tokenizer = maybe_instantiate(tokenizer)
+        self.bert = self._instantiate_bert(bert=bert, tokenizer=self.tokenizer)
 
         if head is not None:
             head = maybe_instantiate(head, bert=self.bert)
