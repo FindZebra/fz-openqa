@@ -192,7 +192,8 @@ class ColbertIndex(FaissIndex):
         start = time.time()
 
         # 2. query the token index
-        p = min(10, max(1, k // 2))
+        # todo: allow setting max value
+        p = min(20, max(1, k // 2))
         topk_indices = self._query_to_embedding_ids(q_vectors, p, index=index)
         faiss_time = time.time()
         log.debug(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
@@ -253,8 +254,11 @@ class ColbertIndex(FaissIndex):
         embedding_ids = embedding_ids.view(num_queries, -1)
         return embedding_ids.to(Q.device)
 
-    # def __del__(self):
-    #     super(ColbertIndex, self).__del__()
+    def __del__(self):
+        if self._max_sim is not None:
+            self._max_sim = self._max_sim.to("cpu")
+            del self._max_sim
+        super(ColbertIndex, self).__del__()
 
 
 class MaxSim(nn.Module):
@@ -287,14 +291,42 @@ class MaxSim(nn.Module):
             scores[:, i : i + chunk_size] = self._score(pids[:, i : i + chunk_size], q_vectors)
 
         # 3. take the top-k results given the MaxSim score
-        k = min(k, scores.shape[-1])
+        p = min(k, scores.shape[-1])
         scores = scores.to(torch.float32)
-        _, maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True)
+        _, maxsim_idx = torch.topk(scores, k=p, dim=-1, largest=True, sorted=True)
         # 4. fetch the corresponding document indices and return
         maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
         maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
 
+        if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
+            # todo: check why this happens
+            # logging.warning(f"MaxSim: k={k}, maxsim_scores={maxsim_scores.shape}, "
+            #                 f"maxsim_pids={maxsim_pids.shape}")
+            maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
+            # logging.warning(f"--> MaxSim: k={k}, maxsim_scores={maxsim_scores.shape}, "
+            #                 f"maxsim_pids={maxsim_pids.shape}")
+
         return {"pids": maxsim_pids, "scores": maxsim_scores}
+
+    def _pad_outputs(self, k, maxsim_pids, maxsim_scores):
+        # pad maxsim_scores with nans
+        missing_scores = torch.empty(
+            maxsim_scores.shape[0],
+            k - maxsim_scores.shape[1],
+            device=maxsim_scores.device,
+            dtype=maxsim_scores.dtype,
+        )
+        missing_scores.fill_(torch.nan)
+        maxsim_scores = torch.cat([maxsim_scores, missing_scores], dim=1)
+        # pad maxsim_pids with zeros
+        missing_pids = torch.zeros(
+            maxsim_pids.shape[0],
+            k - maxsim_pids.shape[1],
+            device=maxsim_pids.device,
+            dtype=maxsim_pids.dtype,
+        )
+        maxsim_pids = torch.cat([maxsim_pids, missing_pids], dim=1)
+        return maxsim_pids, maxsim_scores
 
     def _score(self, pids, q_vectors):
         d_vectors = self._retrieve_pid_vectors(pids)

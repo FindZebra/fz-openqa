@@ -13,7 +13,7 @@ from datasets import Dataset
 from datasets import DatasetDict
 
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.pipes import SearchCorpus
+from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
@@ -53,7 +53,8 @@ class MapWithFingerprint:
         self._check_pickling(self.pipe)
 
         # check if the fingerprint from the previous run is identical to the current one
-        self._check_fingerprint_previous_run(dataset, name=type(self.pipe).__name__)
+        if not self.map_kwargs.get("keep_in_memory", False):
+            self._check_fingerprint_previous_run(dataset, name=type(self.pipe).__name__)
 
         # generate new fingerprints
         fingerprints = self._gen_fingerprints(dataset, self.pipe, {})
@@ -64,7 +65,7 @@ class MapWithFingerprint:
             # adjust kwargs
             kwargs = self.map_kwargs.copy()
             if isinstance(self.pipe, SearchCorpus) and isinstance(self.pipe.index, FaissIndex):
-                # todo: fix: faiss freezes when using multiprocessing
+                # FaissIndex is made to work in on thread only
                 kwargs["num_proc"] = 1
 
             # adjust the batch size to be at least `num_proc
@@ -72,7 +73,7 @@ class MapWithFingerprint:
 
             # fingerprint
             fingerprint = fingerprints.get(key, None)
-            logger.info(f"split={key}: new_fingerprint={fingerprint}")
+            logger.debug(f"split={key}: new_fingerprint={fingerprint}")
 
             pipe = self.pipe
             if self.debug:
@@ -128,10 +129,12 @@ class MapWithFingerprint:
             if len(diff) > 0:
                 logger.warning(
                     f"Fingerprint for {name} changed from the latest run. "
-                    f"Caching cannot be used. diff={diff}"
+                    f"Caching cannot be used. Enable debug logging mode to see the diff."
                 )
-                rich.print(f"[magenta] {name}: Fingerprints are different !")
-                rich.print(diff)
+                logger.debug(f"Fingerprint diff={diff}")
+                if self.debug:
+                    rich.print(f"[magenta] {name}: Fingerprints are different !")
+                    rich.print(diff)
 
         file.write_text(json.dumps(fingerprints, indent=2))
 

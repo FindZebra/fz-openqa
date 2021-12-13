@@ -1,0 +1,11 @@
+defaults:
+  - dense
+
+_target_: fz_openqa.datamodules.index.ColbertOrEsIndexBuilder
+
+faiss_args:
+  factory: IVF100,PQ16x8
+  metric_type: 0 # faiss.METRIC_INNER_PRODUCT
+
+faiss_train_size: 1000
+_id: colbert

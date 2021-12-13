@@ -179,9 +179,10 @@ class CorpusBuilder(HfDatasetBuilder):
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
-        logger.info(f"Dataset contains {len(dataset)} documents. Flatten indices and return.")
+        logger.debug(f"Dataset contains {len(dataset)} documents.")
         # flatten and return
         # todo: consumes too much memory
+        # logger.debug(f"Flatten indices")
         # dataset = dataset.flatten_indices()
 
         # add index column
@@ -210,13 +211,7 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, a shortcut with the Pipe
         Parallel is added to return the original attributes as well."""
 
-        if self.add_encoding_tokens:
-            add_spec_token_fn = partial(add_spec_token, DOC_TOKEN)
-            add_spec_token_pipe = Apply({"text": add_spec_token_fn}, element_wise=True)
-        else:
-            add_spec_token_pipe = None
         return Sequential(
-            add_spec_token_pipe,
             TokenizerPipe(
                 self.tokenizer,
                 max_length=self.max_length,

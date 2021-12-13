@@ -22,6 +22,7 @@ import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -48,16 +49,17 @@ logger = logging.getLogger(__name__)
 
 
 def display_file_size(key: str, fn: PathLike, print_fn=None):
+    if print_fn is None:
+        print_fn = print
     fn = Path(fn)
     if fn.is_dir():
+        print(f"{key}:")
         for f in fn.iterdir():
-            display_file_size(f"{fn} / {f}", f, print_fn)
+            display_file_size(f"{f} -- {os.path.basename(fn.name)}", f, print_fn)
     else:
         s = os.path.getsize(fn)
         s /= 1024 ** 3
         msg = f"{key} - disk_size={s:.3f} GB"
-        if print_fn is None:
-            print_fn = print
         print_fn(msg)
 
 
@@ -351,18 +353,18 @@ class FaissIndex(Index):
 
         # define the progress bar
         train_size = min(cached_vectors.num_rows, self.faiss_train_size)
-        pbar = tqdm(
-            total=cached_vectors.num_rows // train_size,
-            desc=f"Building {type(self).__name__} (batch_size={train_size})",
-            disable=not self.progress_bar,
-        )
 
         # init the faiss index and add the 1st batch
         vectors = next(it)
         self._init_index(vectors)
-        if pbar is not None:
-            pbar.update(1)
         self._add_batch_to_index(vectors)
+
+        # init the progress bar
+        pbar = tqdm(
+            total=(cached_vectors.num_rows // train_size) - 1,
+            desc=f"Building {type(self).__name__} (batch_size={train_size})",
+            disable=not self.progress_bar,
+        )
 
         # iterate through the remaining batches and add them to the index
         while True:
@@ -663,5 +665,7 @@ class FaissIndex(Index):
         self.__dict__.update(state)
 
     def __del__(self):
+        if isinstance(self._index, faiss.IndexReplicas):
+            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
         if self._master and self.persist_cache is False:
             shutil.rmtree(self.cache_dir, ignore_errors=True)

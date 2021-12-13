@@ -28,7 +28,7 @@ class FormatAndTokenize(Sequential):
         self,
         prefix: str,
         *,
-        text_formatter: TextFormatter,
+        text_formatter: Optional[TextFormatter] = None,
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         max_length: Optional[int] = 512,
@@ -50,10 +50,13 @@ class FormatAndTokenize(Sequential):
         else:
             add_spec_tokens_pipe = None
 
+        if text_formatter is not None:
+            text_formatter = text_formatter.copy(text_key=key)
+
         super().__init__(
             FilterKeys(In([f"{prefix}{key}"])),
             ReplaceInKeys(prefix, ""),
-            text_formatter.copy(text_key=key),
+            text_formatter,
             ApplyAsFlatten(
                 Sequential(
                     add_spec_tokens_pipe,

@@ -3,6 +3,9 @@
 defaults:
   - base
   - override /model: retriever
+  - override /callbacks:
+    - checkpoint
+    - progress_bar
 base:
   seed: null
   target_metric: validation/retriever/top10_Accuracy

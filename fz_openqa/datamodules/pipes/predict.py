@@ -437,6 +437,7 @@ class Predict(Pipe):
         callback.close_writer()
         cache_file = callback.cache_file
         trainer.callbacks.remove(callback)
+        del loader
         return cache_file
 
     def read_table(self, split: Optional[Split]) -> TensorArrowTable:
@@ -503,6 +504,7 @@ class Predict(Pipe):
             dataset,
             collate_fn=collate_fn,
             shuffle=False,
+            persistent_workers=False,
             **loader_kwargs,
         )
         return loader

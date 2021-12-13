@@ -5,3 +5,4 @@ text_key: "document.text"
 query_key: "question.text"
 num_proc: ${datamodule.num_proc}
 filter_mode: null
+_id: elastic_search

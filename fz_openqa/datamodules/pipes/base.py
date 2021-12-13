@@ -1,5 +1,4 @@
 import logging
-from abc import ABCMeta
 from abc import abstractmethod
 from copy import copy
 from functools import singledispatchmethod
@@ -35,7 +34,7 @@ class Pipe(Component):
        A list of keys that the pipe requires to be present in the data.
     """
 
-    __metaclass__ = ABCMeta
+    # __metaclass__ = ABCMeta
     id: Optional[str] = None
     input_filter: Optional[Condition] = None
     requires_keys: Optional[List[str]] = None

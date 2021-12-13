@@ -2,16 +2,16 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+import rich
 import torch
 from omegaconf import DictConfig
 from torch.nn import functional as F
 
 from ...utils import maybe_instantiate
+from .option_retriever import Similarity
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
-from fz_openqa.modeling.similarities import DotProduct
-from fz_openqa.modeling.similarities import Similarity
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -44,11 +44,11 @@ class RetrieverSupervised(Module):
 
     def __init__(
         self,
-        similarity: Union[DictConfig, Similarity] = DotProduct(),
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.similarity = maybe_instantiate(similarity)
+        head = next(iter(self.heads.values()))
+        self.similarity = Similarity(head.id)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -110,7 +110,9 @@ class RetrieverSupervised(Module):
         """
         # check features, check that the first document of each question is positive
         check_only_first_doc_positive(batch)
-        return self._forward(batch, _compute_similarity=False, **kwargs)
+        output = self._forward(batch, _compute_similarity=False, **kwargs)
+        output = self._compute_loss(output)
+        return output
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
@@ -118,23 +120,46 @@ class RetrieverSupervised(Module):
         and compute the similarity matrix between the questions and all the documents.
         This results in a matrix of shape [batch_size, batch_size * n_docs].
         """
+
+        # average losses
+        for k in ["loss"]:
+            y = output.get(k, None)
+            if y is not None:
+                output[k] = y.mean()
+        return output
+
+    def _compute_loss(self, output):
+        # todo: allow computing this on each devide separately
+        # todo: mask out identical documents
         # compute the scoring matrix
         hq, hd = (output.pop(k) for k in ["_hq_", "_hd_"])
-        score_matrix = self.similarity(hq, hd)  # [bs x bs*n_docs]
+        score_matrix = self.compute_similarity(hq, hd)  # [bs x bs*n_docs]
         targets = self._generate_targets(
             len(score_matrix),
             n_docs=hd.shape[0] // hq.shape[0],
             device=hd.device,
         )
-
         # compute the loss an prepare the output
         loss = F.cross_entropy(score_matrix, targets, reduction="mean")
         output["loss"] = loss.mean()
         output["n_options"] = score_matrix.shape[1]
-        output["_logits_"] = score_matrix
-        output["_targets_"] = targets
+        output["_logits_"] = score_matrix.detach()
+        output["_targets_"] = targets.detach()
 
         return output
+
+    def compute_similarity(self, hq: torch.Tensor, hd: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the similarity between the question and all the documents.
+        """
+        if self.similarity == Similarity.CLS:
+            return torch.einsum("nh, mh -> nm", hq, hd)
+        elif self.similarity == Similarity.COLBERT:
+            scores = torch.einsum("nqh, mdh -> nmqd", hq, hd)
+            max_scores, _ = torch.max(scores, dim=-1)
+            return max_scores.mean(-1)
+        else:
+            raise ValueError(f"Unknown similarity: {self.similarity}")
 
     def _generate_targets(self, batch_size, *, n_docs: int, device: torch.device):
         """Generate targets. Assuming the target document is the first

@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -32,9 +33,12 @@ DEFAULT_ES_BODY = OmegaConf.to_object(
     OmegaConf.load(Path(es_body.__file__).parent / "default.yaml")
 )
 
+logger = logging.getLogger("fz_openqa.index.elasticsearch")
+
 
 class ElasticSearchIndex(Index):
     preprocesing_pipe: Optional[Pipe] = None
+    max_chunksize: int = 10000
 
     def __init__(
         self,
@@ -154,15 +158,29 @@ class ElasticSearchIndex(Index):
         if self.preprocesing_pipe is not None:
             query = self.preprocesing_pipe(query, text_key=self.query_text_key)
 
-        scores, indexes, contents = self.engine.es_search_bulk(
-            self.index_name, query[self.query_text_key], k=k
-        )
+        texts = query[self.query_text_key]
 
+        # search the index
+        search_results = None
+        eff_batch_size = min(max(1, self.max_chunksize // k), len(texts))
+        for i in range(0, len(texts), eff_batch_size):
+            txt_i = texts[i : i + eff_batch_size]
+            logger.debug(f"Querying ES: [{i}/{len(texts)}], batch size: {len(txt_i)}, k={k}")
+            r = self._query_es(k, txt_i)
+
+            if search_results is None:
+                search_results = r
+            else:
+                search_results += r
+
+        return search_results
+
+    def _query_es(self, k, texts):
+        scores, indexes, contents = self.engine.es_search_bulk(self.index_name, texts, k=k)
         if self.analyze:
             analyzed_tokens = self.engine.es_analyze_text(self.index_name, contents)
         else:
             analyzed_tokens = None
-
         return SearchResult(
             score=scores,
             index=indexes,
