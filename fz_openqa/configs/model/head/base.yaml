@@ -1,2 +1,2 @@
-output_size: ${model.hidden_size}
+output_size: 512
 normalize: true

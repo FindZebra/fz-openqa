@@ -278,7 +278,9 @@ class TensorArrowTable(TensorArrowBase):
         if self.are_shapes_equal(self._shapes):
             self._equal_shapes = True
             self._shared_shape = self._shapes[0]
-            logger.info(f"All shapes are equal. Using a the reference shape: {self._shared_shape}.")
+            logger.debug(
+                f"All shapes are equal. Using a the reference shape: {self._shared_shape}."
+            )
 
         else:
             n_unique_per_dims = [
@@ -296,7 +298,7 @@ class TensorArrowTable(TensorArrowBase):
             # set the shapes as [-1, *dims]
             self._shared_shape = self._shapes[0].clone()
             self._shared_shape[0] = -1
-            logger.info(
+            logger.debug(
                 f"Not all shapes are equal. Using the reference shape: {self._shared_shape}."
             )
 

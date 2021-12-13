@@ -69,7 +69,7 @@ class MedQaBuilder(HfDatasetBuilder):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 50, 50]
+    subset_size = [1000, 100, 100]
 
     # number of options
     n_options = 4
@@ -85,9 +85,12 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.attention_mask",
     ]
 
-    def __init__(self, *args, min_answer_length: Optional[int] = None, **kwargs):
+    def __init__(
+        self, *args, min_answer_length: Optional[int] = None, n_query_tokens: int = 1, **kwargs
+    ):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
+        self.n_query_tokens = n_query_tokens
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -138,7 +141,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -151,7 +154,7 @@ class MedQaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=QUERY_TOKEN,
+            spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
             shape=None,
         )
 
@@ -290,7 +293,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 

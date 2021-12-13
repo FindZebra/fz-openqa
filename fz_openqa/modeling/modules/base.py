@@ -93,6 +93,7 @@ class Module(nn.Module, ABC):
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
         head: Union[DictConfig, Head],
         prefix: str = "",
+        **kwargs,
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()

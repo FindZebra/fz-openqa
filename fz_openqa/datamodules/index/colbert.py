@@ -66,6 +66,10 @@ class ColbertIndex(FaissIndex):
     _is_gpu: bool = False
     _max_add_per_gpu = 1 << 25
 
+    def __init__(self, *args, p: int = 10, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.p = p
+
     @property
     def vectors_table(self) -> TensorArrowTable:
         if self._vectors_table is None:
@@ -153,7 +157,7 @@ class ColbertIndex(FaissIndex):
         search_results = None
         for i in range(0, q_vectors.shape[0], eff_batch_size):
             q_vec = q_vectors[i : i + eff_batch_size]
-            r = self._search_vectors(q_vec, k=k, index=self._index, max_sim=self._max_sim)
+            r = self._search_vectors(q_vec, k=k, p=self.p, index=self._index, max_sim=self._max_sim)
 
             if search_results is None:
                 search_results = r
@@ -181,6 +185,7 @@ class ColbertIndex(FaissIndex):
         q_vectors: Tensor,
         *,
         k: int,
+        p: int,
         index: FaissIndex | IndexReplicas,
         max_sim: MaxSim,
         **kwargs,
@@ -192,7 +197,6 @@ class ColbertIndex(FaissIndex):
         start = time.time()
 
         # 2. query the token index
-        p = min(10, max(1, k // 2))
         topk_indices = self._query_to_embedding_ids(q_vectors, p, index=index)
         faiss_time = time.time()
         log.debug(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
@@ -253,8 +257,11 @@ class ColbertIndex(FaissIndex):
         embedding_ids = embedding_ids.view(num_queries, -1)
         return embedding_ids.to(Q.device)
 
-    # def __del__(self):
-    #     super(ColbertIndex, self).__del__()
+    def __del__(self):
+        if self._max_sim is not None:
+            self._max_sim = self._max_sim.to("cpu")
+            del self._max_sim
+        super(ColbertIndex, self).__del__()
 
 
 class MaxSim(nn.Module):
@@ -266,12 +273,7 @@ class MaxSim(nn.Module):
     @torch.no_grad()
     def forward(self, batch: Batch = None, *, k: int, chunk_size: int = 1000) -> Batch:
         if batch is None:
-            # todo: return emtpy tensor
-            maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
-            maxsim_scores = torch.empty(
-                (0, k), dtype=self.vectors.dtype, device=self.vectors.device
-            )
-            return {"pids": maxsim_pids, "scores": maxsim_scores}
+            return self._empty_result(k)
         q_vectors: Tensor = batch["q_vectors"]
         topk_indices: Tensor = batch["topk_indices"]
 
@@ -287,14 +289,36 @@ class MaxSim(nn.Module):
             scores[:, i : i + chunk_size] = self._score(pids[:, i : i + chunk_size], q_vectors)
 
         # 3. take the top-k results given the MaxSim score
-        k = min(k, scores.shape[-1])
+        p = min(k, scores.shape[-1])
         scores = scores.to(torch.float32)
-        _, maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True)
+        _, maxsim_idx = torch.topk(scores, k=p, dim=-1, largest=True, sorted=True)
         # 4. fetch the corresponding document indices and return
         maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
         maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
 
+        if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
+            maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
+
+        # padded
         return {"pids": maxsim_pids, "scores": maxsim_scores}
+
+    def _empty_result(self, k):
+        maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
+        maxsim_scores = torch.empty((0, k), dtype=self.vectors.dtype, device=self.vectors.device)
+        return {"pids": maxsim_pids, "scores": maxsim_scores}
+
+    def _pad_outputs(self, k, maxsim_pids, maxsim_scores):
+        # pad maxsim_scores with nans
+        maxsim_scores = self._pad_to_length(maxsim_scores, k, -torch.inf)
+        # pad maxsim_pids with zeros
+        maxsim_pids = self._pad_to_length(maxsim_pids, k, -1)
+        return maxsim_pids, maxsim_scores
+
+    def _pad_to_length(self, values, k, fill_value=torch.nan):
+        if values.shape[1] < k:
+            return F.pad(values, (0, k - values.shape[1]), value=fill_value)
+        else:
+            return values
 
     def _score(self, pids, q_vectors):
         d_vectors = self._retrieve_pid_vectors(pids)

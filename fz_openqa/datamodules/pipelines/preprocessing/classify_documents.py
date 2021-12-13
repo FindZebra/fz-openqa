@@ -1,6 +1,6 @@
 from datasets import Dataset
 
-from fz_openqa.datamodules.index.pipes import FetchDocuments
+from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ExtractGoldAnswer
 from fz_openqa.datamodules.pipes import FilterKeys
@@ -48,10 +48,8 @@ class FetchAndClassifyDocuments(Sequential):
 
         super().__init__(
             ApplyAsFlatten(
-                Sequential(
-                    FetchDocuments(
-                        corpus_dataset=corpus_dataset, keys=[f"{classifier.document_field}.text"]
-                    ),
+                FetchDocuments(
+                    corpus_dataset=corpus_dataset, keys=[f"{classifier.document_field}.text"]
                 ),
                 input_filter=In([f"{classifier.document_field}.row_idx"]),
                 update=True,

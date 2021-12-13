@@ -30,8 +30,8 @@ from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.colbert import ColbertIndex
-from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
-from fz_openqa.datamodules.index.pipes import SearchCorpus
+from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.utils.datastruct import Batch

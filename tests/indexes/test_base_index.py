@@ -133,6 +133,8 @@ class TestIndex(TestCase, ABC):
         # check the top-1 scores
         for target, scores, idx in zip(self.retrieval_targets, data['score'], data['index']):
             pred = np.argmax(scores, axis=-1)
+            import rich
+            rich.print(scores)
             self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
             # check if output values are sorted
             self.assertTrue(np.all(scores[:-1] >= scores[1:]), "scores are not properly sorted")

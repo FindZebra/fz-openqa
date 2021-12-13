@@ -1,0 +1,11 @@
+model/bert:
+  _target_: ray.tune.choice
+  categories:
+    - bio_bert.yaml
+    - pubmed.yaml
+
+model/head:
+  _target_: ray.tune.choice
+  categories:
+    - cls.yaml
+    - colbert.yaml

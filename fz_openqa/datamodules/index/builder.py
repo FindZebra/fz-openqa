@@ -1,9 +1,12 @@
+import logging
 from copy import copy
 
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.es import ElasticSearchIndex
+
+logger = logging.getLogger(__name__)
 
 
 class IndexBuilder:
@@ -28,3 +31,23 @@ class ColbertIndexBuilder(IndexBuilder):
 
 class ElasticSearchIndexBuilder(IndexBuilder):
     cls = ElasticSearchIndex
+
+
+class FaissOrEsIndexBuilder(IndexBuilder):
+    cls = FaissIndex
+    alt_cls = ElasticSearchIndex
+
+    def __call__(self, **kwargs) -> Index:
+        params = copy(self.params)
+        params.update(kwargs)
+
+        if params.get("model", None) is not None:
+            return self.cls(**params)
+        else:
+            logger.warning("No model specified, using ElasticSearchIndex")
+            return self.alt_cls(**params)
+
+
+class ColbertOrEsIndexBuilder(FaissOrEsIndexBuilder):
+    cls = ColbertIndex
+    alt_cls = ElasticSearchIndex

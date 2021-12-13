@@ -1,3 +1,4 @@
+import unittest
 from copy import deepcopy
 from dataclasses import dataclass
 from unittest import TestCase
@@ -16,6 +17,7 @@ class PipeOutput:
     output: Batch
 
 
+@unittest.skip("output keys are never used. consider removing this feature.")
 class TestPipesOutputKeys(TestCase):
 
     def setUp(self) -> None:

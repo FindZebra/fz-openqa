@@ -13,6 +13,7 @@ eval_batch_size: 20
 num_workers: 4
 pin_memory: True
 persistent_workers: False
+drop_last: False
 
 # global: dataset preprocessing
 add_encoding_tokens: true

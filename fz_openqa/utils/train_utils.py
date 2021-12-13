@@ -160,6 +160,7 @@ def setup_safe_env():
     if platform == "darwin":
         # a few flags to fix MacOS stuff
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
         import multiprocessing
 
         try:
