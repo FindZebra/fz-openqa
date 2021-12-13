@@ -104,7 +104,7 @@ class TestOptionRetriever(TestModel):
                 'tokenizer': self.tokenizer,
                 'max_length': 512,
                 'add_special_tokens': True,
-                'spec_token': None,
+                'spec_tokens': None,
                 }
         preprocess = Parallel(
             FormatAndTokenize(

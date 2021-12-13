@@ -1,16 +1,12 @@
 import os
 import shutil
 import tempfile
-import unittest
 
 import faiss
 from datasets import Dataset
-from pytorch_lightning import Trainer, LightningModule
-from transformers import BertPreTrainedModel, AutoModel
 
 from fz_openqa.datamodules.index import Index, FaissIndex
 from fz_openqa.modeling.zero_shot import ZeroShot
-from fz_openqa.utils.datastruct import Batch
 from tests.indexes.test_base_index import TestIndex
 
 
@@ -33,19 +29,24 @@ class TestFaissIndex(TestIndex):
         shutil.rmtree(self.cache_dir)
 
     @staticmethod
-    def _init_index_with(index_cls: Index.__class__, *, corpus: Dataset, model=None, collate=None, **kwargs) -> Index:
+    def _init_index_with(index_cls: Index.__class__, *, corpus: Dataset, model=None, collate=None,
+                         **kwargs) -> Index:
         return index_cls(dataset=corpus, model=model, batch_size=2,
-                          model_output_keys=['_hq_', '_hd_'],
-                          collate_pipe=collate,
-                          faiss_args={
-                              "factory": "Flat",
-                              "metric_type": faiss.METRIC_INNER_PRODUCT},
-                          persist_cache=False,
-                          **kwargs)
+                         model_output_keys=['_hq_', '_hd_'],
+                         collate_pipe=collate,
+                         faiss_args={
+                             "factory": "Flat",
+                             "metric_type": faiss.METRIC_INNER_PRODUCT},
+                         dtype="float32",
+                         persist_cache=False,
+                         # colbert p value
+                         p=100,
+                         **kwargs)
 
     def _init_index(self) -> Index:
         return TestFaissIndex._init_index_with(self.cls, corpus=self.corpus, model=self.model,
-                                     collate=self.corpus_collate, cache_dir=self.cache_dir)
+                                               collate=self.corpus_collate,
+                                               cache_dir=self.cache_dir)
 
     def test_dill_inspect(self):
         self._test_dill_inspect()

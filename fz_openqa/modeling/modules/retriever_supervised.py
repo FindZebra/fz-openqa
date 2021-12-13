@@ -170,8 +170,5 @@ class RetrieverSupervised(Module):
 
     def _generate_targets(self, batch_size, *, n_docs: int, device: torch.device):
         """Generate targets. Assuming the target document is the first
-        of each group, the targets are:
-          * 0*n_docs for the first `n_docs` items
-          * 1*n_docs for the following `n_docs` items
-          * ..."""
+        of each group, the targets are [0, 1*n_docs, ..., batch_size * n_docs]."""
         return torch.arange(start=0, end=n_docs * batch_size, step=n_docs, device=device).long()

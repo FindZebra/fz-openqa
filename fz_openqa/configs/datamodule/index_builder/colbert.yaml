@@ -8,4 +8,5 @@ faiss_args:
   metric_type: 0 # faiss.METRIC_INNER_PRODUCT
 
 faiss_train_size: 1000
+p: 30
 _id: colbert
