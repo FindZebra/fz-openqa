@@ -358,6 +358,13 @@ class EnxTwMedQaBuilder(MedQaBuilder):
         return dataset
 
     def load_base_dataset(self) -> DatasetDict:
+        """Loads english and taiwanese MedQA and conatenates them"""
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        return concatenate_datasets(dsets)
+        dsets = [load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        dsets_dict = DatasetDict()
+        for split in dsets[0].keys():
+            dsets[0][split]
+            split_dsets = concatenate_datasets([d[split] for d in dsets])
+            dsets_dict[split] = split_dsets
+
+        return dsets_dict
