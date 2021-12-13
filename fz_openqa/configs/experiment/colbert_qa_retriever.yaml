@@ -3,12 +3,12 @@
 defaults:
   - base
   - override /model: retriever
-  - override /model/head: cls # todo colbert
+  - override /model/head: colbert # todo colbert
   - override /model/bert: pubmed # todo: pubmed
   - override /callbacks:
       - checkpoint
       - progress_bar
-  - override /datamodule/index_builder: dense # todo colbert
+  - override /datamodule/index_builder: colbert # todo colbert
 
 base:
   seed: null
@@ -76,6 +76,8 @@ datamodule:
   builder:
     batch_size: 100
     writer_batch_size: 10000
+    dataset_builder:
+      n_query_tokens: 10
     corpus_builder:
       use_subset: false
 

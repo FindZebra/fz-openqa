@@ -1,13 +1,9 @@
 from typing import Any
 from typing import Optional
-from typing import Union
 
-import rich
 import torch
-from omegaconf import DictConfig
 from torch.nn import functional as F
 
-from ...utils import maybe_instantiate
 from .option_retriever import Similarity
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
@@ -44,11 +40,13 @@ class RetrieverSupervised(Module):
 
     def __init__(
         self,
+        compute_loss_on_device_zero: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
+        self.compute_loss_on_device_zero = compute_loss_on_device_zero
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -111,36 +109,45 @@ class RetrieverSupervised(Module):
         # check features, check that the first document of each question is positive
         check_only_first_doc_positive(batch)
         output = self._forward(batch, _compute_similarity=False, **kwargs)
-        output = self._compute_loss(output)
+        if not self.compute_loss_on_device_zero:
+            output = self._compute_loss(output)
         return output
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
-        gather h_q and h_e from all devices to the device 0
-        and compute the similarity matrix between the questions and all the documents.
-        This results in a matrix of shape [batch_size, batch_size * n_docs].
+        if `self.self.compute_loss_on_device_zero` is False, gather
+        `h_q` and `h_d` from all devices to the device 0 and compute the similarity matrix
+        between the questions and all the documents.
+        Else, gather logits and targets + average losses.
         """
+
+        if self.compute_loss_on_device_zero:
+            output = self._compute_loss(output)
 
         # average losses
         for k in ["loss"]:
             y = output.get(k, None)
             if y is not None:
                 output[k] = y.mean()
+
         return output
 
     def _compute_loss(self, output):
-        # todo: allow computing this on each devide separately
-        # todo: mask out identical documents
-        # compute the scoring matrix
+        """This results in a matrix of shape [batch_size, batch_size * n_docs]."""
         hq, hd = (output.pop(k) for k in ["_hq_", "_hd_"])
-        score_matrix = self.compute_similarity(hq, hd)  # [bs x bs*n_docs]
+
+        # define the score matrix of shape [batch_size, batch_size * n_docs]
+        score_matrix = self.compute_similarity(hq, hd)
+
+        # generate targets [0, 1*n_docs, ..., batch_size * n_docs]
         targets = self._generate_targets(
             len(score_matrix),
             n_docs=hd.shape[0] // hq.shape[0],
             device=hd.device,
         )
+
         # compute the loss an prepare the output
-        loss = F.cross_entropy(score_matrix, targets, reduction="mean")
+        loss = F.cross_entropy(score_matrix, targets, reduction="none")
         output["loss"] = loss.mean()
         output["n_options"] = score_matrix.shape[1]
         output["_logits_"] = score_matrix.detach()
@@ -167,5 +174,4 @@ class RetrieverSupervised(Module):
           * 0*n_docs for the first `n_docs` items
           * 1*n_docs for the following `n_docs` items
           * ..."""
-        one_to_bs = torch.arange(start=0, end=batch_size, device=device).long()
-        return n_docs * one_to_bs
+        return torch.arange(start=0, end=n_docs * batch_size, step=n_docs, device=device).long()
