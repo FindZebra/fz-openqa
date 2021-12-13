@@ -172,16 +172,6 @@ class TestOptionRetriever(TestModel):
         self.assertEqual([self.batch_size, self.n_options],
                          list(output['_hq_'].shape[:2]))
 
-
-    @unittest.skip("not implemented")
-    def test__reduce_step_output(self):
-        data = {"loss": torch.tensor([0.4, 0.6]),
-                "logp": torch.tensor([0.4, 0.6])}
-
-        output = self.model._reduce_step_output(data)
-        for key in output:
-            self.assertEqual(output[key], 0.5)
-
     @torch.enable_grad()
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
