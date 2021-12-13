@@ -2,6 +2,7 @@ import json
 import re
 
 import datasets
+import rich
 
 TXT_PATTERN = r"^.*\.txt$"
 
@@ -21,7 +22,7 @@ _DESCRIPTION = "A class to load the english MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1665FL0D-QZwW-8os8xmxSXubw3jn1-ki/view?usp=sharing"
+_URL = "https://drive.google.com/file/d/1OkJJxgGE9QRQF83g--JZVFUzJkEint6B/view?usp=sharing"
 
 
 class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
@@ -38,6 +39,7 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
                     "idx": datasets.Value("int32"),
                     "text": datasets.Value("string"),
                     "title": datasets.Value("string"),
+                    "cui": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -67,11 +69,16 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
         cleanr = re.compile(r"(<.*?>)|(\[.*?\])")
 
         with open(filepath, "r") as f:
-            data = json.load(f)
-            for idx, article in enumerate(data):
+            for idx, line in enumerate(f.readlines()):
+                article = json.loads(line)
+
+                # cleanup the text
                 text = re.sub(cleanr, "", article["raw_content"])
+
+                # yield the data
                 yield idx, {
                     "text": text,
                     "title": article["title"],
+                    "cui": article["cui"],
                     "idx": idx,
                 }
