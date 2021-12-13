@@ -93,7 +93,7 @@ class RetrieverSupervised(Module):
             output.update(self._forward_document(batch, **kwargs))
 
         if _compute_similarity:
-            output["score"] = self.similarity(output["_hq_"], output["_hd_"])
+            output["score"] = self.compute_similarity(output["_hq_"], output["_hd_"])
 
         return output
 
