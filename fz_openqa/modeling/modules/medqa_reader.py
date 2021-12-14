@@ -60,34 +60,31 @@ class MedQaReader(Module):
         qd_batch = self._concat_questions_and_documents(batch, fields=["question", "document"])
         # pprint_batch(qd_batch)
         # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
-        # rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
-        # rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
-        # rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
-        # rich.print(
-        #     f"[red] {[qd_batch['input_ids'][0][i].tolist() for i in range(4)]}"
-        # )  # noqa: E501
-        # rich.print(
-        #     f"[red] {[self.tokenizer.decode(qd_batch['input_ids'][0][i].tolist()) for i in range(4)]}"  # noqa: E501
-        # )
-        # exit()
-        # rich.print(f"[red] {answer_targets.shape}")
-        # pprint_batch(qd_batch)
+        rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
+        rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
+        rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
+        rich.print(
+            f"[red] {[qd_batch['input_ids'][0][i].tolist() for i in range(4)]}"
+        )  # noqa: E501
+        rich.print(
+            f"[red] {[self.tokenizer.decode(qd_batch['input_ids'][0][i].tolist()) for i in range(4)]}"  # noqa: E501
+        )
+        exit()
 
-        return self.bert(**qd_batch, labels=targets, return_dict=True)
+        return self.bert(
+            qd_batch["input_ids"], qd_batch["attention_mask"], labels=targets, return_dict=True
+        )
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
 
-        # compute the reader loss
         answer_targets: Tensor = batch["answer.target"]
 
         # forward pass through the reader model
         outputs = self._forward(batch, targets=answer_targets, **kwargs)
 
-        loss, logits = outputs[:2]
-
         return {
-            "loss": loss,
-            "_logits_": logits.detach(),
+            "loss": outputs.loss,
+            "_answer_logits_": outputs.logits.detach(),
             "_answer_targets_": answer_targets.detach(),
         }
 
@@ -113,19 +110,26 @@ class MedQaReader(Module):
             "document",
         }, "Question and document fields must be provided."
         bs, n_options, *_ = batch["question.input_ids"].shape
-        rich.print(bs, n_options)
+        # rich.print(bs, n_options)
         batch = self._flatten_qd(batch)
 
         inputs = [
             {
-                "input_ids": batch[f"{key}.input_ids"].view(
-                    -1, *batch[f"{key}.input_ids"].shape[2:]
+                "input_ids": batch["question.input_ids"].view(
+                    -1, *batch["question.input_ids"].shape[2:]
                 )[:, 1:],
-                "attention_mask": batch[f"{key}.attention_mask"].view(
-                    -1, *batch[f"{key}.attention_mask"].shape[2:]
+                "attention_mask": batch["question.attention_mask"].view(
+                    -1, *batch["question.attention_mask"].shape[2:]
                 )[:, 1:],
-            }
-            for key in fields
+            },
+            {
+                "input_ids": batch["document.input_ids"].view(
+                    -1, *batch["document.input_ids"].shape[2:]
+                ),
+                "attention_mask": batch["document.attention_mask"].view(
+                    -1, *batch["document.attention_mask"].shape[2:]
+                ),
+            },
         ]
 
         # concatenate keys across the time dimension, CLS tokens are removed
@@ -157,9 +161,7 @@ class MedQaReader(Module):
         keys = ["document.input_ids", "document.attention_mask"]
         d_batch = {k: batch[k][:, :, :, 1:] for k in keys}
         for key in keys:
-            cls_tokens = batch[key][:, :, 0, :1].squeeze(0)
             d_batch[key] = d_batch[key].contiguous().view(*d_batch[key].shape[:-2], -1)
-            d_batch[key] = torch.cat([cls_tokens, d_batch[key]], dim=-1)
 
         # join question features and document features
         keys = ["question.input_ids", "question.attention_mask"]
@@ -170,7 +172,7 @@ class MedQaReader(Module):
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         answer_logits, answer_targets = (
-            output.get(k, None) for k in ("_logits_", "_answer_targets_")
+            output.get(k, None) for k in ("_answer_logits_", "_answer_targets_")
         )
         self.answer_metrics.update(split, answer_logits, answer_targets)
 
