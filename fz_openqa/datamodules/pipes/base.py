@@ -16,6 +16,7 @@ from fz_openqa.datamodules.component import Component
 from fz_openqa.datamodules.pipes.control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import Eg
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import get_batch_eg
 
 logger = logging.getLogger(__name__)
@@ -341,6 +342,7 @@ class Pipe(Component):
         desc: Optional[str] = None,
         batch_size: Optional[int] = None,
         writer_batch_size: Optional[int] = None,
+        deterministic_fingerprint: bool = False,
         **kwargs,
     ) -> Dataset:
         """
@@ -360,6 +362,9 @@ class Pipe(Component):
             Batch size for the pyarrow writer
         kwargs
             Additional attributes passed to the pipe
+        deterministic_fingerprint
+            If True, the `new_fingerprint` will de defined
+            using `Pipe.fingerprint()` and `Dataset._fingerprint`
         Returns
         -------
         Dataset
@@ -369,6 +374,17 @@ class Pipe(Component):
             if key in kwargs.keys():
                 raise ValueError(f"{key} cannot be set, it is always set as True.")
 
+        if deterministic_fingerprint:
+            new_fingerprint = get_fingerprint(
+                {
+                    "dataset": dataset._fingerprint,
+                    "pipe": self.fingerprint(reduce=True),
+                    "params": kwargs,
+                }
+            )
+        else:
+            new_fingerprint = None
+
         return dataset.map(
             self,
             num_proc=num_proc,
@@ -377,5 +393,6 @@ class Pipe(Component):
             batched=True,
             with_indices=True,
             writer_batch_size=writer_batch_size,
+            new_fingerprint=new_fingerprint,
             **kwargs,
         )
