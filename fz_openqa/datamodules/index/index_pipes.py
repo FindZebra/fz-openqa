@@ -28,53 +28,7 @@ class SearchCorpus(ApplyAsFlatten):
         assert "input_filter" not in kwargs
         self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
-        pipe = SearchCorpusFlat(index, **kwargs)
-        super().__init__(pipe, level=level, input_filter=input_filter, update_idx=True)
-
-
-class SearchCorpusFlat(Pipe):
-    """Search a Corpus object given a query"""
-
-    def __init__(
-        self,
-        index: Index,
-        *,
-        k: Optional[int] = None,
-        index_output_key: str = "document.row_idx",
-        score_output_key: str = "document.retrieval_score",
-        analyzed_output_key: str = "document.analyzed_tokens",
-        **kwargs,
-    ):
-        super(SearchCorpusFlat, self).__init__(**kwargs)
-        self.index = index
-        self.index_output_key = index_output_key
-        self.score_output_key = score_output_key
-        self.analyzed_output_key = analyzed_output_key
-        self.k = k
-
-    def _call_batch(
-        self,
-        query: Batch,
-        *,
-        k: Optional[int] = None,
-        **kwargs,
-    ):
-        # update args
-        k = k or self.k
-
-        # query the index
-        search_result = self.index.search(query, k=k, **kwargs)
-
-        # store as a dictionary and return
-        output = {
-            self.index_output_key: search_result.index,
-            self.score_output_key: search_result.score,
-        }
-
-        if search_result.tokens is not None:
-            output[self.analyzed_output_key] = search_result.tokens
-
-        return output
+        super().__init__(index, level=level, input_filter=input_filter, update_idx=True)
 
 
 class FetchDocuments(Pipe):

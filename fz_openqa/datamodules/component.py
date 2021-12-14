@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from abc import ABCMeta
 from copy import deepcopy
@@ -16,7 +18,7 @@ from fz_openqa.utils.json_struct import apply_to_json_struct
 logger = logging.getLogger(__name__)
 
 
-def leaf_to_json_struct(v: Any, **kwargs) -> Union[Dict, List]:
+def leaf_to_json_struct(v: Any, **kwargs) -> Dict | List:
     """Convert a leaf value into a json structure."""
     if isinstance(v, Component):
         return v.to_json_struct(**kwargs)
@@ -46,10 +48,13 @@ class Component:
     Attributes
     id
        An identifier for the component.
+    no_fingerprint
+       list of attributes to exclude from the fingerprint.
     """
 
     __metaclass__ = ABCMeta
     id: Optional[str] = None
+    no_fingerprint: Optional[List[str]] = None
 
     def __init__(self, *, id: Optional[str] = None, **kwargs):
         """
@@ -63,7 +68,7 @@ class Component:
         if id is not None:
             self.id = id
 
-    def dill_inspect(self, reduce=True) -> Union[bool, Dict[str, bool]]:
+    def dill_inspect(self, reduce=True) -> bool | Dict[str, bool]:
         """
         Inspect the dill representation of the object.
 
@@ -117,15 +122,15 @@ class Component:
             logger.warning(f"Failed to fingerprint {x}: {ex}")
 
     @staticmethod
-    def safe_fingerprint(x: Any, reduce: bool = False) -> Union[Dict, str]:
+    def safe_fingerprint(x: Any, reduce: bool = False) -> Dict | str:
         if isinstance(x, Component):
             return x.fingerprint(reduce=reduce)
         else:
             return Component._fingerprint(x)
 
-    def fingerprint(self, reduce=False) -> Union[str, Dict[str, Any]]:
+    def fingerprint(self, reduce=False) -> str | Dict[str, Any]:
         """
-        Return a fingerprint(s) of the object.
+        Return a fingerprint of the object. All attributes stated in `no_fingerprint` are excluded.
 
         Returns
         -------
@@ -133,9 +138,10 @@ class Component:
             fingerprint(s) (hex-digested hash of the object),
             allows both a string and a nested structure of strings.
         """
-        data = self.to_json_struct()
-        if type(self).__name__.lower() == "predict":
-            rich.print(data)
+
+        # get the json structure of the object, and exclude all parameters
+        # stated in `no_fingerprint`.
+        data = self.to_json_struct(exclude_no_recursive=self.no_fingerprint)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
             """return the fingerprint, excepts if key==__name__"""
@@ -152,7 +158,11 @@ class Component:
         return fingerprints
 
     def to_json_struct(
-        self, append_self: bool = False, exclude: Optional[List[str]] = None, **kwargs
+        self,
+        append_self: bool = False,
+        exclude: Optional[List[str]] = None,
+        exclude_no_recursive: Optional[List[str]] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Return a dictionary representation of the object.
@@ -167,6 +177,11 @@ class Component:
 
         if exclude is None:
             exclude = []
+
+        if exclude_no_recursive is None:
+            exclude_no_recursive = []
+
+        exclude = exclude + exclude_no_recursive
 
         data = {"__name__": type(self).__name__, **attributes}
         if append_self:

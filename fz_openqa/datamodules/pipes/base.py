@@ -9,6 +9,7 @@ from typing import List
 from typing import Optional
 from typing import T
 
+import datasets
 from datasets import Dataset
 from datasets import DatasetDict
 
@@ -140,9 +141,10 @@ class Pipe(Component):
             The output data
         """
 
-        raise TypeError(f"{type(self).__name__} does not support {type(data).__name__}.")
+        raise TypeError(f"{type(self).__name__} does not support {type(data)}.")
 
     @__call__.register(dict)
+    @__call__.register(datasets.arrow_dataset.Batch)
     def _(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         """
         Apply the pipe to a batch of data. Potentially filter the keys using the input_filter.
@@ -270,7 +272,9 @@ class Pipe(Component):
         Dataset
             Processed dataset
         """
-        new_datasets = {split: self._call_dataset(d, **kwargs) for split, d in dataset.items()}
+        new_datasets = {
+            split: self._call_dataset(d, split=split, **kwargs) for split, d in dataset.items()
+        }
         return DatasetDict(new_datasets)
 
     @abstractmethod
@@ -314,25 +318,6 @@ class Pipe(Component):
             The output batch
         """
         raise NotImplementedError(f"_call_egs is not implemented for {type(self)}")
-
-    def _filter_keys(self, batch: Batch) -> Batch:
-        """
-        Filter the batch using the input_filter.
-
-        Parameters
-        ----------
-        batch
-            batch to filter
-
-        Returns
-        -------
-        Batch
-            Filtered batch
-        """
-        if self.input_filter is None:
-            return batch
-
-        return {k: v for k, v in batch.items() if self.input_filter(k)}
 
     def _call_dataset(
         self,
@@ -386,7 +371,7 @@ class Pipe(Component):
             new_fingerprint = None
 
         return dataset.map(
-            self,
+            self._call_batch,
             num_proc=num_proc,
             desc=desc,
             batch_size=batch_size,
@@ -396,3 +381,22 @@ class Pipe(Component):
             new_fingerprint=new_fingerprint,
             **kwargs,
         )
+
+    def _filter_keys(self, batch: Batch) -> Batch:
+        """
+        Filter the batch using the input_filter.
+
+        Parameters
+        ----------
+        batch
+            batch to filter
+
+        Returns
+        -------
+        Batch
+            Filtered batch
+        """
+        if self.input_filter is None:
+            return batch
+
+        return {k: v for k, v in batch.items() if self.input_filter(k)}
