@@ -7,6 +7,10 @@ from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import T
+
+from datasets import Dataset
+from datasets import DatasetDict
 
 from fz_openqa.datamodules.component import Component
 from fz_openqa.datamodules.pipes.control.condition import Condition
@@ -40,6 +44,7 @@ class Pipe(Component):
     requires_keys: Optional[List[str]] = None
     _allows_update: bool = True
     _allows_input_filter: bool = True
+    _backend: Optional[str] = None
 
     def __init__(
         self,
@@ -114,7 +119,30 @@ class Pipe(Component):
         return get_batch_eg(batch=batch, idx=idx, filter_op=filter_op)
 
     @singledispatchmethod
-    def __call__(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+    def __call__(self, data: T, **kwargs) -> T:
+        """
+        Apply the pipe to a data. Potentially filter the keys using the input_filter.
+        This method is dispatched on the type of the input data.
+
+        Parameters
+        ----------
+        data
+            The input data
+        idx
+            indexes of the batch examples
+        kwargs
+            additional arguments
+
+        Returns
+        -------
+        Batch
+            The output data
+        """
+
+        raise TypeError(f"{type(self).__name__} does not support {type(data).__name__}.")
+
+    @__call__.register(dict)
+    def _(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         """
         Apply the pipe to a batch of data. Potentially filter the keys using the input_filter.
         The output of `_call_batch()` is used to update the input batch (before filtering)
@@ -136,7 +164,7 @@ class Pipe(Component):
         """
 
         # filter some input keys
-        _batch = self._filter_batch(batch)
+        _batch = self._filter_keys(batch)
 
         # process the batch
         output = self._call_batch(_batch, idx=idx, **kwargs)
@@ -147,25 +175,6 @@ class Pipe(Component):
             output = batch
 
         return output
-
-    def _filter_batch(self, batch: Batch) -> Batch:
-        """
-        Filter the batch using the input_filter.
-
-        Parameters
-        ----------
-        batch
-            batch to filter
-
-        Returns
-        -------
-        Batch
-            Filtered batch
-        """
-        if self.input_filter is None:
-            return batch
-
-        return {k: v for k, v in batch.items() if self.input_filter(k)}
 
     @__call__.register(list)
     def _(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
@@ -197,10 +206,71 @@ class Pipe(Component):
             raise AttributeError("Pipe.update is set to True, cannot update a list of examples")
 
         # filter some input keys
-        _egs = list(map(self._filter_batch, examples))
+        _egs = list(map(self._filter_keys, examples))
 
         # process the batch
         return self._call_egs(_egs, idx=idx, **kwargs)
+
+    @__call__.register(Dataset)
+    def _(
+        self,
+        dataset: Dataset,
+        *,
+        num_proc: int = 4,
+        desc: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        writer_batch_size: Optional[int] = None,
+        **kwargs,
+    ) -> Dataset:
+        """
+        Apply the Pipe to a `Dataset`
+
+        Parameters
+        ----------
+        dataset
+            A Huggingface Dataset object
+        num_proc
+            Number of workers
+        desc
+            Description for the progress bar
+        batch_size
+            Batch size for each worker
+        writer_batch_size
+            Batch size for the pyarrow writer
+        kwargs
+            Additional attributes passed to the pipe
+        Returns
+        -------
+        Dataset
+            Processed dataset
+        """
+        return self._call_dataset(
+            dataset,
+            num_proc=num_proc,
+            desc=desc,
+            batch_size=batch_size,
+            writer_batch_size=writer_batch_size,
+            **kwargs,
+        )
+
+    @__call__.register(DatasetDict)
+    def _(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
+        """
+        Apply the Pipe to a `DatasetDict`
+
+        Parameters
+        ----------
+        dataset
+            A Huggingface DatasetDict object
+        kwargs
+            Additional attributes passed to `_call_dataset`
+        Returns
+        -------
+        Dataset
+            Processed dataset
+        """
+        new_datasets = {split: self._call_dataset(d, **kwargs) for split, d in dataset.items()}
+        return DatasetDict(new_datasets)
 
     @abstractmethod
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
@@ -243,3 +313,69 @@ class Pipe(Component):
             The output batch
         """
         raise NotImplementedError(f"_call_egs is not implemented for {type(self)}")
+
+    def _filter_keys(self, batch: Batch) -> Batch:
+        """
+        Filter the batch using the input_filter.
+
+        Parameters
+        ----------
+        batch
+            batch to filter
+
+        Returns
+        -------
+        Batch
+            Filtered batch
+        """
+        if self.input_filter is None:
+            return batch
+
+        return {k: v for k, v in batch.items() if self.input_filter(k)}
+
+    def _call_dataset(
+        self,
+        dataset: Dataset,
+        *,
+        num_proc: int = 4,
+        desc: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        writer_batch_size: Optional[int] = None,
+        **kwargs,
+    ) -> Dataset:
+        """
+        Apply the Pipe to a `Dataset`
+
+        Parameters
+        ----------
+        dataset
+            A Huggingface Dataset object
+        num_proc
+            Number of workers
+        desc
+            Description for the progress bar
+        batch_size
+            Batch size for each worker
+        writer_batch_size
+            Batch size for the pyarrow writer
+        kwargs
+            Additional attributes passed to the pipe
+        Returns
+        -------
+        Dataset
+            Processed dataset
+        """
+        for key in ["batched", "with_indices"]:
+            if key in kwargs.keys():
+                raise ValueError(f"{key} cannot be set, it is always set as True.")
+
+        return dataset.map(
+            self,
+            num_proc=num_proc,
+            desc=desc,
+            batch_size=batch_size,
+            batched=True,
+            with_indices=True,
+            writer_batch_size=writer_batch_size,
+            **kwargs,
+        )
