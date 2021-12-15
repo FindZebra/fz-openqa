@@ -159,7 +159,6 @@ class Predict(Pipe):
         self,
         model: pl.LightningModule | nn.Module | Callable,
         model_output_keys: List[str],
-        output_key: str = PREDICT_VECTOR_NAME,
         output_dtype: str = "float32",
         requires_cache: bool = False,
         **kwargs,
@@ -190,7 +189,6 @@ class Predict(Pipe):
         self.model = model
         self.requires_cache = requires_cache
         self.model_output_keys = model_output_keys
-        self.output_key = output_key
         self.dtype = output_dtype
 
     def invalidate_cache(self):
@@ -205,7 +203,7 @@ class Predict(Pipe):
         batch: Batch,
         idx: List[int] = None,
         split: Optional[Split] = None,
-        format: OutputFormat = OutputFormat.TORCH,
+        format: OutputFormat = OutputFormat.NUMPY,
         **kwargs,
     ) -> Batch:
         """

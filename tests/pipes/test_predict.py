@@ -90,13 +90,12 @@ class TestPredict(TestCase):
         for i in range(len(new_dataset)):
             row = cast_values_to_numpy(new_dataset[i], dtype=np.float32)
             exp_row = cast_values_to_numpy(get_batch_eg(expected, idx=i), dtype=np.float32)
-            self.assertTrue((row["new_vector"] == exp_row["vector"]).all())
+            self.assertTrue((row[Predict.output_key] == exp_row[Predict.output_key]).all())
 
     def _init_pipe(self, model):
         return Predict(model=model,
                        requires_cache=True,
-                       model_output_keys=["vector"],
-                       output_key="new_vector")
+                       model_output_keys=["vector"])
 
     def test_cached_predict_dataset_dict(self):
         """Test that the output of the pipe with caching is
@@ -148,4 +147,4 @@ class TestPredict(TestCase):
             for i in range(len(new_dset)):
                 row = cast_values_to_numpy(new_dset[i], dtype=np.float32)
                 exp_row = cast_values_to_numpy(get_batch_eg(expected_dset, idx=i), dtype=np.float32)
-                self.assertTrue((row["new_vector"] == exp_row["vector"]).all())
+                self.assertTrue((row[Predict.output_key] == exp_row[Predict.output_key]).all())
