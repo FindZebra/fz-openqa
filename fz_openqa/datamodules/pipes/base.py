@@ -1,6 +1,7 @@
 import logging
 from abc import abstractmethod
 from copy import copy
+from functools import partial
 from functools import singledispatchmethod
 from typing import Any
 from typing import Callable
@@ -10,8 +11,10 @@ from typing import Optional
 from typing import T
 
 import datasets
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
+from transformers import BatchEncoding
 
 from fz_openqa.datamodules.component import Component
 from fz_openqa.datamodules.pipes.control.condition import Condition
@@ -19,6 +22,8 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import Eg
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import get_batch_eg
+from fz_openqa.utils.json_struct import reduce_json_struct
+from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,7 @@ class Pipe(Component):
     _allows_update: bool = True
     _allows_input_filter: bool = True
     _backend: Optional[str] = None
+    _max_num_proc: Optional[int] = None
 
     def __init__(
         self,
@@ -121,7 +127,17 @@ class Pipe(Component):
         return get_batch_eg(batch=batch, idx=idx, filter_op=filter_op)
 
     @singledispatchmethod
-    def __call__(self, data: T, **kwargs) -> T:
+    def __call__(
+        self,
+        data: T,
+        idx: Optional[List[int]] = None,
+        num_proc: int = 4,
+        desc: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        writer_batch_size: Optional[int] = None,
+        deterministic_fingerprint: bool = False,
+        **kwargs,
+    ) -> T:
         """
         Apply the pipe to a data. Potentially filter the keys using the input_filter.
         This method is dispatched on the type of the input data.
@@ -132,6 +148,14 @@ class Pipe(Component):
             The input data
         idx
             indexes of the batch examples
+        num_proc
+            For `Dataset` input only: number of processes to use
+        desc
+            For `Dataset` input only: description for the progress bar
+        writer_batch_size
+            For `Dataset` input only: batch size for the pyarrow writer
+        deterministic_fingerprint
+            For `Dataset` input only: set `new_fingerprint` using `Pipe.get_fingerprint`.
         kwargs
             additional arguments
 
@@ -143,8 +167,9 @@ class Pipe(Component):
 
         raise TypeError(f"{type(self).__name__} does not support {type(data)}.")
 
-    @__call__.register(dict)
     @__call__.register(datasets.arrow_dataset.Batch)
+    @__call__.register(BatchEncoding)
+    @__call__.register(dict)
     def _(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         """
         Apply the pipe to a batch of data. Potentially filter the keys using the input_filter.
@@ -325,9 +350,10 @@ class Pipe(Component):
         *,
         num_proc: int = 4,
         desc: Optional[str] = None,
-        batch_size: Optional[int] = None,
-        writer_batch_size: Optional[int] = None,
+        batch_size: int = 100,
+        writer_batch_size: int = 1000,
         deterministic_fingerprint: bool = False,
+        keep_in_memory: bool = False,
         **kwargs,
     ) -> Dataset:
         """
@@ -370,8 +396,13 @@ class Pipe(Component):
         else:
             new_fingerprint = None
 
+        # clip the number of workers
+        if self.max_num_proc is not None:
+            num_proc = min(num_proc, self.max_num_proc)
+
+        # process the dataset using `Dataset.map`
         return dataset.map(
-            self._call_batch,
+            self,
             num_proc=num_proc,
             desc=desc,
             batch_size=batch_size,
@@ -379,8 +410,19 @@ class Pipe(Component):
             with_indices=True,
             writer_batch_size=writer_batch_size,
             new_fingerprint=new_fingerprint,
-            **kwargs,
+            keep_in_memory=keep_in_memory,
+            fn_kwargs=kwargs,
         )
+
+    @property
+    def max_num_proc(self) -> Optional[int]:
+        """
+        Maximum number of workers to use, check all children and takes the minimum value
+        """
+        all_max_num_procs = self.to_json_struct(
+            include_only=["_max_num_proc"], include_class_attributes=True
+        )
+        return reduce_json_struct(all_max_num_procs, reduce_op=min)
 
     def _filter_keys(self, batch: Batch) -> Batch:
         """

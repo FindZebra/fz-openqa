@@ -32,7 +32,7 @@ class PlotTopMatchTriggers(Analytic):
         n_pos = dset["document.match_score"]
 
         # Extract triggers for only positive matches
-        n_triggers = [y[0] for x, y, z in zip(n_pos, n_triggers) if sum(x) > 0]
+        n_triggers = [y[0] for x, y in zip(n_pos, n_triggers) if sum(x) > 0]
         # Flatten list
         triggers = list(itertools.chain(*n_triggers))
 

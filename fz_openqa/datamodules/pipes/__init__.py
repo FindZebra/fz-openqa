@@ -10,6 +10,7 @@ from .basic import FilterKeys
 from .basic import GetKey
 from .basic import Identity
 from .basic import Lambda
+from .basic import Partial
 from .basic import RenameKeys
 from .basic import ReplaceInKeys
 from .batchify import AsBatch

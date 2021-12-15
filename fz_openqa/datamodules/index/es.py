@@ -119,19 +119,13 @@ class ElasticSearchIndex(Index):
 
         self.is_indexed = True
 
-    def _preprocess_batch(self, batch: Batch, **kwargs) -> Batch:
-        """Preprocess the batch before indexing"""
-        if self.preprocessing_pipe is not None:
-            batch = self.preprocessing_pipe(batch)
-        return batch
-
     def _preprocess_query(self, batch: Batch, **kwargs) -> Batch:
         """Preprocess the batch before query"""
         if self.preprocessing_pipe is not None:
             batch = self.preprocessing_pipe(batch)
         return batch
 
-    def search(self, query: Batch, *, k: int, **kwargs) -> SearchResult:
+    def _search_chunk(self, query: Batch, *, k: int, **kwargs) -> SearchResult:
         """Search the index for the given query."""
 
         # fetch the texts

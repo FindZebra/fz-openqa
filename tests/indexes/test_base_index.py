@@ -114,7 +114,7 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
-        output = index.search(query, k=self.k)
+        output = index._search_chunk(query, k=self.k)
         # check the output type
         self.assertIsInstance(output, SearchResult)
 

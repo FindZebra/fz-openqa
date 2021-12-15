@@ -1,6 +1,9 @@
 import os
 import sys
 
+from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.index.base import IndexMode
+from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -26,16 +29,12 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.colbert import ColbertIndex
+from fz_openqa.datamodules.index import ElasticSearchIndex, FaissIndex, Index
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
-from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -123,8 +122,10 @@ def run(config: DictConfig) -> None:
 
     # init the index
     IndexCls = ColbertIndex if use_colbert else FaissIndex
+    if config.get("use_es", False):
+        IndexCls = ElasticSearchIndex
     logger.info(f"Initialize index <{IndexCls.__name__}>")
-    index = IndexCls(
+    index: Index = IndexCls(
         dataset=corpus,
         model=model,
         trainer=trainer,
@@ -146,19 +147,16 @@ def run(config: DictConfig) -> None:
         dtype=config.get("dtype", "float32"),
         progress_bar=True,
     )
-    rich.print(index.is_indexed)
-    rich.print(index.ntotal)
+    rich.print(f"> index: {index}")
 
-    # setup search pipe (query the indexes from the corpus)
-    search = SearchCorpus(index, k=5)
     # setup the fetch pipe (fetch all the other fields from the corpus)
     fetcher = FetchNestedDocuments(corpus_dataset=corpus_builder(), collate_pipe=collate_fn)
     query = collate_fn([corpus[i] for i in range(3)])
     query: Batch = {str(k).replace("document.", "question."): v for k, v in query.items()}
 
     # search for one batch
-    pprint_batch(query, "query")
-    output = search(query)
+    pprint_batch(query, f"query {type(query)}")
+    output = index(query, k=5)
 
     # format the output
     pprint_batch(output, "search result")
@@ -175,11 +173,19 @@ def run(config: DictConfig) -> None:
             score = eg["document.retrieval_score"][j]
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
-    # alternatively, you can search for a whole dataloader:
-    outputs = index.search(corpus, k=3, collate_fn=collate_fn, trainer=trainer)
-    for search_results in outputs:
-        pprint_batch(vars(search_results), "search whole dataset - results")
-        break
+    # alternatively, you can search for a whole dataset:
+    query_dset = corpus.rename_columns(
+        {
+            "document.text": "question.text",
+            "document.input_ids": "question.input_ids",
+            "document.attention_mask": "question.attention_mask",
+        }
+    )
+
+    # search for the whole dataset
+    question_collate = MedQaBuilder.get_collate_pipe(corpus_builder)
+    query_dset = index(query_dset, k=3, collate_fn=question_collate, trainer=trainer)
+    pprint_batch(query_dset[:3], "search whole dataset - results")
 
 
 if __name__ == "__main__":

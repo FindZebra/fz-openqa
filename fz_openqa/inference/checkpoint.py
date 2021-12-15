@@ -4,6 +4,7 @@ from typing import Optional
 from typing import Union
 
 import datasets
+import rich
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
@@ -50,6 +51,14 @@ class CheckpointLoader:
         checkpoint_dir = maybe_download_weights(checkpoint_dir, cache_dir=cache_dir)
         self.checkpoint_dir = Path(checkpoint_dir)
         assert self.checkpoint_dir.is_dir(), f"{checkpoint_dir} is not a directory"
+
+        # if the directory contains only a single directory, assume it's the checkpoint directory
+        files = [p for p in self.checkpoint_dir.iterdir() if ".DS_Store" not in p.name]
+        if all(p.is_dir() for p in files) and len([p for p in files]) == 1:
+            self.checkpoint_dir = files[0]
+        logger.info(f"Loading checkpoint from {self.checkpoint_dir}")
+
+        # load the checkpoint config
         self.config = OmegaConf.load(self.checkpoint_dir / "config.yaml")
         if override is not None:
             self.config.update(override)
@@ -72,6 +81,13 @@ class CheckpointLoader:
 
     def load_tokenizer(self):
         return instantiate(self.config.datamodule.tokenizer)
+
+    def instantiate(self, path: str, **kwargs):
+        cfg = self.config
+        for p in path.split("."):
+            cfg = getattr(cfg, p)
+
+        return instantiate(cfg, **kwargs)
 
     @property
     def tokenizer(self) -> PreTrainedTokenizerFast:

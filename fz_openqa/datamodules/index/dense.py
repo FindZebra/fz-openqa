@@ -5,14 +5,12 @@ import os.path
 import shutil
 import tempfile
 import warnings
-from functools import singledispatchmethod
 from pathlib import Path
 from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import Generator
 from typing import Iterable
-from typing import Iterator
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -22,7 +20,6 @@ import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -40,8 +37,8 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
 from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
-from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
@@ -114,11 +111,25 @@ class FaissIndex(Index):
         The name of the index. Must be unique for each configuration.
     """
 
+    default_key = ["input_ids", "attention_mask"]
     _index: FaissSwigIndex = None
     model: Callable = None
-    index_name: str
     _vectors_table: Optional[TensorArrowTable] = None
     _master: bool = True
+    _max_num_proc: int = 1
+    no_fingerprint: List[str] = Index.no_fingerprint + [
+        "_max_sim",
+        "_emb2pid",
+        "faiss_args",
+        "in_memory",
+        "loader_kwargs",
+        "persist_cache",
+        "cache_dir",
+        "progress_bar",
+        "predict_docs",
+        "predict_queries",
+    ]
+
     _pickle_exclude_list: List[str] = [
         "_index",
         "_emb2pid",
@@ -128,13 +139,9 @@ class FaissIndex(Index):
         "_is_gpu",
     ]
 
-    def __init__(
+    def _prepare_index(
         self,
-        dataset: Dataset,
         *,
-        required_keys: List[str] = None,
-        query_field: str = "question",
-        index_field: str = "document",
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
         faiss_args: Dict[str, Any] = None,
@@ -152,14 +159,6 @@ class FaissIndex(Index):
         """
         Parameters
         ----------
-        dataset
-            The dataset to index.
-        required_keys
-            The keys required for each field. e.g. ['text']]
-        query_field
-            The field to be used as query (in the query dataset). e.g. question
-        index_field
-            The field to be used as index (in the dataset). e.g. document
         model
             The model to use for indexing and querying, e.g. a `pl.LightningModule`.
         trainer
@@ -186,26 +185,10 @@ class FaissIndex(Index):
         kwargs
             Additional arguments to pass to the `Index` class.
         """
-        if required_keys is None:
-            required_keys = ["input_ids", "attention_mask"]
 
         faiss_args = faiss_args or DEFAULT_FAISS_KWARGS
         #  save fingerprints and define the index name. The index name
         # must be unique for each dataset x model x faiss_args combination
-        self._model_fingerprint = get_fingerprint(model)
-        self._dataset_fingerprint = dataset._fingerprint
-        self._faiss_fingerprint = get_fingerprint(
-            {**faiss_args, "faiss_train_size": faiss_train_size}
-        )
-        self._fingerprint = get_fingerprint(
-            {
-                "model": self._model_fingerprint,
-                "dtype": dtype,
-                "dataset": self._dataset_fingerprint,
-                "faiss": self._faiss_fingerprint,
-            }
-        )
-        index_name = f"{type(self).__name__}-{self._fingerprint}"
 
         # model and params
         self.model = model
@@ -239,33 +222,6 @@ class FaissIndex(Index):
             self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
         )
 
-        # call the super: build the index
-        kwargs.update(
-            required_keys=required_keys,
-            query_field=query_field,
-            index_field=index_field,
-            index_name=index_name,
-            cache_dir=cache_dir,
-        )
-
-        super(FaissIndex, self).__init__(dataset=dataset, **kwargs)
-
-    @property
-    def is_indexed(self):
-        return self._index is None or self._index.is_trained
-
-    @property
-    def ntotal(self):
-        return self._index is None or self._index.ntotal
-
-    @property
-    def index_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "index.faiss"
-
-    @property
-    def vector_file(self):
-        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "vectors.tsarrow"
-
     def build(self, dataset: Dataset, **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
@@ -282,6 +238,8 @@ class FaissIndex(Index):
 
         """
 
+        self._set_index_name(dataset=dataset)
+
         if self.index_file.exists():
             self._read_index()
         else:
@@ -293,18 +251,6 @@ class FaissIndex(Index):
         # display file sizes
         display_file_size("index", self.index_file, print_fn=logger.info)
         display_file_size("vectors", self.vector_file, print_fn=logger.info)
-
-    def _write_index(self):
-        logger.info(f"Writing {type(self).__name__} [to]: {self.index_file.absolute()}")
-        faiss.write_index(self._index, str(self.index_file))
-
-    def _read_index(self):
-        logger.info(f"Reading {type(self).__name__} from: {self.index_file.absolute()}")
-        self._index = faiss.read_index(str(self.index_file))
-
-    def _read_vectors_table(self) -> TensorArrowTable:
-        logger.info(f"Reading vectors table from: {self.vector_file.absolute()}")
-        return TensorArrowTable(self.vector_file, dtype=self.dtype)
 
     def _build(self, dataset: Dataset, **kwargs):
         """
@@ -519,31 +465,7 @@ class FaissIndex(Index):
         vectors = vectors.to(torch.float32)
         self._index.add(vectors.view(-1, vectors.shape[-1]))
 
-    @singledispatchmethod
-    def search(
-        self,
-        query: Batch | Dataset | DatasetDict,
-        *,
-        idx: Optional[List[int]] = None,
-        split: Optional[Split] = None,
-        k: int = 1,
-        **kwargs,
-    ) -> Any:
-        raise TypeError(f"{type(self)} does not support search")
-
-    @search.register(dict)
-    def _(self, *args, **kwargs):
-        return self._search_batch(*args, **kwargs)
-
-    @search.register(Dataset)
-    def _(self, *args, **kwargs):
-        return self._search_dataset(*args, **kwargs)
-
-    @search.register(DatasetDict)
-    def _(self, *args, **kwargs):
-        return self._search_dataset_dict(*args, **kwargs)
-
-    def _search_batch(
+    def _search_chunk(
         self,
         query: Batch,
         *,
@@ -581,40 +503,37 @@ class FaissIndex(Index):
             The search result for the batch
 
         """
-        query = self.predict_queries(query, idx=idx, split=split)
-        return self._query_index(query, k=k)
-
-    def _search_dataset(
-        self, query: Dataset, *, k: int = 1, collate_fn: Callable, **kwargs
-    ) -> Iterator[SearchResult]:
-        """
-        This method is called if `query` is of type Dataset
-
-        todo: refactor to return a dataset instead of an iterator.
-        todo: replace `search` with `call` and return search results
-              as Batch instead of SearchResult
-        """
-        if self.trainer:
-            self.cache_query_dataset(query, collate_fn=collate_fn, trainer=self.trainer)
-
-        loader = self._init_loader(query, collate_fn=collate_fn)
-        loader = iter_batches_with_indexes(loader)
-        for idx, batch in loader:
-            yield self.search(batch, k=k, idx=idx, **kwargs)
-
-        self.predict_docs.delete_cached_files()
-
-    def _search_dataset_dict(
-        self, query: DatasetDict, *, k: int = 1, **kwargs
-    ) -> Dict[Split, Iterator[SearchResult]]:
-        """This method is called if `query` is of type DatasetDict"""
-        return {split: self.search(dset, k=k, **kwargs) for split, dset in query.items()}
-
-    def _query_index(self, query: Batch, *, k: int) -> SearchResult:
-        """Query the index given a batch of data"""
         vector = self._get_vector_from_batch(query)
-        score, indices = self._index.search(vector, k)
+        score, indices = self.index.search(vector, k)
         return SearchResult(score=score, index=indices, dataset_size=self.dataset_size, k=k)
+
+    def _preprocess_query(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+        """Preprocess the batch before query"""
+        return self.predict_queries(batch, idx=idx, split=split)
+
+    def _call_dataset(
+        self,
+        dataset: Dataset,
+        *,
+        k=1,
+        collate_fn: Optional[Callable] = None,
+        trainer: Optional[Trainer] = None,
+        split: Optional[Split] = None,
+        persist_cache: bool = False,
+        **kwargs,
+    ) -> Dataset:
+        trainer = trainer or self.trainer
+        if trainer:
+            self.cache_query_dataset(
+                dataset, collate_fn=collate_fn, trainer=trainer, persist_cache=persist_cache
+            )
+
+        new_dataset = super()._call_dataset(dataset, k=k, output_format=OutputFormat.LIST, **kwargs)
+        if not persist_cache:
+            self.predict_queries.delete_cached_files(split=split)
+        return new_dataset
 
     def cache_query_dataset(
         self,
@@ -622,6 +541,7 @@ class FaissIndex(Index):
         *,
         collate_fn: Callable,
         trainer: Trainer = None,
+        persist_cache: bool = False,
         **kwargs,
     ):
         trainer = trainer or self.trainer
@@ -631,7 +551,7 @@ class FaissIndex(Index):
             collate_fn=collate_fn,
             trainer=trainer,
             cache_dir=self.cache_dir,
-            persist=False,
+            persist=persist_cache,
             **kwargs,
         )
 
@@ -669,3 +589,43 @@ class FaissIndex(Index):
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
         if self._master and self.persist_cache is False:
             shutil.rmtree(self.cache_dir, ignore_errors=True)
+
+    # def _get_fingerprint_struct(self) -> List | Dict:
+    #     """Add the model fingerprint to the struct"""
+    #     fingerprints = super()._get_fingerprint_struct()
+    #     fingerprints["model"] = get_fingerprint(self.model)
+    #     return fingerprints
+
+    @property
+    def is_indexed(self):
+        return self._index is None or self._index.is_trained
+
+    @property
+    def index(self) -> FaissIndex:
+        if self._index is None:
+            self._read_index()
+        return self._index  # type: ignore
+
+    @property
+    def ntotal(self):
+        return self._index is None or self._index.ntotal
+
+    @property
+    def index_file(self):
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "index.faiss"
+
+    @property
+    def vector_file(self):
+        return Path(self.cache_dir) / "indexes" / f"{self.index_name}" / "vectors.tsarrow"
+
+    def _write_index(self):
+        logger.info(f"Writing {type(self).__name__} [to]: {self.index_file.absolute()}")
+        faiss.write_index(self._index, str(self.index_file))
+
+    def _read_index(self):
+        logger.info(f"Reading {type(self).__name__} from: {self.index_file.absolute()}")
+        self._index = faiss.read_index(str(self.index_file))
+
+    def _read_vectors_table(self) -> TensorArrowTable:
+        logger.info(f"Reading vectors table from: {self.vector_file.absolute()}")
+        return TensorArrowTable(self.vector_file, dtype=self.dtype)

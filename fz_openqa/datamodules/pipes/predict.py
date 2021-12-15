@@ -205,7 +205,7 @@ class Predict(Pipe):
         batch: Batch,
         idx: List[int] = None,
         split: Optional[Split] = None,
-        format: OutputFormat = OutputFormat.NUMPY,
+        format: OutputFormat = OutputFormat.TORCH,
         **kwargs,
     ) -> Batch:
         """
@@ -285,7 +285,7 @@ class Predict(Pipe):
         dataset: Dataset,
         *,
         trainer: Optional[Trainer] = None,
-        collate_fn: Optional[Pipe] = None,
+        collate_fn: Optional[Pipe | Callable] = None,
         loader_kwargs: Optional[Dict] = None,
         cache_dir: Optional[str] = None,
         split: Optional[Split] = None,
@@ -571,15 +571,18 @@ class Predict(Pipe):
         exclude += ["cache_file", "cache_dir"]
         super(Predict, self).to_json_struct(exclude=exclude, **kwargs)
 
-    def delete_cached_files(self):
+    def delete_cached_files(self, split: Optional[Split] = None):
         """Delete the cached files."""
         logger.info(f"Deleting cached vectors {self.cache_file}")
         self._loaded_table = None
         self._loaded_splits = None
-        if isinstance(self.cache_file, PathLike):
-            shutil.rmtree(self.cache_file, ignore_errors=True)
-        elif isinstance(self.cache_file, dict):
-            for fn in self.cache_file.values():
+        cache_file = self.cache_file
+        if split is not None:
+            cache_file = cache_file[split]
+        if isinstance(cache_file, (str, Path)):
+            shutil.rmtree(cache_file, ignore_errors=True)
+        elif isinstance(cache_file, dict):
+            for fn in cache_file.values():
                 shutil.rmtree(fn, ignore_errors=True)
 
         else:

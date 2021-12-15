@@ -9,10 +9,11 @@ from typing import Optional
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.search_result import SearchResult
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.functional import infer_batch_size
 
 
@@ -35,7 +36,7 @@ class Index(Pipe):
 
     index_name: Optional[str] = None
     is_indexed: bool = False
-    default_key: Optional[str] = None
+    default_key: Optional[str | List[str]] = None
     no_fingerprint: List[str] = ["verbose", "index_name", "max_chunksize", "id"]
 
     def __init__(
@@ -51,7 +52,7 @@ class Index(Pipe):
         index_output_key: str = "row_idx",
         score_output_key: str = "retrieval_score",
         analyzed_output_key: str = "analyzed_tokens",
-        # Pipe arguments
+        # `Pipe` arguments
         id: Optional[str] = None,
         update: bool = False,
         input_filter: None = None,
@@ -78,8 +79,8 @@ class Index(Pipe):
             Other parameters to be passed to the `build` method
         """
         if required_keys is None:
-            required_keys = [self.default_key]
-        elif isinstance(required_keys, str):
+            required_keys = self.default_key
+        if isinstance(required_keys, str):
             required_keys = [required_keys]
 
         # indexing parameters
@@ -116,11 +117,24 @@ class Index(Pipe):
         pass
 
     @abstractmethod
+    def build(self, dataset: Dataset, **kwargs):
+        """Index a dataset."""
+        raise NotImplementedError
+
+    @abstractmethod
     def _set_index_name(self, dataset) -> None:
         """Set the index name. Must be unique to allow for sage caching."""
         cls_id = camel_to_snake(type(self).__name__)
         pipe_fingerprint = self.fingerprint(reduce=True)
         self.index_name = f"{cls_id}-{dataset._fingerprint}-{pipe_fingerprint}"
+
+    @abstractmethod
+    def _search_chunk(self, query: Batch, *, k: int, **kwargs) -> SearchResult:
+        raise NotImplementedError
+
+    def _preprocess_query(self, batch: Batch, **kwargs) -> Batch:
+        """Preprocess the batch before query"""
+        return batch
 
     def input_keys(self, mode: Optional[IndexMode] = None) -> List[str]:
         """Return the list of keys required for each mode (indexing, querying)"""
@@ -138,49 +152,51 @@ class Index(Pipe):
         params = [f"{k}={v}" for k, v in params.items()]
         return f"{self.__class__.__name__}({', '.join(params)})"
 
-    @abstractmethod
-    def build(self, dataset: Dataset, **kwargs):
-        """Index a dataset."""
-        raise NotImplementedError
-
-    def _preprocess_batch(self, batch: Batch, **kwargs) -> Batch:
-        """Preprocess the batch before indexing"""
-        return batch
-
-    def _preprocess_query(self, batch: Batch, **kwargs) -> Batch:
-        """Preprocess the batch before query"""
-        return batch
-
-    def _call_batch(self, query: Batch, k: Optional[int] = None, **kwargs) -> Batch:
+    def _call_batch(
+        self,
+        query: Batch,
+        idx: Optional[List[int]] = None,
+        k: Optional[int] = None,
+        output_format: Optional[OutputFormat] = None,
+        **kwargs,
+    ) -> Batch:
         """
         Search the ES index for q batch of examples (query).
 
         Filter the incoming batch using the same pipe as the one
         used to build the index."""
         k = k or self.k
-        query = self._preprocess_query(query, **kwargs)
-        batch_size = infer_batch_size(query)
+        query = self._preprocess_query(query, idx=idx, **kwargs)
+        if len(query.keys()) == 0:
+            raise ValueError(
+                f"No query keys found in batch {query}, "
+                f"make sure the input batch has the following "
+                f"keys={self.input_keys(IndexMode.QUERY)}"
+            )
 
-        # search the index
+        # search the index by chunk
+        batch_size = infer_batch_size(query)
         search_results = None
         eff_batch_size = min(max(1, self.max_chunksize // k), batch_size)
         for i in range(0, batch_size, eff_batch_size):
             chunk_i = slice_batch(query, slice(i, i + eff_batch_size))
-            r = self.search(chunk_i, k=k, **kwargs)
+            r = self._search_chunk(chunk_i, k=k, **kwargs)
 
             if search_results is None:
                 search_results = r
             else:
                 search_results += r
 
-        return self._format_output(search_results)
+        return self._format_output(search_results, output_format=output_format)
 
-    @abstractmethod
-    def search(self, query: Batch, *, k: int, **kwargs) -> SearchResult:
-        raise NotImplementedError
+    def search(self, *args, **kwargs) -> Batch:
+        return self.__call__(*args, **kwargs)
 
-    def _format_output(self, search_results: SearchResult) -> Batch:
+    def _format_output(
+        self, search_results: SearchResult, output_format: Optional[OutputFormat] = None
+    ) -> Batch:
         """Format the output of the search"""
+
         output = {
             self.index_output_key: search_results.index,
             self.score_output_key: search_results.score,
@@ -189,4 +205,10 @@ class Index(Pipe):
         if search_results.tokens is not None:
             output[self.analyzed_output_key] = search_results.tokens
 
-        return {f"{self.index_field}.{key}": value for key, value in output.items()}
+        output = {f"{self.index_field}.{key}": value for key, value in output.items()}
+
+        if output_format is not None:
+            formatter = FormatArray(output_format=output_format)
+            output = {k: formatter(v) for k, v in output.items()}
+
+        return output

@@ -31,6 +31,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 )
 def run(config):
     datasets.set_caching_enabled(True)
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
 
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"

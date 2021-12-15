@@ -26,6 +26,7 @@ from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -156,7 +157,7 @@ class CorpusBuilder(HfDatasetBuilder):
         # define the pipe used for preprocessing
         preprocessing = Sequential(
             self.text_formatter.copy(text_key="text"),
-            Gate(self.to_sentences, GenerateSentences(), update=True),
+            Gate(self.to_sentences, GenerateSentences(global_keys=["idx", "cui"]), update=True),
             self.get_tokenizer_pipe(),
             Gate(
                 not self.to_sentences,
@@ -179,12 +180,6 @@ class CorpusBuilder(HfDatasetBuilder):
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
 
-        logger.debug(f"Dataset contains {len(dataset)} documents.")
-        # flatten and return
-        # todo: consumes too much memory
-        # logger.debug(f"Flatten indices")
-        # dataset = dataset.flatten_indices()
-
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
@@ -204,6 +199,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=[self.tokenizer.sep_token_id] if self.add_special_tokens else [],
             pad_token_id=self.tokenizer.pad_token_id,
+            global_keys=["idx", "cui"],
             verbose=self.verbose,
         )
 

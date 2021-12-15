@@ -42,3 +42,4 @@ class OutputFormat(Enum):
 
     NUMPY = "numpy"
     TORCH = "torch"
+    LIST = "list"

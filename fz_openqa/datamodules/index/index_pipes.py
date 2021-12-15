@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import List
 from typing import Optional
 
@@ -10,6 +11,7 @@ from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -22,13 +24,15 @@ class SearchCorpus(ApplyAsFlatten):
         self,
         index: Index,
         *,
+        k: int = 1,
         level: int = 0,
         **kwargs,
     ):
         assert "input_filter" not in kwargs
         self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
-        super().__init__(index, level=level, input_filter=input_filter, update_idx=True)
+        pipe = Partial(index, k=k)
+        super().__init__(pipe, level=level, input_filter=input_filter, flatten_idx=True)
 
 
 class FetchDocuments(Pipe):

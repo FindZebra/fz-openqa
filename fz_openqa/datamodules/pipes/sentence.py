@@ -18,21 +18,36 @@ class GenerateSentences(Pipe):
     _allows_update = False
 
     def __init__(
-        self, *, delimiter: Optional[str] = ".", required_keys: Optional[List[str]] = None, **kwargs
+        self,
+        *,
+        delimiter: Optional[str] = ".",
+        required_keys: Optional[List[str]] = None,
+        global_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
         super(GenerateSentences, self).__init__(**kwargs)
         required_keys = required_keys or ["idx", "text"]
         self.delimiter = delimiter
         self.required_keys = required_keys
+        if global_keys is None:
+            global_keys = []
+        self.global_keys = global_keys
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return self.generate_sentences(
-            batch, required_keys=self.required_keys, delimiter=self.delimiter
+            batch,
+            required_keys=self.required_keys,
+            delimiter=self.delimiter,
+            global_keys=self.global_keys,
         )
 
     @staticmethod
     def generate_sentences(
-        examples: Dict[str, List[Any]], *, required_keys: List[str], delimiter: str
+        examples: Dict[str, List[Any]],
+        *,
+        required_keys: List[str],
+        delimiter: str,
+        global_keys: List[str],
     ) -> Batch:
         """
         This functions generates the sentences for each corpus article.
@@ -44,10 +59,12 @@ class GenerateSentences(Pipe):
         assert all(key in examples.keys() for key in required_keys)
 
         output = defaultdict(list)
-        for idx, text in zip(examples["idx"], examples["text"]):
+        for idx, text in enumerate(examples["text"]):
+            global_values = {k: examples[k][idx] for k in global_keys if k in examples.keys()}
             for sent_idx, sentence in enumerate(text.split(delimiter)):
-                output["idx"].append(idx)
-                output["sentence_idx"].append(sent_idx)
+                output["passage_idx"].append(sent_idx)
                 output["text"].append(sentence)
+                for k, v in global_values.items():
+                    output[k].append(v)
 
         return output

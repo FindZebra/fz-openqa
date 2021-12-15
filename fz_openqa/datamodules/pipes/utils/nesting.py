@@ -137,5 +137,5 @@ def expand_and_repeat(x: T, axis: int, n: int = 1) -> T:
 
 def nest_idx(idx: List[int], shape: List[int]) -> List[int]:
     """Get the index of a nested list"""
-    stride = np.prod(shape[1:])
+    stride = int(np.prod(shape[1:]))
     return [i * stride + j for i in idx for j in range(stride)]
