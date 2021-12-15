@@ -1,23 +1,22 @@
-import warnings
+from enum import Enum
 from typing import Any
-from typing import List
 from typing import Optional
-from typing import Union
 
+import einops
 import rich
-import torch
 from datasets import Split
 from torch import Tensor
-from transformers import AutoTokenizer
 
-from ...datamodules.pipes import PrintBatch
 from ...utils.pretty import pprint_batch
 from .base import Module
-from .utils import expand_and_flatten
-from .utils import flatten_first_dims
-from fz_openqa.modeling.functional import flatten
-from fz_openqa.modeling.functional import padless_cat
+from .utils.concatenate import concat_questions_and_documents
+from .utils.concatenate import stack_questions_and_documents
 from fz_openqa.utils.datastruct import Batch
+
+
+class ConcatStrategy(Enum):
+    CONCAT = "concat"
+    STACK = "stack"
 
 
 class MedQaReader(Module):
@@ -46,29 +45,52 @@ class MedQaReader(Module):
 
     _required_heads = ["option", "evidence", "relevance"]
 
+    def __init__(self, *args, concat_strategy: ConcatStrategy = ConcatStrategy.CONCAT, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.concat_strategy = ConcatStrategy(concat_strategy)
+
     def _init_metrics(self, prefix: str = ""):
         """Initialize a Metric for each split=train/validation/test
         fir both the answering model and the selection model"""
         self.answer_metrics = self._get_base_metrics(prefix=prefix)
 
-    def _forward(self, batch: Batch, targets, **kwargs) -> Batch:
+    def _forward(self, batch: Batch, targets: Optional[Tensor] = None, **kwargs) -> Batch:
         # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
         # checks inputs, set parameters and concat the questions with the documents
         # pprint_batch(batch)
         # self.bert.tokenizer
+
+        rich.print(f"[magenta] input question tokens: {batch['question.input_ids'].shape}")
+        rich.print(f"[magenta] input document tokens: {batch['document.input_ids'].shape}")
+
         # concatenate questions and documents such that there is no padding between Q and D
-        qd_batch = self._concat_questions_and_documents(batch, fields=["question", "document"])
-        # pprint_batch(qd_batch)
+        args = {"pad_token_id": self._pad_token_id, "max_length": self.max_length}
+        if self.concat_strategy == ConcatStrategy.CONCAT:
+            # returns tokens of shape [bs, n_opts, total_length]
+            qd_batch = concat_questions_and_documents(batch, **args)
+        elif self.concat_strategy == ConcatStrategy.STACK:
+            # returns tokens of shape [bs * n_docs, n_opts, total_length]
+            qd_batch = stack_questions_and_documents(batch, **args)
+        else:
+            raise ValueError(f"Unknown concat strategy: {self.concat_strategy}")
+
+        pprint_batch(qd_batch, "qd_batch")
         # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
         rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
         rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
         rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
-        rich.print(
-            f"[red] {[qd_batch['input_ids'][0][i].tolist() for i in range(4)]}"
-        )  # noqa: E501
-        rich.print(
-            f"[red] {[self.tokenizer.decode(qd_batch['input_ids'][0][i].tolist()) for i in range(4)]}"  # noqa: E501
-        )
+
+        rich.print(f"[magenta] padded tokens: {qd_batch['input_ids'].shape}")
+        for i in range(min(len(qd_batch["input_ids"]), 16)):
+            print(100 * "=")
+            rich.print(f"- batch el #{i+1}")
+            tokens = qd_batch["input_ids"][i]
+            for j in range(2):
+                rich.print(f"- option #{j+1}")
+                print(100 * "-")
+                # rich.print(f"[red] {tokens[j].tolist()}")
+                decoded = self.tokenizer.decode(tokens[j].tolist())
+                rich.print(f"[cyan] {decoded}")
         exit()
 
         return self.bert(
@@ -83,8 +105,8 @@ class MedQaReader(Module):
         outputs = self._forward(batch, targets=answer_targets, **kwargs)
 
         return {
-            "loss": outputs.loss,
-            "_answer_logits_": outputs.logits.detach(),
+            "loss": outputs["loss"],
+            "_answer_logits_": outputs["logits"].detach(),
             "_answer_targets_": answer_targets.detach(),
         }
 
@@ -100,74 +122,6 @@ class MedQaReader(Module):
                 output[k] = y.mean()
 
         return output
-
-    def _concat_questions_and_documents(self, batch: Batch, *, fields: List[str]):
-        """
-        Concatenate fields across the time dimension, and without padding
-        """
-        assert set(fields) == {
-            "question",
-            "document",
-        }, "Question and document fields must be provided."
-        bs, n_options, *_ = batch["question.input_ids"].shape
-        # rich.print(bs, n_options)
-        batch = self._flatten_qd(batch)
-
-        inputs = [
-            {
-                "input_ids": batch["question.input_ids"].view(
-                    -1, *batch["question.input_ids"].shape[2:]
-                )[:, 1:],
-                "attention_mask": batch["question.attention_mask"].view(
-                    -1, *batch["question.attention_mask"].shape[2:]
-                )[:, 1:],
-            },
-            {
-                "input_ids": batch["document.input_ids"].view(
-                    -1, *batch["document.input_ids"].shape[2:]
-                ),
-                "attention_mask": batch["document.attention_mask"].view(
-                    -1, *batch["document.attention_mask"].shape[2:]
-                ),
-            },
-        ]
-
-        # concatenate keys across the time dimension, CLS tokens are removed
-        padded_batch = padless_cat(
-            inputs,
-            master_key="input_ids",
-            pad_token=self._pad_token_id,
-            aux_pad_tokens={"attention_mask": 0},
-        )
-        # append the CLS tokens
-        for key in ["input_ids", "attention_mask"]:
-            cls_tokens = batch[f"{fields[0]}.{key}"][:, :, :1]
-            padded_batch[key] = padded_batch[key].view(bs, n_options, *padded_batch[key].shape[1:])
-            padded_batch[key] = torch.cat([cls_tokens, padded_batch[key]], dim=-1)
-
-        # length of concatenated fields
-        input_length = padded_batch["input_ids"].shape[-1]
-
-        if input_length > self.max_length:
-            warnings.warn(f"the tensor [{'; '.join(fields)}] was truncated.")
-            for key in ["input_ids", "attention_mask"]:
-                padded_batch[key] = padded_batch[key][:, :, : self.max_length]
-
-        return padded_batch
-
-    @staticmethod
-    def _flatten_qd(batch: Batch) -> Batch:
-        # flatten docs of shape [bs, n_options, n_docs, L_docs] to [bs, n_options, n_docs * L_docs]
-        keys = ["document.input_ids", "document.attention_mask"]
-        d_batch = {k: batch[k][:, :, :, 1:] for k in keys}
-        for key in keys:
-            d_batch[key] = d_batch[key].contiguous().view(*d_batch[key].shape[:-2], -1)
-
-        # join question features and document features
-        keys = ["question.input_ids", "question.attention_mask"]
-        q_batch = {k: batch[k] for k in keys}
-
-        return {**q_batch, **d_batch}
 
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""

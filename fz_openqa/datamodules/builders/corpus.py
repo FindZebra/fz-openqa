@@ -8,6 +8,7 @@ from typing import List
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
@@ -188,7 +189,7 @@ class CorpusBuilder(HfDatasetBuilder):
             num_proc=self.num_proc,
             desc="Tokenizing documents and extracting overlapping passages",
             # todo: only for debugging
-            keep_in_memory=True,
+            # keep_in_memory=True,
         )
 
         # todo: only for debugging

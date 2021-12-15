@@ -21,9 +21,8 @@ class GenerateSentences(Pipe):
         self, *, delimiter: Optional[str] = ".", required_keys: Optional[List[str]] = None, **kwargs
     ):
         super(GenerateSentences, self).__init__(**kwargs)
-        required_keys = required_keys or ["idx", "text"]
         self.delimiter = delimiter
-        self.required_keys = required_keys
+        self.required_keys = required_keys or ["idx", "text"]
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return self.generate_sentences(
