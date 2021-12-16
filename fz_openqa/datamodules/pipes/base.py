@@ -1,8 +1,9 @@
+import json
 import logging
 from abc import abstractmethod
 from copy import copy
-from functools import partial
 from functools import singledispatchmethod
+from pathlib import Path
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -11,6 +12,7 @@ from typing import Optional
 from typing import T
 
 import datasets
+import jsondiff
 import rich
 from datasets import Dataset
 from datasets import DatasetDict
@@ -20,10 +22,10 @@ from fz_openqa.datamodules.component import Component
 from fz_openqa.datamodules.pipes.control.condition import Condition
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import Eg
+from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import get_batch_eg
 from fz_openqa.utils.json_struct import reduce_json_struct
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +356,8 @@ class Pipe(Component):
         writer_batch_size: int = 1000,
         deterministic_fingerprint: bool = False,
         keep_in_memory: bool = False,
+        cache_fingerprint: Optional[PathLike] = None,
+        fingerprint_kwargs_exclude: Optional[List[str]] = None,
         **kwargs,
     ) -> Dataset:
         """
@@ -376,6 +380,9 @@ class Pipe(Component):
         deterministic_fingerprint
             If True, the `new_fingerprint` will de defined
             using `Pipe.fingerprint()` and `Dataset._fingerprint`
+        cache_fingerprint
+            If set to a path, the fingerprint will be cache to that directory.
+            If a file already exists, the fingerprint will be compared with the cached one.
         Returns
         -------
         Dataset
@@ -385,20 +392,36 @@ class Pipe(Component):
             if key in kwargs.keys():
                 raise ValueError(f"{key} cannot be set, it is always set as True.")
 
+        if cache_fingerprint is not None:
+            self._check_cached_fingerprint(
+                cache_fingerprint,
+                dataset,
+                kwargs=kwargs,
+                fingerprint_kwargs_exclude=fingerprint_kwargs_exclude,
+            )
+
         if deterministic_fingerprint:
             new_fingerprint = get_fingerprint(
                 {
                     "dataset": dataset._fingerprint,
                     "pipe": self.fingerprint(reduce=True),
-                    "params": kwargs,
+                    "params": {
+                        k: get_fingerprint(v)
+                        for k, v in kwargs.items()
+                        if k not in fingerprint_kwargs_exclude
+                    },
                 }
             )
+            logger.info(f"{type(self).__name__}: Setting new fingerprint to {new_fingerprint}")
         else:
             new_fingerprint = None
 
         # clip the number of workers
         if self.max_num_proc is not None:
             num_proc = min(num_proc, self.max_num_proc)
+
+        if desc is None:
+            desc = self.__class__.__name__
 
         # process the dataset using `Dataset.map`
         return dataset.map(
@@ -422,7 +445,14 @@ class Pipe(Component):
         all_max_num_procs = self.to_json_struct(
             include_only=["_max_num_proc"], include_class_attributes=True
         )
-        return reduce_json_struct(all_max_num_procs, reduce_op=min)
+
+        def safe_min(x):
+            try:
+                return min(x)
+            except ValueError:
+                return None
+
+        return reduce_json_struct(all_max_num_procs, reduce_op=safe_min)
 
     def _filter_keys(self, batch: Batch) -> Batch:
         """
@@ -442,3 +472,89 @@ class Pipe(Component):
             return batch
 
         return {k: v for k, v in batch.items() if self.input_filter(k)}
+
+    def _check_cached_fingerprint(
+        self,
+        cache_dir: PathLike,
+        dataset: Dataset,
+        kwargs: Optional[Dict] = None,
+        fingerprint_kwargs_exclude: Optional[List[str]] = None,
+        debug: bool = True,
+    ):
+        """
+        This method checks if the cached fingerprint is the same as the current one and save
+        the current one. The cached fingerprint is based on the `Pipe.fingerprint()`,
+        `Dataset._fingerprint` and `get_fingerprint(kwargs)`, kwargs matching
+        `fingerprint_kwargs_exclude` are exlucded.
+
+        Parameters
+        ----------
+        cache_dir
+            Path to the cache directory
+        dataset
+            Dataset to process
+        kwargs
+            Additional attributes passed to the pipe
+        debug
+            If True, the fingerprint will be printed
+        Returns
+        -------
+        None
+        """
+
+        if cache_dir is None:
+            logger.warning("cache_dir is not provided, previous fingerprints cannot be verified.")
+            return
+
+        # kwargs exceptions
+        if kwargs is not None:
+            kwargs = copy(kwargs)
+            if fingerprint_kwargs_exclude is not None:
+                for key in fingerprint_kwargs_exclude:
+                    kwargs.pop(key, None)
+
+        # get a json-file from the current pipe
+        fingerprints = self.fingerprint(reduce=False)
+        fingerprints["__all__"] = self.fingerprint(reduce=True)
+
+        # define the fingerprint for the kwargs
+        kwargs_fingerprint_dict = {k: get_fingerprint(v) for k, v in kwargs.items()}
+        kwargs_fingerprint = get_fingerprint(kwargs_fingerprint_dict)
+        fingerprints["__kwargs__"] = fingerprint_kwargs_exclude
+
+        # get the dataset fingerprint
+        if isinstance(dataset, Dataset):
+            dset_fingerprint = dataset._fingerprint
+        elif isinstance(dataset, DatasetDict):
+            dset_fingerprint = get_fingerprint({k: d._fingerprint for k, d in dataset.items()})
+        else:
+            raise TypeError(f"Cannot handle dataset type {type(dataset)}")
+        fingerprints["__dataset__"] = dset_fingerprint
+
+        # create the directory to store the fingerprints
+        path = Path(cache_dir)
+        if not path.exists():
+            path.mkdir(parents=True)
+
+        # compare to previously saved fingerprints
+        name = self.__class__.__name__
+
+        file = path / f"{name}-{dset_fingerprint}-{kwargs_fingerprint}.json"
+        if file.exists():
+            prev_fingerprints = json.loads(file.read_text())
+            diff = jsondiff.diff(prev_fingerprints, fingerprints)
+            if len(diff) > 0:
+                logger.warning(
+                    f"Fingerprint for {name} changed from the latest run. "
+                    f"Caching cannot be used. Enable debug logging mode to see the diff."
+                )
+                logger.debug(f"Fingerprint diff={diff}")
+                if debug:
+                    rich.print(f"[magenta] {name}: Fingerprints are different !")
+                    rich.print(diff)
+            else:
+                logger.info(f"Fingerprint for {name} is identical to the latest run.")
+        else:
+            logger.info(f"No previous fingerprint found for {name}.")
+
+        file.write_text(json.dumps(fingerprints, indent=2))
