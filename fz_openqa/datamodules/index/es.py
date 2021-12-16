@@ -106,6 +106,8 @@ class ElasticSearchIndex(Index):
         # build the index
         if is_new_index:
             with Status("ingesting ES index.."):
+                # todo: to it by batch and add progress bar. This is currently loading
+                #  ALL text into memory
                 try:
                     _ = self.engine.es_bulk(
                         index_name=self.index_name,
