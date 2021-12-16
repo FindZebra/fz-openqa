@@ -98,6 +98,9 @@ class FetchDocuments(Pipe):
         # todo: query dataset for unique indexes only (torch.unique)
         indexes = [int(idx) for idx in batch[self.index_key]]
 
+        if len(indexes) == 0:
+            return {}
+
         rows = self._fetch_rows(indexes, max_chunk_size=self.max_chunk_size)
         new_indexes = rows[self.index_key]
         if not new_indexes == indexes:
