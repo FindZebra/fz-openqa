@@ -51,7 +51,7 @@ pre-commit install
 wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.14.1-linux-x86_64.tar.gz
 tar -xzf elasticsearch-7.14.1-linux-x86_64.tar.gz
 ```
-To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and type `./bin/elasticsearch`.
+To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and run `./bin/elasticsearch`.
 
 5. Run something using the environment
 

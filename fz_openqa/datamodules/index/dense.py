@@ -40,6 +40,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
@@ -545,6 +546,7 @@ class FaissIndex(Index):
         **kwargs,
     ):
         trainer = trainer or self.trainer
+        pprint_batch(collate_fn([dataset[i] for i in range(3)]), "cache_query_dataset")
         self._cache_vectors(
             dataset,
             predict=self.predict_queries,

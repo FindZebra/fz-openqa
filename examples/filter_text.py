@@ -1,10 +1,10 @@
 from copy import copy
 
-from fz_openqa.datamodules.pipes import SciSpacyFilter
+from fz_openqa.datamodules.pipes import SciSpaCyFilter
 from fz_openqa.datamodules.pipes import StopWordsFilter
 from fz_openqa.utils.pretty import get_separator
 
-filter = SciSpacyFilter(text_key="text")
+filter = SciSpaCyFilter(text_key="text")
 filter2 = StopWordsFilter(text_key="text")
 txt = [
     "A 59-year-old overweight woman presents to the urgent care clinic with the complaint of severe abdominal pain for the past 2 hours. She also complains of a dull pain in her back with nausea and vomiting several times. Her pain has no relation with food. Her past medical history is significant for recurrent abdominal pain due to cholelithiasis. Her father died at the age of 60 with some form of abdominal cancer. Her temperature is 37\u00b0C (98.6\u00b0F), respirations are 15/min, pulse is 67/min, and blood pressure is 122/98 mm Hg. Physical exam is unremarkable. However, a CT scan of the abdomen shows a calcified mass near her gallbladder. Which of the following diagnoses should be excluded first in this patient?",  # noqa: E501

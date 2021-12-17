@@ -4,14 +4,16 @@ from typing import Optional
 from typing import Union
 
 import datasets
-import rich
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
+from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa import configs
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
+from fz_openqa.utils.datastruct import PathLike
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,10 @@ class CheckpointLoader:
     _tokenizer: Optional[PreTrainedTokenizerFast] = None
 
     def __init__(
-        self, checkpoint_dir: str, override=Optional[OmegaConf], cache_dir: Optional[str] = None
+        self,
+        checkpoint_dir: str,
+        override: Optional[DictConfig] = None,
+        cache_dir: Optional[str] = None,
     ):
         checkpoint_dir = maybe_download_weights(checkpoint_dir, cache_dir=cache_dir)
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -61,10 +66,20 @@ class CheckpointLoader:
         # load the checkpoint config
         self.config = OmegaConf.load(self.checkpoint_dir / "config.yaml")
         if override is not None:
-            self.config.update(override)
+            logger.info(f"Overriding config with keys {list(override.keys())}")
+            if "override_ops" in override.keys():
+                self._apply_override_ops(override.override_ops)
+            self.config = OmegaConf.merge(self.config, override)
 
-    def print_config(self):
-        print_config(self.config, resolve=False)
+    def _apply_override_ops(self, override_config: DictConfig):
+
+        delete_keys = override_config.get("delete", None)
+        if delete_keys is not None:
+            for key in delete_keys:
+                self.config.pop(key, None)
+
+    def print_config(self, **kwargs):
+        print_config(self.config, resolve=False, **kwargs)
 
     def model_checkpoint(self, last=False) -> Union[None, Path]:
         checkpoints = (self.checkpoint_dir / "checkpoints").iterdir()
@@ -98,8 +113,7 @@ class CheckpointLoader:
     def load_bert(self):
         return instantiate(self.config.model.bert)
 
-    def load_model(self, last=False) -> Model:
-
+    def load_model(self, last=False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
 
         path = self.model_checkpoint(last=last)
@@ -112,6 +126,7 @@ class CheckpointLoader:
                 path,
                 tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
                 bert=OmegaConf.to_object(self.config.model.bert),
+                **kwargs,
             )
         else:
             logger.warning("No checkpoint found. Initializing model without checkpoint.")

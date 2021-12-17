@@ -3,7 +3,7 @@ from functools import partial
 from typing import Any
 from typing import Dict
 
-from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.builders.medqa import MinLength
 from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.pipelines.collate.field import CollateField

@@ -1,5 +1,6 @@
 defaults:
   - base
+  - text_filter: null
 
 _target_: fz_openqa.datamodules.index.ElasticSearchIndexBuilder
 
@@ -14,7 +15,7 @@ text_formatter: null
 analyze_es_tokens: false
 
 # arguments for preprocessing the index
-map_kwargs:
+prep_map_kwargs:
   batch_size: 100
   num_proc: ${datamodule.num_proc}
 

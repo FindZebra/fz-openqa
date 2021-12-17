@@ -354,7 +354,7 @@ class Pipe(Component):
         desc: Optional[str] = None,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
-        deterministic_fingerprint: bool = False,
+        set_new_fingerprint: bool = False,
         keep_in_memory: bool = False,
         cache_fingerprint: Optional[PathLike] = None,
         fingerprint_kwargs_exclude: Optional[List[str]] = None,
@@ -377,7 +377,7 @@ class Pipe(Component):
             Batch size for the pyarrow writer
         kwargs
             Additional attributes passed to the pipe
-        deterministic_fingerprint
+        set_new_fingerprint
             If True, the `new_fingerprint` will de defined
             using `Pipe.fingerprint()` and `Dataset._fingerprint`
         cache_fingerprint
@@ -400,7 +400,7 @@ class Pipe(Component):
                 fingerprint_kwargs_exclude=fingerprint_kwargs_exclude,
             )
 
-        if deterministic_fingerprint:
+        if set_new_fingerprint:
             new_fingerprint = get_fingerprint(
                 {
                     "dataset": dataset._fingerprint,
@@ -412,13 +412,16 @@ class Pipe(Component):
                     },
                 }
             )
-            logger.info(f"{type(self).__name__}: Setting new fingerprint to {new_fingerprint}")
+            logger.info(f"{type(self).__name__}: Setting `new_fingerprint` to {new_fingerprint}")
         else:
             new_fingerprint = None
 
         # clip the number of workers
-        if self.max_num_proc is not None:
-            num_proc = min(num_proc, self.max_num_proc)
+        max_num_proc = self.max_num_proc
+        if max_num_proc is not None:
+            if num_proc > max_num_proc:
+                logger.info(f"{type(self).__name__}: Clipping number of workers to {max_num_proc}.")
+                num_proc = max_num_proc
 
         if desc is None:
             desc = self.__class__.__name__
@@ -558,3 +561,19 @@ class Pipe(Component):
             logger.info(f"No previous fingerprint found for {name}.")
 
         file.write_text(json.dumps(fingerprints, indent=2))
+
+
+"""
+# elastic search
+
+
+# scispaCy match:
+ - Recall@    1: 3.23%
+ - Recall@    5: 33.47%
+ - Recall@   20: 55.65%
+ - Recall@   50: 68.55%
+ - Recall@  100: 75.40%
+ - Recall@ 1000: 85.48%
+
+
+"""

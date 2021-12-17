@@ -7,10 +7,12 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Type
 from typing import Union
 
 import dill
 import rich
+from typing_extensions import Self
 
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.json_struct import apply_to_json_struct

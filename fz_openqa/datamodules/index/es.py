@@ -6,6 +6,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 from datasets import Dataset
 from omegaconf import OmegaConf
 from rich.status import Status
@@ -17,11 +18,9 @@ from .search_result import SearchResult
 from fz_openqa.configs.datamodule.index_builder import es_body
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine
 from fz_openqa.datamodules.pipes import CopyBatch
-from fz_openqa.datamodules.pipes import MetaMapFilter
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import SciSpacyFilter
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import StopWordsFilter
+from fz_openqa.datamodules.pipes import TextFilter
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.utils.datastruct import Batch
 
@@ -38,25 +37,25 @@ DEFAULT_MAP_KWARGS = {"batch_size": 100, "num_proc": 4}
 class ElasticSearchIndex(Index):
     preprocessing_pipe: Optional[Pipe] = None
     default_key: str = "text"
-    no_fingerprint: List[str] = Index.no_fingerprint + ["engine", "map_kwargs"]
+    no_fingerprint: List[str] = Index.no_fingerprint + ["engine", "prep_map_kwargs"]
 
     def _prepare_index(
         self,
         *,
-        filter_mode: Optional[str] = None,
+        text_filter: Optional[TextFilter] = None,
         text_formatter: Optional[TextFormatter] = None,
         es_body: Optional[Dict] = DEFAULT_ES_BODY,
         analyze_es_tokens: Optional[bool] = False,
-        map_kwargs: Optional[Dict] = None,
+        prep_map_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
 
-        if map_kwargs is None:
-            map_kwargs = DEFAULT_MAP_KWARGS
+        if prep_map_kwargs is None:
+            prep_map_kwargs = DEFAULT_MAP_KWARGS
 
         # set indexing parameters
         self.index_key = f"{self.index_field}.{self.index_output_key}"  # ie. "document.row_idx"
-        self.map_kwargs = map_kwargs
+        self.prep_map_kwargs = prep_map_kwargs
         self.engine = ElasticSearchEngine(analyze=analyze_es_tokens)
         self.es_body = es_body
         self.analyze_es_tokens = analyze_es_tokens
@@ -69,23 +68,19 @@ class ElasticSearchIndex(Index):
         self.text_keys = [self.index_text_key, self.query_text_key]
 
         # pipe used to potentially filter the input text
-        if filter_mode is not None:
-            filter_pipe_cls = {
-                "scispacy": SciSpacyFilter,
-                "metamap": MetaMapFilter,
-                "stopwords": StopWordsFilter,
-            }[filter_mode]
-            filter_pipe = filter_pipe_cls(text_key=self.text_keys)
-        else:
-            filter_pipe = None
+        if text_filter is not None:
+            text_filter: TextFilter = text_filter.copy(text_key=self.text_keys)
+            logger.info(f"Using {text_filter} to filter text")
 
-        # text cleaning and filtering ()
-        if filter_pipe is not None or text_formatter is not None:
-            if text_formatter is not None:
-                text_formatter = text_formatter.copy(text_key=self.text_keys)
+        if text_formatter is not None:
+            text_formatter: TextFormatter = text_formatter.copy(text_key=self.text_keys)
+            logger.info(f"Using {text_formatter} to clean text")
+
+        # text cleaning and filtering
+        if text_filter is not None or text_formatter is not None:
             self.preprocessing_pipe = Sequential(
                 CopyBatch(),
-                filter_pipe,
+                text_filter,
                 text_formatter,
             )
         else:
@@ -160,6 +155,6 @@ class ElasticSearchIndex(Index):
         return dataset.map(
             self.preprocessing_pipe,
             batched=True,
-            **self.map_kwargs,
+            **self.prep_map_kwargs,
             desc="ES Indexing: preprocessing",
         )

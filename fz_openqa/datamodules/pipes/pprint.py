@@ -18,9 +18,10 @@ class PrintBatch(Pipe):
     Print the batch
     """
 
-    def __init__(self, header: Optional[str] = None, **kwargs):
+    def __init__(self, header: Optional[str] = None, report_nans: bool = False, **kwargs):
         super(PrintBatch, self).__init__(**kwargs)
         self.header = header
+        self.report_nans = report_nans
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -29,7 +30,7 @@ class PrintBatch(Pipe):
             header = "PrintBatch"
         if self.id is not None:
             header = f"{header} (id={self.id})"
-        pprint_batch(batch, header=header)
+        pprint_batch(batch, header=header, report_nans=self.report_nans)
         if len(kwargs):
             kwargs = {k: self._format_kwarg_v(v) for k, v in kwargs.items() if v is not None}
             rich.print(f"PrintBatch input kwargs = {kwargs}")
