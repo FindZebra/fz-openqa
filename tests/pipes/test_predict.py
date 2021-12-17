@@ -60,7 +60,7 @@ class TestPredict(TestCase):
         dataset_builder.subset_size = [2]
         dataset = dataset_builder()
         dataset = dataset.select(range(self.n_samples))
-        collate_fn = dataset_builder.get_collate_pipe()
+        collate_fn = dataset_builder._get_collate_pipe()
 
         # init the predict pipe
         pipe = self._init_pipe(self.model)
@@ -107,7 +107,7 @@ class TestPredict(TestCase):
         )
         dataset_builder.subset_size = [10, 10, 10]
         dataset = dataset_builder()
-        collate_fn = dataset_builder.get_collate_pipe()
+        collate_fn = dataset_builder._get_collate_pipe()
 
         # init the predict pipe
         pipe = self._init_pipe(self.model)

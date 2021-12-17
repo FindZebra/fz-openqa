@@ -143,7 +143,7 @@ def run(config):
         model=model,
         trainer=trainer,
         model_output_keys=["_hd_", "_hq_"],
-        collate_pipe=corpus_builder.get_collate_pipe(),
+        collate_pipe=corpus_builder._get_collate_pipe(),
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 4),

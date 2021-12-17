@@ -137,7 +137,7 @@ class Pipe(Component):
         desc: Optional[str] = None,
         batch_size: Optional[int] = None,
         writer_batch_size: Optional[int] = None,
-        deterministic_fingerprint: bool = False,
+        set_new_fingerprint: bool = False,
         **kwargs,
     ) -> T:
         """
@@ -156,7 +156,7 @@ class Pipe(Component):
             For `Dataset` input only: description for the progress bar
         writer_batch_size
             For `Dataset` input only: batch size for the pyarrow writer
-        deterministic_fingerprint
+        set_new_fingerprint
             For `Dataset` input only: set `new_fingerprint` using `Pipe.get_fingerprint`.
         kwargs
             additional arguments

@@ -113,7 +113,7 @@ def run(config: DictConfig) -> None:
 
     # build the corpus and take a subset
     corpus = corpus_builder()
-    collate_fn = corpus_builder.get_collate_pipe()
+    collate_fn = corpus_builder._get_collate_pipe()
     n_samples = config.get("n_samples", 1000)
     if n_samples is not None and n_samples > 0:
         n_samples = min(n_samples, len(corpus))
@@ -140,7 +140,7 @@ def run(config: DictConfig) -> None:
             "pin_memory": config.get("pin_memory", True),
         },
         model_output_keys=["_hd_", "_hq_"],
-        collate_pipe=corpus_builder.get_collate_pipe(),
+        collate_pipe=corpus_builder._get_collate_pipe(),
         cache_dir=cache_dir,
         persist_cache=config.get("persist_cache", False),
         in_memory=config.get("in_memory", True),
@@ -183,7 +183,7 @@ def run(config: DictConfig) -> None:
     )
 
     # search for the whole dataset
-    question_collate = MedQaBuilder.get_collate_pipe(corpus_builder)
+    question_collate = MedQaBuilder._get_collate_pipe(corpus_builder)
     query_dset = index(query_dset, k=3, collate_fn=question_collate, trainer=trainer)
     pprint_batch(query_dset[:3], "search whole dataset - results")
 

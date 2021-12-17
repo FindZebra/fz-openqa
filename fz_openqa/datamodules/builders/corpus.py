@@ -142,14 +142,12 @@ class CorpusBuilder(HfDatasetBuilder):
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
-        # remove title for now
-        dataset = dataset.remove_columns("title")
-
         # add the document index column if not already provided
         if "idx" not in dataset.column_names:
             dataset = dataset.map(
                 partial(set_row_idx, key="idx"),
-                batched=False,
+                batched=True,
+                batch_size=1000,
                 num_proc=self.num_proc,
                 with_indices=True,
                 desc="Indexing documents",
@@ -158,7 +156,11 @@ class CorpusBuilder(HfDatasetBuilder):
         # define the pipe used for preprocessing
         preprocessing = Sequential(
             self.text_formatter.copy(text_key="text"),
-            Gate(self.to_sentences, GenerateSentences(global_keys=["idx", "cui"]), update=True),
+            Gate(
+                self.to_sentences,
+                GenerateSentences(global_keys=["idx", "cui", "title"]),
+                update=True,
+            ),
             self.get_tokenizer_pipe(),
             Gate(
                 not self.to_sentences,
@@ -184,7 +186,8 @@ class CorpusBuilder(HfDatasetBuilder):
         # add index column
         dataset = dataset.map(
             partial(set_row_idx, key="document.row_idx"),
-            batched=False,
+            batched=True,
+            batch_size=1000,
             num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing documents",
@@ -200,7 +203,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=[self.tokenizer.sep_token_id] if self.add_special_tokens else [],
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["idx", "cui"],
+            global_keys=["idx", "cui", "title"],
             verbose=self.verbose,
         )
 
@@ -229,7 +232,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens = [self.tokenizer.cls_token_id]
         return start_tokens
 
-    def get_collate_pipe(self) -> Pipe:
+    def _get_collate_pipe(self) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate

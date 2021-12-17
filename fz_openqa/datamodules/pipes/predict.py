@@ -367,6 +367,7 @@ class Predict(Pipe):
                 )
         else:
             # process the whole dataset using Trainer
+            logger.info(f"Writing vectors to {callback.cache_file}")
             self._process(
                 dataset,
                 callback=callback,

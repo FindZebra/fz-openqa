@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Union
 
+import rich
 import torch
 from transformers import PreTrainedTokenizerFast
 
@@ -21,7 +24,7 @@ def add_spec_token(
     return f"{special_token}{text}"
 
 
-def set_row_idx(example: Dict[str, Any], idx: int, key: str = "idx") -> Dict[str, Any]:
+def set_row_idx(_, idx: int | List[int], key: str = "idx") -> Dict[str, Any]:
     return {key: idx}
 
 

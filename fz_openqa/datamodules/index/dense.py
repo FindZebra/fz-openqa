@@ -30,6 +30,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm.rich import tqdm
 
+from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
@@ -39,8 +40,8 @@ from fz_openqa.datamodules.pipes.predict import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ class FaissIndex(Index):
         "loader_kwargs",
         "persist_cache",
         "cache_dir",
+        "trainer",
         "progress_bar",
         "predict_docs",
         "predict_queries",
@@ -300,6 +302,7 @@ class FaissIndex(Index):
 
         # define the progress bar
         train_size = min(cached_vectors.num_rows, self.faiss_train_size)
+        logger.info(f"Index training size: {train_size}")
 
         # init the faiss index and add the 1st batch
         vectors = next(it)
@@ -391,6 +394,7 @@ class FaissIndex(Index):
 
         """
         # reshape as 2D array
+        logger.info(f"Initializing index with vectors: {vectors.shape}")
         vectors = vectors.view((-1, vectors.shape[-1])).contiguous()
 
         # init the faiss index
@@ -456,6 +460,7 @@ class FaissIndex(Index):
         vectors = vectors.to(torch.float32)
         self._index.train(vectors)
         assert self._index.is_trained is True, "Index is not trained"
+        logger.info("Index is trained.")
 
     def _add_batch_to_index(self, vectors: torch.Tensor):
         """
@@ -546,7 +551,6 @@ class FaissIndex(Index):
         **kwargs,
     ):
         trainer = trainer or self.trainer
-        pprint_batch(collate_fn([dataset[i] for i in range(3)]), "cache_query_dataset")
         self._cache_vectors(
             dataset,
             predict=self.predict_queries,
@@ -631,3 +635,11 @@ class FaissIndex(Index):
     def _read_vectors_table(self) -> TensorArrowTable:
         logger.info(f"Reading vectors table from: {self.vector_file.absolute()}")
         return TensorArrowTable(self.vector_file, dtype=self.dtype)
+
+    def _set_index_name(self, dataset) -> None:
+        """Set the index name. Must be unique to allow for sage caching."""
+        cls_id = camel_to_snake(type(self).__name__)
+        pipe_fingerprint = self.fingerprint(reduce=True, exclude=["model"])
+        model_fingerprint = get_fingerprint(self.model)
+        self.index_name = f"{cls_id}-{dataset._fingerprint}-{pipe_fingerprint}-{model_fingerprint}"
+        logger.info(f"Index name: {self.index_name}")

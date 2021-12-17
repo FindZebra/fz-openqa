@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from pathlib import Path
 
 import datasets
@@ -15,8 +16,6 @@ from fz_openqa import configs
 from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
 from fz_openqa.datamodules.builders.corpus import FzCorpusBuilder
 from fz_openqa.datamodules.builders.fz_queries import FzQueriesBuilder
-from fz_openqa.datamodules.index import ElasticSearchIndexBuilder
-from fz_openqa.datamodules.index import FaissIndexBuilder
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.index.rank import FetchCuiAndRank
@@ -24,15 +23,9 @@ from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CKPT = "/scratch/valv/fz-openqa/runs/2021-12-16/17-36-40/"
-if not Path(DEFAULT_CKPT).exists():
-    DEFAULT_CKPT = (
-        "https://drive.google.com/file/d/11IgxWOVFLcSqiIwtWXgDEQ1NpNdl-egL/view?usp=sharing"
-    )
 default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
@@ -80,6 +73,18 @@ def run(config: DictConfig) -> None:
     logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     # avoid "too many open files" error
     torch.multiprocessing.set_sharing_strategy("file_system")
+
+    # change checkpoint
+    if os.environ.get("USER") == "valv" and sys.platform != "darwin":
+        if any("colbert" in arg for arg in sys.argv):
+            DEFAULT_CKPT = "/scratch/valv/fz-openqa/runs/2021-12-16/17-36-40"
+        else:
+            DEFAULT_CKPT = "/scratch/valv/fz-openqa/runs/2021-12-17/10-39-57"
+    else:
+        DEFAULT_CKPT = (
+            "https://drive.google.com/file/d/11IgxWOVFLcSqiIwtWXgDEQ1NpNdl-egL/view?usp=sharing"
+        )
+    logger.info(f"Using checkpoint: {DEFAULT_CKPT}")
 
     # load a checkpoint
     # todo: cleanup config overriding
@@ -131,7 +136,9 @@ def run(config: DictConfig) -> None:
         model=model,
         trainer=trainer,
         dataset=corpus,
-        collate_pipe=corpus_builder.get_collate_pipe(),
+        collate_pipe=corpus_builder.get_collate_pipe(
+            columns=["document.text", "document.input_ids", "document.attention_mask"]
+        ),
     )
 
     logger.info(f"Indexing index with {index_builder}..")
@@ -141,26 +148,28 @@ def run(config: DictConfig) -> None:
     logger.info(f"Indexing dataset (pipe={index.fingerprint(reduce=True)})..")
     indexed_dataset = index(
         dataset,
-        collate_fn=dataset_builder.get_collate_pipe(),
+        collate_fn=dataset_builder.get_collate_pipe(
+            columns=["question.input_ids", "question.attention_mask"]
+        ),
         k=config.get("topk", 1000),
         batch_size=10,
         trainer=trainer,
         num_proc=4,
-        cache_fingerprint=Path(cache_dir) / "rank_fz_queries_fingerprints" / "index",
+        cache_fingerprint=Path(cache_dir) / "rank_fz_queries_fingerprints",
         fingerprint_kwargs_exclude=["trainer"],
         set_new_fingerprint=True,
     )
 
     # compute the rank
     logger.info("Ranking dataset..")
-    ranker = FetchCuiAndRank(corpus, method="sum")
+    ranker = FetchCuiAndRank(corpus, method="sum", fetch_max_chunk_size=100)
     indexed_dataset = ranker(
         indexed_dataset,
         batch_size=10,
         # writer_batch_size=3000,
         num_proc=4,
-        cache_fingerprint=Path(cache_dir) / "rank_fz_queries_fingerprints" / "ranker",
-        deterministic_fingerprint=True,
+        cache_fingerprint=Path(cache_dir) / "rank_fz_queries_fingerprints",
+        set_new_fingerprint=True,
     )
 
     # display questions and retrieved passages

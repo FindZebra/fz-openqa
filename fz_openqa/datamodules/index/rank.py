@@ -76,8 +76,10 @@ class ComputeCuiRank(Pipe):
             cui_ids[d_cui] += [i]
             if method == "sum":
                 if d_score < -1e3:
-                    logger.warning(f"Score {d_score} is low.")
-                cui_scores[d_cui] += d_score
+                    # NB: This is a hack to deal with -float("inf") values.
+                    logger.warning(f"Score {d_score} is low. Skipping.")
+                else:
+                    cui_scores[d_cui] += d_score
             else:
                 cui_scores[d_cui] = max(cui_scores[d_cui], d_score)
 
@@ -132,12 +134,17 @@ class FetchCuiAndRank(Sequential):
         output_key: str = "question.document_rank",
         output_match_id_key: str = "question.matched_document_idx",
         method: str = "sum",
+        fetch_max_chunk_size: int = 100,
         level: int = 1,
         **kwargs,
     ):
         super().__init__(
             ApplyAsFlatten(
-                FetchDocuments(corpus_dataset=corpus_dataset, keys=[document_cui_key]),
+                FetchDocuments(
+                    corpus_dataset=corpus_dataset,
+                    keys=[document_cui_key],
+                    max_chunk_size=fetch_max_chunk_size,
+                ),
                 input_filter=In([document_id_key]),
                 update=True,
                 level=level,

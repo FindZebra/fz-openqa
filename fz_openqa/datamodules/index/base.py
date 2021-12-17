@@ -6,6 +6,7 @@ from enum import Enum
 from typing import List
 from typing import Optional
 
+import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.search_result import SearchResult
@@ -37,7 +38,7 @@ class Index(Pipe):
     index_name: Optional[str] = None
     is_indexed: bool = False
     default_key: Optional[str | List[str]] = None
-    no_fingerprint: List[str] = ["verbose", "index_name", "max_chunksize", "id"]
+    no_fingerprint: List[str] = ["verbose", "index_name", "max_chunksize", "id", "k"]
 
     def __init__(
         self,

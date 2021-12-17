@@ -10,11 +10,13 @@ from datasets import load_dataset
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
+from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.dataset import take_subset
@@ -182,7 +184,14 @@ class HfDatasetBuilder(DatasetBuilder):
         )
         return dataset
 
-    def get_collate_pipe(self) -> Pipe:
+    def get_collate_pipe(self, columns: Optional[List[str]] = None) -> Pipe:
+        pipe = self._get_collate_pipe()
+        if columns is not None:
+            pipe = Sequential(pipe, FilterKeys(In(columns)))
+
+        return pipe
+
+    def _get_collate_pipe(self) -> Pipe:
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 

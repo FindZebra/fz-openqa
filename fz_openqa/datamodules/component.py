@@ -130,7 +130,9 @@ class Component:
         else:
             return Component._fingerprint(x)
 
-    def fingerprint(self, reduce=False) -> str | Dict[str, Any]:
+    def fingerprint(
+        self, reduce=False, exclude: Optional[List[str]] = None
+    ) -> str | Dict[str, Any]:
         """
         Return a fingerprint of the object. All attributes stated in `no_fingerprint` are excluded.
 
@@ -154,10 +156,12 @@ class Component:
 
         return fingerprints
 
-    def _get_fingerprint_struct(self) -> List | Dict:
+    def _get_fingerprint_struct(self, exclude: Optional[List[str]] = None) -> List | Dict:
         """get the fingerprint for each element in the JSON-like representation
         of the object, and exclude all parameters stated in `no_fingerprint`"""
-        data = self.to_json_struct(exclude_no_recursive=self.no_fingerprint)
+        exclude = exclude or []
+        exclude.extend(self.no_fingerprint or [])
+        data = self.to_json_struct(exclude_no_recursive=exclude)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
             """return the fingerprint, excepts if key==__name__"""

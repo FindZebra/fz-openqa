@@ -74,7 +74,7 @@ class FzQueriesBuilder(MedQaBuilder):
 
         return dataset
 
-    def get_collate_pipe(self):
+    def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions")
 

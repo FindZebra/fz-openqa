@@ -75,10 +75,15 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
                 # cleanup the text
                 text = re.sub(cleanr, "", article["raw_content"])
 
+                # get cui
+                cui = article["cui"]
+                if cui is None:
+                    cui = "<unknown-cui>"
+
                 # yield the data
                 yield idx, {
-                    "text": text,
-                    "title": article["title"],
-                    "cui": article["cui"],
+                    "text": str(text),
+                    "title": str(article["title"]),
+                    "cui": str(cui),
                     "idx": idx,
                 }
