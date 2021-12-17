@@ -179,7 +179,9 @@ def run(config: DictConfig) -> None:
 
     # compute the rank
     logger.info("Ranking dataset..")
-    ranker = FetchCuiAndRank(corpus, method="sum", fetch_max_chunk_size=100)
+    ranker = FetchCuiAndRank(
+        corpus, method=config.get("rank_method", "sum"), fetch_max_chunk_size=100
+    )
     indexed_dataset = ranker(
         indexed_dataset,
         batch_size=10,
