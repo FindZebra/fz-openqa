@@ -6,3 +6,5 @@ from .builder import FaissOrEsIndexBuilder
 from .builder import IndexBuilder
 from .dense import FaissIndex
 from .es import ElasticSearchIndex
+from .rank import ComputeCuiRank
+from .rank import FetchCuiAndRank

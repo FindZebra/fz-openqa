@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import List
 from typing import Optional
 
@@ -10,6 +11,7 @@ from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
+from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -22,59 +24,15 @@ class SearchCorpus(ApplyAsFlatten):
         self,
         index: Index,
         *,
+        k: int = 1,
         level: int = 0,
         **kwargs,
     ):
         assert "input_filter" not in kwargs
         self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
-        pipe = SearchCorpusFlat(index, **kwargs)
-        super().__init__(pipe, level=level, input_filter=input_filter, update_idx=True)
-
-
-class SearchCorpusFlat(Pipe):
-    """Search a Corpus object given a query"""
-
-    def __init__(
-        self,
-        index: Index,
-        *,
-        k: Optional[int] = None,
-        index_output_key: str = "document.row_idx",
-        score_output_key: str = "document.retrieval_score",
-        analyzed_output_key: str = "document.analyzed_tokens",
-        **kwargs,
-    ):
-        super(SearchCorpusFlat, self).__init__(**kwargs)
-        self.index = index
-        self.index_output_key = index_output_key
-        self.score_output_key = score_output_key
-        self.analyzed_output_key = analyzed_output_key
-        self.k = k
-
-    def _call_batch(
-        self,
-        query: Batch,
-        *,
-        k: Optional[int] = None,
-        **kwargs,
-    ):
-        # update args
-        k = k or self.k
-
-        # query the index
-        search_result = self.index.search(query, k=k, **kwargs)
-
-        # store as a dictionary and return
-        output = {
-            self.index_output_key: search_result.index,
-            self.score_output_key: search_result.score,
-        }
-
-        if search_result.tokens is not None:
-            output[self.analyzed_output_key] = search_result.tokens
-
-        return output
+        pipe = Partial(index, k=k)
+        super().__init__(pipe, level=level, input_filter=input_filter, flatten_idx=True)
 
 
 class FetchDocuments(Pipe):
@@ -86,6 +44,8 @@ class FetchDocuments(Pipe):
     `datasets.Dataset.__getitem__` is used to fetch the documents. It return fewer
     documents than the requested number of documents if `max_chunk_size` is too large.
     Set `max_chunk_size` to a smaller value to avoid this.
+
+    todo: merge this within the Index using MixIn
     """
 
     def __init__(
@@ -139,6 +99,9 @@ class FetchDocuments(Pipe):
         # get the `dataset` indexes
         # todo: query dataset for unique indexes only (torch.unique)
         indexes = [int(idx) for idx in batch[self.index_key]]
+
+        if len(indexes) == 0:
+            return {}
 
         rows = self._fetch_rows(indexes, max_chunk_size=self.max_chunk_size)
         new_indexes = rows[self.index_key]

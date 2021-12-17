@@ -4,6 +4,7 @@ from .corpus import FzCorpusBuilder
 from .corpus import FZxMedQaCorpusBuilder
 from .corpus import MedQaCorpusBuilder
 from .corpus import WikipediaCorpusBuilder
+from .fz_queries import FzQueriesBuilder
 from .hf_dataset import HfDatasetBuilder
 from .medqa import ConcatMedQaBuilder
 from .medqa import MedQaBuilder

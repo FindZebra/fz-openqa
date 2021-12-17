@@ -1,0 +1,5 @@
+defaults:
+  - stopwords
+
+_target_: fz_openqa.datamodules.pipes.SciSpaCyFilter
+model_name: en_core_sci_sm

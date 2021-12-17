@@ -1,8 +1,23 @@
+defaults:
+  - base
+  - text_filter: null
+
 _target_: fz_openqa.datamodules.index.ElasticSearchIndexBuilder
 
-index_key: "document.row_idx"
-text_key: "document.text"
-query_key: "question.text"
-num_proc: ${datamodule.num_proc}
+# key to index
+required_keys: text
+
+# text cleaning
 filter_mode: null
-_id: elastic_search
+text_formatter: null
+
+# return the ES analyzed tokens
+analyze_es_tokens: false
+
+# arguments for preprocessing the index
+prep_map_kwargs:
+  batch_size: 100
+  num_proc: ${datamodule.num_proc}
+
+# id for logging
+id: elastic_search

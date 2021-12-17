@@ -178,7 +178,7 @@ class OpenQaBuilder(DatasetBuilder):
             dataset=corpus,
             model=model,
             trainer=trainer,
-            collate_pipe=self.corpus_builder.get_collate_pipe(),
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
         )
 
         dataset = self.map_dataset(
@@ -355,7 +355,7 @@ class OpenQaBuilder(DatasetBuilder):
                 to_tensor=["match_score", "retrieval_score"],
                 id="collate-nested-document-attributes",
             ),
-            self.dataset_builder.get_collate_pipe(),
+            self.dataset_builder._get_collate_pipe(),
         )
 
         # B. select documents (resample the field `document.row_idx`)
@@ -370,7 +370,7 @@ class OpenQaBuilder(DatasetBuilder):
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(columns=self.output_columns),
-            collate_pipe=self.corpus_builder.get_collate_pipe(),
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
             level=document_nesting_level,
         )
 

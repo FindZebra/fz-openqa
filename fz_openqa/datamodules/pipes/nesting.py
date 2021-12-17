@@ -130,13 +130,13 @@ class ApplyAsFlatten(Pipe):
         self,
         pipe: Pipe,
         level: int = 1,
-        update_idx: bool = True,
+        flatten_idx: bool = True,
         **kwargs,
     ):
         super(ApplyAsFlatten, self).__init__(**kwargs)
         self.pipe = pipe
         self.level = level
-        self.update_idx = update_idx
+        self.flatten_idx = flatten_idx
         if level > 0:
             self.flatten = Flatten(level=level)
             self.nest = Nest(shape=None)
@@ -151,7 +151,7 @@ class ApplyAsFlatten(Pipe):
         batch = self.flatten(batch)
 
         # compute the new index
-        if self.update_idx:
+        if self.flatten_idx:
             idx = kwargs.get("idx", None)
             if idx is not None:
                 kwargs = kwargs.copy()

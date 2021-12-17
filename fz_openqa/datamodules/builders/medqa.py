@@ -126,10 +126,11 @@ class MedQaBuilder(HfDatasetBuilder):
         # add an index column
         dataset = dataset.map(
             partial(set_row_idx, key="question.row_idx"),
-            batched=False,
+            batched=True,
+            batch_size=1000,
             num_proc=self.num_proc,
             with_indices=True,
-            desc="Indexing",
+            desc="Indexing rows",
         )
 
         return dataset
@@ -158,7 +159,7 @@ class MedQaBuilder(HfDatasetBuilder):
             shape=None,
         )
 
-    def get_collate_pipe(self):
+    def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
@@ -256,7 +257,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         # add an index column
         dataset = dataset.map(
             partial(set_row_idx, key="question.row_idx"),
-            batched=False,
+            batched=True,
             num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing",
@@ -297,7 +298,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
             shape=[-1, self.n_options],
         )
 
-    def get_collate_pipe(self):
+    def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
