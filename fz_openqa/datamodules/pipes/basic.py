@@ -338,3 +338,8 @@ class Partial(Pipe):
         _kwargs = self.kwargs.copy()
         _kwargs.update(kwargs)
         return self.pipe(batch, **_kwargs)
+
+    def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        _kwargs = self.kwargs.copy()
+        _kwargs.update(kwargs)
+        return self.pipe(examples, **_kwargs)

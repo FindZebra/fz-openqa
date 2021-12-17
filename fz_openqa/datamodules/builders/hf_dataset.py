@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -184,10 +187,15 @@ class HfDatasetBuilder(DatasetBuilder):
         )
         return dataset
 
-    def get_collate_pipe(self, columns: Optional[List[str]] = None) -> Pipe:
+    def get_collate_pipe(
+        self, transform: Optional[Callable | Pipe] = None, columns: Optional[List[str]] = None
+    ) -> Pipe:
         pipe = self._get_collate_pipe()
         if columns is not None:
             pipe = Sequential(pipe, FilterKeys(In(columns)))
+
+        if transform is not None:
+            pipe = Sequential(pipe, transform)
 
         return pipe
 

@@ -9,6 +9,7 @@ defaults:
       - checkpoint
       - progress_bar
   - override /datamodule/index_builder: dense # todo colbert
+  - override /datamodule/transform: span_dropout
 
 base:
   seed: null
@@ -87,6 +88,9 @@ datamodule:
       batch_size: 1000
       num_workers: 8
       pin_memory: true
+
+  transform:
+    rate: 0.3
 
 logger:
   wandb:

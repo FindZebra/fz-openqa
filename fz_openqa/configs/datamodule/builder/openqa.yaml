@@ -4,6 +4,7 @@ defaults:
 
 _target_: fz_openqa.datamodules.builders.OpenQaBuilder
 index_builder: ${datamodule.index_builder}
+transform: ${datamodule.transform}
 relevance_classifier: ${datamodule.relevance_classifier}
 n_retrieved_documents: ${datamodule.n_retrieved_documents}
 n_documents: ${datamodule.n_documents}
@@ -13,4 +14,4 @@ select_mode: ${datamodule.select_mode}
 output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}
-batch_size: 100
+batch_size: 10
