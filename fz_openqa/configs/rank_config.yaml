@@ -37,6 +37,10 @@ datamodule:
     persist_cache: true
     cache_dir: ${sys.cache_dir}
     verbose: true
+    progress_bar: true
+    dtype: float32
+    p: 100
+    keep_maxsim_on_cpu: true
 
 # command applied before overriding another config
 override_ops:

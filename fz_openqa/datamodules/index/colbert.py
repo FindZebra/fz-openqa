@@ -68,9 +68,19 @@ class ColbertIndex(FaissIndex):
     _max_add_per_gpu = 1 << 25
     _max_num_proc: int = 1
 
-    def __init__(self, *args, p: int = 10, **kwargs):
+    no_fingerprint: List[str] = FaissIndex.no_fingerprint + [
+        "_max_sim",
+        "_vectors" "_emb2pid",
+        "in_memory",
+        "_is_gpu",
+        "_max_add_per_gpu",
+        "keep_maxsim_on_cpu",
+    ]
+
+    def __init__(self, *args, p: int = 10, keep_maxsim_on_cpu: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self.p = p
+        self.keep_maxsim_on_cpu = keep_maxsim_on_cpu
 
     @torch.no_grad()
     def _call_batch(
@@ -202,10 +212,15 @@ class ColbertIndex(FaissIndex):
         embedding_ids = embedding_ids.view(num_queries, -1)
         return embedding_ids.to(Q.device)
 
-    def __del__(self):
+    def to_cpu(self):
+        super().to_cpu()
         if self._max_sim is not None:
+            if isinstance(self._max_sim, nn.DataParallel):
+                self._max_sim = self._max_sim.module
             self._max_sim = self._max_sim.to("cpu")
-            del self._max_sim
+
+    def __del__(self):
+        self.to_cpu()
         super(ColbertIndex, self).__del__()
 
     @property
@@ -254,10 +269,15 @@ class ColbertIndex(FaissIndex):
         return emb2pid.reshape(-1).contiguous()
 
     def _allocate_gpus(self, n_gpus):
+        """Allocate GPUs to the faiss index and to max_sim"""
         gpus = list(range(n_gpus))
         if n_gpus > 1:
-            faiss_gpus = gpus[n_gpus // 2 :]
-            maxsim_gpus = gpus[: n_gpus // 2]
+            if not self.keep_maxsim_on_cpu:
+                faiss_gpus = gpus[n_gpus // 2 :]
+                maxsim_gpus = gpus[: n_gpus // 2]
+            else:
+                faiss_gpus = gpus
+                maxsim_gpus = []
         elif n_gpus == 1:
             faiss_gpus = gpus
             maxsim_gpus = []

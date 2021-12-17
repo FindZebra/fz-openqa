@@ -44,6 +44,8 @@ class FetchDocuments(Pipe):
     `datasets.Dataset.__getitem__` is used to fetch the documents. It return fewer
     documents than the requested number of documents if `max_chunk_size` is too large.
     Set `max_chunk_size` to a smaller value to avoid this.
+
+    todo: merge this within the Index using MixIn
     """
 
     def __init__(

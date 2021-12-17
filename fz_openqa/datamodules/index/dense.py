@@ -120,8 +120,6 @@ class FaissIndex(Index):
     _master: bool = True
     _max_num_proc: int = 1
     no_fingerprint: List[str] = Index.no_fingerprint + [
-        "_max_sim",
-        "_emb2pid",
         "faiss_args",
         "in_memory",
         "loader_kwargs",
@@ -438,8 +436,7 @@ class FaissIndex(Index):
 
     def _train_ends(self):
         """move the index back to CPU if it was moved to GPU"""
-        if isinstance(self._index, faiss.IndexReplicas):
-            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+        self.to_cpu()
 
     def _train(self, vectors: torch.Tensor):
         """
@@ -532,6 +529,7 @@ class FaissIndex(Index):
     ) -> Dataset:
         trainer = trainer or self.trainer
         if trainer:
+            self.to_cpu()
             self.cache_query_dataset(
                 dataset, collate_fn=collate_fn, trainer=trainer, persist_cache=persist_cache
             )
@@ -591,10 +589,13 @@ class FaissIndex(Index):
         self.__dict__.update(state)
 
     def __del__(self):
-        if isinstance(self._index, faiss.IndexReplicas):
-            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+        self.to_cpu()
         if self._master and self.persist_cache is False:
             shutil.rmtree(self.cache_dir, ignore_errors=True)
+
+    def to_cpu(self):
+        if isinstance(self._index, faiss.IndexReplicas):
+            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
 
     # def _get_fingerprint_struct(self) -> List | Dict:
     #     """Add the model fingerprint to the struct"""

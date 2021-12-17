@@ -213,3 +213,6 @@ class Index(Pipe):
             output = {k: formatter(v) for k, v in output.items()}
 
         return output
+
+    def to_cpu(self):
+        pass

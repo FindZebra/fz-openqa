@@ -9,4 +9,5 @@ faiss_args:
 
 faiss_train_size: 1000
 p: 30
+keep_maxsim_on_cpu: true
 _id: colbert

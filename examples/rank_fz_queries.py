@@ -66,6 +66,24 @@ def run(config: DictConfig) -> None:
          - Recall@  100: 76.61%
          - Recall@ 1000: 87.90%
 
+        Dense (CLS):
+         - Recall@    1: 0.00%
+         - Recall@    5: 3.63%
+         - Recall@   20: 8.47%
+         - Recall@   50: 15.73%
+         - Recall@  100: 22.58%
+         - Recall@ 1000: 46.37%
+
+         Dense (Colbert):
+          - Recall@    1: 0.40%
+          - Recall@    5: 3.63%
+          - Recall@   20: 10.48%
+          - Recall@   50: 17.34%
+          - Recall@  100: 20.97%
+          - Recall@ 1000: 36.29%
+
+
+
     ```
     """
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -74,7 +92,7 @@ def run(config: DictConfig) -> None:
     # avoid "too many open files" error
     torch.multiprocessing.set_sharing_strategy("file_system")
 
-    # change checkpoint
+    # set the default checkpoint based on the environment
     if os.environ.get("USER") == "valv" and sys.platform != "darwin":
         if any("colbert" in arg for arg in sys.argv):
             DEFAULT_CKPT = "/scratch/valv/fz-openqa/runs/2021-12-16/17-36-40"
@@ -84,7 +102,6 @@ def run(config: DictConfig) -> None:
         DEFAULT_CKPT = (
             "https://drive.google.com/file/d/11IgxWOVFLcSqiIwtWXgDEQ1NpNdl-egL/view?usp=sharing"
         )
-    logger.info(f"Using checkpoint: {DEFAULT_CKPT}")
 
     # load a checkpoint
     # todo: cleanup config overriding
@@ -96,7 +113,7 @@ def run(config: DictConfig) -> None:
     rich.print(f">> cache_dir = {cache_dir}, exists={cache_dir.exists()}")
 
     # load model
-    model: Model = loader.load_model()
+    model: Model = loader.load_model(zero_shot=config.get("zero_shot", False))
     logger.info(f"Loaded model {type(model.module)}, fingerprint={get_fingerprint(model)}")
 
     # initialize the corpus builder
@@ -175,7 +192,9 @@ def run(config: DictConfig) -> None:
     # display questions and retrieved passages
     indices = slice(40, 50)
     fetch_doc_data = FetchDocuments(
-        corpus_dataset=corpus, index_key="document.row_idx", keys=["document.text", "document.cui"]
+        corpus_dataset=corpus,
+        index_key="document.row_idx",
+        keys=["document.text", "document.cui", "document.title"],
     )
     batch = indexed_dataset[indices]
     for i in range(len(batch["question.text"])):
@@ -222,6 +241,52 @@ def run(config: DictConfig) -> None:
     for target_rank in [1, 5, 20, 50, 100, 1000]:
         recall = ((ranks >= 0).float() * (ranks < target_rank).float()).sum() / len(ranks)
         rich.print(f" - Recall@{target_rank:5}: {recall * 100:.2f}%")
+
+    # save all top-k retrieved passages
+    batch_size = 100
+    topk = 10
+    output_path = Path(config.sys.work_dir) / "outputs"
+    output_path.mkdir(exist_ok=True, parents=True)
+    output_path = (
+        output_path
+        / f'ranking-{", ".join(sys.argv[1:]).replace(" ","").replace("/",".").replace("+","")}.txt'
+    )
+    logger.info(f"Saving top-{topk} retrieved docs to `{output_path.absolute()}`")
+    with open(str(output_path), "w") as f:
+        for i in range(0, len(indexed_dataset), batch_size):
+            batch = indexed_dataset[i : i + batch_size]
+            for i in range(len(batch["question.text"])):
+                q_txt = batch["question.text"][i]
+                q_txt = q_txt.replace("'", "")
+                f.write(100 * "=" + "\n")
+                f.write(
+                    f" - query #{i + 1} - cui={batch['question.cui'][i]}, "
+                    f"match_rank={batch['question.document_rank'][i]}, "
+                    f"query=`{q_txt}`\n"
+                )
+
+                # get the global ids (row_idx)
+                batch_row_ids = batch["document.row_idx"][i][:topk]
+
+                # fetch the document data given the document row_idx
+                docs = fetch_doc_data({"document.row_idx": batch_row_ids})
+
+                # display the matched documents
+                for j in range(len(docs["document.text"])):
+                    f.write(100 * "." + "\n")
+                    doc_txt = docs["document.text"][j]
+                    doc_txt = doc_txt.replace("'", "").replace("\n", " ")
+                    q_cuis = batch["question.cui"][i]
+                    is_match = any(
+                        q_cui.lower() == docs["document.cui"][j].lower() for q_cui in q_cuis
+                    )
+                    f.write(
+                        f"- doc #{j + 1}, query #{i+1}, "
+                        f"score={batch['document.retrieval_score'][i][j]:.2f}, "
+                        f"title={docs['document.title'][j]}, "
+                        f"match={is_match}, "
+                        f"text=`{doc_txt}`\n"
+                    )
 
 
 if __name__ == "__main__":

@@ -88,7 +88,10 @@ class ComputeCuiRank(Pipe):
         ranked_cuis = [x[0] for x in ranked_cuis]
 
         # return the rank of the question cui
-        return ranked_cuis.index(q_cui), cui_ids.get(q_cui, [])
+        try:
+            return ranked_cuis.index(q_cui), cui_ids.get(q_cui, [])
+        except ValueError:
+            return None, []
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
         """Compute the rank of the query CUIs in the retrieved documents and

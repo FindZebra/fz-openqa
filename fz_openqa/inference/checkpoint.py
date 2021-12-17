@@ -113,11 +113,11 @@ class CheckpointLoader:
     def load_bert(self):
         return instantiate(self.config.model.bert)
 
-    def load_model(self, last=False, **kwargs) -> Model:
+    def load_model(self, last=False, zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
 
         path = self.model_checkpoint(last=last)
-        if path is not None:
+        if path is not None and not zero_shot:
             logger.info(f"Loading model from checkpoint: {path}")
             # need to override the saved `tokenizer` and `bert` hyperparameters
             # so `sys.cache_dir` can be overridden
