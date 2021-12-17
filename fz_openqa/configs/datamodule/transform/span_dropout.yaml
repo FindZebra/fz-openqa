@@ -1,0 +1,7 @@
+_target_: fz_openqa.datamodules.pipes.SpanDropout
+
+lbda: 3
+rate: 0.1
+field: question
+keys: [ input_ids, attention_mask ]
+update: true

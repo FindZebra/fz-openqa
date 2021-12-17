@@ -4,6 +4,7 @@ defaults:
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - relevance_classifier: exact_match
+  - transform: none
 
 _target_: fz_openqa.datamodules.DataModule
 

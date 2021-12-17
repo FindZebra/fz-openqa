@@ -82,6 +82,7 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int = 100,
         writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
+        transform: Optional[Pipe] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -93,6 +94,9 @@ class OpenQaBuilder(DatasetBuilder):
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
+
+        # transform for the collate_fn
+        self.transform = transform
 
         # objects
         self.index_builder = index_builder
@@ -379,6 +383,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Collate Q&A + document indexes", collate_qad),
                 ("Select documents", select_documents),
                 ("Fetch document data", fetch_documents),
+                ("Transform", self.transform),
             ],
             id="collate-pipeline",
         )

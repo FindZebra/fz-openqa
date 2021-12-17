@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
+from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
@@ -139,8 +140,11 @@ class DataModule(LightningDataModule):
 
     def _get_collate_fn(self, split: Split):
         collate_fn = self.collate_pipe
+
+        # add the split info to the collate_fn
         if isinstance(collate_fn, Pipe):
             collate_fn = partial(collate_fn, split=split)
+
         return collate_fn
 
     def val_dataloader(self, **kwargs):

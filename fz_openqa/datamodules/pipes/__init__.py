@@ -38,6 +38,7 @@ from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
 from .sorting import Sort
+from .span_dropout import SpanDropout
 from .text_filtering import SciSpaCyFilter
 from .text_filtering import StopWordsFilter
 from .text_filtering import TextFilter
