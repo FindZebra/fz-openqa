@@ -14,4 +14,4 @@ select_mode: ${datamodule.select_mode}
 output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}
-batch_size: 10
+batch_size: 100

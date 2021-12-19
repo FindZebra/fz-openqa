@@ -9,7 +9,6 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -42,15 +41,27 @@ class SelectMode(Enum):
     SAMPLE = "sample"
 
 
-def replace_tokens(x: torch.Tensor | list | Number, *, a: Any, b: Any, **kwargs):
+def replace_with_n_tokens(x: torch.Tensor | list | Number, *, a: Any, b: Any, n: int, **kwargs):
+    """replace the token `a` with `n` `b` tokens"""
+    if isinstance(x, list):
+        if isinstance(x[0], list):
+            x = [replace_with_n_tokens(y, a=a, b=b, n=n, **kwargs) for y in x]
+        else:
+            idx = x.index(a)
+            x = x[:idx] + n * [b] + x[idx + 1 :]
+    else:
+        raise TypeError(f"Cannot handle input of type {type(x)}")
 
-    if isinstance(x, torch.Tensor):
-        x[x == a] = b
-    elif isinstance(x, Number):
-        if x == a:
-            x = b
-    elif isinstance(x, list):
-        x = [replace_tokens(y, a=a, b=b, **kwargs) for y in x]
+    return x
+
+
+def pad_first(x: torch.Tensor | list | Number, *, value: Any, n: int, **kwargs):
+    """pad the sequence with `n``value`tokens"""
+    if isinstance(x, list):
+        if isinstance(x[0], list):
+            x = [pad_first(y, value=value, n=n, **kwargs) for y in x]
+        else:
+            x = n * [value] + x
     else:
         raise TypeError(f"Cannot handle input of type {type(x)}")
 
@@ -79,8 +90,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         document_key: str = "document.idx",
         passage_key: str = "document.passage_idx",
-        score_key: str = "document.retrieval_score",
-        max_score: float = 10.0,
+        n_query_tokens: int = 10,
         min_distance: int = 1,
         poisson_lambda: float = 2.0,
         n_neighbours: int = 1,
@@ -112,6 +122,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         self.map_args = {
             "min_distance": min_distance,
             "poisson_lambda": poisson_lambda,
+            "n_query_tokens": n_query_tokens,
             "n_neighbours": self.n_neighbours,
             "passage_key": passage_key,
             "document_key": document_key,
@@ -203,6 +214,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         min_distance: float,
         poisson_lambda: float,
         n_neighbours: int,
+        n_query_tokens: int,
         num_proc: int,
         batch_size: int,
         **map_kwargs,
@@ -211,7 +223,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         Build the inverse cloze task dataset.
         """
 
-        # build ICT
+        # Generate Inverse Cloze Task data
         ict_pipe = InverseClozeTask(
             document_key=document_key,
             passage_key=passage_key,
@@ -221,19 +233,19 @@ class InverseClozeTaskBuilder(DatasetBuilder):
             keys=["input_ids", "attention_mask"],
         )
 
-        # replace [DOC] with [QUERY] tokens
+        # replace [DOC] with [QUERY] tokens and pad the attention mask
         vocab = self.tokenizer.vocab
         doc_token_id = vocab[DOC_TOKEN]
         query_token_id = vocab[QUERY_TOKEN]
-        fn = partial(replace_tokens, a=doc_token_id, b=query_token_id)
-        replace_tokens_pipe = Apply({"question.input_ids": fn})
+        fn_a = partial(replace_with_n_tokens, a=doc_token_id, b=query_token_id, n=n_query_tokens)
+        fn_b = partial(pad_first, value=1, n=n_query_tokens - 1)
+        replace_tokens_pipe = Apply({"question.input_ids": fn_a, "question.attention_mask": fn_b})
 
         corpus = corpus.map(
             Sequential(ict_pipe, replace_tokens_pipe),
             batch_size=batch_size,
             batched=True,
             num_proc=num_proc,
-            keep_in_memory=True,  # todo: remove this
             desc="Generating Inverse Cloze Task",
             **map_kwargs,
         )
@@ -250,6 +262,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
                 tokenizer=self.tokenizer,
                 level=1,
                 include_only=["input_ids", "attention_mask", "match_score", "retrieval_score"],
+                to_tensor=["match_score", "retrieval_score"],
             ),
         )
 

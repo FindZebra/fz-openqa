@@ -6,6 +6,7 @@ from .corpus import MedQaCorpusBuilder
 from .corpus import WikipediaCorpusBuilder
 from .fz_queries import FzQueriesBuilder
 from .hf_dataset import HfDatasetBuilder
+from .inverse_cloze_task import InverseClozeTaskBuilder
 from .medqa import ConcatMedQaBuilder
 from .medqa import MedQaBuilder
 from .openqa import OpenQaBuilder

@@ -1,0 +1,22 @@
+defaults:
+  - builder: inverse_cloze_task
+  - text_formatter: simple_lowercase
+  - tokenizer: pretrained
+  - transform: none
+
+_target_: fz_openqa.datamodules.DataModule
+
+# datamodule args
+train_batch_size: 10
+eval_batch_size: 20
+num_workers: 4
+pin_memory: True
+persistent_workers: False
+drop_last: False
+
+# global: dataset preprocessing
+add_encoding_tokens: true
+add_special_tokens: true
+use_subset: false
+num_proc: 4
+cache_dir: ${sys.cache_dir}
