@@ -3,24 +3,24 @@ from __future__ import annotations
 import json
 import logging
 from enum import Enum
+from functools import partial
+from numbers import Number
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import pytorch_lightning as pl
-import rich
+import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
-from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
-from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
-from fz_openqa.datamodules.pipes import BlockSequential
-from fz_openqa.datamodules.pipes import Flatten
+from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
@@ -29,6 +29,10 @@ from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.typing import HfDataset
+from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,21 @@ logger = logging.getLogger(__name__)
 class SelectMode(Enum):
     FIRST = "first"
     SAMPLE = "sample"
+
+
+def replace_tokens(x: torch.Tensor | list | Number, *, a: Any, b: Any, **kwargs):
+
+    if isinstance(x, torch.Tensor):
+        x[x == a] = b
+    elif isinstance(x, Number):
+        if x == a:
+            x = b
+    elif isinstance(x, list):
+        x = [replace_tokens(y, a=a, b=b, **kwargs) for y in x]
+    else:
+        raise TypeError(f"Cannot handle input of type {type(x)}")
+
+    return x
 
 
 class InverseClozeTaskBuilder(DatasetBuilder):
@@ -60,6 +79,8 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         document_key: str = "document.idx",
         passage_key: str = "document.passage_idx",
+        score_key: str = "document.retrieval_score",
+        max_score: float = 10.0,
         min_distance: int = 1,
         poisson_lambda: float = 2.0,
         n_neighbours: int = 1,
@@ -190,7 +211,8 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         Build the inverse cloze task dataset.
         """
 
-        pipe = InverseClozeTask(
+        # build ICT
+        ict_pipe = InverseClozeTask(
             document_key=document_key,
             passage_key=passage_key,
             min_distance=min_distance,
@@ -198,11 +220,20 @@ class InverseClozeTaskBuilder(DatasetBuilder):
             n_neighbours=n_neighbours,
             keys=["input_ids", "attention_mask"],
         )
+
+        # replace [DOC] with [QUERY] tokens
+        vocab = self.tokenizer.vocab
+        doc_token_id = vocab[DOC_TOKEN]
+        query_token_id = vocab[QUERY_TOKEN]
+        fn = partial(replace_tokens, a=doc_token_id, b=query_token_id)
+        replace_tokens_pipe = Apply({"question.input_ids": fn})
+
         corpus = corpus.map(
-            pipe,
+            Sequential(ict_pipe, replace_tokens_pipe),
             batch_size=batch_size,
             batched=True,
             num_proc=num_proc,
+            keep_in_memory=True,  # todo: remove this
             desc="Generating Inverse Cloze Task",
             **map_kwargs,
         )
@@ -218,7 +249,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
                 "document",
                 tokenizer=self.tokenizer,
                 level=1,
-                include_only=["input_ids", "attention_mask", "document.match_score"],
+                include_only=["input_ids", "attention_mask", "match_score", "retrieval_score"],
             ),
         )
 
@@ -226,5 +257,55 @@ class InverseClozeTaskBuilder(DatasetBuilder):
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Pretty format a dataset row"""
-        args = {"dataset_builder": self.corpus_builder, "tokenizer": self.tokenizer}
-        return format_row_flat_questions(row, **args)
+        decode_kwargs = {
+            "skip_special_tokens": False,
+            "tokenizer": self.tokenizer,
+        }
+        repr = "* Question:"
+        repr += (
+            pretty_decode(
+                row["question.input_ids"],
+                **decode_kwargs,
+                style="deep_sky_blue3",
+            )
+            + "\n"
+        )
+
+        repr += get_separator("-") + "\n"
+        n_docs = len(row["document.input_ids"])
+        match_scores = row.get("document.match_score", None)
+        doc_scores = row.get("document.retrieval_score", None)
+        if doc_scores is None:
+            doc_scores = [None] * n_docs
+        if match_scores is None:
+            match_scores = [None] * n_docs
+            n_positives = None
+            n_negative = None
+        else:
+            n_positives = sum(match_scores > 0)
+            n_negative = sum(match_scores == 0)
+        repr += (
+            f"* Documents: n={n_docs}, " f"n_positive={n_positives}, " f"n_negative={n_negative}\n"
+        )
+        for j in range(min(n_docs, 3)):
+            repr += get_separator(".") + "\n"
+
+            match_on = row.get("document.match_on", None)
+            match_on = match_on[j] if match_on is not None else None
+            repr += (
+                f"|-* Document #{1 + j}, "
+                f"score={doc_scores[j]}, "
+                f"match_score={match_scores[j]}, "
+                f"match_on={match_on}\n"
+            )
+
+            repr += (
+                pretty_decode(
+                    row["document.input_ids"][j],
+                    **decode_kwargs,
+                    style="white",
+                )
+                + "\n"
+            )
+
+        return repr

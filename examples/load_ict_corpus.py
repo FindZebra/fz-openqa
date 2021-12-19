@@ -45,12 +45,16 @@ def run(config: DictConfig) -> None:
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", False),
         cache_dir=config.sys.cache_dir,
+        passage_length=200,
+        passage_stride=200,
         num_proc=4,
         analyses=[ReportCorpusStatistics(output_dir="./analyses")],
     )
 
     # initialize the Inverse Cloze Task Builder
-    ict_builder = InverseClozeTaskBuilder(corpus_builder=builder, n_neighbours=1, num_proc=2)
+    ict_builder = InverseClozeTaskBuilder(
+        corpus_builder=builder, n_neighbours=3, num_proc=4, min_distance=1, poisson_lambda=2
+    )
     dataset = ict_builder()
     collate_fn = ict_builder.get_collate_pipe()
 
@@ -61,7 +65,7 @@ def run(config: DictConfig) -> None:
     pprint_batch(batch, "ICT batch")
 
     for i in range(3):
-        # todo: debug format row and check results
+        # todo: replace DOC tokens
         rich.print(ict_builder.format_row({k: v[i] for k, v in batch.items()}))
 
 

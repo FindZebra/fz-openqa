@@ -5,12 +5,10 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-import rich
 import torch
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class InverseClozeTask(Pipe):
@@ -20,6 +18,8 @@ class InverseClozeTask(Pipe):
         passage_key: str = "document.passage_idx",
         input_field: str = "document",
         output_field: str = "question",
+        score_keys: str | List[str] = None,
+        max_score: float = 100.0,
         min_distance: float = 1,
         poisson_lambda: float = 1,
         n_neighbours: int = 1,
@@ -28,14 +28,16 @@ class InverseClozeTask(Pipe):
     ):
         super().__init__(**kwargs)
 
-        if n_neighbours > 1:
-            raise NotImplementedError("n_neighbours > 1 not implemented")
+        if isinstance(score_keys, str):
+            score_keys = [score_keys]
 
         self.document_key = document_key
         self.passage_key = passage_key
         self.input_field = input_field
         self.output_field = output_field
         self.min_distance = min_distance
+        self.score_keys = score_keys or ["document.match_score", "document.retrieval_score"]
+        self.max_score = max_score
         self.poisson_lambda = poisson_lambda
         self.n_neighbours = n_neighbours
         self.keys = keys
@@ -50,15 +52,44 @@ class InverseClozeTask(Pipe):
             doc_partition[doc_id].append(i)
 
         sampled_indices = []
+        sampled_scores = []
         for i, (doc_id, passage_id) in enumerate(zip(doc_ids, passage_ids)):
-            # get the target distance from the current passage
-            distance = np.random.poisson(self.poisson_lambda)
-            distance = max(self.min_distance, distance)
-
-            # get the set of candidate documents
+            # get the list of ids matching the doc_id
             candidates_ids = doc_partition[doc_id]
-            candidates = [i for i in candidates_ids if abs(passage_ids[i] - passage_id) == distance]
-            sampled_indices.append(np.random.choice(candidates))
+
+            # sample distances without replacement
+            samples_i = []
+            scores_i = []
+            while len(samples_i) < self.n_neighbours:
+                # sample a distance
+                d_j = np.random.poisson(self.poisson_lambda)
+                d_j = max(d_j, self.min_distance)
+
+                # sample a passage given this distance
+                sign = 2 * int(np.random.random() > 0.5) - 1
+                j = i + sign * d_j
+
+                # reject if already included
+                if j in samples_i:
+                    continue
+
+                # check if j is from the same document
+                if j not in candidates_ids:
+                    continue
+
+                # the, if the passage is valid, append
+                samples_i.append(j)
+                score_j = max(1.0, self.max_score) - d_j
+                scores_i.append(score_j)
+
+            # sort descending
+            data = zip(samples_i, scores_i)
+            data = sorted(data, key=lambda x: -x[1])
+            samples_i, scores_i = map(list, zip(*data))
+
+            # append
+            sampled_indices.append(samples_i)
+            sampled_scores.append(scores_i)
 
         # rename the batch
         output = {
@@ -69,10 +100,12 @@ class InverseClozeTask(Pipe):
         for key in self.keys:
             values = output[f"{self.output_field}.{key}"]
             output[f"{self.input_field}.{key}"] = [
-                self._concat([values[i]]) for i in sampled_indices
+                self._concat([values[i] for i in selected_ids]) for selected_ids in sampled_indices
             ]
 
-        output[f"{self.input_field}.match_score"] = [[1] for i in sampled_indices]
+        # add the score column(s)
+        for key in self.score_keys:
+            output[key] = sampled_scores
 
         return output
 
