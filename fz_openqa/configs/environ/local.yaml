@@ -11,10 +11,14 @@ trainer:
 
 datamodule:
   use_subset: True
-  train_batch_size: 10
-  eval_batch_size: 20
+  train_batch_size: 4
+  eval_batch_size: 4
   num_proc: 2
   num_workers: 2
+  n_documents:
+    train: 3
+    validation: 3
+    test: 3
 
 datamodule.corpus_builder:
   passage_length: 100

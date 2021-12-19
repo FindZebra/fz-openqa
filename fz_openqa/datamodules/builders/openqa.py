@@ -14,6 +14,8 @@ import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
@@ -82,7 +84,7 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int = 100,
         writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
-        transform: Optional[Pipe] = None,
+        transform: Optional[Pipe | DictConfig] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -96,6 +98,11 @@ class OpenQaBuilder(DatasetBuilder):
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
         # transform for the collate_fn
+        if isinstance(transform, (dict, DictConfig)):
+            if len(transform):
+                transform = instantiate(transform)
+            else:
+                transform = None
         self.transform = transform
 
         # objects
