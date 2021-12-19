@@ -23,7 +23,7 @@ trainer:
   min_epochs: 1
   max_epochs: 200
   accumulate_grad_batches: 2
-  check_val_every_n_epoch: 1
+  val_check_interval: 0.3
   # reload_dataloaders_every_n_epochs: 1
 
 
@@ -41,8 +41,8 @@ datamodule:
   mapping_freq: null
 
   # dataloader
-  train_batch_size: 64
-  eval_batch_size: 256
+  train_batch_size: 128
+  eval_batch_size: 2000
   num_workers: 16 # setting this too high might lead `Dataset.map()` to hang
   persistent_workers: true
   pin_memory: true
@@ -80,4 +80,4 @@ datamodule:
 
 logger:
   wandb:
-    group: colbert-qa-retriever
+    group: inverse-cloze-task

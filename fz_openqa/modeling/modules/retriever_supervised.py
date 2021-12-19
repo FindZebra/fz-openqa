@@ -1,9 +1,12 @@
 from typing import Any
 from typing import Optional
 
+import einops
+import rich
 import torch
 from torch.nn import functional as F
 
+from ...utils.pretty import pprint_batch
 from .option_retriever import Similarity
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims
@@ -40,13 +43,15 @@ class RetrieverSupervised(Module):
 
     def __init__(
         self,
-        compute_loss_on_device_zero: bool = False,
+        compute_loss_across_devices: bool = False,
+        distillation_weight: float = 0,  # todo
         **kwargs,
     ):
         super().__init__(**kwargs)
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
-        self.compute_loss_on_device_zero = compute_loss_on_device_zero
+        self.distillation_weight = distillation_weight
+        self.compute_loss_across_devices = compute_loss_across_devices
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -109,7 +114,15 @@ class RetrieverSupervised(Module):
         # check features, check that the first document of each question is positive
         check_only_first_doc_positive(batch)
         output = self._forward(batch, _compute_similarity=False, **kwargs)
-        if not self.compute_loss_on_device_zero:
+        if self.distillation_weight > 0:
+            if "document.retrieval_score" not in batch.keys():
+                ValueError(
+                    f"`document.retrieval_score` must be provided, "
+                    f"found keys={list(batch.keys())}"
+                )
+            output["_distillation_targets_"] = batch["document.retrieval_score"]
+
+        if not self.compute_loss_across_devices:
             output = self._compute_loss(output)
         return output
 
@@ -121,11 +134,11 @@ class RetrieverSupervised(Module):
         Else, gather logits and targets + average losses.
         """
 
-        if self.compute_loss_on_device_zero:
+        if self.compute_loss_across_devices:
             output = self._compute_loss(output)
 
         # average losses
-        for k in ["loss"]:
+        for k in ["loss", "distillation_loss"]:
             y = output.get(k, None)
             if y is not None:
                 output[k] = y.mean()
@@ -153,20 +166,45 @@ class RetrieverSupervised(Module):
         output["_logits_"] = score_matrix.detach()
         output["_targets_"] = targets.detach()
 
+        # compute the distillation loss
+        if self.distillation_weight > 0:
+            distilation_targets = output["_distillation_targets_"]
+            bs, n_docs = distilation_targets.shape
+            hd_ = einops.rearrange(hd, "(bs n_docs) ... -> bs n_docs ...", bs=bs, n_docs=n_docs)
+
+            element_wise_score = self.compute_similarity(hq, hd_)
+            kl_div = F.kl_div(element_wise_score, distilation_targets)
+            output["distillation_loss"] = kl_div.mean()
+            loss += self.distillation_weight * kl_div.mean()
+
         return output
 
     def compute_similarity(self, hq: torch.Tensor, hd: torch.Tensor) -> torch.Tensor:
         """
         Compute the similarity between the question and all the documents.
         """
-        if self.similarity == Similarity.CLS:
-            return torch.einsum("nh, mh -> nm", hq, hd)
-        elif self.similarity == Similarity.COLBERT:
-            scores = torch.einsum("nqh, mdh -> nmqd", hq, hd)
-            max_scores, _ = torch.max(scores, dim=-1)
-            return max_scores.mean(-1)
+        assert hq.shape[-1] == hd.shape[-1]
+        if len(hq.shape) == len(hd.shape):
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("nh, mh -> nm", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("nqh, mdh -> nmqd", hq, hd)
+                max_scores, _ = torch.max(scores, dim=-1)
+                return max_scores.mean(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}")
         else:
-            raise ValueError(f"Unknown similarity: {self.similarity}")
+            assert hq.shape[0] == hd.shape[0]
+            assert len(hd.shape) == len(hq.shape) + 1
+
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("nh, nmh -> nm", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("nqh, nmdh -> nmqd", hq, hd)
+                max_scores, _ = torch.max(scores, dim=-1)
+                return max_scores.mean(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}")
 
     def _generate_targets(self, batch_size, *, n_docs: int, device: torch.device):
         """Generate targets. Assuming the target document is the first

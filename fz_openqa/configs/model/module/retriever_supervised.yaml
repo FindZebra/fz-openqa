@@ -1,2 +1,6 @@
 _target_: fz_openqa.modeling.modules.RetrieverSupervised
 _id: supervised_retriever
+
+
+distillation_weight: 0
+compute_loss_across_devices: false
