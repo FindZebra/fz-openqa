@@ -33,7 +33,13 @@ def pretty_decode(
         style_out = f"[/{style}]"
     else:
         style_in = style_out = ""
-    n_pad_tokens = list(tokens).count(tokenizer.pad_token_id)
+
+    if isinstance(tokens, Tensor):
+        tokens = tokens.cpu().numpy()
+    if isinstance(tokens, np.ndarray):
+        tokens = tokens.tolist()
+
+    n_pad_tokens = tokens.count(tokenizer.pad_token_id)
     txt = tokenizer.decode(tokens, **kwargs)
     txt = f"{style_in}`{txt.replace('[PAD]', '').strip()}`{style_out}"
     if only_text:

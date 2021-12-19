@@ -119,7 +119,7 @@ def run(config: DictConfig) -> None:
     # initialize the corpus builder
     logging.info(
         f"Initializing corpus builder "
-        f"<{loader.config.datamodule.builder.corpus_builder._target_}>"
+        f"<{loader.config.datamodule.corpus_builder.corpus_builder._target_}>"
     )
     corpus_builder: FzCorpusBuilder = loader.instantiate(
         "datamodule.builder.corpus_builder",
@@ -129,7 +129,7 @@ def run(config: DictConfig) -> None:
     # initialize the queries builder
     logging.info(
         f"Initializing dataset builder "
-        f"<{loader.config.datamodule.builder.dataset_builder._target_}>"
+        f"<{loader.config.datamodule.corpus_builder.dataset_builder._target_}>"
     )
     dataset_builder: FzQueriesBuilder = loader.instantiate(
         "datamodule.builder.dataset_builder",
