@@ -2,10 +2,13 @@ from enum import Enum
 from typing import Any
 from typing import Optional
 
+import einops
 import torch
 from datasets import Split
 from torch import Tensor
 
+from ...utils.pretty import pprint_batch
+from .utils.gradients import batch_backprop_grads
 from .utils.gradients import GradExpression
 from .utils.gradients import in_batch_grads
 from .utils.gradients import supervised_loss
@@ -49,13 +52,18 @@ class OptionRetriever(Module):
     ]
 
     # require heads
-    _required_heads = ["question", "document"]
+    _required_heads = [
+        "question_reader",
+        "document_reader",
+        "question_retriever",
+        "document_retriever",
+    ]
 
     def __init__(
         self,
         *args,
         alpha: float = 0.01,
-        grad_expr: GradExpression = GradExpression.VARIATIONAL,
+        grad_expr: GradExpression = GradExpression.BATCH_BACKPROP,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -76,7 +84,7 @@ class OptionRetriever(Module):
         q_shape = d_shape = None
         output = {}
         if "document.input_ids" in batch:
-            d_shape = batch["document.input_ids"].shape
+            bs, n_opts, n_docs, _ = batch["document.input_ids"].shape
             # flatten the batch_size and n_options and n_docs dimensions
             d_batch = flatten_first_dims(
                 batch,
@@ -85,13 +93,26 @@ class OptionRetriever(Module):
             )
 
             # process the document with the backbone
-            hd = self._backbone(d_batch, prefix="document", head="document", **kwargs)
+            h_heads = self._backbone(
+                d_batch,
+                prefix="document",
+                heads=["document_reader", "document_retriever"],
+                **kwargs,
+            )
             # reshape and return
-            hd = hd.reshape(*d_shape[:3], *hd.shape[1:])
-            output["_hd_"] = hd
+            for k, v in h_heads.items():
+                tag = k.split("_")[-1]
+                v = einops.rearrange(
+                    v,
+                    "(bs n_opts n_docs) ... -> bs n_opts n_docs ...",
+                    bs=bs,
+                    n_opts=n_opts,
+                    n_docs=n_docs,
+                )
+                output[f"_hd_{tag}_"] = v
 
         if "question.input_ids" in batch:
-            q_shape = batch["question.input_ids"].shape
+            bs, n_opts, _ = batch["question.input_ids"].shape
             # flatten the batch_size and n_options dimensions
             q_batch = flatten_first_dims(
                 batch,
@@ -100,11 +121,20 @@ class OptionRetriever(Module):
             )
 
             # process the document with the backbone
-            hq = self._backbone(q_batch, prefix="question", head="question", **kwargs)
+            q_heads = self._backbone(
+                q_batch,
+                prefix="question",
+                heads=["question_reader", "question_retriever"],
+                **kwargs,
+            )
 
             # reshape and return
-            hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
-            output["_hq_"] = hq
+            for k, v in q_heads.items():
+                tag = k.split("_")[-1]
+                v = einops.rearrange(v, "(bs n_opts) ... -> bs n_opts ...", bs=bs, n_opts=n_opts)
+                output[f"_hq_{tag}_"] = v
+
+        pprint_batch(output, "forward", silent=True)
 
         if all(d is not None for d in (d_shape, q_shape)):
             if not d_shape[:2] == q_shape[:2]:
@@ -124,20 +154,31 @@ class OptionRetriever(Module):
         # process the batch using BERT and the heads
         targets = batch["answer.target"]
         output = self._forward(batch, **kwargs)
-        hq, hd = (output[k] for k in ["_hq_", "_hd_"])
+        keys = [
+            "_hq_reader_",
+            "_hd_reader_",
+            "_hq_retriever_",
+            "_hd_retriever_",
+        ]
+        hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
 
         # compute the score for each pair `f([q_j; a_j], d_jk)`
-        partial_score = self._compute_score(hd=hd, hq=hq)
 
-        if self.grad_expr in [GradExpression.BATCH_GATHER, GradExpression.BATCH_SUM]:
-            step_output = in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
-        elif self.grad_expr == GradExpression.VARIATIONAL:
-            step_output = variational_grads(partial_score, targets, grad_expr=self.grad_expr)
+        reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
+        retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
+
+        if self.grad_expr == GradExpression.BATCH_BACKPROP:
+            step_output = batch_backprop_grads(
+                reader_score=reader_score,
+                retriever_score=retriever_score,
+                targets=targets,
+                grad_expr=self.grad_expr,
+            )
         else:
             raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
 
         # auxiliary loss
-        supervised_loss_out = supervised_loss(partial_score, batch["document.match_score"])
+        supervised_loss_out = supervised_loss(retriever_score, batch["document.match_score"])
         supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
         if self.alpha > 0:
             step_output["loss"] += self.alpha * supervised_loss_
@@ -145,16 +186,41 @@ class OptionRetriever(Module):
 
         return step_output
 
-    def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
+    def _compute_score(
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        across_batch: bool = False,
+    ) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
-        if self.similarity == Similarity.CLS:
-            return torch.einsum("boh, bodh -> bod", hq, hd)
-        elif self.similarity == Similarity.COLBERT:
-            scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
-            max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+        if not across_batch:
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("boh, bodh -> bod", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
-            raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
+            if doc_ids is None:
+                raise ValueError("doc_ids is required for non-element-wise computation")
+
+            # get the unique list of documents vectors
+            hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
+            doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
+            udoc_ids, uids = torch.unique(doc_ids, return_inverse=True)
+            hd = hd[uids]
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("boh, mh -> bom", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

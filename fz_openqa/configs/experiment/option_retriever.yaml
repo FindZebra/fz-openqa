@@ -1,9 +1,12 @@
 # @package _global_
 
 defaults:
-  - base
+  - colbert_qa_retriever
   - override /model: option_retriever
+  - override /model/head: cls # todo colbert
+  - override /model/bert: pubmed # todo: pubmed
   - override /datamodule/builder: concat_openqa
+
 base:
   seed: null
   target_metric: validation/reader/logp
@@ -15,22 +18,23 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 300
+  val_check_interval: 0.3
 
 datamodule:
-  use_subset: false
+  # how often to map the dataset
+  mapping_freq: null
+
+  # dataloader
   train_batch_size: 8
   eval_batch_size: 128
-  num_workers: 16
-  builder:
-    batch_size: 20
-  n_documents:
-    train: 12
-    validation: 12
-    test: 12
-  max_pos_docs: 1
-  filter_unmatched: False
-  select_mode: sample
+  num_workers: 8 # setting this too high might lead `Dataset.map()` to hang
+  persistent_workers: false
+  pin_memory: true
+  # drop_last: true # todo: fix this
+
+  # dataset builder
+  use_subset: false
+  num_proc: 4
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -39,7 +43,38 @@ datamodule:
     - document.row_idx
     - document.match_score
     - document.retrieval_score
-    - answer.target
+
+  # documents
+  n_documents:
+    train: 20
+    validation: 100
+    test: 100
+  max_pos_docs: 1
+  filter_unmatched: true
+  select_mode: sample
+
+  # tag documents as positive or negative
+  relevance_classifier:
+    interpretable: false
+
+  # OpenQA builder parameters
+  builder:
+    batch_size: 100
+    writer_batch_size: 1000
+    dataset_builder:
+      n_query_tokens: 0
+    corpus_builder:
+      use_subset: false
+
+  # Index parameters
+  index_builder:
+    loader_kwargs:
+      batch_size: 1000
+      num_workers: 8
+      pin_memory: true
+
+  transform:
+    rate: 0
 
 logger:
   wandb:

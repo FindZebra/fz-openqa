@@ -7,12 +7,14 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from .utils import batch_cartesian_product
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class GradExpression(Enum):
     BATCH_SUM = "batch-sum"
     BATCH_GATHER = "batch-gather"
     VARIATIONAL = "variational"
+    BATCH_BACKPROP = "batch-backprop"
 
 
 @dataclass
@@ -106,6 +108,70 @@ def variational_grads(partial_score: Tensor, targets: Tensor, **kwargs):
     loss_reader = q.logp_a_star__d.mean(1)
     loss = -1 * (loss_reader + retrieval_loss)
 
+    return {
+        "loss": loss,
+        "reader/logp": q.logp_a_star.detach(),
+        "_reader_logits_": q.logp_a.detach(),
+        "_reader_targets_": targets.detach(),
+        "_doc_logits_": q.log_p_d__a_no_perm.detach(),
+    }
+
+
+def base_quantities_2(
+    retriever_score: Tensor, reader_score: Tensor, targets: torch.Tensor
+) -> Quantities:
+    # repeat the scores for all combinations of documents:
+    # `D \in D_1 \times D_2 \times ... \times D_N`
+    targets = targets.unsqueeze(1)
+    expanded_reader_score, expanded_retriever_score = batch_cartesian_product(
+        [reader_score, retriever_score]
+    )
+    # partial answer log-likelihood `\log p(a | q, D[\sigma], A)` for `\sigma \in S(M)`
+    logp_a__d = expanded_reader_score.log_softmax(dim=1)
+    targets_ = targets.expand(-1, expanded_reader_score.shape[2])
+    logp_a_star__d = -F.cross_entropy(logp_a__d, targets_, reduction="none")
+    # document log-likelihood `\log p(\sigma(d_j) | a_j, q_j)`
+    normalizer = retriever_score.logsumexp(dim=2, keepdim=True)
+    log_p_d__a = expanded_retriever_score - normalizer
+    log_p_d__a_no_perm = retriever_score.log_softmax(dim=2)
+
+    pprint_batch(
+        {
+            "retriever_score": retriever_score,
+            "reader_score": reader_score,
+            "expanded_reader_score": expanded_reader_score,
+            "expanded_retriever_score": expanded_retriever_score,
+            "log_p_d__a": log_p_d__a,
+            "log_p_d__a_no_perm": log_p_d__a_no_perm,
+        },
+        "base_quantities_2",
+        silent=True,
+    )
+
+    # answer lower-bound: `\sum_\sigma \log p(a_\star | q, A)`
+    logp_a = (logp_a__d + log_p_d__a.sum(dim=1, keepdims=True)).logsumexp(dim=2)
+    logp_a_star = torch.gather(logp_a, dim=1, index=targets).squeeze(1)
+    return Quantities(
+        score=reader_score,
+        log_p_d__a=log_p_d__a,
+        log_p_d__a_no_perm=log_p_d__a_no_perm,
+        logp_a=logp_a,
+        logp_a_star=logp_a_star,
+        logp_a_star__d=logp_a_star__d,
+    )
+
+
+def batch_backprop_grads(
+    *,
+    retriever_score: Tensor,
+    reader_score: Tensor,
+    targets: Tensor,
+    grad_expr: GradExpression = GradExpression.BATCH_SUM,
+):
+    """Compute the gradients assuming the batch being the entire dataset"""
+    q = base_quantities_2(retriever_score, reader_score, targets)
+
+    loss = -1 * (q.logp_a_star).mean(-1)
     return {
         "loss": loss,
         "reader/logp": q.logp_a_star.detach(),
