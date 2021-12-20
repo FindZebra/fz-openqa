@@ -10,7 +10,7 @@ from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import EnxTwMedQABuilder
+from fz_openqa.datamodules.builders.medqa import EnxTwMedQaBuilder
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -33,9 +33,9 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = EnxTwMedQABuilder(
+    builder = EnxTwMedQaBuilder(
         tokenizer=tokenizer,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         min_answer_length=config.get("min_answer_length", None),
         num_proc=2,
@@ -46,7 +46,8 @@ def run(config: DictConfig) -> None:
     dm.display_samples()
 
     # access dataset
-    rich.print(dm.dataset)
+    rich.print(f"Dataset shape: {dm.dataset.shape}")
+    rich.print(f"Numbers of unique questions: {len(set(dm.dataset['train']['question.idx']))}")
 
 
 if __name__ == "__main__":

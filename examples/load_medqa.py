@@ -34,7 +34,7 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = EnxTwMedQaBuilder(
+    builder = MedQaBuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
@@ -47,7 +47,7 @@ def run(config: DictConfig) -> None:
     dm.display_samples()
 
     # access dataset
-    rich.print(dm.dataset.shape)
+    rich.print(dm.dataset)
 
 
 if __name__ == "__main__":
