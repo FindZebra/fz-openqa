@@ -803,4 +803,6 @@ DISCARD_TUIs = [
     # Activities & Behaviors
     "T052",  # Activity
     "T057",  # Occupational Activity
+    # Living Beings
+    "T101",  # Patient or Disabled Group
 ]
