@@ -5,8 +5,8 @@ defaults:
   - override /datamodule: openqa
   - override /datamodule/builder: concat_openqa
   - override /model: medqa_reader
-  - override /model/bert: mini.yaml #debug
-  - override /sys: local.yaml #debug
+#  - override /model/bert: mini.yaml #debug
+#  - override /sys: local.yaml #debug
 
 base:
   seed: null
@@ -15,21 +15,21 @@ base:
 
 
 trainer:
-  gpus: 0 #debug
+  gpus: 8 #debug
   checkpoint_callback: true #debug
   strategy: dp
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 8 #debug
+  val_check_interval: 0.5 #debug
 
 
 datamodule:
   use_subset: false #debug
-  train_batch_size: 4
-  eval_batch_size: 8
+  train_batch_size: 16
+  eval_batch_size: 32
   num_proc: 4
-  num_workers: 4
+  num_workers: 16 #debug
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -43,8 +43,8 @@ datamodule:
     - answer.target
 
   # documents
-  n_retrieved_documents: 3
-  n_documents: 3
+  n_retrieved_documents: 20
+  n_documents: 20
   filter_unmatched: false
 
   # encoding tokens
@@ -55,7 +55,7 @@ datamodule:
   builder:
     corpus_builder:
       to_sentences: true
-      use_subset: true #debug
+      use_subset: false #debug
       passage_length: 100
       passage_stride: 50
 
@@ -65,4 +65,4 @@ callbacks: null
 
 #logger:
 #  wandb:
-#    group: medqa-reader-only # name your experiment here
+#    group: medqa-mop-reader # name your experiment here
