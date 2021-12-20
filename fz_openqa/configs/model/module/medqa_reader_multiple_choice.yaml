@@ -1,0 +1,3 @@
+_target_: fz_openqa.modeling.modules.MedQaReader
+
+concat_strategy: concat

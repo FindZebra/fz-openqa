@@ -1,0 +1,68 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /datamodule: openqa
+  - override /datamodule/builder: concat_openqa
+  - override /model: medqa_reader
+  - override /model/bert: mini.yaml #debug
+  - override /sys: local.yaml #debug
+
+base:
+  seed: null
+  target_metric: validation/reader/Accuracy
+  target_mode: max
+
+
+trainer:
+  gpus: 0 #debug
+  checkpoint_callback: true #debug
+  strategy: dp
+  min_epochs: 1
+  max_epochs: 1000
+  accumulate_grad_batches: 4
+  val_check_interval: 8 #debug
+
+
+datamodule:
+  use_subset: false #debug
+  train_batch_size: 4
+  eval_batch_size: 8
+  num_proc: 4
+  num_workers: 4
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+    - answer.input_ids
+    - answer.attention_mask
+    - answer.target
+
+  # documents
+  n_retrieved_documents: 3
+  n_documents: 3
+  filter_unmatched: false
+
+  # encoding tokens
+  add_encoding_tokens: true
+  add_special_tokens: true
+
+  # builder options
+  builder:
+    corpus_builder:
+      to_sentences: true
+      use_subset: true #debug
+      passage_length: 100
+      passage_stride: 50
+
+
+logger: null
+callbacks: null
+
+#logger:
+#  wandb:
+#    group: medqa-reader-only # name your experiment here

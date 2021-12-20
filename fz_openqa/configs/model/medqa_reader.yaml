@@ -1,0 +1,5 @@
+defaults:
+  - base
+  - head: null
+  - override bert: bert_multiple_choice.yaml
+  - override module: medqa_reader_multiple_choice

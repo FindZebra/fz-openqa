@@ -399,6 +399,14 @@ python-versions = "*"
 six = ">=1.4.0"
 
 [[package]]
+name = "einops"
+version = "0.3.2"
+description = "A new flavour of deep learning operations"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "elasticsearch"
 version = "7.16.1"
 description = "Python client for Elasticsearch"
@@ -430,6 +438,7 @@ spacy = ">=3.0.1,<3.1.0"
 [package.source]
 type = "url"
 url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz"
+
 [[package]]
 name = "en-core-sci-sm"
 version = "0.4.0"
@@ -444,6 +453,7 @@ spacy = ">=3.0.1,<3.1.0"
 [package.source]
 type = "url"
 url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_sm-0.4.0.tar.gz"
+
 [[package]]
 name = "faiss-cpu"
 version = "1.6.5"
@@ -2504,6 +2514,10 @@ distlib = [
 docker-pycreds = [
     {file = "docker-pycreds-0.4.0.tar.gz", hash = "sha256:6ce3270bcaf404cc4c3e27e4b6c70d3521deae82fb508767870fdbf772d584d4"},
     {file = "docker_pycreds-0.4.0-py2.py3-none-any.whl", hash = "sha256:7266112468627868005106ec19cd0d722702d2b7d5912a28e19b826c3d37af49"},
+]
+einops = [
+    {file = "einops-0.3.2-py3-none-any.whl", hash = "sha256:285f3c75620897acb8b5580170c88121f010c77ce130bc7b9f220179009dafe0"},
+    {file = "einops-0.3.2.tar.gz", hash = "sha256:5200e413539f0377f4177ef00dc019968f4177c49b1db3e836c7883df2a5fe2e"},
 ]
 elasticsearch = [
     {file = "elasticsearch-7.16.1-py2.py3-none-any.whl", hash = "sha256:97e9d62db71a571c540d6dfa2a51bc2263b5c0d7b9f9896eb7116ba02373c69b"},
