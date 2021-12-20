@@ -222,7 +222,7 @@ class TestOptionRetriever(TestModel):
                            f" probs[0]={probs[0]}, "
                            f"probs[1]={probs[1]}")
                 doc_probs = output['_doc_logits_'].detach().exp()
-                doc_dist = (doc_probs - doc_targets).pow(2)
+                # doc_dist = (doc_probs - doc_targets).pow(2)
                 if VERBOSE > 5:
                     rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 

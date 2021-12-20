@@ -3,7 +3,9 @@ from typing import Any
 from typing import Optional
 
 import einops
+import rich
 import torch
+import torch.nn.functional as F
 from datasets import Split
 from torch import Tensor
 
@@ -62,12 +64,14 @@ class OptionRetriever(Module):
     def __init__(
         self,
         *args,
-        alpha: float = 0.01,
+        alpha: float = 0,
+        resample_k: Optional[int] = None,
         grad_expr: GradExpression = GradExpression.BATCH_BACKPROP,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
+        self.resample_k = resample_k
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
@@ -152,8 +156,42 @@ class OptionRetriever(Module):
         """
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
-        targets = batch["answer.target"]
-        output = self._forward(batch, **kwargs)
+
+        d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
+        q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
+
+        if self.resample_k:
+
+            # compute documents logits
+            with torch.no_grad():
+                d_out = self._forward(d_batch, **kwargs)
+
+            # compute questions logits
+            output = self._forward(q_batch, **kwargs)
+
+            # compute the score and sample k without replacement
+            with torch.no_grad():
+                retriever_score = self._compute_score(
+                    hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
+                )
+
+                # sample k documents
+                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
+                sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
+
+                # gather the sampled documents and update d_batch
+                for k, v in d_batch.items():
+                    if isinstance(v, torch.Tensor):
+                        leaf_shape = v.shape[len(sample_ids.shape) :]
+                        _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
+                        _index = _index.expand(*sample_ids.shape, *leaf_shape)
+                        d_batch[k] = v.gather(index=_index, dim=2)
+        else:
+            # compute questions logits
+            output = self._forward(q_batch, **kwargs)
+
+        # compute the document logits
+        output.update(self._forward(d_batch, **kwargs))
         keys = [
             "_hq_reader_",
             "_hd_reader_",
@@ -161,9 +199,7 @@ class OptionRetriever(Module):
             "_hd_retriever_",
         ]
         hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
-
         # compute the score for each pair `f([q_j; a_j], d_jk)`
-
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
@@ -171,7 +207,7 @@ class OptionRetriever(Module):
             step_output = batch_backprop_grads(
                 reader_score=reader_score,
                 retriever_score=retriever_score,
-                targets=targets,
+                targets=batch["answer.target"],
                 grad_expr=self.grad_expr,
             )
         else:
@@ -185,6 +221,11 @@ class OptionRetriever(Module):
         step_output.update(supervised_loss_out)
 
         return step_output
+
+    def _resample_k(self, batch: Batch, k: int) -> Batch:
+        """Re-sample k documents from the batch."""
+        pprint_batch(batch, "resample_k", silent=False)
+        return batch
 
     def _compute_score(
         self,
