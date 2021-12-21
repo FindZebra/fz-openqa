@@ -9,9 +9,13 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
@@ -21,8 +25,9 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_qu
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
-from fz_openqa.datamodules.index.pipes import SearchCorpus
+from fz_openqa.datamodules.index.helpers import FakeDataset
+from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
@@ -31,7 +36,10 @@ from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
+from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -74,7 +82,9 @@ class OpenQaBuilder(DatasetBuilder):
         select_mode: str = "first",
         num_proc: int = 2,
         batch_size: int = 100,
+        writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
+        transform: Optional[Pipe | DictConfig] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -86,6 +96,14 @@ class OpenQaBuilder(DatasetBuilder):
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
+
+        # transform for the collate_fn
+        if isinstance(transform, (dict, DictConfig)):
+            if len(transform):
+                transform = instantiate(transform)
+            else:
+                transform = None
+        self.transform = transform
 
         # objects
         self.index_builder = index_builder
@@ -103,6 +121,7 @@ class OpenQaBuilder(DatasetBuilder):
             "filter_unmatched": filter_unmatched,
             "num_proc": num_proc,
             "batch_size": batch_size,
+            "writer_batch_size": writer_batch_size,
         }
 
     @property
@@ -131,7 +150,12 @@ class OpenQaBuilder(DatasetBuilder):
         return f"{self.__class__.__name__}({args})"
 
     def _call(
-        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+        self,
+        format: Optional[str] = "torch",
+        columns: Optional[List[str]] = None,
+        model: Optional[pl.LightningModule] = None,
+        trainer: Optional[pl.Trainer] = None,
+        **kwargs,
     ) -> OpenQaDataset:
         """
         Build the OpenQA dataset using a base `dataset`, which questions are
@@ -143,8 +167,12 @@ class OpenQaBuilder(DatasetBuilder):
             The format of the dataset (see `Dataset.set_format`)
         columns
             The columns to include in the output dataset.
+        model
+            The model to use for mapping.
+        trainer
+            The trainer to use for mapping.
         kwargs
-            Additional arguments, unused here.
+            Additional arguments, pass to the Dataset.map() in `map_dataset`
         Returns
         -------
         OpenQaDataset
@@ -156,15 +184,23 @@ class OpenQaBuilder(DatasetBuilder):
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder()
 
-        index = self.index_builder(dataset=corpus, **kwargs)
+        # build the index, potnetially using a model
+        index = self.index_builder(
+            dataset=corpus,
+            model=model,
+            trainer=trainer,
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
+        )
 
-        dataset = self.map_dataset(dataset=dataset, corpus=corpus, index=index, **self.map_args)
+        dataset = self.map_dataset(
+            dataset=dataset, corpus=corpus, index=index, **self.map_args, **kwargs
+        )
 
         if format is not None:
             dataset = self.set_format(dataset, format=format)
 
         # remove columns that are not needed
-
+        columns = columns or self.output_columns
         if columns is not None:
             dataset = keep_only_columns(dataset, columns=columns)
             corpus = keep_only_columns(corpus, columns=columns)
@@ -189,6 +225,7 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int,
         relevance_classifier: RelevanceClassifier,
         filter_unmatched: bool,
+        **map_kwargs,
     ) -> DatasetDict:
         """
         Map the dataset with documents from the corpus.
@@ -196,11 +233,10 @@ class OpenQaBuilder(DatasetBuilder):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
-
         question_nesting_level = self.dataset_builder.nesting_level
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
-        # cache the dataset using the index's model
+        # cache the dataset using `index.model`, so vectors can be reused in `SearchCorpus`
         # for nested datasets, the dataset is flatten, so the index
         # in the flatten dataset corresponds to the flattened index
         # in the call of SearchCorpus.
@@ -221,7 +257,6 @@ class OpenQaBuilder(DatasetBuilder):
                 num_proc=num_proc,
                 batch_size=100,
             )
-
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
         # Search the document and tag them with `document.match_score`
@@ -255,9 +290,12 @@ class OpenQaBuilder(DatasetBuilder):
             "num_proc": num_proc,
             "batch_size": batch_size,
             "batched": True,
-            # avoid: pyarrow.lib.ArrowInvalid: Invalid null value
-            # https://github.com/huggingface/datasets/issues/2831
-            "writer_batch_size": 5000,
+            # about: writer_batch_size:
+            # to avoid: pyarrow.lib.ArrowInvalid: Invalid null value
+            #   https://github.com/huggingface/datasets/issues/2831
+            # but setting value to high causes the writer to hang:
+            #   https://github.com/huggingface/datasets/issues/482
+            **map_kwargs,
         }
 
         # process the dataset with each block
@@ -328,7 +366,7 @@ class OpenQaBuilder(DatasetBuilder):
                 to_tensor=["match_score", "retrieval_score"],
                 id="collate-nested-document-attributes",
             ),
-            self.dataset_builder.get_collate_pipe(),
+            self.dataset_builder._get_collate_pipe(),
         )
 
         # B. select documents (resample the field `document.row_idx`)
@@ -343,7 +381,7 @@ class OpenQaBuilder(DatasetBuilder):
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(columns=self.output_columns),
-            collate_pipe=self.corpus_builder.get_collate_pipe(),
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
             level=document_nesting_level,
         )
 
@@ -352,6 +390,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Collate Q&A + document indexes", collate_qad),
                 ("Select documents", select_documents),
                 ("Fetch document data", fetch_documents),
+                ("Transform", self.transform),
             ],
             id="collate-pipeline",
         )

@@ -159,7 +159,6 @@ class Predict(Pipe):
         self,
         model: pl.LightningModule | nn.Module | Callable,
         model_output_keys: List[str],
-        output_key: str = PREDICT_VECTOR_NAME,
         output_dtype: str = "float32",
         requires_cache: bool = False,
         **kwargs,
@@ -190,7 +189,6 @@ class Predict(Pipe):
         self.model = model
         self.requires_cache = requires_cache
         self.model_output_keys = model_output_keys
-        self.output_key = output_key
         self.dtype = output_dtype
 
     def invalidate_cache(self):
@@ -285,7 +283,7 @@ class Predict(Pipe):
         dataset: Dataset,
         *,
         trainer: Optional[Trainer] = None,
-        collate_fn: Optional[Pipe] = None,
+        collate_fn: Optional[Pipe | Callable] = None,
         loader_kwargs: Optional[Dict] = None,
         cache_dir: Optional[str] = None,
         split: Optional[Split] = None,
@@ -369,6 +367,7 @@ class Predict(Pipe):
                 )
         else:
             # process the whole dataset using Trainer
+            logger.info(f"Writing vectors to {callback.cache_file}")
             self._process(
                 dataset,
                 callback=callback,
@@ -437,6 +436,7 @@ class Predict(Pipe):
         callback.close_writer()
         cache_file = callback.cache_file
         trainer.callbacks.remove(callback)
+        del loader
         return cache_file
 
     def read_table(self, split: Optional[Split]) -> TensorArrowTable:
@@ -503,6 +503,7 @@ class Predict(Pipe):
             dataset,
             collate_fn=collate_fn,
             shuffle=False,
+            persistent_workers=False,
             **loader_kwargs,
         )
         return loader
@@ -569,15 +570,18 @@ class Predict(Pipe):
         exclude += ["cache_file", "cache_dir"]
         super(Predict, self).to_json_struct(exclude=exclude, **kwargs)
 
-    def delete_cached_files(self):
+    def delete_cached_files(self, split: Optional[Split] = None):
         """Delete the cached files."""
         logger.info(f"Deleting cached vectors {self.cache_file}")
         self._loaded_table = None
         self._loaded_splits = None
-        if isinstance(self.cache_file, PathLike):
-            shutil.rmtree(self.cache_file, ignore_errors=True)
-        elif isinstance(self.cache_file, dict):
-            for fn in self.cache_file.values():
+        cache_file = self.cache_file
+        if split is not None:
+            cache_file = cache_file[split]
+        if isinstance(cache_file, (str, Path)):
+            shutil.rmtree(cache_file, ignore_errors=True)
+        elif isinstance(cache_file, dict):
+            for fn in cache_file.values():
                 shutil.rmtree(fn, ignore_errors=True)
 
         else:

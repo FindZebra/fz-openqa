@@ -10,6 +10,7 @@ from .basic import FilterKeys
 from .basic import GetKey
 from .basic import Identity
 from .basic import Lambda
+from .basic import Partial
 from .basic import RenameKeys
 from .basic import ReplaceInKeys
 from .batchify import AsBatch
@@ -37,8 +38,8 @@ from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
 from .sorting import Sort
-from .text_filtering import MetaMapFilter
-from .text_filtering import SciSpacyFilter
+from .span_dropout import SpanDropout
+from .text_filtering import SciSpaCyFilter
 from .text_filtering import StopWordsFilter
 from .text_filtering import TextFilter
 from .text_formatter import TextFormatter

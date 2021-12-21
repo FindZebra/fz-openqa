@@ -2,10 +2,12 @@ from typing import Any
 from typing import Callable
 from typing import Union
 
+import numpy as np
 import torch
 from pytorch_lightning.utilities import move_data_to_device
 from torch import Tensor
 
+from . import ApplyToAll
 from ...utils.functional import cast_values_to_numpy
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -20,6 +22,22 @@ class ToNumpy(Pipe):
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return cast_values_to_numpy(batch, as_contiguous=self.as_contiguous)
+
+
+class ToList(ApplyToAll):
+    """Move Tensors to the CPU and cast to numpy arrays."""
+
+    def __init__(self):
+        def op(x: Any):
+            if isinstance(x, Tensor):
+                return x.cpu().numpy()
+            if isinstance(x, np.ndarray):
+                x = x.tolist()
+            if not isinstance(x, list):
+                raise TypeError(f"Cannot convert {type(x)} to list")
+            return x
+
+        super().__init__(op=op)
 
 
 class Itemize(Pipe):

@@ -63,7 +63,7 @@ class Model(LightningModule):
         head: Union[DictConfig, Module] = None,
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
-        num_warmup_steps: int = 10000,
+        num_warmup_steps: int = 1000,
         lr: float = 0.001,
         weight_decay: float = 0.01,
         **kwargs,

@@ -30,7 +30,7 @@ from fz_openqa.callbacks.store_results import StorePredictionsCallback
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.dense import AddRowIdx
-from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import SearchCorpus
@@ -121,7 +121,7 @@ def run(config: DictConfig) -> None:
     predict.cache(
         corpus,
         trainer=trainer,
-        collate_fn=corpus_builder.get_collate_pipe(),
+        collate_fn=corpus_builder._get_collate_pipe(),
         cache_dir=cache_dir,
         loader_kwargs={"batch_size": 2},
         persist=True,
@@ -130,7 +130,7 @@ def run(config: DictConfig) -> None:
     rich.print(f">> cache_file={predict.cache_file}")
 
     idx = list(range(n_samples))
-    batch = corpus_builder.get_collate_pipe()([corpus[i] for i in idx])
+    batch = corpus_builder._get_collate_pipe()([corpus[i] for i in idx])
 
     # idx = list(range(n_samples + 1))
     rich.print("[green]>> processing with cache")

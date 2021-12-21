@@ -9,7 +9,6 @@ from datasets import Dataset
 from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.index import Index
-from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
 from fz_openqa.utils.train_utils import setup_safe_env, silent_huggingface
@@ -114,12 +113,17 @@ class TestIndex(TestCase, ABC):
         index = self._init_index()
         # build the query and search the index using the query
         query = self.dataset_collate([row for row in self.dataset])
-        output = index.search(query, k=self.k)
+        output = index(query, k=self.k)
+
+        index_key = f"{index.index_field}.{index.index_output_key}"
+        score_key = f"{index.index_field}.{index.score_output_key}"
         # check the output type
-        self.assertIsInstance(output, SearchResult)
+        for key in [index_key, score_key]:
+            self.assertIn(key, output.keys())
 
         # cast output
-        data = {'score': output.score, 'index': output.index}
+        data = {'score': output[score_key],
+                'index': output[index_key]}
         data = {k: cast_to_array(v) for k, v in data.items()}
 
         # check that the index values are in [0, len(self.dataset) - 1]

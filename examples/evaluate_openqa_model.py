@@ -104,7 +104,7 @@ def run(config: DictConfig) -> None:
             "pin_memory": config.get("pin_memory", True),
         },
         model_output_keys=["_hd_", "_hq_"],
-        collate_pipe=corpus_builder.get_collate_pipe(),
+        collate_pipe=corpus_builder._get_collate_pipe(),
         persist_cache=config.get("persist_cache", True),
         cache_dir=cache_dir,
     )

@@ -1,5 +1,6 @@
 from copy import copy
 from copy import deepcopy
+from typing import Any
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -300,3 +301,45 @@ class CopyBatch(Pipe):
             return deepcopy(batch)
         else:
             return copy(batch)
+
+
+class Partial(Pipe):
+    """Run a pipe with keyword arguments"""
+
+    def __init__(
+        self,
+        pipe: Pipe,
+        id: Optional[str] = None,
+        input_filter: Optional[Condition] = None,
+        update: bool = False,
+        **kwargs,
+    ):
+        """
+
+        Parameters
+        ----------
+        pipe
+            the pipe to run
+        id
+           An identifier for the pipe.
+        input_filter
+            a condition used to filter keys in the input data
+            (keys that do not satisfy the condition are removed)
+        update
+            If set to True, output the input batch updated with the output batch.
+        kwargs
+            Parameters to the __call__ of the pipe
+        """
+        super().__init__(id=id, input_filter=input_filter, update=update)
+        self.pipe = pipe
+        self.kwargs = kwargs
+
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+        _kwargs = self.kwargs.copy()
+        _kwargs.update(kwargs)
+        return self.pipe(batch, **_kwargs)
+
+    def _call_egs(self, examples: List[Eg], idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        _kwargs = self.kwargs.copy()
+        _kwargs.update(kwargs)
+        return self.pipe(examples, **_kwargs)

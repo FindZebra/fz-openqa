@@ -22,10 +22,11 @@ IDX_COL = "__idx__"
 
 
 def select_field_from_output(batch: Batch, fields: List[str]) -> torch.Tensor:
-    avail_fields = [k for k in batch.keys() if k in fields]
+    batch_keys = list(batch.keys())
+    avail_fields = [k for k in batch_keys if k in fields]
     if len(avail_fields) != 1:
         raise ValueError(
-            f"One and only one field in {fields} must be provided, " f"founds keys={batch.keys()})."
+            f"One and only one field in {fields} must be provided, " f"founds keys={batch_keys})."
         )
     vector = [v for k, v in batch.items() if k in fields][0]
     return vector
@@ -53,8 +54,8 @@ class StorePredictionsCallback(Callback):
         self.accepted_fields = accepted_fields
         self.dtype = dtype
         self._reset()
-        logger.info(f"Initialized {type(self).__name__} with cache_file={self.cache_file}")
-        logger.info(f"is_written={self.is_written}")
+        logger.debug(f"Initialized {type(self).__name__} with cache_file={self.cache_file}")
+        logger.debug(f"is_written={self.is_written}")
 
     def on_predict_epoch_end(self, *args, **kwargs) -> None:
         self.close_writer()

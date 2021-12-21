@@ -46,6 +46,13 @@ class FormatArray:
                 x = torch.tensor(x)
             if x.dtype in [torch.float16, torch.float32]:
                 x = x.to(self.dtype)
+        elif self.output_format == OutputFormat.LIST:
+            if isinstance(x, torch.Tensor):
+                x = x.detach().cpu().numpy()
+            if isinstance(x, np.ndarray):
+                x = x.tolist()
+            if not isinstance(x, list):
+                raise TypeError(f"Unsupported type: {type(x)}")
         else:
             raise ValueError(
                 f"Unsupported output_format: {self.output_format}." f"OutputFormat={OutputFormat}"

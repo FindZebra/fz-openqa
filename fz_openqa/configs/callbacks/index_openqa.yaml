@@ -1,0 +1,2 @@
+index_openqa:
+  _target_: fz_openqa.callbacks.index_openqa.IndexOpenQaCallback

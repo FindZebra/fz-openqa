@@ -1,0 +1,19 @@
+# input keys
+required_keys: ???
+query_field: question
+index_field: document
+
+# additional parameters
+index_output_key: row_idx
+score_output_key: retrieval_score
+analyzed_output_key: analyzed_tokens
+
+# processing
+max_chunksize: 100
+verbose: false
+
+# default values
+k: 10
+
+# logging
+id: ???

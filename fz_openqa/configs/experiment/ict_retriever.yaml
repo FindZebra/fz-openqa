@@ -1,0 +1,83 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /model: retriever
+  - override /model/head: cls # todo colbert
+  - override /model/bert: pubmed # todo: pubmed
+  - override /callbacks:
+      - checkpoint
+      - progress_bar
+  - override /datamodule: inverse_cloze_task
+  - override /datamodule/transform: span_dropout
+
+base:
+  seed: null
+  target_metric: validation/retriever/top10_Accuracy
+  target_mode: max
+  is_search: false
+
+trainer:
+  gpus: 8
+  strategy: dp
+  min_epochs: 1
+  max_epochs: 200
+  accumulate_grad_batches: 2
+  val_check_interval: 0.3
+  # reload_dataloaders_every_n_epochs: 1
+
+
+model:
+  lr: 1e-5
+  weight_decay: 1e-3
+  num_warmup_steps: 1000
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.3
+
+datamodule:
+
+  # how often to map the dataset
+  mapping_freq: null
+
+  # dataloader
+  train_batch_size: 128
+  eval_batch_size: 2000
+  num_workers: 16 # setting this too high might lead `Dataset.map()` to hang
+  persistent_workers: true
+  pin_memory: true
+  drop_last: true # todo: fix this
+
+  # dataset builder
+  use_subset: false
+  num_proc: 8
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+
+  # OpenQA builder parameters
+  builder:
+    batch_size: 100
+    writer_batch_size: 1000
+
+    # ICT parameters
+    n_query_tokens: 10
+    min_distance: 1
+    poisson_lambda: 3
+    n_neighbours: 1
+
+
+    corpus_builder:
+      use_subset: false
+
+  transform:
+    rate: 0
+
+logger:
+  wandb:
+    group: inverse-cloze-task

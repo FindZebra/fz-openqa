@@ -1,15 +1,21 @@
+import warnings
 from enum import Enum
 from typing import Any
 from typing import Optional
 
+import einops
 import torch
+import torch.nn.functional as F
 from datasets import Split
 from torch import Tensor
 
+from ...utils.pretty import pprint_batch
+from .metrics import SafeMetricCollection
+from .metrics import SplitMetrics
+from .utils.gradients import batch_backprop_grads
 from .utils.gradients import GradExpression
-from .utils.gradients import in_batch_grads
 from .utils.gradients import supervised_loss
-from .utils.gradients import variational_grads
+from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
@@ -49,17 +55,24 @@ class OptionRetriever(Module):
     ]
 
     # require heads
-    _required_heads = ["question", "document"]
+    _required_heads = [
+        "question_reader",
+        "document_reader",
+        "question_retriever",
+        "document_retriever",
+    ]
 
     def __init__(
         self,
         *args,
-        alpha: float = 0.01,
-        grad_expr: GradExpression = GradExpression.VARIATIONAL,
+        alpha: float = 0,
+        resample_k: Optional[int] = None,
+        grad_expr: GradExpression = GradExpression.BATCH_BACKPROP,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
+        self.resample_k = resample_k
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
@@ -68,15 +81,25 @@ class OptionRetriever(Module):
         """Initialize the metrics for each split."""
         self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
 
+        self.total_logp_metrics = self._init_total_logp_metrics(prefix)
+
         self.retriever_metrics = self._get_base_metrics(
             prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
         )
+
+    def _init_total_logp_metrics(self, prefix):
+        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
+        metrics = SafeMetricCollection(
+            {"reader/total-logp": TotalEpochMetric(**metric_kwargs)},
+            prefix=prefix,
+        )
+        return SplitMetrics(metrics)
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
         q_shape = d_shape = None
         output = {}
         if "document.input_ids" in batch:
-            d_shape = batch["document.input_ids"].shape
+            bs, n_opts, n_docs, _ = batch["document.input_ids"].shape
             # flatten the batch_size and n_options and n_docs dimensions
             d_batch = flatten_first_dims(
                 batch,
@@ -85,13 +108,26 @@ class OptionRetriever(Module):
             )
 
             # process the document with the backbone
-            hd = self._backbone(d_batch, prefix="document", head="document", **kwargs)
+            h_heads = self._backbone(
+                d_batch,
+                prefix="document",
+                heads=["document_reader", "document_retriever"],
+                **kwargs,
+            )
             # reshape and return
-            hd = hd.reshape(*d_shape[:3], *hd.shape[1:])
-            output["_hd_"] = hd
+            for k, v in h_heads.items():
+                tag = k.split("_")[-1]
+                v = einops.rearrange(
+                    v,
+                    "(bs n_opts n_docs) ... -> bs n_opts n_docs ...",
+                    bs=bs,
+                    n_opts=n_opts,
+                    n_docs=n_docs,
+                )
+                output[f"_hd_{tag}_"] = v
 
         if "question.input_ids" in batch:
-            q_shape = batch["question.input_ids"].shape
+            bs, n_opts, _ = batch["question.input_ids"].shape
             # flatten the batch_size and n_options dimensions
             q_batch = flatten_first_dims(
                 batch,
@@ -100,11 +136,20 @@ class OptionRetriever(Module):
             )
 
             # process the document with the backbone
-            hq = self._backbone(q_batch, prefix="question", head="question", **kwargs)
+            q_heads = self._backbone(
+                q_batch,
+                prefix="question",
+                heads=["question_reader", "question_retriever"],
+                **kwargs,
+            )
 
             # reshape and return
-            hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
-            output["_hq_"] = hq
+            for k, v in q_heads.items():
+                tag = k.split("_")[-1]
+                v = einops.rearrange(v, "(bs n_opts) ... -> bs n_opts ...", bs=bs, n_opts=n_opts)
+                output[f"_hq_{tag}_"] = v
+
+        pprint_batch(output, "forward", silent=True)
 
         if all(d is not None for d in (d_shape, q_shape)):
             if not d_shape[:2] == q_shape[:2]:
@@ -122,39 +167,120 @@ class OptionRetriever(Module):
         """
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
-        targets = batch["answer.target"]
-        output = self._forward(batch, **kwargs)
-        hq, hd = (output[k] for k in ["_hq_", "_hd_"])
 
+        d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
+        q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
+        n_docs = d_batch["document.input_ids"].shape[2]
+        output = {}
+        if self.resample_k is not None and n_docs > self.resample_k:
+            warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
+
+            # compute documents logits
+            with torch.no_grad():
+                d_out = self._forward(d_batch, **kwargs)
+
+            # compute questions logits
+            output.update(self._forward(q_batch, **kwargs))
+
+            # compute the score and sample k without replacement
+            with torch.no_grad():
+                retriever_score = self._compute_score(
+                    hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
+                )
+
+                # log the retriever accuracy
+                supervised_loss_out = supervised_loss(
+                    retriever_score, d_batch["document.match_score"]
+                )
+                output["retriever/alpha"] = self.alpha
+                output.update(supervised_loss_out)
+
+                # sample k documents
+                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
+                sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
+
+                # re-sample the documents
+                for k, v in d_batch.items():
+                    if isinstance(v, torch.Tensor):
+                        leaf_shape = v.shape[len(sample_ids.shape) :]
+                        _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
+                        _index = _index.expand(*sample_ids.shape, *leaf_shape)
+                        d_batch[k] = v.gather(index=_index, dim=2)
+
+        else:
+            # compute questions logits
+            output.update(self._forward(q_batch, **kwargs))
+
+        # compute the document logits
+        output.update(self._forward(d_batch, **kwargs))
+        keys = [
+            "_hq_reader_",
+            "_hd_reader_",
+            "_hq_retriever_",
+            "_hd_retriever_",
+        ]
+        hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
         # compute the score for each pair `f([q_j; a_j], d_jk)`
-        partial_score = self._compute_score(hd=hd, hq=hq)
+        reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
+        retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
-        if self.grad_expr in [GradExpression.BATCH_GATHER, GradExpression.BATCH_SUM]:
-            step_output = in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
-        elif self.grad_expr == GradExpression.VARIATIONAL:
-            step_output = variational_grads(partial_score, targets, grad_expr=self.grad_expr)
+        if self.grad_expr == GradExpression.BATCH_BACKPROP:
+            step_output = batch_backprop_grads(
+                reader_score=reader_score,
+                retriever_score=retriever_score,
+                targets=batch["answer.target"],
+                grad_expr=self.grad_expr,
+            )
         else:
             raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
 
         # auxiliary loss
-        supervised_loss_out = supervised_loss(partial_score, batch["document.match_score"])
-        supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
-        if self.alpha > 0:
-            step_output["loss"] += self.alpha * supervised_loss_
-        step_output.update(supervised_loss_out)
+        if self.alpha > 0 or self.resample_k is None:
+
+            supervised_loss_out = supervised_loss(retriever_score, d_batch["document.match_score"])
+            supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
+            if self.alpha > 0:
+                warnings.warn(f"Using alpha={self.alpha}")
+                step_output["loss"] += self.alpha * supervised_loss_
+        step_output["retriever/alpha"] = self.alpha
 
         return step_output
 
-    def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
+    def _compute_score(
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        across_batch: bool = False,
+    ) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
-        if self.similarity == Similarity.CLS:
-            return torch.einsum("boh, bodh -> bod", hq, hd)
-        elif self.similarity == Similarity.COLBERT:
-            scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
-            max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+        if not across_batch:
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("boh, bodh -> bod", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
-            raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
+            if doc_ids is None:
+                raise ValueError("doc_ids is required for non-element-wise computation")
+
+            # get the unique list of documents vectors
+            hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
+            doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
+            udoc_ids, uids = torch.unique(doc_ids, return_inverse=True)
+            hd = hd[uids]
+            if self.similarity == Similarity.CLS:
+                return torch.einsum("boh, mh -> bom", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
@@ -180,6 +306,9 @@ class OptionRetriever(Module):
         if retrieval_logits is not None and retrieval_logits.numel() > 0:
             self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
 
+        if "reader/logp" in output:
+            self.total_logp_metrics.update(split, output["reader/logp"], None)
+
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
@@ -196,4 +325,5 @@ class OptionRetriever(Module):
         return {
             **self.metrics.compute(split),
             **self.retriever_metrics.compute(split),
+            **self.total_logp_metrics.compute(split),
         }

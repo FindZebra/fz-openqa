@@ -1,4 +1,6 @@
 _target_: fz_openqa.modeling.modules.OptionRetriever
 
-grad_expr: variational
+grad_expr: batch-backprop
 alpha: 0
+resample_k: null
+_id: option_retriever

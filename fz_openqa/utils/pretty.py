@@ -12,6 +12,7 @@ from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.json_struct import flatten_json_struct
 from fz_openqa.utils.shape import infer_batch_shape
 from fz_openqa.utils.shape import infer_shape
 
@@ -32,7 +33,13 @@ def pretty_decode(
         style_out = f"[/{style}]"
     else:
         style_in = style_out = ""
-    n_pad_tokens = list(tokens).count(tokenizer.pad_token_id)
+
+    if isinstance(tokens, Tensor):
+        tokens = tokens.cpu().numpy()
+    if isinstance(tokens, np.ndarray):
+        tokens = tokens.tolist()
+
+    n_pad_tokens = tokens.count(tokenizer.pad_token_id)
     txt = tokenizer.decode(tokens, **kwargs)
     txt = f"{style_in}`{txt.replace('[PAD]', '').strip()}`{style_out}"
     if only_text:
@@ -46,8 +53,12 @@ def get_separator(char="\u2500"):
     return console_width * char
 
 
-def pprint_batch(batch: Batch, header=None):
-    u, exceptions = _repr_batch(batch, header, rich=True)
+def pprint_batch(
+    batch: Batch, header=None, report_nans: bool = False, silent: bool = False
+) -> None:
+    if silent:
+        return
+    u, exceptions = _repr_batch(batch, header, report_nans=report_nans, rich=True)
     u = get_separator() + "\n" + u
     rich.print(u)
     if len(exceptions):
@@ -58,12 +69,14 @@ def pprint_batch(batch: Batch, header=None):
         logger.warning(f"Couldn't pretty print key={key}\nException={e}")
 
 
-def repr_batch(batch: Batch, header=None, rich: bool = False) -> str:
-    u, exceptions = _repr_batch(batch, header)
+def repr_batch(batch: Batch, header=None, report_nans: bool = False, rich: bool = False) -> str:
+    u, exceptions = _repr_batch(batch, header, report_nans=report_nans, rich=rich)
     return u
 
 
-def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dict[str, Exception]]:
+def _repr_batch(
+    batch: Batch, header=None, rich: bool = False, report_nans: bool = False
+) -> Tuple[str, Dict[str, Exception]]:
     if not isinstance(
         batch,
         (
@@ -87,46 +100,53 @@ def _repr_batch(batch: Batch, header=None, rich: bool = False) -> Tuple[str, Dic
     for k in sorted(batch.keys()):
         try:
             shape, leaf_type = infer_shape(batch[k], return_leaf_type=True)
-        except Exception as e:
-            exceptions[k] = e
-        data += [
-            {
+            row = {
                 "key": k,
                 "shape": str(shape),
                 "type": type(batch[k]).__name__,
                 "leaf_type": str(leaf_type),
             }
-        ]
+            if report_nans:
+                values = flatten_json_struct(batch[k])
+                nan_count = sum(int(x is None) for x in values)
+                row["nans"] = str(nan_count)
+
+        except Exception as e:
+            exceptions[k] = e
+            row = {
+                "key": "<error>",
+                "shape": "<error>",
+                "type": "<error>",
+                "leaf_type": "<error>",
+            }
+            if report_nans:
+                row["nans"] = "<error>"
+
+        data += [row]
 
     keys = list(data[0].keys())
-    maxs = {k: max([len(d[k]) for d in data]) for k in keys}
-    _s = "  "
-    _sep = " [white]|[/white] " if rich else " | "
+    column_width = {k: max([len(d[k]) for d in data]) for k in keys}
+    newline_start = "  "
+    column_sep = " [white]|[/white] " if rich else " | "
 
+    # define a horizontal separator
     row_in = "[white]" if rich else ""
     row_out = "[/white]" if rich else ""
-    _row_sep = (
-        f"{_s}{row_in}{'_' * maxs['key']}"
-        f"{_sep}{'_' * maxs['shape']}"
-        f"{_sep}{'_' * maxs['leaf_type']}"
-        f"{_sep}{'_' * maxs['type']}{row_out}\n"
-    )
-    u += _row_sep
-    u += (
-        f"{_s}{'key':{maxs['key']}}"
-        f"{_sep}{'shape':{maxs['shape']}}"
-        f"{_sep}{'leaf_type':{maxs['leaf_type']}}"
-        f"{_sep}{'type':{maxs['type']}}\n"
-    )
-    u += _row_sep
-    for row in data:
-        u += (
-            f"{_s}{row['key']:{maxs['key']}}"
-            f"{_sep}{row['shape']:{maxs['shape']}}"
-            f"{_sep}{row['leaf_type']:{maxs['leaf_type']}}"
-            f"{_sep}{row['type']:{maxs['type']}}\n"
-        )
+    seps = "".join(f"{'_' * m}" for m in column_width.values())
+    horizontal_sep = f"{newline_start}{row_in}{seps}{row_out}\n"
 
-    u += _row_sep
+    def format_row(row: Dict) -> str:
+        u = newline_start
+        u += column_sep.join(f"{row[k]:{column_width[k]}}" for k in keys)
+        u += "\n"
+        return u
+
+    u += horizontal_sep
+    u += format_row({k: k for k in keys})
+    u += horizontal_sep
+    for row in data:
+        u += format_row(row)
+
+    u += horizontal_sep
 
     return u, exceptions

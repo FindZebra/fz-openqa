@@ -1,0 +1,12 @@
+defaults:
+  - medqa_corpus@corpus_builder
+
+_target_: fz_openqa.datamodules.builders.InverseClozeTaskBuilder
+transform: ${datamodule.transform}
+output_columns: ${datamodule.output_columns}
+
+num_proc: ${datamodule.num_proc}
+batch_size: 100
+
+corpus_builder:
+  passage_stride: ${datamodule.builder.corpus_builder.passage_length}

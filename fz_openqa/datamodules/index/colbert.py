@@ -55,6 +55,7 @@ class ColbertIndex(FaissIndex):
     Notes
     -----
     Future work:
+    0. todo: cleanup the code
     1. todo: Handle documents of different lengths (check the original repo
     2. todo: Handle sampling vectors from the TensorArrowTable without holding them in memory
 
@@ -65,54 +66,24 @@ class ColbertIndex(FaissIndex):
     _max_sim: Optional[MaxSim, nn.DataParallel] = None
     _is_gpu: bool = False
     _max_add_per_gpu = 1 << 25
+    _max_num_proc: int = 1
 
-    @property
-    def vectors_table(self) -> TensorArrowTable:
-        if self._vectors_table is None:
-            self._vectors_table = self._read_vectors_table()
-        return self._vectors_table
+    no_fingerprint: List[str] = FaissIndex.no_fingerprint + [
+        "_max_sim",
+        "_vectors" "_emb2pid",
+        "in_memory",
+        "_is_gpu",
+        "_max_add_per_gpu",
+        "keep_maxsim_on_cpu",
+    ]
 
-    @property
-    def vectors(self) -> Tensor:
-        if self._vectors is None:
-            vectors_table = self.vectors_table
-            self._vectors = self._read_vectors_from_table(vectors_table)
-            log_mem_size(self._vectors, "Loaded Colbert vectors", logger=log)
-        return self._vectors
-
-    @property
-    def emb2pid(self) -> Tensor:
-        if self._emb2pid is None:
-            self._emb2pid = self._build_emb2pid_from_vectors(self.vectors_table)
-        return self._emb2pid
+    def __init__(self, *args, p: int = 10, keep_maxsim_on_cpu: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.p = p
+        self.keep_maxsim_on_cpu = keep_maxsim_on_cpu
 
     @torch.no_grad()
-    def _read_vectors_from_table(self, vectors_table: TensorArrowTable) -> Tensor:
-        mem_size = vectors_table.nbytes // 1024 ** 3
-        log.info(
-            f"Reading {vectors_table.num_rows} vectors ({mem_size:.3f} GB) "
-            f"from {vectors_table.path}"
-        )
-        start_time = time.time()
-        vectors = vectors_table[0 : len(vectors_table)]
-        log.info(
-            f"Read {vectors_table.num_rows} vectors. Elapsed time: {time.time() - start_time:.3f}s"
-        )
-        return vectors
-
-    @torch.no_grad()
-    def _build_emb2pid_from_vectors(self, vectors_table: TensorArrowTable) -> Tensor:
-        emb2pid = torch.arange(vectors_table.num_rows, dtype=torch.long)
-        if self._vectors is not None:
-            one_vec = self._vectors[0]
-        else:
-            one_vec = vectors_table[0]
-        vector_length = one_vec.shape[0]
-        emb2pid = emb2pid[:, None].expand(-1, vector_length)
-        return emb2pid.reshape(-1).contiguous()
-
-    @torch.no_grad()
-    def _search_batch(
+    def _call_batch(
         self,
         query: Batch,
         *,
@@ -120,8 +91,9 @@ class ColbertIndex(FaissIndex):
         split: Optional[Split] = None,
         k: int = 1,
         faiss_batch_size: int = 2,
+        output_format: Optional[OutputFormat] = None,
         **kwargs,
-    ) -> SearchResult:
+    ) -> Batch:
 
         # 1. get query vector
         query = self.predict_queries(query, format=OutputFormat.TORCH, idx=idx, split=split)
@@ -153,27 +125,14 @@ class ColbertIndex(FaissIndex):
         search_results = None
         for i in range(0, q_vectors.shape[0], eff_batch_size):
             q_vec = q_vectors[i : i + eff_batch_size]
-            r = self._search_vectors(q_vec, k=k, index=self._index, max_sim=self._max_sim)
+            r = self._search_vectors(q_vec, k=k, p=self.p, index=self._index, max_sim=self._max_sim)
 
             if search_results is None:
                 search_results = r
             else:
                 search_results += r
 
-        return search_results
-
-    def _allocate_gpus(self, n_gpus):
-        gpus = list(range(n_gpus))
-        if n_gpus > 1:
-            faiss_gpus = gpus[n_gpus // 2 :]
-            maxsim_gpus = gpus[: n_gpus // 2]
-        elif n_gpus == 1:
-            faiss_gpus = gpus
-            maxsim_gpus = []
-        else:
-            faiss_gpus = []
-            maxsim_gpus = []
-        return faiss_gpus, maxsim_gpus
+        return self._format_output(search_results, output_format=output_format)
 
     @torch.no_grad()
     def _search_vectors(
@@ -181,6 +140,7 @@ class ColbertIndex(FaissIndex):
         q_vectors: Tensor,
         *,
         k: int,
+        p: int,
         index: FaissIndex | IndexReplicas,
         max_sim: MaxSim,
         **kwargs,
@@ -192,7 +152,6 @@ class ColbertIndex(FaissIndex):
         start = time.time()
 
         # 2. query the token index
-        p = min(10, max(1, k // 2))
         topk_indices = self._query_to_embedding_ids(q_vectors, p, index=index)
         faiss_time = time.time()
         log.debug(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
@@ -253,8 +212,79 @@ class ColbertIndex(FaissIndex):
         embedding_ids = embedding_ids.view(num_queries, -1)
         return embedding_ids.to(Q.device)
 
-    # def __del__(self):
-    #     super(ColbertIndex, self).__del__()
+    def to_cpu(self):
+        super().to_cpu()
+        if self._max_sim is not None:
+            if isinstance(self._max_sim, nn.DataParallel):
+                self._max_sim = self._max_sim.module
+            self._max_sim = self._max_sim.to("cpu")
+
+    def __del__(self):
+        self.to_cpu()
+        super(ColbertIndex, self).__del__()
+
+    @property
+    def vectors_table(self) -> TensorArrowTable:
+        if self._vectors_table is None:
+            self._vectors_table = self._read_vectors_table()
+        return self._vectors_table
+
+    @property
+    def vectors(self) -> Tensor:
+        if self._vectors is None:
+            vectors_table = self.vectors_table
+            self._vectors = self._read_vectors_from_table(vectors_table)
+            log_mem_size(self._vectors, "Loaded Colbert vectors", logger=log)
+        return self._vectors
+
+    @property
+    def emb2pid(self) -> Tensor:
+        if self._emb2pid is None:
+            self._emb2pid = self._build_emb2pid_from_vectors(self.vectors_table)
+        return self._emb2pid
+
+    @torch.no_grad()
+    def _read_vectors_from_table(self, vectors_table: TensorArrowTable) -> Tensor:
+        mem_size = vectors_table.nbytes // 1024 ** 3
+        log.info(
+            f"Reading {vectors_table.num_rows} vectors ({mem_size:.3f} GB) "
+            f"from {vectors_table.path}"
+        )
+        start_time = time.time()
+        vectors = vectors_table[0 : len(vectors_table)]
+        log.info(
+            f"Read {vectors_table.num_rows} vectors. Elapsed time: {time.time() - start_time:.3f}s"
+        )
+        return vectors
+
+    @torch.no_grad()
+    def _build_emb2pid_from_vectors(self, vectors_table: TensorArrowTable) -> Tensor:
+        emb2pid = torch.arange(vectors_table.num_rows, dtype=torch.long)
+        if self._vectors is not None:
+            one_vec = self._vectors[0]
+        else:
+            one_vec = vectors_table[0]
+        vector_length = one_vec.shape[0]
+        emb2pid = emb2pid[:, None].expand(-1, vector_length)
+        return emb2pid.reshape(-1).contiguous()
+
+    def _allocate_gpus(self, n_gpus):
+        """Allocate GPUs to the faiss index and to max_sim"""
+        gpus = list(range(n_gpus))
+        if n_gpus > 1:
+            if not self.keep_maxsim_on_cpu:
+                faiss_gpus = gpus[n_gpus // 2 :]
+                maxsim_gpus = gpus[: n_gpus // 2]
+            else:
+                faiss_gpus = gpus
+                maxsim_gpus = []
+        elif n_gpus == 1:
+            faiss_gpus = gpus
+            maxsim_gpus = []
+        else:
+            faiss_gpus = []
+            maxsim_gpus = []
+        return faiss_gpus, maxsim_gpus
 
 
 class MaxSim(nn.Module):
@@ -266,12 +296,7 @@ class MaxSim(nn.Module):
     @torch.no_grad()
     def forward(self, batch: Batch = None, *, k: int, chunk_size: int = 1000) -> Batch:
         if batch is None:
-            # todo: return emtpy tensor
-            maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
-            maxsim_scores = torch.empty(
-                (0, k), dtype=self.vectors.dtype, device=self.vectors.device
-            )
-            return {"pids": maxsim_pids, "scores": maxsim_scores}
+            return self._empty_result(k)
         q_vectors: Tensor = batch["q_vectors"]
         topk_indices: Tensor = batch["topk_indices"]
 
@@ -287,14 +312,36 @@ class MaxSim(nn.Module):
             scores[:, i : i + chunk_size] = self._score(pids[:, i : i + chunk_size], q_vectors)
 
         # 3. take the top-k results given the MaxSim score
-        k = min(k, scores.shape[-1])
+        p = min(k, scores.shape[-1])
         scores = scores.to(torch.float32)
-        _, maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True)
+        _, maxsim_idx = torch.topk(scores, k=p, dim=-1, largest=True, sorted=True)
         # 4. fetch the corresponding document indices and return
         maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
         maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
 
+        if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
+            maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
+
+        # padded
         return {"pids": maxsim_pids, "scores": maxsim_scores}
+
+    def _empty_result(self, k):
+        maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
+        maxsim_scores = torch.empty((0, k), dtype=self.vectors.dtype, device=self.vectors.device)
+        return {"pids": maxsim_pids, "scores": maxsim_scores}
+
+    def _pad_outputs(self, k, maxsim_pids, maxsim_scores):
+        # pad maxsim_scores with nans
+        maxsim_scores = self._pad_to_length(maxsim_scores, k, -torch.inf)
+        # pad maxsim_pids with zeros
+        maxsim_pids = self._pad_to_length(maxsim_pids, k, -1)
+        return maxsim_pids, maxsim_scores
+
+    def _pad_to_length(self, values, k, fill_value=torch.nan):
+        if values.shape[1] < k:
+            return F.pad(values, (0, k - values.shape[1]), value=fill_value)
+        else:
+            return values
 
     def _score(self, pids, q_vectors):
         d_vectors = self._retrieve_pid_vectors(pids)
