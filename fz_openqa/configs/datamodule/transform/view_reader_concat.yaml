@@ -1,0 +1,7 @@
+_target_: fz_openqa.datamodules.pipes.View
+
+format: reader_concat
+tokenizer: ${datamodule.tokenizer}
+max_length: 512
+additional_columns: [answer.target, document.match_score]
+update: false

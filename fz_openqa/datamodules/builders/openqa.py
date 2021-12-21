@@ -10,7 +10,6 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -25,7 +24,6 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_qu
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
 from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
@@ -36,10 +34,7 @@ from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
-from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import SelectDocs
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -99,14 +94,18 @@ class OpenQaBuilder(DatasetBuilder):
 
         # transform for the collate_fn
         if isinstance(transform, (dict, DictConfig)):
-            if len(transform):
-                transform = instantiate(transform)
+            if len(transform.keys()):
+                transform = instantiate(transform, tokenizer=self.tokenizer)
             else:
                 transform = None
         self.transform = transform
 
-        # objects
+        # index
         self.index_builder = index_builder
+
+        # relevance classifier
+        if not isinstance(relevance_classifier, (Pipe)):
+            relevance_classifier = None
 
         # arguments
         self.output_columns = output_columns
@@ -260,16 +259,18 @@ class OpenQaBuilder(DatasetBuilder):
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
         # Search the document and tag them with `document.match_score`
-        pipe = BlockSequential(
-            [
-                (
-                    "Search documents",
-                    SearchCorpus(
-                        index,
-                        k=n_retrieved_documents,
-                        level=question_nesting_level,
-                    ),
+        blocks = [
+            (
+                "Search documents",
+                SearchCorpus(
+                    index,
+                    k=n_retrieved_documents,
+                    level=question_nesting_level,
                 ),
+            )
+        ]
+        if relevance_classifier is not None:
+            blocks += [
                 (
                     "Classify documents",
                     FetchAndClassifyDocuments(
@@ -283,7 +284,8 @@ class OpenQaBuilder(DatasetBuilder):
                 ),
                 ("Sort documents", SortDocuments(level=document_nesting_level)),
             ]
-        )
+
+        pipe = BlockSequential(blocks)
 
         # adjust the batch size to account for the documents
         map_kwargs = {
@@ -384,7 +386,6 @@ class OpenQaBuilder(DatasetBuilder):
             collate_pipe=self.corpus_builder._get_collate_pipe(),
             level=document_nesting_level,
         )
-
         return BlockSequential(
             [
                 ("Collate Q&A + document indexes", collate_qad),

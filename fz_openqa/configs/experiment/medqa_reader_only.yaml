@@ -4,6 +4,9 @@ defaults:
   - base
   - override /datamodule: openqa
   - override /datamodule/builder: concat_openqa
+  - override /datamodule/transform: view_reader_concat
+  # set the classifier to None to avoid using the positive documents
+  - override /datamodule/relevance_classifier: none
   - override /model: medqa_reader
 #  - override /model/bert: mini.yaml #debug
 #  - override /sys: local.yaml #debug
@@ -43,9 +46,13 @@ datamodule:
     - answer.target
 
   # documents
-  n_retrieved_documents: 20
+  n_retrieved_documents: 100
   n_documents: 20
+
+  # the properties bellow are only used if the relevance classifier is available
+  max_pos_docs: null
   filter_unmatched: false
+  select_mode: first
 
   # encoding tokens
   add_encoding_tokens: true
@@ -55,8 +62,8 @@ datamodule:
   builder:
     corpus_builder:
       to_sentences: true
-      use_subset: false #debug
-      passage_length: 100
+      use_subset: false # debug
+      passage_length: 100 # todo: why smaller than 200?
       passage_stride: 50
 
 

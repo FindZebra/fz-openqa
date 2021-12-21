@@ -179,9 +179,6 @@ class CorpusBuilder(HfDatasetBuilder):
             desc="Tokenizing documents and extracting overlapping passages",
         )
 
-        # todo: only for debugging
-        # exit()
-
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")

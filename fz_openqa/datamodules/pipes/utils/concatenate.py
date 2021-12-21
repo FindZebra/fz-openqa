@@ -93,7 +93,7 @@ def concat_questions_and_documents(batch: Batch, *, pad_token_id: int, max_lengt
 
     # truncate the inputs to the maximum length
     input_length = padded_batch["input_ids"].shape[-1]
-    if input_length > max_length:
+    if max_length is not None and input_length > max_length:
         warnings.warn(f"the tensor [{'; '.join(fields)}] was truncated.")
         for key in ["input_ids", "attention_mask"]:
             padded_batch[key] = padded_batch[key][..., :max_length]
@@ -200,7 +200,7 @@ def stack_questions_and_documents(batch: Batch, *, pad_token_id: int, max_length
 
     # truncate the inputs to the maximum length
     input_length = padded_batch["input_ids"].shape[-1]
-    if input_length > max_length:
+    if max_length is not None and input_length > max_length:
         warnings.warn(f"the tensor [{'; '.join(fields)}] was truncated.")
         for key in ["input_ids", "attention_mask"]:
             padded_batch[key] = padded_batch[key][..., :max_length]
