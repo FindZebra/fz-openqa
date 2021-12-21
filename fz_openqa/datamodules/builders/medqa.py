@@ -16,7 +16,7 @@ from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import medqa
+from fz_openqa.datamodules.generators import medqa_us_custom
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
@@ -49,7 +49,7 @@ class MinLength:
 
 class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = medqa.__file__
+    dset_script_path_or_id = medqa_us_custom.__file__
 
     # nesting level of the question field
     nesting_level = 0
@@ -69,7 +69,7 @@ class MedQaBuilder(HfDatasetBuilder):
     ]
 
     # number of data points per subset train/val/test
-    subset_size = [100, 50, 50]
+    subset_size = [1000, 100, 100]
 
     # number of options
     n_options = 4
@@ -85,9 +85,18 @@ class MedQaBuilder(HfDatasetBuilder):
         "question.attention_mask",
     ]
 
-    def __init__(self, *args, min_answer_length: Optional[int] = 3, **kwargs):
+    def __init__(
+        self,
+        *args,
+        query_key: Optional[str] = "question.text",
+        min_answer_length: Optional[int] = None,
+        n_query_tokens: int = 1,
+        **kwargs,
+    ):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
+        self.n_query_tokens = n_query_tokens
+        self.query_key = query_key
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
@@ -123,10 +132,11 @@ class MedQaBuilder(HfDatasetBuilder):
         # add an index column
         dataset = dataset.map(
             partial(set_row_idx, key="question.row_idx"),
-            batched=False,
+            batched=True,
+            batch_size=1000,
             num_proc=self.num_proc,
             with_indices=True,
-            desc="Indexing",
+            desc="Indexing rows",
         )
 
         return dataset
@@ -138,7 +148,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -151,11 +161,11 @@ class MedQaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=QUERY_TOKEN,
+            spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
             shape=None,
         )
 
-    def get_collate_pipe(self):
+    def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
@@ -234,6 +244,9 @@ class ConcatMedQaBuilder(MedQaBuilder):
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
+        if self.query_key == "question.metamap":
+            dataset = dataset.map(self.transform_qst, desc="Transforming questions to metamap list")
+
         # concat question and answers
         dataset = dataset.map(
             self.get_concat_qa_pipe(),
@@ -253,13 +266,18 @@ class ConcatMedQaBuilder(MedQaBuilder):
         # add an index column
         dataset = dataset.map(
             partial(set_row_idx, key="question.row_idx"),
-            batched=False,
+            batched=True,
             num_proc=self.num_proc,
             with_indices=True,
             desc="Indexing",
         )
 
         return dataset
+
+    @staticmethod
+    def transform_qst(row):
+        row["question.text"] = " ".join(map(str, row["question.metamap"]))
+        return row
 
     def get_concat_qa_pipe(self):
         q_start_tokens = []
@@ -290,11 +308,11 @@ class ConcatMedQaBuilder(MedQaBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
-    def get_collate_pipe(self):
+    def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
