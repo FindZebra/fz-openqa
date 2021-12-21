@@ -62,78 +62,45 @@ class MedQaReader(Module):
         # pprint_batch(batch)
         # self.bert.tokenizer
 
-        # rich.print(f"[magenta] input question tokens: {batch['question.input_ids'].shape}")
-        # rich.print(f"[magenta] input document tokens: {batch['document.input_ids'].shape}")
+        DEBUG = False
 
-        # # concatenate questions and documents such that there is no padding between Q and D
-        # args = {"pad_token_id": self._pad_token_id, "max_length": self.max_length}
-        # if self.concat_strategy == ConcatStrategy.CONCAT:
-        #     # returns tokens of shape [bs, n_opts, total_length]
-        #     qd_batch = concat_questions_and_documents(batch, **args)
-        # elif self.concat_strategy == ConcatStrategy.STACK:
-        #     # returns tokens of shape [bs * n_docs, n_opts, total_length]
-        #     qd_batch = stack_questions_and_documents(batch, **args)
-        # else:
-        #     raise ValueError(f"Unknown concat strategy: {self.concat_strategy}")
+        if DEBUG:
+            rich.print(f"[magenta] input question tokens: {batch['question.input_ids'].shape}")
+            rich.print(f"[magenta] input document tokens: {batch['document.input_ids'].shape}")
 
-        # pprint_batch(qd_batch, "qd_batch")
-        # # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
-        # rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
-        # rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
-        # rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
-        #
-        # rich.print(f"[magenta] padded tokens: {qd_batch['input_ids'].shape}")
-        # for i in range(min(len(qd_batch["input_ids"]), 16)):
-        #     print(100 * "=")
-        #     rich.print(f"- batch el #{i+1}")
-        #     tokens = qd_batch["input_ids"][i]
-        #     for j in range(2):
-        #         rich.print(f"- option #{j+1}")
-        #         print(100 * "-")
-        #         # rich.print(f"[red] {tokens[j].tolist()}")
-        #         decoded = self.tokenizer.decode(tokens[j].tolist())
-        #         rich.print(f"[cyan] {decoded}")
-        # exit()
-
-        bs, n_opts, q_length = batch["question.input_ids"].shape
-
-        max_length = self.max_length
-        # pprint_batch(batch)
-        if q_length > max_length:
-            padded_batch = {
-                "input_ids": batch["question.input_ids"][:, :, :max_length],
-                "attention_mask": batch["question.attention_mask"][:, :, :max_length],
-            }
+        # concatenate questions and documents such that there is no padding between Q and D
+        args = {"pad_token_id": self._pad_token_id, "max_length": self.max_length}
+        if self.concat_strategy == ConcatStrategy.CONCAT:
+            # returns tokens of shape [bs, n_opts, total_length]
+            qd_batch = concat_questions_and_documents(batch, **args)
+        elif self.concat_strategy == ConcatStrategy.STACK:
+            # returns tokens of shape [bs * n_docs, n_opts, total_length]
+            qd_batch = stack_questions_and_documents(batch, **args)
         else:
-            pad_ids = torch.zeros(
-                bs,
-                n_opts,
-                max_length,
-                dtype=batch["question.input_ids"].dtype,
-                device=batch["question.input_ids"].device,
-            )
-            pad_mask = torch.zeros(
-                bs,
-                n_opts,
-                max_length,
-                dtype=batch["question.attention_mask"].dtype,
-                device=batch["question.attention_mask"].device,
-            )
+            raise ValueError(f"Unknown concat strategy: {self.concat_strategy}")
 
-            pad_ids[:, :, :q_length] = batch["question.input_ids"]
-            pad_mask[:, :, :q_length] = batch["question.attention_mask"]
+        if DEBUG:
+            pprint_batch(qd_batch, "qd_batch")
+            # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
+            rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
+            rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
+            rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
 
-            padded_batch = {
-                "input_ids": pad_ids,
-                "attention_mask": pad_mask,
-            }
-
-        # pprint_batch(padded_batch)
-        # exit()
+            rich.print(f"[magenta] padded tokens: {qd_batch['input_ids'].shape}")
+            for i in range(min(len(qd_batch["input_ids"]), 16)):
+                print(100 * "=")
+                rich.print(f"- batch el #{i+1}")
+                tokens = qd_batch["input_ids"][i]
+                for j in range(2):
+                    rich.print(f"- option #{j+1}")
+                    print(100 * "-")
+                    # rich.print(f"[red] {tokens[j].tolist()}")
+                    decoded = self.tokenizer.decode(tokens[j].tolist())
+                    rich.print(f"[cyan] {decoded}")
 
         return self.bert(
-            padded_batch["input_ids"],
-            padded_batch["attention_mask"],
+            qd_batch["input_ids"],
+            qd_batch["attention_mask"],
             labels=targets,
             return_dict=True,
         )
