@@ -23,7 +23,7 @@ trainer:
   strategy: dp
   min_epochs: 1
   max_epochs: 1000
-  accumulate_grad_batches: 4
+  accumulate_grad_batches: 2
   val_check_interval: 0.3 #debug
 
 model:
