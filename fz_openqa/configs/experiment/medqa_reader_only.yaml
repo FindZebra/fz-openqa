@@ -24,7 +24,15 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 0.5 #debug
+  val_check_interval: 0.3 #debug
+
+model:
+  lr: 1e-5
+  weight_decay: 1e-4
+  dropout: 0
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1
 
 
 datamodule:
@@ -48,7 +56,6 @@ datamodule:
   # documents
   n_retrieved_documents: 100
   n_documents: 20
-
   # the properties bellow are only used if the relevance classifier is available
   max_pos_docs: null
   filter_unmatched: false
@@ -67,9 +74,9 @@ datamodule:
       passage_stride: 50
 
 
-logger: null
-callbacks: null
+# logger: null
+# callbacks: null
 
-#logger:
-#  wandb:
-#    group: medqa-mop-reader # name your experiment here
+logger:
+  wandb:
+    group: medqa-mop-reader # name your experiment here
