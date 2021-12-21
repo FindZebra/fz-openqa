@@ -1,20 +1,21 @@
+import warnings
 from enum import Enum
 from typing import Any
 from typing import Optional
 
 import einops
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
 from torch import Tensor
 
 from ...utils.pretty import pprint_batch
+from .metrics import SafeMetricCollection
+from .metrics import SplitMetrics
 from .utils.gradients import batch_backprop_grads
 from .utils.gradients import GradExpression
-from .utils.gradients import in_batch_grads
 from .utils.gradients import supervised_loss
-from .utils.gradients import variational_grads
+from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
@@ -80,9 +81,19 @@ class OptionRetriever(Module):
         """Initialize the metrics for each split."""
         self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
 
+        self.total_logp_metrics = self._init_total_logp_metrics(prefix)
+
         self.retriever_metrics = self._get_base_metrics(
             prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
         )
+
+    def _init_total_logp_metrics(self, prefix):
+        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
+        metrics = SafeMetricCollection(
+            {"reader/total-logp": TotalEpochMetric(**metric_kwargs)},
+            prefix=prefix,
+        )
+        return SplitMetrics(metrics)
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
         q_shape = d_shape = None
@@ -159,15 +170,17 @@ class OptionRetriever(Module):
 
         d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
-
-        if self.resample_k:
+        n_docs = d_batch["document.input_ids"].shape[2]
+        output = {}
+        if self.resample_k is not None and n_docs > self.resample_k:
+            warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
 
             # compute documents logits
             with torch.no_grad():
                 d_out = self._forward(d_batch, **kwargs)
 
             # compute questions logits
-            output = self._forward(q_batch, **kwargs)
+            output.update(self._forward(q_batch, **kwargs))
 
             # compute the score and sample k without replacement
             with torch.no_grad():
@@ -175,20 +188,28 @@ class OptionRetriever(Module):
                     hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
                 )
 
+                # log the retriever accuracy
+                supervised_loss_out = supervised_loss(
+                    retriever_score, d_batch["document.match_score"]
+                )
+                output["retriever/alpha"] = self.alpha
+                output.update(supervised_loss_out)
+
                 # sample k documents
                 soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
                 sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
 
-                # gather the sampled documents and update d_batch
+                # re-sample the documents
                 for k, v in d_batch.items():
                     if isinstance(v, torch.Tensor):
                         leaf_shape = v.shape[len(sample_ids.shape) :]
                         _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
                         _index = _index.expand(*sample_ids.shape, *leaf_shape)
                         d_batch[k] = v.gather(index=_index, dim=2)
+
         else:
             # compute questions logits
-            output = self._forward(q_batch, **kwargs)
+            output.update(self._forward(q_batch, **kwargs))
 
         # compute the document logits
         output.update(self._forward(d_batch, **kwargs))
@@ -214,18 +235,16 @@ class OptionRetriever(Module):
             raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
 
         # auxiliary loss
-        supervised_loss_out = supervised_loss(retriever_score, batch["document.match_score"])
-        supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
-        if self.alpha > 0:
-            step_output["loss"] += self.alpha * supervised_loss_
-        step_output.update(supervised_loss_out)
+        if self.alpha > 0 or self.resample_k is None:
+
+            supervised_loss_out = supervised_loss(retriever_score, d_batch["document.match_score"])
+            supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
+            if self.alpha > 0:
+                warnings.warn(f"Using alpha={self.alpha}")
+                step_output["loss"] += self.alpha * supervised_loss_
+        step_output["retriever/alpha"] = self.alpha
 
         return step_output
-
-    def _resample_k(self, batch: Batch, k: int) -> Batch:
-        """Re-sample k documents from the batch."""
-        pprint_batch(batch, "resample_k", silent=False)
-        return batch
 
     def _compute_score(
         self,
@@ -287,6 +306,9 @@ class OptionRetriever(Module):
         if retrieval_logits is not None and retrieval_logits.numel() > 0:
             self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
 
+        if "reader/logp" in output:
+            self.total_logp_metrics.update(split, output["reader/logp"], None)
+
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
@@ -303,4 +325,5 @@ class OptionRetriever(Module):
         return {
             **self.metrics.compute(split),
             **self.retriever_metrics.compute(split),
+            **self.total_logp_metrics.compute(split),
         }

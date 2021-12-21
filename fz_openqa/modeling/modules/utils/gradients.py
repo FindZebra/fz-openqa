@@ -2,6 +2,7 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 
+import rich
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -78,23 +79,6 @@ def in_batch_grads(
         "_reader_targets_": targets.detach(),
         "_doc_logits_": q.log_p_d__a_no_perm.detach(),
     }
-
-
-def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
-    """Compute the supervised retrieval loss"""
-    if not torch.all(match_score[..., 1:] == 0):
-        warnings.warn("Not all documents with index >0 are negative.")
-
-    pos_docs = match_score > 0
-    loss_mask = (pos_docs[:, :, 0]) & (pos_docs[:, :, 1:].sum(-1) == 0)
-    logits = partial_score[loss_mask]
-    targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
-    if logits.numel() > 0:
-        loss = F.cross_entropy(logits, targets)
-    else:
-        loss = 0.0
-
-    return {"retriever_loss": loss, "_retriever_logits_": logits, "_retriever_targets_": targets}
 
 
 def variational_grads(partial_score: Tensor, targets: Tensor, **kwargs):
@@ -179,3 +163,31 @@ def batch_backprop_grads(
         "_reader_targets_": targets.detach(),
         "_doc_logits_": q.log_p_d__a_no_perm.detach(),
     }
+
+
+def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
+    """
+    Compute the supervised retrieval loss
+    # todo: check loss, can we keep it without using the mask
+    # todo: figure out how to compute the targets and logits for the metrics
+    """
+
+    pos_docs = match_score > 0
+    loss_mask = pos_docs.sum(-1) > 0
+    logits = partial_score[loss_mask]
+    pos_docs = pos_docs[loss_mask].float()
+
+    if logits.numel() > 0:
+        loss = -(pos_docs * F.log_softmax(logits, dim=-1) / pos_docs.sum(dim=-1, keepdims=True))
+        loss = loss.sum(-1)
+
+    else:
+        loss = torch.tensor(0.0, dtype=partial_score.dtype, device=partial_score.device)
+
+    # compute logits and targets for the metrics
+    match_score = match_score[loss_mask]
+    ids = torch.argsort(match_score, dim=-1, descending=True)
+    targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
+    logits = logits.gather(index=ids, dim=-1)
+
+    return {"retriever/loss": loss, "_retriever_logits_": logits, "_retriever_targets_": targets}
