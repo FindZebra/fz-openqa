@@ -1,6 +1,5 @@
 import itertools
 import re
-from dataclasses import dataclass
 from functools import partial
 from itertools import zip_longest
 from typing import Any
@@ -15,6 +14,7 @@ from typing import Tuple
 import numpy as np
 import rich
 import spacy
+from dataclasses import dataclass
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity
 from spacy.language import Language
@@ -188,7 +188,7 @@ class AliasBasedMatch(RelevanceClassifier):
         self,
         filter_tui: Optional[bool] = True,
         filter_acronyms: Optional[bool] = True,
-        model_name: Optional[str] = "en_core_sci_lg",
+        model_name: Optional[str] = "en_core_sci_scibert",
         linker_name: str = "umls",
         threshold: float = 0.7,
         lazy_setup: bool = True,
@@ -264,6 +264,8 @@ class AliasBasedMatch(RelevanceClassifier):
     def _load_spacy_model(model_name: str, linker_name: str = "umls", threshold: float = 0.7):
         """When you call a spaCy model on a text, spaCy first tokenizes the text to produce a Doc object.
         Doc is then processed in several different steps – the processing pipeline."""
+        # initialize gpu usage if possible
+        spacy.prefer_gpu()
         model = spacy.load(
             model_name,
             disable=[
@@ -282,7 +284,7 @@ class AliasBasedMatch(RelevanceClassifier):
             config={
                 "threshold": threshold,
                 "linker_name": linker_name,
-                "max_entities_per_mention": 3,
+                "max_entities_per_mention": 1,
             },
         )
         return model
