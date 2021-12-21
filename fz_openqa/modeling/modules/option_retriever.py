@@ -172,6 +172,7 @@ class OptionRetriever(Module):
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
         n_docs = d_batch["document.input_ids"].shape[2]
         output = {}
+        step_output = {}
         if self.resample_k is not None and n_docs > self.resample_k:
             warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
 
@@ -192,8 +193,7 @@ class OptionRetriever(Module):
                 supervised_loss_out = supervised_loss(
                     retriever_score, d_batch["document.match_score"]
                 )
-                output["retriever/alpha"] = self.alpha
-                output.update(supervised_loss_out)
+                step_output.update(supervised_loss_out)
 
                 # sample k documents
                 soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
@@ -225,11 +225,13 @@ class OptionRetriever(Module):
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
         if self.grad_expr == GradExpression.BATCH_BACKPROP:
-            step_output = batch_backprop_grads(
-                reader_score=reader_score,
-                retriever_score=retriever_score,
-                targets=batch["answer.target"],
-                grad_expr=self.grad_expr,
+            step_output.update(
+                batch_backprop_grads(
+                    reader_score=reader_score,
+                    retriever_score=retriever_score,
+                    targets=batch["answer.target"],
+                    grad_expr=self.grad_expr,
+                )
             )
         else:
             raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
