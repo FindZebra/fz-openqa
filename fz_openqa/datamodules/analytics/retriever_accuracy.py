@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 from typing import Dict
 from typing import List
@@ -30,8 +31,11 @@ class RetrieverAccuracy(Analytic):
     requires_columns: List[str] = ["document.retrieval_score", "answer.target"]
     output_file_name = "retrieval_accuracy.json"
 
-    @staticmethod
-    def process_dataset_split(dset: Dataset) -> Dict:
+    def __init__(self, *args, method: str = "sum", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.method = method
+
+    def process_dataset_split(self, dset: Dataset) -> Dict | List:
         """
         Report on a specific split of the dataset.
         """
@@ -46,7 +50,13 @@ class RetrieverAccuracy(Analytic):
         targets = np.array(dset["answer.target"])
 
         # compute predictions based on the retrieval scores
-        preds = scores.max(axis=2).argmax(1)
+        if self.method == "sum":
+            logits = scores.sum(axis=2)
+        elif self.method == "max":
+            logits = scores.max(axis=2)
+        else:
+            raise ValueError(f"Unknown method: {self.method}")
+        preds = logits.argmax(1)
 
         # report
         labels = list({y for y in targets})
@@ -68,3 +78,9 @@ class RetrieverAccuracy(Analytic):
                 rich.print(f"{split}:")
                 rich.print(r["str"])
             print(get_separator())
+
+        if self.wandb_log:
+            try:
+                self.log_to_wandb(dict_results)
+            except Exception as e:
+                warnings.warn(f"Could not log to wandb: {e}")

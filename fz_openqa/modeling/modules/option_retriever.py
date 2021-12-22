@@ -96,68 +96,44 @@ class OptionRetriever(Module):
         return SplitMetrics(metrics)
 
     def _forward(self, batch: Batch, **kwargs) -> Batch:
-        q_shape = d_shape = None
         output = {}
-        if "document.input_ids" in batch:
-            bs, n_opts, n_docs, _ = batch["document.input_ids"].shape
-            # flatten the batch_size and n_options and n_docs dimensions
-            d_batch = flatten_first_dims(
-                batch,
-                n_dims=3,
-                keys=["document.input_ids", "document.attention_mask"],
-            )
 
-            # process the document with the backbone
-            h_heads = self._backbone(
-                d_batch,
-                prefix="document",
-                heads=["document_reader", "document_retriever"],
-                **kwargs,
-            )
-            # reshape and return
-            for k, v in h_heads.items():
-                tag = k.split("_")[-1]
-                v = einops.rearrange(
-                    v,
-                    "(bs n_opts n_docs) ... -> bs n_opts n_docs ...",
-                    bs=bs,
-                    n_opts=n_opts,
-                    n_docs=n_docs,
-                )
-                output[f"_hd_{tag}_"] = v
+        if "document.input_ids" in batch:
+            output.update(self._forward_field(batch, "document", **kwargs))
 
         if "question.input_ids" in batch:
-            bs, n_opts, _ = batch["question.input_ids"].shape
-            # flatten the batch_size and n_options dimensions
-            q_batch = flatten_first_dims(
-                batch,
-                n_dims=2,
-                keys=["question.input_ids", "question.attention_mask"],
-            )
+            output.update(self._forward_field(batch, "question", **kwargs))
 
-            # process the document with the backbone
-            q_heads = self._backbone(
-                q_batch,
-                prefix="question",
-                heads=["question_reader", "question_retriever"],
-                **kwargs,
-            )
+        return output
 
-            # reshape and return
-            for k, v in q_heads.items():
-                tag = k.split("_")[-1]
-                v = einops.rearrange(v, "(bs n_opts) ... -> bs n_opts ...", bs=bs, n_opts=n_opts)
-                output[f"_hq_{tag}_"] = v
+    def _forward_field(self, batch: Batch, field: str, silent: bool = True, **kwargs) -> Batch:
+        original_shape = batch[f"{field}.input_ids"].shape
+        pprint_batch(batch, f"forward {field}", silent=silent)
 
-        pprint_batch(output, "forward", silent=True)
+        # flatten the batch
+        flat_batch = flatten_first_dims(
+            batch,
+            n_dims=len(original_shape) - 1,
+            keys=[f"{field}.input_ids", f"{field}.attention_mask"],
+        )
+        # process the document with the backbone
+        h_heads = self._backbone(
+            flat_batch,
+            prefix=f"{field}",
+            heads=[f"{field}_reader", f"{field}_retriever"],
+            **kwargs,
+        )
+        pprint_batch(h_heads, f"h_heads {field}", silent=silent)
 
-        if all(d is not None for d in (d_shape, q_shape)):
-            if not d_shape[:2] == q_shape[:2]:
-                raise ValueError(
-                    f"Expected 2 first dimensions to be equal, "
-                    f"got documents of shape: {d_shape} and "
-                    f"questions of shape{q_shape}"
-                )
+        # reshape and return
+        output = {}
+        for k, v in h_heads.items():
+            tag = k.split("_")[-1]  # reader / retriever
+            v = v.view(*original_shape[:-1], *v.shape[1:])
+            name = {"document": "hd", "question": "hq"}[field]
+            output[f"_{name}_{tag}_"] = v
+
+        pprint_batch(output, f"output {field}", silent=silent)
 
         return output
 
@@ -173,6 +149,7 @@ class OptionRetriever(Module):
         n_docs = d_batch["document.input_ids"].shape[2]
         output = {}
         step_output = {}
+        is_supervised_loss_computed = False
         if self.resample_k is not None and n_docs > self.resample_k:
             warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
 
@@ -193,6 +170,7 @@ class OptionRetriever(Module):
                 supervised_loss_out = supervised_loss(
                     retriever_score, d_batch["document.match_score"]
                 )
+                is_supervised_loss_computed = True
                 step_output.update(supervised_loss_out)
 
                 # sample k documents
@@ -241,6 +219,8 @@ class OptionRetriever(Module):
 
             supervised_loss_out = supervised_loss(retriever_score, d_batch["document.match_score"])
             supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
+            if is_supervised_loss_computed:
+                step_output.update(supervised_loss_out)
             if self.alpha > 0:
                 warnings.warn(f"Using alpha={self.alpha}")
                 step_output["loss"] += self.alpha * supervised_loss_

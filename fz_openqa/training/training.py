@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 import warnings
 from functools import partial
 from typing import List
@@ -183,6 +184,13 @@ def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
     trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
     while trainer.current_epoch < max_epochs:
         try:
+
+            if trainer.current_epoch > 0:
+                log.info("Updating dataset...")
+                start_time = time.time()
+                datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True)
+                log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
+
             trainer.fit(
                 model=model,
                 train_dataloader=datamodule.train_dataloader(),
@@ -193,8 +201,6 @@ def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
             if trainer.current_epoch >= max_epochs:
                 break
 
-            log.info("Updating dataset...")
-            datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True)
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
         except KeyboardInterrupt:

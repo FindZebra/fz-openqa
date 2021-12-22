@@ -4,8 +4,11 @@ defaults:
   - colbert_qa_retriever
   - override /model: option_retriever
   - override /model/head: cls # todo colbert
-  - override /model/bert: pubmed # todo: pubmed
+  - override /model/bert: pubmed
   - override /datamodule/builder: concat_openqa
+  - override /datamodule/index_builder: dense # todo colbert
+  - override /datamodule/builder/analytics:
+      - retriever_accuracy
 
 base:
   seed: null
@@ -18,27 +21,27 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 0.25
+  val_check_interval: 0.5
 
 model:
   module:
-    resample_k: 10
+    resample_k: null
     alpha: 0
 
 datamodule:
   # how often to map the dataset
-  mapping_freq: null
+  mapping_freq: 5 # todo: debug
 
   # dataloader
   train_batch_size: 8
-  eval_batch_size: 16
+  eval_batch_size: 64 # todo: debug
   num_workers: 16 # setting this too high might lead `Dataset.map()` to hang
   persistent_workers: false
   pin_memory: true
   # drop_last: true # todo: fix this
 
   # dataset builder
-  use_subset: false
+  use_subset: false # todo: debug
   num_proc: 4
   output_columns:
     - answer.target
@@ -51,10 +54,11 @@ datamodule:
     - document.retrieval_score
 
   # documents
+  n_retrieved_documents: 1000 # todo: debug
   n_documents:
-    train: 100
-    validation: 100
-    test: 100
+    train: 10 # todo: debug
+    validation: 10 # todo: debug
+    test: 10 # todo: debug
   max_pos_docs: 1
   filter_unmatched: false
   select_mode: sample
@@ -70,10 +74,15 @@ datamodule:
     dataset_builder:
       n_query_tokens: 0
     corpus_builder:
-      use_subset: false
+      use_subset: false # todo: debug
 
   # Index parameters
   index_builder:
+    model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
+    faiss_args:
+      factory: Flat
+      metric_type: 0 # =faiss.METRIC_INNER_PRODUCT
+      nprobe: 32
     loader_kwargs:
       batch_size: 1000
       num_workers: 8

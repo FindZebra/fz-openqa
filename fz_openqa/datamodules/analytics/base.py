@@ -11,9 +11,11 @@ from typing import Union
 
 import plotly.graph_objects as go
 import rich
+import wandb
 from datasets import Dataset
 from datasets import DatasetDict
 
+from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -35,9 +37,10 @@ class Analytic:
     requires_columns: List[str] = []
     output_file_name: str = "analytic.json"
 
-    def __init__(self, *, output_dir: str, verbose: bool = False):
+    def __init__(self, *, output_dir: str, verbose: bool = False, wandb_log: bool = False):
         super().__init__()
         self.verbose = verbose
+        self.wandb_log = wandb_log
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
         self.output_file_path = self.output_dir / self.output_file_name
@@ -86,6 +89,9 @@ class Analytic:
         if self.verbose:
             self.pprint_json_results(results)
 
+        if self.wandb_log:
+            self.log_to_wandb(results)
+
     def save_as_json(self, results: Union[dict, list]) -> None:
         """
         Save results as json file.
@@ -108,3 +114,9 @@ class Analytic:
         print(get_separator("."))
         rich.print(json.dumps(results, indent=2))
         print(get_separator())
+
+    def log_to_wandb(self, results: List | Dict):
+        """Log results to wandb"""
+        name = camel_to_snake(type(self).__name__)
+        data = {name: results}
+        wandb.log(data)
