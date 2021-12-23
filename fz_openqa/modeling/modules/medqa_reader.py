@@ -70,6 +70,7 @@ class MedQaReader(Module):
                     # rich.print(f"[red] {tokens[j].tolist()}")
                     decoded = self.tokenizer.decode(tokens[j].tolist())
                     rich.print(f"[cyan] {decoded}")
+            exit()
 
         return self.bert(
             batch["qad.input_ids"],
