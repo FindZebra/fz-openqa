@@ -26,12 +26,11 @@ class GenerateSentences(Pipe):
         **kwargs,
     ):
         super(GenerateSentences, self).__init__(**kwargs)
-        required_keys = required_keys or ["idx", "text"]
         self.delimiter = delimiter
-        self.required_keys = required_keys
         if global_keys is None:
             global_keys = []
         self.global_keys = global_keys
+        self.required_keys = required_keys or ["idx", "text"]
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         return self.generate_sentences(

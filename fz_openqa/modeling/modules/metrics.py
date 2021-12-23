@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from typing import Any
 from typing import Dict
@@ -46,7 +48,7 @@ class SplitMetrics(nn.Module):
         else:
             self[split].reset()
 
-    def update(self, split: Split, *args: Tuple[torch.Tensor]) -> None:
+    def update(self, split: Split, *args: torch.Tensor | None) -> None:
         """update the metrics of the given split."""
         self[split].update(*args)
 
