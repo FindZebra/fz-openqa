@@ -8,7 +8,7 @@ defaults:
   # set the classifier to None to avoid using the positive documents
   - override /datamodule/relevance_classifier: none
   - override /model: medqa_reader
-#  - override /model/bert: mini.yaml #debug
+  - override /model/bert: pubmed_multiple_choice
 #  - override /sys: local.yaml #debug
 
 base:
