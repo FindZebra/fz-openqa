@@ -224,7 +224,7 @@ class CorpusBuilder(HfDatasetBuilder):
             add_special_tokens=add_special_tokens,
             add_encoding_tokens=add_encoding_tokens,
             return_offsets_mapping=True,
-            spec_tokens=DOC_TOKEN,
+            spec_token=DOC_TOKEN,
             shape=None,
             update=True,
             input_filter=In(["text"]),

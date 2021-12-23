@@ -1,10 +1,11 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: F407
 
 import re
 from functools import partial
 from typing import List
 from typing import Optional
 
+import rich
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import AddPrefix
@@ -59,7 +60,7 @@ class FormatAndTokenize(Sequential):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         max_length: Optional[int] = 512,
-        spec_tokens: Optional[str | List[str]] = None,
+        spec_token: Optional[str] = None,
         shape: Optional[List[int]] = None,
         return_token_type_ids: bool = False,
         add_special_tokens: bool = True,
@@ -70,12 +71,9 @@ class FormatAndTokenize(Sequential):
         if shape is None:
             shape = [-1]
 
-        if isinstance(spec_tokens, str):
-            spec_tokens = [spec_tokens]
-
-        if add_encoding_tokens and spec_tokens is not None:
+        if add_encoding_tokens and spec_token is not None:
             add_spec_tokens_pipe = Apply(
-                {key: partial(add_spec_token, "".join(spec_tokens))},
+                {key: partial(add_spec_token, spec_token)},
                 element_wise=True,
             )
         else:
