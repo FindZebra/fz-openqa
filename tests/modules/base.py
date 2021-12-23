@@ -2,6 +2,7 @@ from abc import ABC
 from copy import deepcopy
 from unittest import TestCase
 
+import datasets
 import torch
 import transformers.utils.logging
 from transformers import AutoTokenizer, BertPreTrainedModel, AutoModel
@@ -10,6 +11,7 @@ from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.train_utils import silent_huggingface
 
 
 class TestModel(TestCase, ABC):
@@ -43,7 +45,8 @@ class TestModel(TestCase, ABC):
     def setUp(self) -> None:
         """Instantiate the TestCase with dummy data"""
         torch.set_grad_enabled(False)
-        transformers.logging.set_verbosity(transformers.logging.CRITICAL)
+        silent_huggingface()
+        datasets.set_caching_enabled(False)
         self.batch_size = 2
         self.n_documents = 4
         self.n_options = 3
@@ -66,7 +69,7 @@ class TestModel(TestCase, ABC):
                 'tokenizer': self.tokenizer,
                 'max_length': 512,
                 'add_special_tokens': True,
-                'spec_token': None,
+                'spec_tokens': None,
                 }
         preprocess = Parallel(
             FormatAndTokenize(

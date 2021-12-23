@@ -43,15 +43,6 @@ class TestReaderMultipleChoice(TestModel):
         self.assertEqual(output["_relevance_logits_"].shape,
                          (self.batch_size, self.n_documents,))
 
-    def test__reduce_step_output(self):
-        data = {"loss": torch.tensor([0.4, 0.6]),
-                "relevance_loss": torch.tensor([0.4, 0.6]),
-                "answer_loss": torch.tensor([0.4, 0.6])}
-
-        output = self.model._reduce_step_output(data)
-        for key in output:
-            self.assertEqual(output[key], 0.5)
-
     def test__expand_and_flatten_qd(self):
         output = self.model._expand_and_flatten_qd(self.batch, n_docs=self.n_documents)
 

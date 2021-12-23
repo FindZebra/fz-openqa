@@ -2,6 +2,7 @@ import json
 import logging
 from functools import partial
 from pathlib import Path
+from time import time
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -12,8 +13,10 @@ from datasets import Dataset
 from datasets import DatasetDict
 
 from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.pipes import SearchCorpus
+from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
 
@@ -26,11 +29,18 @@ class MapWithFingerprint:
     """
 
     def __init__(
-        self, pipe: Pipe, batched=True, cache_dir: str = None, _id: str = None, **map_kwargs: Any
+        self,
+        pipe: Pipe,
+        batched=True,
+        cache_dir: str = None,
+        id: str = None,
+        debug: bool = False,
+        **map_kwargs: Any,
     ):
-        self._id = _id
+        self.id = id
         self.pipe = pipe
         self.cache_dir = cache_dir
+        self.debug = debug
         self.map_kwargs = {"batched": batched, **map_kwargs}
 
     def __call__(self, dataset: HfDataset) -> HfDataset:
@@ -43,7 +53,8 @@ class MapWithFingerprint:
         self._check_pickling(self.pipe)
 
         # check if the fingerprint from the previous run is identical to the current one
-        self._check_fingerprint_previous_run(dataset, name=type(self.pipe).__name__)
+        if not self.map_kwargs.get("keep_in_memory", False):
+            self._check_fingerprint_previous_run(dataset, name=type(self.pipe).__name__)
 
         # generate new fingerprints
         fingerprints = self._gen_fingerprints(dataset, self.pipe, {})
@@ -54,20 +65,31 @@ class MapWithFingerprint:
             # adjust kwargs
             kwargs = self.map_kwargs.copy()
             if isinstance(self.pipe, SearchCorpus) and isinstance(self.pipe.index, FaissIndex):
-                # todo: fix: faiss freezes when using multiprocessing
+                # FaissIndex is made to work in on thread only
                 kwargs["num_proc"] = 1
+
+            # adjust the batch size to be at least `num_proc
+            kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])
 
             # fingerprint
             fingerprint = fingerprints.get(key, None)
-            logger.info(f"split={key}: fingerprint={fingerprint}")
+            logger.debug(f"split={key}: new_fingerprint={fingerprint}")
+
+            pipe = self.pipe
+            if self.debug:
+                pipe = Sequential(
+                    PrintBatch(f"{self.id} : input"), pipe, PrintBatch(f"{self.id} : output")
+                )
 
             # process each split
+            start_time = time()
             dataset[key] = dset.map(
-                partial(self.pipe, split=key),
+                partial(pipe, split=key),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,
             )
+            logger.info(f"{self.id}, {key}: elapsed_time={time() - start_time:.2f}")
 
         if {"__all__"} == set(dataset.keys()):
             dataset = dataset.pop("__all__")
@@ -107,10 +129,12 @@ class MapWithFingerprint:
             if len(diff) > 0:
                 logger.warning(
                     f"Fingerprint for {name} changed from the latest run. "
-                    f"Caching cannot be used. diff={diff}"
+                    f"Caching cannot be used. Enable debug logging mode to see the diff."
                 )
-                rich.print(f"[magenta] {name}: Fingerprints are different !")
-                rich.print(diff)
+                logger.debug(f"Fingerprint diff={diff}")
+                if self.debug:
+                    rich.print(f"[magenta] {name}: Fingerprints are different !")
+                    rich.print(diff)
 
         file.write_text(json.dumps(fingerprints, indent=2))
 

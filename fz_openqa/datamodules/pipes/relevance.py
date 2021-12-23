@@ -175,6 +175,8 @@ class ExactMatch(RelevanceClassifier):
     def _get_matches(self, pair: Pair) -> List[str]:
         doc_text = pair.document[f"{self.document_field}.text"]
         answer_text = pair.answer[f"{self.answer_field}.text"]
+        if doc_text is None or answer_text is None:
+            raise ValueError(f"Missing text for document or answer: {pair}")
         return find_all(doc_text, [answer_text])
 
 

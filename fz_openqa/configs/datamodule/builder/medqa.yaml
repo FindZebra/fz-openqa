@@ -2,3 +2,4 @@ defaults:
   - base
 
 _target_: fz_openqa.datamodules.builders.MedQaBuilder
+n_query_tokens: 1

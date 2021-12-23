@@ -1,0 +1,4 @@
+tune_callback:
+  _target_: fz_openqa.callbacks.tune.TuneReportCallback
+  metrics:
+    - ${base.target_metric}

@@ -86,17 +86,11 @@ class MedQaBuilder(HfDatasetBuilder):
     ]
 
     def __init__(
-        self,
-        *args,
-        query_key: Optional[str] = "question.text",
-        min_answer_length: Optional[int] = None,
-        n_query_tokens: int = 1,
-        **kwargs,
+        self, *args, min_answer_length: Optional[int] = None, n_query_tokens: int = 1, **kwargs
     ):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
         self.n_query_tokens = n_query_tokens
-        self.query_key = query_key
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""

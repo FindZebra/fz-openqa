@@ -7,10 +7,12 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import torch
 from datasets import Split
 from omegaconf import DictConfig
+from scipy.special import softmax
+from torch import Tensor
 
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from .nesting import Nested
 from .sorting import reindex
@@ -57,11 +59,13 @@ class SelectDocsOneEg(Pipe):
         strict: bool = True,
         shuffle: bool = False,
         score_key: str = "document.match_score",
+        retrieval_score_key: str = "document.retrieval_score",
         **kwargs,
     ):
         super(SelectDocsOneEg, self).__init__(**kwargs)
         self.total = total
         self.score_key = score_key
+        self.retrieval_score_key = retrieval_score_key
         self.max_pos_docs = max_pos_docs
         self.pos_select_mode = pos_select_mode
         self.neg_select_mode = neg_select_mode
@@ -91,19 +95,44 @@ class SelectDocsOneEg(Pipe):
 
         # get the positive indexes
         positive_idx = [i for i, x in enumerate(is_positive) if x]
-        selected_positive_idx = select_values(
-            positive_idx,
-            k=min(self.max_pos_docs, len(positive_idx)),
-            mode=self.pos_select_mode,
-        )
+        pos_probs = self.get_probs(batch, positive_idx)
+
+        try:
+            selected_positive_idx = select_values(
+                positive_idx,
+                k=min(self.max_pos_docs, len(positive_idx)),
+                mode=self.pos_select_mode,
+                probs=pos_probs,
+            )
+        except Exception as e:
+            warnings.warn(f"Failed to select positive documents, probs={pos_probs}, Exception={e}")
+            selected_positive_idx = select_values(
+                positive_idx,
+                k=min(self.max_pos_docs, len(positive_idx)),
+                mode="first",
+                probs=pos_probs,
+            )
 
         # get the negative indexes
         negative_idx = [i for i, x in enumerate(is_positive) if not x]
-        selected_negative_idx = select_values(
-            negative_idx,
-            k=total - len(selected_positive_idx),
-            mode=self.neg_select_mode,
-        )
+        neg_probs = self.get_probs(batch, negative_idx)
+
+        try:
+            selected_negative_idx = select_values(
+                negative_idx,
+                k=total - len(selected_positive_idx),
+                mode=self.neg_select_mode,
+                probs=neg_probs,
+            )
+
+        except Exception as e:
+            warnings.warn(f"Failed to select negative documents, probs={neg_probs}, Exception={e}")
+            selected_negative_idx = select_values(
+                negative_idx,
+                k=total - len(selected_positive_idx),
+                mode="first",
+                probs=neg_probs,
+            )
 
         # final index
         index = selected_positive_idx + selected_negative_idx
@@ -123,8 +152,28 @@ class SelectDocsOneEg(Pipe):
         # re-index and return
         return {k: reindex(v, index) for k, v in batch.items()}
 
+    def get_probs(self, batch, idx):
+        scores = batch[self.retrieval_score_key][idx]
+        if len(scores):
+            if isinstance(scores, Tensor):
+                scores = torch.nan_to_num(scores, nan=-1e3, posinf=1e3, neginf=-1e3)
+                probs = torch.softmax(scores.to(torch.float64), dim=-1)
+            else:
+                scores = np.nan_to_num(scores, nan=-1e3, posinf=1e3, neginf=-1e3)
+                probs = softmax(scores)
+
+            return probs
+        else:
+            return None
+
     def check_index_consistency(
-        self, index, *, negative_idx, positive_idx, selected_negative_idx, total
+        self,
+        index,
+        *,
+        negative_idx,
+        positive_idx,
+        selected_negative_idx,
+        total,
     ):
         if self.strict:
             # check output
@@ -159,11 +208,14 @@ class SelectDocsOneEg(Pipe):
         return index
 
 
-def select_values(values: List[int], *, k: int, mode: str = "first") -> List[int]:
+def select_values(
+    values: List[int], *, k: int, mode: str = "first", probs: Optional[np.ndarray] = None
+) -> List[int]:
     if mode == "first":
         return values[:k]
     elif mode == "sample":
         k = min(len(values), k)
-        return [x for x in np.random.choice(copy(values), size=k, replace=False)]
+        samples = [x for x in np.random.choice(copy(values), size=k, replace=False, p=probs)]
+        return samples
     else:
         raise ValueError(f"Unknown mode {mode}")

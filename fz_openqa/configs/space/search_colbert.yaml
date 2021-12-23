@@ -1,0 +1,34 @@
+model/bert:
+  _target_: ray.tune.choice
+  categories:
+    # - bio_bert.yaml
+    - pubmed.yaml
+
+model/head:
+  _target_: ray.tune.choice
+  categories:
+    - cls.yaml
+    - colbert.yaml
+
+model.bert.hidden_dropout_prob:
+  _target_: ray.tune.choice
+  categories:
+    - 0
+    - 0.1
+    - 0.3
+    - 0.5
+
+model.bert.attention_probs_dropout_prob:
+  _target_: ray.tune.choice
+  categories:
+    - 0
+    - 0.1
+    - 0.3
+    - 0.5
+
+datamodule.transform.rate:
+  _target_: ray.tune.choice
+  categories:
+    - 0
+    - 0.1
+    - 0.2

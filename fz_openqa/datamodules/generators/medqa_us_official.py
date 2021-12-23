@@ -24,7 +24,7 @@ _HOMEPAGE = ""
 _CITATION = ""
 
 
-class MedQaGenerator(datasets.GeneratorBasedBuilder):
+class OfficialMedQaGenerator(datasets.GeneratorBasedBuilder):
     """MedQAxCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)

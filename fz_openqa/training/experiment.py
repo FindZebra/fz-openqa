@@ -15,7 +15,6 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
 def run_experiment_with_config(config: DictConfig):
-
     # replace config paths with loaded configs
     resolve_config_paths(config, path=os.path.dirname(configs.__file__))
 

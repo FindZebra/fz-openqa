@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
+from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
@@ -66,6 +67,7 @@ class DataModule(LightningDataModule):
         num_workers: int = 2,
         pin_memory: bool = True,
         persistent_workers: bool = False,
+        drop_last: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -79,13 +81,13 @@ class DataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
+        self.drop_last = drop_last
 
     def prepare_data(self, **kwargs):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        pass  # todo: uncomment this
-        # logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
-        # self.builder(**kwargs)
+        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
+        self.builder(**kwargs)
 
     def setup(self, stage: Optional[str] = None, **kwargs):
         """
@@ -94,6 +96,15 @@ class DataModule(LightningDataModule):
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
         logger.info(f"Setting up with <{self.builder.__class__.__name__}>")
+        self.update_dataset(stage=stage, **kwargs)
+
+    def update_dataset(self, stage: Optional[str] = None, **kwargs):
+        """
+        Load data and preprocess the data.
+        1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
+        2. Build the operator to collate examples into a batch (`self.collate_pipe`).
+        """
+        logger.info(f"Updating dataset with <{self.builder.__class__.__name__}>")
         self.dataset = self.builder(**kwargs)
 
         # define the collate operator
@@ -108,6 +119,7 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
+            drop_last=self.drop_last,
             shuffle=shuffle,
             collate_fn=collate_fn,
         )
@@ -121,14 +133,18 @@ class DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers,
+            drop_last=self.drop_last,
             shuffle=shuffle,
             collate_fn=collate_fn,
         )
 
     def _get_collate_fn(self, split: Split):
         collate_fn = self.collate_pipe
+
+        # add the split info to the collate_fn
         if isinstance(collate_fn, Pipe):
             collate_fn = partial(collate_fn, split=split)
+
         return collate_fn
 
     def val_dataloader(self, **kwargs):

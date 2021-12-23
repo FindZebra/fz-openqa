@@ -15,8 +15,7 @@ trainer:
   min_epochs: 1
   max_epochs: 1000
   accumulate_grad_batches: 4
-  val_check_interval: 200
-  flush_logs_every_n_steps: 1
+  val_check_interval: 300
 
 datamodule:
   use_subset: false
@@ -29,8 +28,9 @@ datamodule:
     train: 12
     validation: 12
     test: 12
-  max_pos_docs: 3
+  max_pos_docs: 1
   filter_unmatched: False
+  select_mode: sample
   output_columns:
     - question.input_ids
     - question.attention_mask

@@ -1,3 +1,4 @@
+import unittest
 from copy import deepcopy
 from functools import partial
 
@@ -103,7 +104,7 @@ class TestOptionRetriever(TestModel):
                 'tokenizer': self.tokenizer,
                 'max_length': 512,
                 'add_special_tokens': True,
-                'spec_token': None,
+                'spec_tokens': None,
                 }
         preprocess = Parallel(
             FormatAndTokenize(
@@ -142,15 +143,15 @@ class TestOptionRetriever(TestModel):
         output = self.model.step(self.batch)
         # keys
         self.assertIn("loss", output)
-        self.assertIn("_logits_", output)
-        self.assertIn("_targets_", output)
+        self.assertIn("_reader_logits_", output)
+        self.assertIn("_reader_targets_", output)
 
         # check that model predictions are correct
-        self.assertEqual(output['_logits_'].argmax(-1).numpy().tolist(),
-                         output['_targets_'].numpy().tolist())
+        self.assertEqual(output['_reader_logits_'].argmax(-1).numpy().tolist(),
+                         output['_reader_targets_'].numpy().tolist())
 
         # check that probs sum to 1 `logits.exp().sum(-1) == 1`
-        self.assertTrue(torch.allclose(output['_logits_'].exp().sum(-1), torch.tensor(1.)))
+        self.assertTrue(torch.allclose(output['_reader_logits_'].exp().sum(-1), torch.tensor(1.)))
 
     def test_compute_score(self):
         """test the `_compute_score` method. Make sure that retrieval score
@@ -170,14 +171,6 @@ class TestOptionRetriever(TestModel):
                          list(output['_hd_'].shape[:3]))
         self.assertEqual([self.batch_size, self.n_options],
                          list(output['_hq_'].shape[:2]))
-
-    def test__reduce_step_output(self):
-        data = {"loss": torch.tensor([0.4, 0.6]),
-                "logp": torch.tensor([0.4, 0.6])}
-
-        output = self.model._reduce_step_output(data)
-        for key in output:
-            self.assertEqual(output[key], 0.5)
 
     @torch.enable_grad()
     def test_overfit(self):
@@ -208,16 +201,16 @@ class TestOptionRetriever(TestModel):
             optimizer.step()
 
             if VERBOSE and i % 10 == 0:
-                probs = output['_logits_'].detach().exp().numpy()
+                probs = output['_reader_logits_'].detach().exp().numpy()
                 rich.print(f"{i} - loss={loss:.3f}, probs[0]={probs[0]}, probs[1]={probs[1]}")
                 doc_probs = output['_doc_logits_'].detach().exp()
-                doc_dist = (doc_probs - doc_targets).pow(2)
+                # doc_dist = (doc_probs - doc_targets).pow(2)
                 # rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
         targets = batch['answer.target']
         output = model.evaluate(batch)
-        probs = output['_logits_'].detach().exp()
+        probs = output['_reader_logits_'].detach().exp()
         target_probs = probs.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1).numpy()
         probs = probs.numpy()
         targets = targets.numpy()

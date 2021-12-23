@@ -1,4 +1,4 @@
 defaults:
-  - base
+  - medqa
 
 _target_: fz_openqa.datamodules.builders.ConcatMedQaBuilder

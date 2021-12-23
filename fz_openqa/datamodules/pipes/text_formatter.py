@@ -77,9 +77,21 @@ class TextFormatter(Pipe):
         else:
             ValueError(f"Cannot handle type {type(x).__name__}.")
 
-    def _call_batch(self, batch: Batch, text_key: Optional[str] = None, **kwargs) -> Batch:
+    def _call_batch(
+        self,
+        batch: Batch,
+        idx: Optional[List[int]] = None,
+        *,
+        text_key: Optional[str] = None,
+        **kwargs,
+    ) -> Batch:
         text_key = text_key or self.text_key
         assert text_key is not None, "attribute `text_key` must be set."
         if isinstance(text_key, str):
             text_key = [text_key]
-        return {key: self._apply_to_leaves(batch[key], self.clean) for key in text_key}
+
+        return {
+            key: self._apply_to_leaves(batch[key], self.clean)
+            for key in text_key
+            if key in batch.keys()
+        }

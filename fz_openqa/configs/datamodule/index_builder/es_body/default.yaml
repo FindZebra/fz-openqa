@@ -9,16 +9,16 @@ mappings:
       # Prevents the inverted index and doc values from being created
       enabled: false
 settings:
-   # Defines changes to the text before tokenization and indexing
+  # Defines changes to the text before tokenization and indexing
   analysis:
     analyzer:
       custom_analyzer:
         # token filters
         filter:
-        - lowercase # Converts tokens to lowercase
-        - stop # Removes tokens equivalent to english stopwords
-        - asciifolding # Converts a-z, 1-9, and symbolic characters to their ASCII equivalent
-        - my_snow # Converts tokens to its root word based snowball stemming
+          - lowercase # Converts tokens to lowercase
+          - stop # Removes tokens equivalent to english stopwords
+          - asciifolding # Converts a-z, 1-9, and symbolic characters to their ASCII equivalent
+          - my_snow # Converts tokens to its root word based snowball stemming
         tokenizer: standard
         type: custom
     filter:

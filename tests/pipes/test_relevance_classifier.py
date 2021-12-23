@@ -126,7 +126,6 @@ class TestRelevanceClassifier(TestCase):
         Flatten and process with the classifier.
         """
         return Sequential(
-            PrintBatch("input"),
             ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
         )
 

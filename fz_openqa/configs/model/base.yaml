@@ -7,6 +7,8 @@ _target_: fz_openqa.modeling.Model
 bert_id: ${model.bert.pretrained_model_name_or_path}
 tokenizer: ${datamodule.tokenizer}
 cache_dir: ${sys.cache_dir}
-hidden_size: 128
-lr: 2e-5
-weight_decay: 1e-4
+lr: 3e-5
+weight_decay: 0.01
+monitor_metric: ${base.target_metric}
+num_training_steps: 10000
+num_warmup_steps: 1000

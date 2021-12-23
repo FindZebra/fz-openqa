@@ -29,6 +29,7 @@ def print_config(
     config: DictConfig,
     fields: Optional[Sequence[str]] = None,
     resolve: bool = True,
+    exclude: Optional[Sequence[str]] = None,
 ) -> None:
     """Prints content of DictConfig using Rich library and its tree structure.
     Args:
@@ -40,8 +41,11 @@ def print_config(
 
     style = "dim"
     tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
+    if exclude is None:
+        exclude = []
 
     fields = fields or config.keys()
+    fields = filter(lambda x: x not in exclude, fields)
     for field in fields:
         branch = tree.add(field, style=style, guide_style=style)
 

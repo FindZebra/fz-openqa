@@ -1,7 +1,4 @@
 defaults:
   - checkpoint
-
-tune_callback:
-  _target_: ray.tune.integration.pytorch_lightning.TuneReportCallback
-  metrics:
-    - ${base.target_metric}
+  - tune_callback
+  - early_stopping

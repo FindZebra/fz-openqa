@@ -1,0 +1,4 @@
+defaults:
+  - scispacy
+
+model_name: en_core_sci_lg

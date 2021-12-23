@@ -3,12 +3,10 @@ import os
 import warnings
 from sys import platform
 from typing import List
-from typing import Optional
-from typing import Sequence
 
+import datasets
 import pytorch_lightning as pl
-import rich.syntax
-import rich.tree
+import transformers
 import wandb
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
@@ -18,6 +16,11 @@ from pytorch_lightning.utilities import rank_zero_only
 
 def empty(*args, **kwargs):
     pass
+
+
+def silent_huggingface():
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    transformers.logging.set_verbosity(transformers.logging.CRITICAL)
 
 
 def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
@@ -157,6 +160,7 @@ def setup_safe_env():
     if platform == "darwin":
         # a few flags to fix MacOS stuff
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
         import multiprocessing
 
         try:

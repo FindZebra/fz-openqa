@@ -1,0 +1,53 @@
+# @package _global_
+
+# kill all idle processes using:
+# > ps aux | grep ray:: | grep -v grep | awk '{print $2}' | xargs kill -9
+
+# delete checkpoints
+# > find . -type d -path "./*" -mmin +100 -exec rm -rf {} \;
+
+defaults:
+  - override /sys: hpo-titan
+  - override /space: search_colbert
+  - override /runner: default
+
+base:
+  name: colbert-qa-retriever
+  target_metric: validation/retriever/top10_Accuracy
+  target_mode: max
+  # resources
+  gpus: 8
+  cpus: 32
+
+ray:
+  local_mode: true
+  configure_logging: true
+
+experiment:
+  experiment: colbert_qa_retriever.yaml
+  sys: titan.yaml
+  sys.cache_dir: ${sys.cache_dir}
+  base.target_metric: ${base.target_metric}
+  base.target_mode: ${base.target_mode}
+  base.seed: null
+  base.is_search: true
+  print_config: true
+  verbose: true
+  # ignore_warnings: True
+  # trainer.progress_bar_refresh_rate: 0
+  trainer.checkpoint_callback: True
+  logger.wandb.group: ${base.name}
+  callbacks: tune.yaml
+  datamodule.num_workers: 16
+  datamodule.num_proc: 8
+  trainer.max_epochs: 200
+  datamodule.use_subset: false
+  trainer.gpus: ${base.gpus}
+  trainer.strategy: dp
+
+
+runner:
+  num_samples: 1000
+  fail_fast: True
+  raise_on_failed_trial: True
+  search_alg: null

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from abc import ABCMeta
 from copy import deepcopy
@@ -5,10 +7,12 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Type
 from typing import Union
 
 import dill
 import rich
+from typing_extensions import Self
 
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.json_struct import apply_to_json_struct
@@ -16,7 +20,7 @@ from fz_openqa.utils.json_struct import apply_to_json_struct
 logger = logging.getLogger(__name__)
 
 
-def leaf_to_json_struct(v: Any, **kwargs) -> Union[Dict, List]:
+def leaf_to_json_struct(v: Any, **kwargs) -> Dict | List:
     """Convert a leaf value into a json structure."""
     if isinstance(v, Component):
         return v.to_json_struct(**kwargs)
@@ -46,10 +50,13 @@ class Component:
     Attributes
     id
        An identifier for the component.
+    no_fingerprint
+       list of attributes to exclude from the fingerprint.
     """
 
     __metaclass__ = ABCMeta
     id: Optional[str] = None
+    no_fingerprint: Optional[List[str]] = None
 
     def __init__(self, *, id: Optional[str] = None, **kwargs):
         """
@@ -63,7 +70,7 @@ class Component:
         if id is not None:
             self.id = id
 
-    def dill_inspect(self, reduce=True) -> Union[bool, Dict[str, bool]]:
+    def dill_inspect(self, reduce=True) -> bool | Dict[str, bool]:
         """
         Inspect the dill representation of the object.
 
@@ -117,25 +124,44 @@ class Component:
             logger.warning(f"Failed to fingerprint {x}: {ex}")
 
     @staticmethod
-    def safe_fingerprint(x: Any, reduce: bool = False) -> Union[Dict, str]:
+    def safe_fingerprint(x: Any, reduce: bool = False) -> Dict | str:
         if isinstance(x, Component):
             return x.fingerprint(reduce=reduce)
         else:
             return Component._fingerprint(x)
 
-    def fingerprint(self, reduce=False) -> Union[str, Dict[str, Any]]:
+    def fingerprint(
+        self, reduce=False, exclude: Optional[List[str]] = None
+    ) -> str | Dict[str, Any]:
         """
-        Return a fingerprint(s) of the object.
+        Return a fingerprint of the object. All attributes stated in `no_fingerprint` are excluded.
 
         Returns
         -------
         Union[str, Dict[str, Any]]
             fingerprint(s) (hex-digested hash of the object),
             allows both a string and a nested structure of strings.
+
+
+        Notes
+        -----
+        todo: Future versions: fingerprint the class attributes as well.
+         This might be done using `include_class_attributes` with `get_attributes_dict`.
         """
-        data = self.to_json_struct()
-        if type(self).__name__.lower() == "predict":
-            rich.print(data)
+
+        fingerprints = self._get_fingerprint_struct()
+
+        if reduce:
+            fingerprints = get_fingerprint(fingerprints)
+
+        return fingerprints
+
+    def _get_fingerprint_struct(self, exclude: Optional[List[str]] = None) -> List | Dict:
+        """get the fingerprint for each element in the JSON-like representation
+        of the object, and exclude all parameters stated in `no_fingerprint`"""
+        exclude = exclude or []
+        exclude.extend(self.no_fingerprint or [])
+        data = self.to_json_struct(exclude_no_recursive=exclude)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
             """return the fingerprint, excepts if key==__name__"""
@@ -145,14 +171,16 @@ class Component:
                 return get_fingerprint(v)
 
         fingerprints = apply_to_json_struct(data, maybe_get_fingerprint)
-
-        if reduce:
-            fingerprints = get_fingerprint(fingerprints)
-
         return fingerprints
 
     def to_json_struct(
-        self, append_self: bool = False, exclude: Optional[List[str]] = None, **kwargs
+        self,
+        append_self: bool = False,
+        exclude: Optional[List[str]] = None,
+        exclude_no_recursive: Optional[List[str]] = None,
+        include_only: Optional[List[str]] = None,
+        include_class_attributes: bool = False,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Return a dictionary representation of the object.
@@ -162,21 +190,34 @@ class Component:
         Dictionary[str, Any]
             Dictionary representation of the object
         """
-        kwargs = {"append_self": append_self, "exclude": exclude, **kwargs}
-        attributes = self._get_attributes()
+        kwargs = {
+            "append_self": append_self,
+            "exclude": exclude,
+            "include_only": include_only,
+            "include_class_attributes": include_class_attributes,
+            **kwargs,
+        }
+        attributes = self._get_attributes(include_class_attributes=include_class_attributes)
 
         if exclude is None:
             exclude = []
+
+        if exclude_no_recursive is None:
+            exclude_no_recursive = []
+
+        exclude = exclude + exclude_no_recursive
 
         data = {"__name__": type(self).__name__, **attributes}
         if append_self:
             data["__self__"] = self
         data = {k: v for k, v in data.items() if not (k == "id" and v is None)}
         data = {k: v for k, v in data.items() if k not in exclude}
+        if include_only is not None:
+            data = {k: v for k, v in data.items() if k in include_only}
         data = {k: leaf_to_json_struct(v, **kwargs) for k, v in data.items()}
         return data
 
-    def _get_attributes(self) -> Dict:
+    def _get_attributes(self, include_class_attributes: bool = False) -> Dict:
         """
         Return a dictionary of attributes of the object, uses __getstate__ if available.
 
@@ -185,10 +226,15 @@ class Component:
         Dict
             Dictionary of attributes of the object
         """
-        if hasattr(self, "__getstate__"):
-            attributes = self.__getstate__()
+        if include_class_attributes:
+            attributes = type(self).__dict__.copy()
         else:
-            attributes = vars(self)
+            attributes = {}
+        if hasattr(self, "__getstate__"):
+            attributes.update(self.__getstate__())
+        else:
+            attributes.update(vars(self))
+
         return attributes
 
     def __repr__(self) -> str:
