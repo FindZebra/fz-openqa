@@ -313,6 +313,9 @@ class OpenQaBuilder(DatasetBuilder):
             )
             dataset = mapper(dataset)
 
+        # free-up GPU memory
+        index.to_cpu()
+
         # filter out questions that are not match to any  positive document
         if filter_unmatched:
 

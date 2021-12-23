@@ -66,6 +66,8 @@ class OptionRetriever(Module):
         self,
         *args,
         alpha: float = 0,
+        max_batch_size: Optional[int] = None,
+        eval_topk: Optional[int] = 20,
         resample_k: Optional[int] = None,
         grad_expr: GradExpression = GradExpression.BATCH_BACKPROP,
         **kwargs,
@@ -73,9 +75,11 @@ class OptionRetriever(Module):
         super().__init__(*args, **kwargs)
         self.grad_expr = GradExpression(grad_expr)
         self.resample_k = resample_k
+        self.max_batch_size = max_batch_size
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
+        self.eval_topk = eval_topk
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -109,6 +113,10 @@ class OptionRetriever(Module):
     def _forward_field(self, batch: Batch, field: str, silent: bool = True, **kwargs) -> Batch:
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
+        if self.training:
+            max_batch_size = None
+        else:
+            max_batch_size = self.max_batch_size
 
         # flatten the batch
         flat_batch = flatten_first_dims(
@@ -121,6 +129,7 @@ class OptionRetriever(Module):
             flat_batch,
             prefix=f"{field}",
             heads=[f"{field}_reader", f"{field}_retriever"],
+            max_batch_size=max_batch_size,
             **kwargs,
         )
         pprint_batch(h_heads, f"h_heads {field}", silent=silent)
@@ -202,6 +211,12 @@ class OptionRetriever(Module):
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
+        # log retriever entropy
+        retriever_logits = retriever_score.log_softmax(dim=-1)
+        retriever_entropy = -(retriever_logits.exp() * retriever_logits).sum(dim=(1, 2)).mean()
+        step_output["retriever/entropy"] = retriever_entropy.detach()
+
+        # compute the gradients
         if self.grad_expr == GradExpression.BATCH_BACKPROP:
             step_output.update(
                 batch_backprop_grads(
@@ -209,6 +224,7 @@ class OptionRetriever(Module):
                     retriever_score=retriever_score,
                     targets=batch["answer.target"],
                     grad_expr=self.grad_expr,
+                    eval_topk=self.eval_topk,
                 )
             )
         else:
@@ -216,10 +232,9 @@ class OptionRetriever(Module):
 
         # auxiliary loss
         if self.alpha > 0 or self.resample_k is None:
-
             supervised_loss_out = supervised_loss(retriever_score, d_batch["document.match_score"])
             supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
-            if is_supervised_loss_computed:
+            if not is_supervised_loss_computed:
                 step_output.update(supervised_loss_out)
             if self.alpha > 0:
                 warnings.warn(f"Using alpha={self.alpha}")

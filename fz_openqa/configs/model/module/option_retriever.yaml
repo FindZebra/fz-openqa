@@ -3,4 +3,6 @@ _target_: fz_openqa.modeling.modules.OptionRetriever
 grad_expr: batch-backprop
 alpha: 0
 resample_k: null
+max_tokens: null
+eval_topk: 20
 _id: option_retriever

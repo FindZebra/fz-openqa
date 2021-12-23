@@ -1,6 +1,7 @@
 import warnings
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 import rich
 import torch
@@ -102,10 +103,19 @@ def variational_grads(partial_score: Tensor, targets: Tensor, **kwargs):
 
 
 def base_quantities_2(
-    retriever_score: Tensor, reader_score: Tensor, targets: torch.Tensor
+    retriever_score: Tensor,
+    reader_score: Tensor,
+    targets: torch.Tensor,
+    eval_topk: Optional[int] = None,
 ) -> Quantities:
     # repeat the scores for all combinations of documents:
     # `D \in D_1 \times D_2 \times ... \times D_N`
+    if eval_topk is not None and retriever_score.shape[-1] > eval_topk:
+        warnings.warn(f"Truncating scores {retriever_score.shape} to topk={eval_topk}")
+        idx = torch.argsort(retriever_score, dim=-1, descending=True)[..., :eval_topk]
+        retriever_score = retriever_score.gather(index=idx, dim=-1)
+        reader_score = reader_score.gather(index=idx, dim=-1)
+
     targets = targets.unsqueeze(1)
     expanded_reader_score, expanded_retriever_score = batch_cartesian_product(
         [reader_score, retriever_score]
@@ -151,9 +161,10 @@ def batch_backprop_grads(
     reader_score: Tensor,
     targets: Tensor,
     grad_expr: GradExpression = GradExpression.BATCH_SUM,
+    eval_topk: Optional[int] = None,
 ):
     """Compute the gradients assuming the batch being the entire dataset"""
-    q = base_quantities_2(retriever_score, reader_score, targets)
+    q = base_quantities_2(retriever_score, reader_score, targets, eval_topk=eval_topk)
 
     loss = -1 * (q.logp_a_star).mean(-1)
     return {
@@ -178,10 +189,13 @@ def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
     pos_docs = pos_docs[loss_mask].float()
 
     if logits.numel() > 0:
+        n_total = len(pos_docs)
+        n_pos = pos_docs.sum()
         loss = -(pos_docs * F.log_softmax(logits, dim=-1) / pos_docs.sum(dim=-1, keepdims=True))
         loss = loss.sum(-1)
 
     else:
+        n_total = n_pos = 0
         loss = torch.tensor(0.0, dtype=partial_score.dtype, device=partial_score.device)
 
     # compute logits and targets for the metrics
@@ -190,4 +204,10 @@ def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
     targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
     logits = logits.gather(index=ids, dim=-1)
 
-    return {"retriever/loss": loss, "_retriever_logits_": logits, "_retriever_targets_": targets}
+    return {
+        "retriever/loss": loss,
+        "_retriever_logits_": logits,
+        "_retriever_targets_": targets,
+        "retriever/n_options": n_total,
+        "retriever/n_positive": n_pos,
+    }

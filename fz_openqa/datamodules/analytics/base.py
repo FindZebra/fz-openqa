@@ -118,5 +118,12 @@ class Analytic:
     def log_to_wandb(self, results: List | Dict):
         """Log results to wandb"""
         name = camel_to_snake(type(self).__name__)
-        data = {name: results}
-        wandb.log(data)
+        self._log_leaf_to_wandb(name, results)
+
+    @staticmethod
+    def _log_leaf_to_wandb(key, value):
+        if isinstance(value, dict):
+            for k, v in value.items():
+                Analytic._log_leaf_to_wandb(f"{key}/{k}", v)
+        else:
+            wandb.log({key: value})

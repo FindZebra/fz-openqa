@@ -61,12 +61,12 @@ def train(config: DictConfig) -> Optional[float]:
 
     # only preprocess the data if there is no trainer
     if config.get("trainer", None) is None:
-        datamodule.prepare_data()
+        # datamodule.prepare_data()
         datamodule.setup()
         return
 
     # display dataset
-    datamodule.prepare_data()
+    # datamodule.prepare_data()
     datamodule.setup()
     if config.verbose:
         rich.print(datamodule.dataset)
@@ -135,7 +135,7 @@ def train(config: DictConfig) -> Optional[float]:
     # Evaluate Module on test set after training
     if not config.trainer.get("fast_dev_run"):
         log.info("Starting testing..")
-        trainer.test(datamodule=datamodule)
+        trainer.test(dataloaders=datamodule.test_dataloader())
 
     # Make sure everything closed properly
     log.info("Finalizing..")
@@ -184,13 +184,6 @@ def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
     trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
     while trainer.current_epoch < max_epochs:
         try:
-
-            if trainer.current_epoch > 0:
-                log.info("Updating dataset...")
-                start_time = time.time()
-                datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True)
-                log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
-
             trainer.fit(
                 model=model,
                 train_dataloader=datamodule.train_dataloader(),
@@ -200,6 +193,11 @@ def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
             log.info(f"Epoch {trainer.current_epoch} completed.")
             if trainer.current_epoch >= max_epochs:
                 break
+
+            log.info("Updating dataset...")
+            start_time = time.time()
+            datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True)
+            log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
 
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
