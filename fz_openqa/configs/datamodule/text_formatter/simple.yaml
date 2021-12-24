@@ -2,5 +2,7 @@ _target_: fz_openqa.datamodules.pipes.TextFormatter
 
 remove_breaks: True
 remove_ref: True
+remove_hex: True
 lowercase: True
-aggressive_cleaning: True
+aggressive_cleaning: False
+remove_symbols: True

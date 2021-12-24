@@ -5,7 +5,6 @@ from rich.status import Status
 
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes.relevance import ExactMatch
-from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.datamodules.pipes.relevance import ScispaCyMatch
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -161,7 +160,7 @@ batch = Collate(keys=None)(exs)
 pprint_batch(batch)
 
 with Status("Loading classifiers.."):
-    classifiers = [ExactMatch(), MetaMapMatch(), ScispaCyMatch()]
+    classifiers = [ExactMatch(), ScispaCyMatch()]
 output = {c: c(copy(batch)) for c in classifiers}
 
 for i, eg in enumerate(exs):

@@ -1,11 +1,14 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: F407
 
 import itertools
 from typing import Any
 from typing import Dict
 from typing import List
 
+import matplotlib.pyplot as plt
+import pandas as pd
 import plotly.graph_objects as go
+import seaborn as sns
 from datasets import Dataset
 
 from .base import Analytic
@@ -15,7 +18,7 @@ class PlotScoreDistributions(Analytic):
     """Plot the distribution of retrieval scores for matched documents"""
 
     requires_columns = ["document.retrieval_score", "document.match_score"]
-    output_file_name = "score_distribution_plot.html"
+    output_file_name = "score_distribution_plot"
 
     def process_dataset_split(self, dset: Dataset) -> List:
         """
@@ -35,26 +38,19 @@ class PlotScoreDistributions(Analytic):
         """
         Plot for all splits in a dataset.
         """
+        labels = ["Positive"] * len(results["positives"]) + ["Negative"] * len(results["negatives"])
+        scores = results["positives"] + results["negatives"]
 
-        fig = go.Figure()
-        colors = ["rgb(102, 178, 255)", "rgb(232, 97, 83)"]
-        for i, (key, val) in enumerate(results.items()):
-            fig.add_trace(
-                go.Histogram(
-                    name=key,
-                    x=val,
-                    histnorm="probability density",
-                    marker_color=colors[i],
-                    xbins=dict(start=0, end=250, size=5),
-                    opacity=0.75,
-                )
-            )
+        df = pd.DataFrame(
+            {
+                "Scores": scores,
+                "Labels": labels,
+            }
+        )
 
-        # Overlay both histograms
-        fig.update_layout(barmode="overlay")
-        fig.update_traces(hovertemplate=None, hoverinfo="skip")
-        fig.update_yaxes(ticklabelposition="inside top", title="Density")
-        fig.update_xaxes(title="Retrieval score")
+        fig = sns.displot(
+            df, x="Scores", hue="Labels", stat="density", common_norm=False, height=8, aspect=15 / 8
+        )
 
         return fig
 
@@ -68,4 +64,4 @@ class PlotScoreDistributions(Analytic):
         """Process the results of the analytic."""
         results = self.collate_splits(results)
         fig = self.plot_split(results=results)
-        self.save_as_html(fig)
+        self.save_as_png(fig)

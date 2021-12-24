@@ -21,6 +21,7 @@ from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -44,7 +45,7 @@ def run(config):
     dataset_builder = MedQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
@@ -64,12 +65,12 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(),
-        relevance_classifier=ExactMatch(interpretable=True),
+        relevance_classifier=ScispaCyMatch(interpretable=True),
         n_retrieved_documents=1000,
         n_documents=10,
-        max_pos_docs=1,
+        max_pos_docs=5,
         filter_unmatched=config.get("filter_unmatched", False),
-        num_proc=2,
+        num_proc=1,
         batch_size=50,
         analyses=[
             CountMatchedQuestions(output_dir="./analyses", verbose=True),
