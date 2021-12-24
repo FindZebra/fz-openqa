@@ -34,6 +34,7 @@ from .pprint import PrintBatch
 from .pprint import PrintText
 from .predict import Predict
 from .relevance import ExactMatch
+from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
 from .sorting import Sort

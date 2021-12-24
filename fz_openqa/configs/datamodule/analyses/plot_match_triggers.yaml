@@ -1,4 +1,0 @@
-defaults:
-  - base
-
-_target_: fz_openqa.datamodules.analytics.PlotTopMatchTriggers

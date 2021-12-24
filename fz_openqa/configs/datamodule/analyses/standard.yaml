@@ -1,9 +1,0 @@
-- _target_: fz_openqa.datamodules.analytics.CountMatchedQuestions
-  output_dir: ${getcwd:}/analyses/
-  verbose: true
-- _target_: fz_openqa.datamodules.analytics.PlotTopMatchTriggers
-  output_dir: ${getcwd:}/analyses/
-  verbose: true
-- _target_: fz_openqa.datamodules.analytics.PlotScoreDistributions
-  output_dir: ${getcwd:}/analyses/
-  verbose: true

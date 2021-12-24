@@ -1,4 +1,4 @@
-from __future__ import annotations  # noqa: F407
+from __future__ import annotations
 
 import abc
 import json
@@ -9,7 +9,6 @@ from typing import Dict
 from typing import List
 from typing import Union
 
-import matplotlib as mpl
 import plotly.graph_objects as go
 import rich
 from datasets import Dataset
@@ -100,14 +99,7 @@ class Analytic:
         Save plot as html file
         """
         logging.info(f"Saving analytics to {self.output_file_path.absolute()}")
-        fig.write_html(f"{self.output_file_path}.html", include_plotlyjs=True)
-
-    def save_as_png(self, fig: mpl.Figure) -> None:
-        """
-        Save plot as png file
-        """
-        logging.info(f"Saving analytics to {self.output_file_path.absolute()}")
-        fig.savefig(f"{self.output_file_path}.png")
+        fig.write_html(self.output_file_path, include_plotlyjs=True)
 
     def pprint_json_results(self, results: List | Dict):
         """Print results as JSON"""

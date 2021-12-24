@@ -8,6 +8,7 @@ from typing import Optional
 
 import datasets
 import rich
+import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
@@ -15,18 +16,9 @@ from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import LightningLoggerBase
-from rich.progress import track
 
 from fz_openqa.callbacks.index_openqa import IndexOpenQaCallback
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import DropKeys
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import torch
-from fz_openqa.datamodules.pipes.nesting import infer_batch_size
-from fz_openqa.datamodules.pipes.nesting import Nested
-from fz_openqa.datamodules.pipes.update import UpdateKeys
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -68,10 +60,8 @@ def train(config: DictConfig) -> Optional[float]:
 
     # only preprocess the data if there is no trainer
     if config.get("trainer", None) is None:
-        log.info(f"Preprocessing the data <{config.datamodule._target_}>")
         datamodule.prepare_data()
         datamodule.setup()
-
         return
 
     # display dataset

@@ -13,6 +13,8 @@
         - [AliasBasedMatch().get_linked_entities](#aliasbasedmatchget_linked_entities)
     - [ExactMatch](#exactmatch)
     - [LinkedEntity](#linkedentity)
+    - [MetaMapMatch](#metamapmatch)
+        - [MetaMapMatch().preprocess](#metamapmatchpreprocess)
     - [Pair](#pair)
     - [RelevanceClassifier](#relevanceclassifier)
         - [RelevanceClassifier().classify](#relevanceclassifierclassify)
@@ -128,10 +130,22 @@ dataclass
 class LinkedEntity():
 ```
 
+## MetaMapMatch
+
+[[find in source code]](blob/master/fz_openqa/datamodules/pipes/relevance.py#L359)
+
+```python
+class MetaMapMatch(AliasBasedMatch):
+    def __init__(**kwargs):
+```
 
 #### See also
 
 - [AliasBasedMatch](#aliasbasedmatch)
+
+### MetaMapMatch().preprocess
+
+[[find in source code]](blob/master/fz_openqa/datamodules/pipes/relevance.py#L363)
 
 ```python
 def preprocess(pairs: Iterable[Pair]) -> Iterable[Pair]:

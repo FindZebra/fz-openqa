@@ -1,3 +1,3 @@
 _target_: fz_openqa.datamodules.pipes.ScispaCyMatch
-_id: scispacy
-interpretable: True
+_id: scispacy_match
+interpretable: False

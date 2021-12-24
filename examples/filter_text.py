@@ -1,4 +1,3 @@
-import json
 from copy import copy
 
 from fz_openqa.datamodules.pipes import SciSpaCyFilter
@@ -26,10 +25,8 @@ txt2 = [
     "fail",
     "fails",
     "Togo",
-    "Vitamin D",
-    "Oral contraceptive use",
 ]
-batch = {"text": txt}
+batch = {"text": txt2}
 new_batch = filter(copy(batch))
 for original_txt, new_txt in zip(batch["text"], new_batch["text"]):
     print(get_separator())

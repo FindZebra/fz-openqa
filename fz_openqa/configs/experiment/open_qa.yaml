@@ -43,7 +43,7 @@ datamodule:
   train_batch_size: 8
   valid_batch_size: 128
   max_length: 512
-  use_subset: false
+  use_subset: False
 
 corpus:
   eval_batch_size: 1000

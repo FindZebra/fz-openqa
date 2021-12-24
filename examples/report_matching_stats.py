@@ -14,6 +14,7 @@ from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ScispaCyMatch
 from fz_openqa.datamodules.pipes import TextFormatter
+from fz_openqa.datamodules.pipes.relevance import MetaMapMatch
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -71,6 +72,8 @@ args = parser.parse_args()
 
 if args.cls == "scispacy":
     cls = ScispaCyMatch(interpretable=True, spacy_kwargs={"batch_size": 100, "n_process": 1})
+elif args.cls == "metamap":
+    cls = MetaMapMatch(interpretable=True)
 elif args.cls == "exact":
     cls = ExactMatch(interpretable=True)
 else:
