@@ -45,38 +45,74 @@ class QuALITY(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
         QualityConfig(
             name="full",
-            description="Raw QuALITY dataset",
+            description="QuALITY dataset with questions and articles",
         ),
         QualityConfig(
-            name="easy",
-            description="QuALITY dataset - easy questions only",
+            name="questions",
+            description="QuALITY dataset - only the questions",
         ),
         QualityConfig(
-            name="hard",
-            description="Used simple heuristic to collect many noisily-labeled instances to "
-            "build PQA-A for pretraining",
+            name="documents",
+            description="QuALITY dataset - only the articles",
         ),
     ]
 
     def _info(self):
-        return datasets.DatasetInfo(
-            description=_DESCRIPTION,
-            features=datasets.Features(
-                {
-                    "question.idx": datasets.Value("int32"),
-                    "question.text": datasets.Value("string"),
-                    "document.idx": datasets.Value("int32"),
-                    "document.text": datasets.Value("string"),
-                    "answer.text": datasets.Sequence(datasets.Value("string")),
-                    "answer.target": datasets.Value("int32"),
-                    "question.difficulty": datasets.Value("string"),
-                }
-            ),
-            supervised_keys=None,
-            homepage=_HOMEPAGE,
-            license=_LICENSE,
-            citation=_CITATION,
-        )
+        if self.config.name == "full":
+            return datasets.DatasetInfo(
+                description=_DESCRIPTION,
+                features=datasets.Features(
+                    {
+                        "question.idx": datasets.Value("int32"),
+                        "question.text": datasets.Value("string"),
+                        "document.idx": datasets.Value("int32"),
+                        "document.title": datasets.Value("string"),
+                        "document.text": datasets.Value("string"),
+                        "answer.text": datasets.Sequence(datasets.Value("string")),
+                        "answer.target": datasets.Value("int32"),
+                        "question.difficulty": datasets.Value("string"),
+                    }
+                ),
+                supervised_keys=None,
+                homepage=_HOMEPAGE,
+                license=_LICENSE,
+                citation=_CITATION,
+            )
+        elif self.config.name == "questions":
+            return datasets.DatasetInfo(
+                description=_DESCRIPTION,
+                features=datasets.Features(
+                    {
+                        "question.idx": datasets.Value("int32"),
+                        "question.text": datasets.Value("string"),
+                        "document.idx": datasets.Value("int32"),
+                        "answer.text": datasets.Sequence(datasets.Value("string")),
+                        "answer.target": datasets.Value("int32"),
+                        "question.difficulty": datasets.Value("string"),
+                    }
+                ),
+                supervised_keys=None,
+                homepage=_HOMEPAGE,
+                license=_LICENSE,
+                citation=_CITATION,
+            )
+        elif self.config.name == "documents":
+            return datasets.DatasetInfo(
+                description=_DESCRIPTION,
+                features=datasets.Features(
+                    {
+                        "idx": datasets.Value("int32"),
+                        "text": datasets.Value("string"),
+                        "title": datasets.Value("string"),
+                    }
+                ),
+                supervised_keys=None,
+                homepage=_HOMEPAGE,
+                license=_LICENSE,
+                citation=_CITATION,
+            )
+        else:
+            raise ValueError(f"Unknown config name={self.config.name}")
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
@@ -107,21 +143,30 @@ class QuALITY(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath, split):
         """Yields examples."""
-        with open(filepath, "r") as f:
-            q_idx = 0
-            for doc_idx, line in enumerate(f.readlines()):
-                data = json.loads(line)
-                doc_text = data["article"]
-                for question in data["questions"]:
-                    target = question.get("gold_label", -1)
-                    row = {
-                        "question.text": question["question"],
-                        "question.idx": q_idx,
-                        "document.text": doc_text,
-                        "document.idx": doc_idx,
-                        "question.difficulty": "hard" if question["difficult"] else "easy",
-                        "answer.text": question["options"],
-                        "answer.target": target - 1,
-                    }
-                    yield q_idx, row
-                    q_idx += 1
+        if self.config.name == "documents":
+            with open(filepath, "r") as f:
+                for doc_idx, line in enumerate(f.readlines()):
+                    data = json.loads(line)
+                    row = {"idx": doc_idx, "text": data["article"], "title": data["title"]}
+                    yield doc_idx, row
+        else:
+            with open(filepath, "r") as f:
+                q_idx = 0
+                for doc_idx, line in enumerate(f.readlines()):
+                    data = json.loads(line)
+                    for question in data["questions"]:
+                        target = question.get("gold_label", -1)
+                        row = {
+                            "question.text": question["question"],
+                            "question.idx": q_idx,
+                            "document.idx": doc_idx,
+                            "question.difficulty": "hard" if question["difficult"] else "easy",
+                            "answer.text": question["options"],
+                            "answer.target": target - 1,
+                        }
+                        if self.config.name == "full":
+                            row["document.text"] = data["article"]
+                            row["document.title"] = data["title"]
+
+                        yield q_idx, row
+                        q_idx += 1

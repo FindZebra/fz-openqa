@@ -20,6 +20,7 @@ from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
 from fz_openqa.datamodules.generators import medwiki_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
+from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import Collate
@@ -112,7 +113,8 @@ class CorpusBuilder(HfDatasetBuilder):
 
     @staticmethod
     def _load_dataset(script, **kwargs):
-        dataset = load_dataset(script, **kwargs)
+        args = [script]
+        dataset = load_dataset(*args, **kwargs)
         if isinstance(dataset, DatasetDict):
             dataset = concatenate_datasets(list(dataset.values()))
         return dataset
@@ -333,3 +335,9 @@ class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)
+
+
+class QuALITYCorpusBuilder(CorpusBuilder):
+    subset_size = [10]
+    dset_script_path_or_id = quality.__file__
+    dset_name = "documents"

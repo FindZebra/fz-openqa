@@ -92,10 +92,6 @@ class MedQaBuilder(HfDatasetBuilder):
         self.min_answer_length = min_answer_length
         self.n_query_tokens = n_query_tokens
 
-    def load_base_dataset(self) -> DatasetDict:
-        """Load the base HuggingFace dataset."""
-        return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
-
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
         return dataset
