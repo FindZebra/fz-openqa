@@ -36,10 +36,10 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "idx": datasets.Value("int32"),
-                    "text": datasets.Value("string"),
-                    "title": datasets.Value("string"),
-                    "cui": datasets.Value("string"),
+                    "document.idx": datasets.Value("int32"),
+                    "document.text": datasets.Value("string"),
+                    "document.title": datasets.Value("string"),
+                    "document.cui": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -82,8 +82,8 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
 
                 # yield the data
                 yield idx, {
-                    "text": str(text),
-                    "title": str(article["title"]),
-                    "cui": str(cui),
-                    "idx": idx,
+                    "document.text": str(text),
+                    "document.title": str(article["title"]),
+                    "document.cui": str(cui),
+                    "document.idx": idx,
                 }

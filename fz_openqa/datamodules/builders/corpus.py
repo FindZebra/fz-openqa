@@ -31,6 +31,7 @@ from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import PrintText
+from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
@@ -143,6 +144,11 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
+
+        for attr in dataset.column_names:
+            if "document." in attr:
+                new_attr = attr.replace("document.", "")
+                dataset = dataset.rename_column(attr, new_attr)
 
         # add the document index column if not already provided
         if "idx" not in dataset.column_names:

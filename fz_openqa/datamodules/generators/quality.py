@@ -101,9 +101,9 @@ class QuALITY(datasets.GeneratorBasedBuilder):
                 description=_DESCRIPTION,
                 features=datasets.Features(
                     {
-                        "idx": datasets.Value("int32"),
-                        "text": datasets.Value("string"),
-                        "title": datasets.Value("string"),
+                        "document.idx": datasets.Value("int32"),
+                        "document.text": datasets.Value("string"),
+                        "document.title": datasets.Value("string"),
                     }
                 ),
                 supervised_keys=None,
@@ -147,7 +147,11 @@ class QuALITY(datasets.GeneratorBasedBuilder):
             with open(filepath, "r") as f:
                 for doc_idx, line in enumerate(f.readlines()):
                     data = json.loads(line)
-                    row = {"idx": doc_idx, "text": data["article"], "title": data["title"]}
+                    row = {
+                        "document.idx": doc_idx,
+                        "document.text": data["article"],
+                        "document.title": data["title"],
+                    }
                     yield doc_idx, row
         else:
             with open(filepath, "r") as f:
