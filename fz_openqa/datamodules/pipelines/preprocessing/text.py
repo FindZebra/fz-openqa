@@ -74,8 +74,10 @@ class FormatAndTokenize(Sequential):
             spec_tokens = [spec_tokens]
 
         if add_encoding_tokens and spec_tokens is not None:
+            # store `spec_token` to ensure proper fingerprinting
+            spec_token = "".join(spec_tokens)
             add_spec_tokens_pipe = Apply(
-                {key: partial(add_spec_token, "".join(spec_tokens))},
+                {key: partial(add_spec_token, spec_token)},
                 element_wise=True,
             )
         else:

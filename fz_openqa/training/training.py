@@ -38,7 +38,7 @@ def train(config: DictConfig) -> Optional[float]:
     setup_safe_env()
     if not config.verbose:
         os.environ["WANDB_SILENT"] = "TRUE"
-        datasets.logging.set_verbosity(datasets.logging.ERROR)
+        # datasets.logging.set_verbosity(datasets.logging.ERROR)
         # datasets.disable_progress_bar()
 
     # set verbosity
@@ -71,6 +71,7 @@ def train(config: DictConfig) -> Optional[float]:
     if config.verbose:
         rich.print(datamodule.dataset)
         pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
+        datamodule.display_samples(n_samples=1)
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")

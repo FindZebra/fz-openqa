@@ -270,7 +270,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
-            q_start_tokens.append(QUERY_TOKEN)
+            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 
         add_spec_tokens_pipe = Apply(
             {"question.text": partial(add_spec_token, q_start_tokens)}, element_wise=True

@@ -29,14 +29,18 @@ model:
     alpha: 0
     max_batch_size: 128
     eval_topk: 30
+  head:
+    downscaling: 2
+    kernel_size: 9
 
 datamodule:
   # how often to map the dataset
-  mapping_freq: 5 # todo: debug
+  mapping_freq: 10 # todo: debug
 
   # dataloader
   train_batch_size: 8
-  eval_batch_size: 16 # todo: debug
+
+  eval_batch_size: 64 # todo: debug
   num_workers: 16 # setting this too high might lead `Dataset.map()` to hang
   persistent_workers: false
   pin_memory: true
@@ -59,8 +63,8 @@ datamodule:
   n_retrieved_documents: 1_000 # todo: debug
   n_documents:
     train: 10 # todo: debug
-    validation: 100 # todo: debug
-    test: 100 # todo: debug
+    validation: 10 # todo: debug
+    test: 10 # todo: debug
   max_pos_docs: 1
   filter_unmatched: false
   select_mode: sample
@@ -74,7 +78,7 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      n_query_tokens: 0
+      n_query_tokens: 10 # todo: debug
     corpus_builder:
       use_subset: false # todo: debug
 
