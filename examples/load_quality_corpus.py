@@ -53,7 +53,7 @@ def run(config: DictConfig) -> None:
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=2,
-        analytics=[ReportCorpusStatistics(output_dir="./analytics")],
+        analytics=[ReportCorpusStatistics(output_dir="./analytics", verbose=True)],
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
