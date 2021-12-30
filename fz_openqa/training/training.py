@@ -8,6 +8,7 @@ from typing import List
 from typing import Optional
 
 import datasets
+import pytorch_lightning as pl
 import rich
 import torch
 from hydra.utils import instantiate
@@ -122,13 +123,16 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Training...
     patch_signal_connector(trainer)
-    mapping_freq = config.datamodule.get("mapping_freq", None)
-    if mapping_freq is not None and mapping_freq > 0:
+    dataset_update_freq = config.datamodule.get("dataset_update_freq", None)
+    dataset_update_args = config.datamodule.get("dataset_update_args", {})
+    if dataset_update_freq is not None and dataset_update_freq > 0:
         log.info(
             f"Starting training with dataset updates "
-            f"(max_epochs={trainer.max_epochs}, mapping_freq={mapping_freq}).."
+            f"(max_epochs={trainer.max_epochs}, dataset_update_freq={dataset_update_freq}).."
         )
-        train_with_dataset_updates(datamodule, model, trainer, mapping_freq)
+        train_with_dataset_updates(
+            datamodule, model, trainer, dataset_update_freq, **dataset_update_args
+        )
     else:
         log.info(f"Starting training (max_epochs={trainer.max_epochs})..")
         trainer.fit(model=model, datamodule=datamodule)
@@ -179,11 +183,22 @@ def patch_signal_connector(trainer: Trainer):
     trainer.signal_connector.teardown = partial(_no_signal_teardown, trainer.signal_connector)
 
 
-def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
+def train_with_dataset_updates(
+    datamodule, model, trainer, update_freq: int, **kwargs
+) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
     max_epochs = trainer.max_epochs
     trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
     while trainer.current_epoch < max_epochs:
+
+        # update the dataset
+        try:
+            if trainer.current_epoch > 0:
+                update_dataset(datamodule, model=model, trainer=trainer, **kwargs)
+        except Exception:
+            log.exception("Dataset update interrupted.")
+
+        # fit the model for `update_freq` epochs
         try:
             trainer.fit(
                 model=model,
@@ -195,13 +210,27 @@ def train_with_dataset_updates(datamodule, model, trainer, update_freq: int):
             if trainer.current_epoch >= max_epochs:
                 break
 
-            log.info("Updating dataset...")
-            start_time = time.time()
-            datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True)
-            log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
-
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
         except KeyboardInterrupt:
             log.info("Training interrupted.")
             break
+
+    # load the best model and return it
+    if trainer.checkpoint_callback.last_model_path is not None:
+        model = model.load_from_checkpoint(trainer.checkpoint_callback.last_model_path)
+    else:
+        log.info("No checkpoint found. Using the last model.")
+
+    update_dataset(datamodule, model=model, trainer=trainer, **kwargs)
+
+    return model
+
+
+def update_dataset(
+    datamodule: DataModule, *, model: pl.LightningModule, trainer: Trainer, **kwargs
+):
+    log.info("Updating dataset...")
+    start_time = time.time()
+    datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True, **kwargs)
+    log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
