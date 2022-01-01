@@ -38,7 +38,7 @@ model:
 datamodule:
 
   # how often to map the dataset
-  mapping_freq: null
+  dataset_update_freq: null
 
   # dataloader
   train_batch_size: 128

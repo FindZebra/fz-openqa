@@ -125,13 +125,18 @@ def train(config: DictConfig) -> Optional[float]:
     patch_signal_connector(trainer)
     dataset_update_freq = config.datamodule.get("dataset_update_freq", None)
     dataset_update_args = config.datamodule.get("dataset_update_args", {})
+    dataset_update_args = dataset_update_args or {}
     if dataset_update_freq is not None and dataset_update_freq > 0:
         log.info(
             f"Starting training with dataset updates "
             f"(max_epochs={trainer.max_epochs}, dataset_update_freq={dataset_update_freq}).."
         )
         train_with_dataset_updates(
-            datamodule, model, trainer, dataset_update_freq, **dataset_update_args
+            datamodule,
+            model=model,
+            trainer=trainer,
+            update_freq=dataset_update_freq,
+            **dataset_update_args,
         )
     else:
         log.info(f"Starting training (max_epochs={trainer.max_epochs})..")
@@ -184,7 +189,12 @@ def patch_signal_connector(trainer: Trainer):
 
 
 def train_with_dataset_updates(
-    datamodule, model, trainer, update_freq: int, **kwargs
+    datamodule: DataModule,
+    *,
+    model: pl.LightningModule,
+    trainer: Trainer,
+    update_freq: int,
+    **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
     max_epochs = trainer.max_epochs
@@ -197,6 +207,7 @@ def train_with_dataset_updates(
                 update_dataset(datamodule, model=model, trainer=trainer, **kwargs)
         except Exception:
             log.exception("Dataset update interrupted.")
+            break
 
         # fit the model for `update_freq` epochs
         try:
@@ -209,6 +220,12 @@ def train_with_dataset_updates(
             log.info(f"Epoch {trainer.current_epoch} completed.")
             if trainer.current_epoch >= max_epochs:
                 break
+            elif trainer.current_epoch < trainer.fit_loop.max_epochs - 1:
+                log.info(
+                    f"Training interrupted. "
+                    f"Epochs remaining: {max_epochs - trainer.current_epoch}"
+                )
+                break
 
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
@@ -217,6 +234,7 @@ def train_with_dataset_updates(
             break
 
     # load the best model and return it
+    log.info("Training completed. Loading best model and re-indexing the dataset")
     if trainer.checkpoint_callback.last_model_path is not None:
         model = model.load_from_checkpoint(trainer.checkpoint_callback.last_model_path)
     else:

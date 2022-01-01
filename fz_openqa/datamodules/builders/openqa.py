@@ -10,7 +10,6 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -25,7 +24,6 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_qu
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
 from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
@@ -36,10 +34,10 @@ from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
-from fz_openqa.datamodules.pipes import RenameKeys
-from fz_openqa.datamodules.pipes import SelectDocs
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes import TextFormatter
+from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -75,11 +73,9 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
+        sampler: Sampler,
         n_retrieved_documents: int,
-        n_documents: Optional[int | Dict] = None,
-        max_pos_docs: Optional[int] = None,
         filter_unmatched: bool = True,
-        select_mode: str = "first",
         num_proc: int = 2,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
@@ -110,14 +106,12 @@ class OpenQaBuilder(DatasetBuilder):
 
         # arguments
         self.output_columns = output_columns
-        self.n_documents = n_documents or n_retrieved_documents
-        self.max_pos_docs = max_pos_docs
-        self.select_mode = SelectMode(select_mode)
+        self.sampler = sampler
+        self.n_documents = self.sampler.total or n_retrieved_documents
         self.map_args = {
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
-            "n_documents": self.n_documents,
-            "max_pos_docs": max_pos_docs,
+            "sampler": sampler,
             "filter_unmatched": filter_unmatched,
             "num_proc": num_proc,
             "batch_size": batch_size,
@@ -218,9 +212,8 @@ class OpenQaBuilder(DatasetBuilder):
         dataset: DatasetDict,
         corpus: Dataset,
         index: Index,
+        sampler: Optional[Sampler],
         n_retrieved_documents: int,
-        n_documents: int,
-        max_pos_docs: Optional[int],
         num_proc: int,
         batch_size: int,
         relevance_classifier: RelevanceClassifier,
@@ -322,8 +315,8 @@ class OpenQaBuilder(DatasetBuilder):
             def fn(split: Split):
                 return partial(
                     filter_questions_by_pos_docs,
-                    n_documents=n_documents,
-                    max_pos_docs=max_pos_docs,
+                    n_documents=self.n_documents,
+                    max_pos_docs=None,  # todo: fix this
                     split=split,
                     level=question_nesting_level,
                 )
@@ -374,11 +367,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
-            self.n_documents,
-            max_pos_docs=self.max_pos_docs,
-            level=document_nesting_level,
-            select_mode=self.select_mode.value,
-            shuffle=False,
+            self.sampler, level=document_nesting_level
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
@@ -400,26 +389,15 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: int | Dict,
+        sampler: Optional[Sampler],
         *,
-        max_pos_docs: Optional[int],
         level: int = 1,
-        select_mode: str = "first",
-        shuffle: bool = False,
     ) -> Optional[Pipe]:
-        if n_documents == 0:
+        if sampler is None:
             return None
 
-        return SelectDocs(
-            total=n_documents,
-            max_pos_docs=max_pos_docs,
-            pos_select_mode=select_mode,
-            neg_select_mode=select_mode,
-            strict=False,
-            update=True,
-            level=level,
-            shuffle=shuffle,
-        )
+        input_filter = HasPrefix(f"{sampler.field}")
+        return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Pretty format a dataset row"""

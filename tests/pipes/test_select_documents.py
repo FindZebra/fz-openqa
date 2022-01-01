@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import torch
 
-from fz_openqa.datamodules.pipes.documents import SelectDocsOneEg
+from fz_openqa.datamodules.pipes.select_docs import SelectPositivesOneEg
 
 
 class TestSelectDocuments(TestCase):
@@ -18,7 +18,7 @@ class TestSelectDocuments(TestCase):
                                     (5, 2),
                                     (10, 5)]:
 
-            output = SelectDocsOneEg(total=total, max_pos_docs=max_pos_docs)(deepcopy(self.data))
+            output = SelectPositivesOneEg(total=total, max_pos_docs=max_pos_docs)(deepcopy(self.data))
 
             for k, v in output.items():
                 self.assertEqual(len(v), total)
@@ -31,9 +31,9 @@ class TestSelectDocuments(TestCase):
                                     (10, 1),
                                     (10, 3)]:
 
-            output = SelectDocsOneEg(total=total,
-                                     strict=False,
-                                     max_pos_docs=max_pos_docs)(deepcopy(self.data))
+            output = SelectPositivesOneEg(total=total,
+                                          strict=False,
+                                          max_pos_docs=max_pos_docs)(deepcopy(self.data))
 
             for k, v in output.items():
                 self.assertEqual(len(v), total)
@@ -41,8 +41,8 @@ class TestSelectDocuments(TestCase):
     def test_ordering(self):
 
         total, max_pos_docs = (10, 5)
-        output = SelectDocsOneEg(total=total,
-                                 strict=False,
-                                 max_pos_docs=max_pos_docs)(deepcopy(self.data))
+        output = SelectPositivesOneEg(total=total,
+                                      strict=False,
+                                      max_pos_docs=max_pos_docs)(deepcopy(self.data))
 
         self.assertEqual([x for x in output['document.feature']], [5, 4, 3, 2, 1, 10, 9, 8, 7, 6])

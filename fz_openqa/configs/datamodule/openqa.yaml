@@ -4,6 +4,7 @@ defaults:
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - relevance_classifier: exact_match
+  - sampler: random
   - transform: none
 
 _target_: fz_openqa.datamodules.DataModule
@@ -30,6 +31,5 @@ n_documents:
   train: 10
   validation: 100
   test: 100
-max_pos_docs: 1
 filter_unmatched: true
 select_mode: first
