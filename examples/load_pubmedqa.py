@@ -12,7 +12,10 @@ import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.pubmedqa import PubMedQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
+from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+
+logger = logging.getLogger(__name__)
 
 
 @hydra.main(
@@ -34,12 +37,14 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
-        num_proc=2,
     )
+
+    # dm = builder.load_base_dataset()
+
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_samples()
+    # dm.display_samples()
 
     # access dataset
     rich.print(dm.dataset)
