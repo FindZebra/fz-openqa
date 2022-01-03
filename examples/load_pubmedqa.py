@@ -37,14 +37,13 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=config.get("cache_dir", default_cache_dir),
+        num_proc=2,
     )
-
-    # dm = builder.load_base_dataset()
 
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    # dm.display_samples()
+    dm.display_samples()  # throws error with invalid data type
 
     # access dataset
     rich.print(dm.dataset)

@@ -226,7 +226,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
     ]
 
     # output columns
-    column_names = [
+    columns = [
         "question.text",
         "question.input_ids",
         "question.attention_mask",

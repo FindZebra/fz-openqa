@@ -45,7 +45,7 @@ def run(config: DictConfig) -> None:
     dm.display_samples()
 
     # access dataset
-    rich.print(builder.load_base_dataset())
+    rich.print(dm.dataset)
 
 
 if __name__ == "__main__":

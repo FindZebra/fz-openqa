@@ -118,7 +118,6 @@ class PubMedQaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             spec_tokens=ANS_TOKEN,
-            shape=None,
         )
 
     def get_question_tokenizer_pipe(self):
@@ -170,3 +169,8 @@ class PubMedQaBuilder(HfDatasetBuilder):
             + "\n"
         )
         return u
+
+
+class PubMedQaArtificialBuilder(PubMedQaBuilder):
+    subset_size = [20]
+    dset_script_path_or_id = "pqa_artificial"
