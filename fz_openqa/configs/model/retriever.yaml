@@ -1,4 +1,4 @@
 defaults:
   - base
-  - head: cls
+  - head: dense
   - override module: retriever_supervised

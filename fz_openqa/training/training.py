@@ -11,16 +11,20 @@ import datasets
 import pytorch_lightning as pl
 import rich
 import torch
+from datasets import Split
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
 from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
+from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
+from torch.optim.lr_scheduler import LambdaLR
 
 from fz_openqa.callbacks.index_openqa import IndexOpenQaCallback
 from fz_openqa.datamodules import DataModule
+from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -125,6 +129,7 @@ def train(config: DictConfig) -> Optional[float]:
     patch_signal_connector(trainer)
     dataset_update_freq = config.datamodule.get("dataset_update_freq", None)
     dataset_update_args = config.datamodule.get("dataset_update_args", {})
+    dataset_update_reset_optimizer = config.datamodule.get("dataset_update_reset_optimizer", False)
     dataset_update_args = dataset_update_args or {}
     if dataset_update_freq is not None and dataset_update_freq > 0:
         log.info(
@@ -136,6 +141,7 @@ def train(config: DictConfig) -> Optional[float]:
             model=model,
             trainer=trainer,
             update_freq=dataset_update_freq,
+            reset_optimizer=dataset_update_reset_optimizer,
             **dataset_update_args,
         )
     else:
@@ -191,9 +197,10 @@ def patch_signal_connector(trainer: Trainer):
 def train_with_dataset_updates(
     datamodule: DataModule,
     *,
-    model: pl.LightningModule,
+    model: Model,
     trainer: Trainer,
     update_freq: int,
+    reset_optimizer: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -223,12 +230,18 @@ def train_with_dataset_updates(
             elif trainer.current_epoch < trainer.fit_loop.max_epochs - 1:
                 log.info(
                     f"Training interrupted. "
-                    f"Epochs remaining: {max_epochs - trainer.current_epoch}"
+                    f"Epochs remaining: {trainer.fit_loop.max_epochs - trainer.current_epoch}"
                 )
                 break
 
+            # update trainer parameters
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
+
+            # get optimizer state and store it into the model, so it can be set in the begining
+            # of `trainer.fit()`
+            if not reset_optimizer:
+                set_model_opt_states(model)
         except KeyboardInterrupt:
             log.info("Training interrupted.")
             break
@@ -240,9 +253,17 @@ def train_with_dataset_updates(
     else:
         log.info("No checkpoint found. Using the last model.")
 
-    update_dataset(datamodule, model=model, trainer=trainer, **kwargs)
+    update_dataset(datamodule, model=model, trainer=trainer, splits=[Split.TEST], **kwargs)
 
     return model
+
+
+def set_model_opt_states(model):
+    optimizer = model.optimizers()
+    if isinstance(optimizer, LightningOptimizer):
+        optimizer = optimizer.optimizer
+    scheduler = model.lr_schedulers()
+    model.opt_states = {"optimizer": optimizer.state_dict(), "lr_scheduler": scheduler.state_dict()}
 
 
 def update_dataset(

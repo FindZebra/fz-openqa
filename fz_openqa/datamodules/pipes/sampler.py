@@ -82,10 +82,13 @@ class SamplerBoostPositives(Sampler):
             total = total[str(split)]
 
         logits = batch[self.retrieval_score_key]
-        scores = batch[self.match_score_key]
 
-        # select positives samples
-        pos_indexes = [i for i, x in enumerate(scores) if x > 0]
+        if self.match_score_key in batch.keys():
+            scores = batch[self.match_score_key]
+            # select positives samples
+            pos_indexes = [i for i, x in enumerate(scores) if x > 0]
+        else:
+            pos_indexes = []
 
         # sample positives
         if self.n_boosted > 0 and len(pos_indexes) > 0:

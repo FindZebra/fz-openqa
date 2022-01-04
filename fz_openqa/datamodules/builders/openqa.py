@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from copy import copy
 from enum import Enum
 from functools import partial
 from typing import Any
@@ -10,6 +11,7 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -149,6 +151,7 @@ class OpenQaBuilder(DatasetBuilder):
         columns: Optional[List[str]] = None,
         model: Optional[pl.LightningModule] = None,
         trainer: Optional[pl.Trainer] = None,
+        splits: Optional[List[str]] = None,
         **kwargs,
     ) -> OpenQaDataset:
         """
@@ -178,6 +181,10 @@ class OpenQaBuilder(DatasetBuilder):
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder()
 
+        # select splits
+        if splits is not None:
+            dataset = DatasetDict({k: v for k, v in dataset.items() if k in splits})
+
         # build the index, potnetially using a model
         index = self.index_builder(
             dataset=corpus,
@@ -186,8 +193,13 @@ class OpenQaBuilder(DatasetBuilder):
             collate_pipe=self.corpus_builder._get_collate_pipe(),
         )
 
+        # map the corpus to the dataset
+        map_args = copy(self.map_args)
+        for k in list(kwargs.keys()):
+            if k in map_args:
+                map_args[k] = kwargs.pop(k)
         dataset = self.map_dataset(
-            dataset=dataset, corpus=corpus, index=index, **self.map_args, **kwargs
+            dataset=dataset, corpus=corpus, index=index, **map_args, **kwargs
         )
 
         if format is not None:
@@ -272,7 +284,9 @@ class OpenQaBuilder(DatasetBuilder):
                         axis=document_nesting_level,
                         n=n_retrieved_documents,
                         extract_gold=question_nesting_level == 0,
-                    ),
+                    )
+                    if relevance_classifier is not None
+                    else None,
                 ),
                 ("Sort documents", SortDocuments(level=document_nesting_level)),
             ]
