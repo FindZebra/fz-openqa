@@ -49,7 +49,7 @@ class Index(Pipe):
         query_field: str = "question",
         index_field: str = "document",
         verbose: bool = False,
-        max_chunksize: int = 1000,
+        max_chunksize: int = 100,
         index_output_key: str = "row_idx",
         score_output_key: str = "retrieval_score",
         analyzed_output_key: str = "analyzed_tokens",
@@ -162,11 +162,12 @@ class Index(Pipe):
         **kwargs,
     ) -> Batch:
         """
-        Search the ES index for q batch of examples (query).
+        Search the index for a batch of examples (query).
 
         Filter the incoming batch using the same pipe as the one
         used to build the index."""
         k = k or self.k
+
         query = self._preprocess_query(query, idx=idx, **kwargs)
         if len(query.keys()) == 0:
             raise ValueError(
@@ -178,7 +179,7 @@ class Index(Pipe):
         # search the index by chunk
         batch_size = infer_batch_size(query)
         search_results = None
-        eff_batch_size = min(max(1, self.max_chunksize // k), batch_size)
+        eff_batch_size = min(max(1, self.max_chunksize), batch_size)
         for i in range(0, batch_size, eff_batch_size):
             chunk_i = slice_batch(query, slice(i, i + eff_batch_size))
             r = self._search_chunk(chunk_i, k=k, **kwargs)

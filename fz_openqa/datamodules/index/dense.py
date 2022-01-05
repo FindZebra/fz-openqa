@@ -399,7 +399,7 @@ class FaissIndex(Index):
         dim = vectors.shape[-1]
         factory_str = self.faiss_args.get("factory", None)
         metric_type = self.faiss_args["metric_type"]
-        logger.info(f"Initializing faiss index with {factory_str}")
+        logger.info(f"Initializing faiss index with `{factory_str}`")
         if factory_str is not None:
             self._index = faiss.index_factory(dim, factory_str, metric_type)
         else:
@@ -613,8 +613,10 @@ class FaissIndex(Index):
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def to_cpu(self):
-        if isinstance(self._index, faiss.IndexReplicas):
+        try:
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+        except Exception:
+            pass
 
     # def _get_fingerprint_struct(self) -> List | Dict:
     #     """Add the model fingerprint to the struct"""

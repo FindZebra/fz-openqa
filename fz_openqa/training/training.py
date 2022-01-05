@@ -211,7 +211,9 @@ def train_with_dataset_updates(
         # update the dataset
         try:
             if trainer.current_epoch > 0:
-                update_dataset(datamodule, model=model, trainer=trainer, **kwargs)
+                update_dataset(
+                    datamodule, model=model, trainer=trainer, keep_in_memory=True, **kwargs
+                )
         except Exception:
             log.exception("Dataset update interrupted.")
             break
@@ -267,9 +269,14 @@ def set_model_opt_states(model):
 
 
 def update_dataset(
-    datamodule: DataModule, *, model: pl.LightningModule, trainer: Trainer, **kwargs
+    datamodule: DataModule,
+    *,
+    model: pl.LightningModule,
+    trainer: Trainer,
+    keep_in_memory=True,
+    **kwargs,
 ):
     log.info("Updating dataset...")
     start_time = time.time()
-    datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=True, **kwargs)
+    datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
     log.info(f"Dataset updated in {time.time() - start_time:.2f}s")

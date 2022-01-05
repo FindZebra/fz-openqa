@@ -62,9 +62,9 @@ def run(config: DictConfig) -> None:
     PytorchLightning's Trainer can be used to accelerate indexing.
     Example, to index the whole corpus (~5min on `rhea`):
     ```bash
-    poetry run python examples/index_corpus_using_dense_retriever.py \
-    trainer.strategy=dp trainer.gpus=8 +batch_size=2000 +num_workers=16
-    +n_samples=null +use_subset=False +num_proc=4
+    CUDA_VISIBLE_DEVICES=0,1,2,3 poetry run python examples/index_corpus_with_faiss.py \
+    trainer.strategy=dp trainer.gpus=4 +batch_size=1000 +num_workers=16 \
+    +n_samples=1000 +use_subset=False +num_proc=4 +colbert=True
 
     ```
     """
@@ -81,7 +81,11 @@ def run(config: DictConfig) -> None:
     zero_shot = config.get("zero_shot", True)
     if zero_shot:
         bert_id = config.get("bert", "google/bert_uncased_L-2_H-128_A-2")
-        model = ZeroShot(bert_id=bert_id, head="contextual" if use_colbert else "flat")
+        model = ZeroShot(
+            bert_id=bert_id,
+            head="contextual" if use_colbert else "flat",
+            limit_size=32 if use_colbert else None,
+        )
         tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -91,7 +95,7 @@ def run(config: DictConfig) -> None:
         tokenizer = loader.tokenizer
     model.eval()
     model.freeze()
-    logger.info(f"Model {type(model)} loaded")
+    logger.info(f"IndentityModel {type(model)} loaded")
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
@@ -130,10 +134,10 @@ def run(config: DictConfig) -> None:
         model=model,
         trainer=trainer,
         faiss_train_size=config.get("faiss_train_size", 1000),
-        faiss_args={
-            "factory": config.get("factory", "Flat"),
-            "metric_type": faiss.METRIC_INNER_PRODUCT,
-        },
+        # faiss_args={
+        #     "factory": config.get("factory", "IVF100,PQ16x8"),
+        #     "metric_type": faiss.METRIC_INNER_PRODUCT,
+        # },
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 1),
@@ -146,6 +150,7 @@ def run(config: DictConfig) -> None:
         in_memory=config.get("in_memory", True),
         dtype=config.get("dtype", "float32"),
         progress_bar=True,
+        p=100,
     )
     rich.print(f"> index: {index}")
 

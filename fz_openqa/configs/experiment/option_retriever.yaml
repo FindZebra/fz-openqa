@@ -1,13 +1,16 @@
 # @package _global_
 
 defaults:
-  - colbert_qa_retriever
   - override /model: option_retriever
   - override /model/bert: pubmed
   - override /model/head: colbert
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/head}
-  - override /datamodule/sampler: boost_positives
+  - override /datamodule/sampler: boost_dropout
+  - override /callbacks:
+      - checkpoint
+      - progress_bar
+      - lr_monitor
   - override /datamodule/builder/analytics:
       - retriever_accuracy
 
@@ -15,6 +18,7 @@ base:
   seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
+  is_search: false
 
 trainer:
   gpus: 8
@@ -35,7 +39,7 @@ model:
   module:
     resample_k: null
     alpha: 0
-    max_batch_size: 128
+    max_batch_size: 200
     eval_topk: 30
     grad_expr: in_batch
   head:
@@ -44,20 +48,20 @@ model:
 
 datamodule:
   # how often to map the dataset
-  dataset_update_freq: 3 # 15 # todo: debug : prev=15
+  dataset_update_freq: 15
   dataset_update_args:
     relevance_classifier: null
 
   # dataloader
   train_batch_size: 8
 
-  eval_batch_size: 64 # todo: debug
-  num_workers: 16 # setting this too high might lead `Dataset.map()` to hang
+  eval_batch_size: 64
+  num_workers: 16
   persistent_workers: false
   pin_memory: true
 
   # dataset builder
-  use_subset: false # todo: debug
+  use_subset: false
   num_proc: 4
   output_columns:
     - answer.target
@@ -70,14 +74,12 @@ datamodule:
     - document.retrieval_score
 
   # documents
-  n_retrieved_documents: 1_000 # todo: debug
+  n_retrieved_documents: 1_000
   n_documents:
-    train: 10 # todo: debug
-    validation: 10 # todo: debug
-    test: 10 # todo: debug
-  max_pos_docs: 1
+    train: 10
+    validation: 10
+    test: 10
   filter_unmatched: false
-  select_mode: sample
 
   # tag documents as positive or negative
   relevance_classifier:
@@ -88,21 +90,25 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      n_query_tokens: 10 # todo: debug
+      n_query_tokens: 10
     corpus_builder:
-      use_subset: false # todo: debug
+      use_subset: false
 
   # Index parameters
   index_builder:
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
+    p: 100
+    max_chunksize: 1000
+    maxsim_chunksize: 20000
+    persist_cache: true # todo: debug: remove
     faiss_args:
       factory: IVF100,PQ16x8
       metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
-      nprobe: 8 # todo: 32
+      nprobe: 16
     loader_kwargs:
       batch_size: 4_000
-      num_workers: 8
+      num_workers: 16
       pin_memory: true
 
   transform:

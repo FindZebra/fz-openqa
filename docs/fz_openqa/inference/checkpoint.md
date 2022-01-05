@@ -40,7 +40,7 @@ def load_bert():
 [[find in source code]](blob/master/fz_openqa/inference/checkpoint.py#L85)
 
 ```python
-def load_model(last=False) -> Model:
+def load_model(last=False) -> IndentityModel:
 ```
 
 ### CheckpointLoader().load_tokenizer

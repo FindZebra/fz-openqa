@@ -11,7 +11,7 @@ from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilde
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
-from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch
+from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch, Sampler
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 
@@ -24,7 +24,8 @@ def get_default_config():
         'use_subset': True,
         'max_length': 512,
         'num_proc': 2,
-        'text_formatter': TextFormatter()
+        'text_formatter': TextFormatter(),
+        'sampler': Sampler()
     }
 
 
