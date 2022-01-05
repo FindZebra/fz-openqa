@@ -240,8 +240,8 @@ def train_with_dataset_updates(
             trainer.fit_loop.max_epochs += update_freq
             trainer.num_sanity_val_steps = 0
 
-            # get optimizer state and store it into the model, so it can be set in the begining
-            # of `trainer.fit()`
+            # get optimizer state and store it into the model, so it can be
+            # set in the beginning of `trainer.fit()`
             if not reset_optimizer:
                 set_model_opt_states(model)
         except KeyboardInterrupt:

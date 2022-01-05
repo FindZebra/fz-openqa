@@ -8,6 +8,7 @@ from typing import Optional
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
+import rich
 import torch
 from datasets import Split
 from faiss import IndexReplicas
@@ -186,9 +187,8 @@ class ColbertIndex(FaissIndex):
     def to_cpu(self):
         super().to_cpu()
         if self._max_sim is not None:
-            if isinstance(self._max_sim, nn.DataParallel):
-                self._max_sim = self._max_sim.module  # type: ignore
-            self._max_sim = self._max_sim.cpu()
+            del self._max_sim
+            self._max_sim = None
 
     def __del__(self):
         self.to_cpu()

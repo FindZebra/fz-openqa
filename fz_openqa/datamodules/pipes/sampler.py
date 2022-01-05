@@ -26,6 +26,7 @@ class Sampler(Pipe):
         retrieval_score_key: str = "retrieval_score",
         field="document",
         replace: bool = False,
+        largest: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -34,6 +35,7 @@ class Sampler(Pipe):
         self.retrieval_score_key = f"{field}.{retrieval_score_key}"
         self.field = field
         self.replace = replace
+        self.largest = largest
 
         super(Sampler, self).__init__(**kwargs)
 
@@ -49,10 +51,18 @@ class Sampler(Pipe):
 
         # sample
         index = np.arange(len(probs))
-        sampled_index = np.random.choice(index, size=total, p=probs, replace=self.replace)
+        sampled_index = self._sample(index, probs, total)
 
         # re-index and return
         return {k: reindex(v, sampled_index) for k, v in batch.items()}
+
+    def _sample(self, index, probs, total):
+        if self.largest:
+            index = index[np.argsort(-probs)]
+            sampled_index = index[:total]
+        else:
+            sampled_index = np.random.choice(index, size=total, p=probs, replace=self.replace)
+        return sampled_index
 
     @staticmethod
     def compute_probs(
@@ -69,7 +79,17 @@ class Sampler(Pipe):
         return probs
 
 
+class SamplerSupervised(Sampler):
+    """Sample"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class SamplerBoostPositives(Sampler):
+    """Sample first `n_boosted` positive samples from the batch and
+    complete with any other sample"""
+
     def __init__(self, *args, n_boosted: int = 1, **kwargs):
         super().__init__(*args, **kwargs)
         self.n_boosted = n_boosted
@@ -95,9 +115,7 @@ class SamplerBoostPositives(Sampler):
             pos_logits = logits[pos_indexes]
             pos_probs = self.compute_probs(pos_logits)
             n = min(self.n_boosted, total, len(pos_indexes))
-            sampled_pos_indexes = np.random.choice(
-                pos_indexes, size=n, p=pos_probs, replace=self.replace
-            )
+            sampled_pos_indexes = self._sample(pos_indexes, pos_probs, n)
         else:
             sampled_pos_indexes = []
 
@@ -108,9 +126,7 @@ class SamplerBoostPositives(Sampler):
             other_logits = logits[other_indexes]
             other_probs = self.compute_probs(other_logits)
             try:
-                sampled_other_indexes = np.random.choice(
-                    other_indexes, size=n, p=other_probs, replace=self.replace
-                )
+                sampled_other_indexes = self._sample(other_indexes, other_probs, n)
             except Exception as e:
                 rich.print(
                     f"indexes: {len(logits)}, n: {n}, "
