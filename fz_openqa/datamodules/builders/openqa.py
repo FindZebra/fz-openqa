@@ -39,6 +39,7 @@ from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
@@ -77,7 +78,7 @@ class OpenQaBuilder(DatasetBuilder):
         relevance_classifier: RelevanceClassifier,
         sampler: Sampler,
         n_retrieved_documents: int,
-        filter_unmatched: bool = True,
+        dataset_filter: Optional[DatasetFilter] = None,
         num_proc: int = 2,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
@@ -96,11 +97,6 @@ class OpenQaBuilder(DatasetBuilder):
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
         # transform for the collate_fn
-        if isinstance(transform, (dict, DictConfig)):
-            if len(transform):
-                transform = instantiate(transform)
-            else:
-                transform = None
         self.transform = transform
 
         # objects
@@ -109,12 +105,10 @@ class OpenQaBuilder(DatasetBuilder):
         # arguments
         self.output_columns = output_columns
         self.sampler = sampler
-        self.n_documents = self.sampler.total or n_retrieved_documents
         self.map_args = {
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
-            "sampler": sampler,
-            "filter_unmatched": filter_unmatched,
+            "dataset_filter": dataset_filter,
             "num_proc": num_proc,
             "batch_size": batch_size,
             "writer_batch_size": writer_batch_size,
@@ -224,12 +218,11 @@ class OpenQaBuilder(DatasetBuilder):
         dataset: DatasetDict,
         corpus: Dataset,
         index: Index,
-        sampler: Optional[Sampler],
         n_retrieved_documents: int,
         num_proc: int,
         batch_size: int,
-        relevance_classifier: RelevanceClassifier,
-        filter_unmatched: bool,
+        relevance_classifier: Optional[RelevanceClassifier],
+        dataset_filter: Optional[DatasetFilter],
         **map_kwargs,
     ) -> DatasetDict:
         """
@@ -305,9 +298,6 @@ class OpenQaBuilder(DatasetBuilder):
             **map_kwargs,
         }
 
-        # process the dataset with each block
-        original_size = {k: len(dset) for k, dset in dataset.items()}
-
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
@@ -323,27 +313,18 @@ class OpenQaBuilder(DatasetBuilder):
         # free-up GPU memory
         index.to_cpu()
 
-        # filter out questions that are not match to any  positive document
-        if filter_unmatched:
-
-            def fn(split: Split):
-                return partial(
-                    filter_questions_by_pos_docs,
-                    n_documents=self.n_documents,
-                    max_pos_docs=None,  # todo: fix this
-                    split=split,
-                    level=question_nesting_level,
-                )
-
+        # filter the dataset
+        if dataset_filter is not None:
+            original_size = {k: len(dset) for k, dset in dataset.items()}
             dataset = DatasetDict(
                 {
-                    split: dset.filter(fn(split), num_proc=num_proc)
+                    split: dset.filter(partial(dataset_filter, split=split), **map_kwargs)
                     for split, dset in dataset.items()
                 }
             )
 
-        # print the difference in length for each split
-        logger.info(format_size_difference(original_size, dataset))
+            # print the difference in length for each split
+            logger.info(format_size_difference(original_size, dataset))
 
         return dataset
 

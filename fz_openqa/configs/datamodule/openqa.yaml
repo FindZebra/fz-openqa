@@ -4,6 +4,7 @@ defaults:
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - relevance_classifier: exact_match
+  - dataset_filter: none
   - sampler: random
   - transform: none
 
@@ -31,5 +32,3 @@ n_documents:
   train: 10
   validation: 100
   test: 100
-filter_unmatched: true
-select_mode: first

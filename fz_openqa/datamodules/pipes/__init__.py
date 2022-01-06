@@ -20,6 +20,8 @@ from .collate import ApplyToEachExample
 from .collate import Collate
 from .collate import DeCollate
 from .collate import FirstEg
+from .dataset_filter import DatasetFilter
+from .dataset_filter import SupervisedDatasetFilter
 from .meta import BlockSequential
 from .meta import Gate
 from .meta import Parallel
@@ -38,6 +40,7 @@ from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
 from .sampler import Sampler
 from .sampler import SamplerBoostPositives
+from .sampler import SamplerSupervised
 from .select_docs import SelectPositives
 from .sorting import Sort
 from .span_dropout import SpanDropout

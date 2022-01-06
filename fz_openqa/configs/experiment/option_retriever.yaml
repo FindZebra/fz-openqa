@@ -1,18 +1,22 @@
 # @package _global_
 
 defaults:
+  - base
   - override /model: option_retriever
   - override /model/bert: pubmed
   - override /model/head: colbert
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/head}
   - override /datamodule/sampler: boost_positives
+  - override /datamodule/transform: none
+  - override /datamodule/dataset_filter: none
+  - override /datamodule/builder/analytics:
+      - retriever_accuracy
+  - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - progress_bar
       - lr_monitor
-  - override /datamodule/builder/analytics:
-      - retriever_accuracy
 
 base:
   seed: null
@@ -25,14 +29,15 @@ trainer:
   strategy: dp
   min_epochs: 1
   max_epochs: 1_000
+  gradient_clip_val: 0.5
   accumulate_grad_batches: 4
   val_check_interval: 0.5
 
 model:
   lr: 1e-5
   weight_decay: 1e-3
-  num_warmup_steps: 1000
-  num_training_steps: 10000
+  num_warmup_steps: 1_000
+  num_training_steps: 10_000
   bert:
     hidden_dropout_prob: 0.1
     attention_probs_dropout_prob: 0.1 # todo: changed from 0.3
@@ -49,14 +54,12 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update_freq: 15
-  dataset_update_reset_optimizer: false
-
+  dataset_update_reset_optimizer: true
   dataset_update_args:
     relevance_classifier: null
 
   # dataloader
   train_batch_size: 8
-
   eval_batch_size: 64
   num_workers: 16
   persistent_workers: false
@@ -81,7 +84,6 @@ datamodule:
     train: 10
     validation: 10
     test: 10
-  filter_unmatched: false
 
   # tag documents as positive or negative
   relevance_classifier:
@@ -101,8 +103,8 @@ datamodule:
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
     p: 100
-    max_chunksize: 1000
-    maxsim_chunksize: 20000
+    max_chunksize: 1_000
+    maxsim_chunksize: 20_000
     persist_cache: false
     faiss_args:
       factory: IVF100,PQ16x8
