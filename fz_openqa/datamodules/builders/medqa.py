@@ -107,6 +107,11 @@ class MedQaBuilder(HfDatasetBuilder):
         """Apply filter operation to the dataset and return"""
         return dataset
 
+    @staticmethod
+    def transform_qst(row):
+        row["question.text"] = row["question.metamap"]
+        return row
+
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
@@ -117,6 +122,12 @@ class MedQaBuilder(HfDatasetBuilder):
             lengths = {k: len(d) for k, d in dataset.items()}
             dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
             logger.info(format_size_difference(lengths, dataset))
+
+        # transform questions to metamap entities
+        if self.query_key == "question.metamap":
+            dataset = dataset.map(
+                self.transform_qst, desc="Transform questions to metamap entities"
+            )
 
         # Tokenize the text fields (question and answers)
         if self.tokenizer:
@@ -149,7 +160,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_token=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -162,7 +173,7 @@ class MedQaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
+            spec_token=self.n_query_tokens * [QUERY_TOKEN],
             shape=None,
         )
 
@@ -245,6 +256,13 @@ class ConcatMedQaBuilder(MedQaBuilder):
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
+        # filter out answers that are too short
+        if self.min_answer_length is not None:
+            logger.info(f"Filtering out answers shorter than {self.min_answer_length} characters")
+            lengths = {k: len(d) for k, d in dataset.items()}
+            dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
+            logger.info(format_size_difference(lengths, dataset))
+
         # transform questions to metamap entities
         if self.query_key == "question.metamap":
             dataset = dataset.map(
@@ -277,11 +295,6 @@ class ConcatMedQaBuilder(MedQaBuilder):
         )
 
         return dataset
-
-    @staticmethod
-    def transform_qst(row):
-        row["question.text"] = row["question.metamap"]
-        return row
 
     def get_concat_qa_pipe(self):
         q_start_tokens = []
