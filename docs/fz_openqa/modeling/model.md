@@ -1,30 +1,30 @@
-# Model
+# IndentityModel
 
 > Auto-generated documentation for [fz_openqa.modeling.model](blob/master/fz_openqa/modeling/model.py) module.
 
-- [Fz-openqa](../../README.md#fz-openqa-index) / [Modules](../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../index.md#fz-openqa) / [Modeling](index.md#modeling) / Model
-    - [Model](#model)
-        - [Model().check_input_features](#modelcheck_input_features)
-        - [Model().configure_optimizers](#modelconfigure_optimizers)
-        - [Model().forward](#modelforward)
-        - [Model().log_data](#modellog_data)
-        - [Model().predict](#modelpredict)
-        - [Model().test_epoch_end](#modeltest_epoch_end)
-        - [Model().test_step](#modeltest_step)
-        - [Model().test_step_end](#modeltest_step_end)
-        - [Model().training_epoch_end](#modeltraining_epoch_end)
-        - [Model().training_step](#modeltraining_step)
-        - [Model().training_step_end](#modeltraining_step_end)
-        - [Model().validation_epoch_end](#modelvalidation_epoch_end)
-        - [Model().validation_step](#modelvalidation_step)
-        - [Model().validation_step_end](#modelvalidation_step_end)
+- [Fz-openqa](../../README.md#fz-openqa-index) / [Modules](../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../index.md#fz-openqa) / [Modeling](index.md#modeling) / IndentityModel
+    - [IndentityModel](#model)
+        - [IndentityModel().check_input_features](#modelcheck_input_features)
+        - [IndentityModel().configure_optimizers](#modelconfigure_optimizers)
+        - [IndentityModel().forward](#modelforward)
+        - [IndentityModel().log_data](#modellog_data)
+        - [IndentityModel().predict](#modelpredict)
+        - [IndentityModel().test_epoch_end](#modeltest_epoch_end)
+        - [IndentityModel().test_step](#modeltest_step)
+        - [IndentityModel().test_step_end](#modeltest_step_end)
+        - [IndentityModel().training_epoch_end](#modeltraining_epoch_end)
+        - [IndentityModel().training_step](#modeltraining_step)
+        - [IndentityModel().training_step_end](#modeltraining_step_end)
+        - [IndentityModel().validation_epoch_end](#modelvalidation_epoch_end)
+        - [IndentityModel().validation_step](#modelvalidation_step)
+        - [IndentityModel().validation_step_end](#modelvalidation_step_end)
 
-## Model
+## IndentityModel
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L22)
 
 ```python
-class Model(LightningModule):
+class IndentityModel(LightningModule):
     def __init__(
         tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
@@ -67,7 +67,7 @@ The metrics are updated at each `_step_end` (e.g. keeping track of
 the true positives and false negatives).
 The metrics are computed for the whole epoch in `_epoch_end`.
 
-### Model().check_input_features
+### IndentityModel().check_input_features
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L222)
 
@@ -75,7 +75,7 @@ The metrics are computed for the whole epoch in `_epoch_end`.
 def check_input_features(batch):
 ```
 
-### Model().configure_optimizers
+### IndentityModel().configure_optimizers
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L167)
 
@@ -89,7 +89,7 @@ See examples here:
     https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html
     #configure-optimizers
 
-### Model().forward
+### IndentityModel().forward
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L92)
 
@@ -101,7 +101,7 @@ def forward(batch: Batch, **kwargs) -> Batch:
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().log_data
+### IndentityModel().log_data
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L142)
 
@@ -123,7 +123,7 @@ the split id.
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().predict
+### IndentityModel().predict
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L95)
 
@@ -135,7 +135,7 @@ def predict(batch: Batch, **kwargs) -> Batch:
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().test_epoch_end
+### IndentityModel().test_epoch_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L219)
 
@@ -143,7 +143,7 @@ def predict(batch: Batch, **kwargs) -> Batch:
 def test_epoch_end(outputs: List[Any]):
 ```
 
-### Model().test_step
+### IndentityModel().test_step
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L205)
 
@@ -159,7 +159,7 @@ def test_step(
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().test_step_end
+### IndentityModel().test_step_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L186)
 
@@ -171,7 +171,7 @@ def test_step_end(batch: Batch, **kwargs) -> Batch:
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().training_epoch_end
+### IndentityModel().training_epoch_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L213)
 
@@ -179,7 +179,7 @@ def test_step_end(batch: Batch, **kwargs) -> Batch:
 def training_epoch_end(outputs: List[Any]):
 ```
 
-### Model().training_step
+### IndentityModel().training_step
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L189)
 
@@ -195,7 +195,7 @@ def training_step(
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().training_step_end
+### IndentityModel().training_step_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L180)
 
@@ -207,7 +207,7 @@ def training_step_end(batch: Batch, **kwargs) -> Batch:
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().validation_epoch_end
+### IndentityModel().validation_epoch_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L216)
 
@@ -215,7 +215,7 @@ def training_step_end(batch: Batch, **kwargs) -> Batch:
 def validation_epoch_end(outputs: List[Any]):
 ```
 
-### Model().validation_step
+### IndentityModel().validation_step
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L197)
 
@@ -231,7 +231,7 @@ def validation_step(
 
 - [Batch](../utils/datastruct.md#batch)
 
-### Model().validation_step_end
+### IndentityModel().validation_step_end
 
 [[find in source code]](blob/master/fz_openqa/modeling/model.py#L183)
 

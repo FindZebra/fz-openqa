@@ -18,5 +18,6 @@ in_memory: true
 dtype: float32
 model_output_keys: [_hq_, _hd_]
 persist_cache: false
-progress_bar: false
+cache_dir: ${sys.cache_dir}
+progress_bar: true
 _id: dense

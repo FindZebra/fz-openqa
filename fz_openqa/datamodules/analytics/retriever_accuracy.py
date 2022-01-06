@@ -60,8 +60,12 @@ class RetrieverAccuracy(Analytic):
 
         # report
         labels = list({y for y in targets})
-        report_str = classification_report(targets, preds, labels=labels, output_dict=False)
-        report_dict = classification_report(targets, preds, labels=labels, output_dict=True)
+        report_str = classification_report(
+            targets, preds, labels=labels, output_dict=False, digits=3
+        )
+        report_dict = classification_report(
+            targets, preds, labels=labels, output_dict=True, digits=3
+        )
         return {"dict": report_dict, "str": report_str}
 
     def _process_results(self, results: Dict[str, Any]):

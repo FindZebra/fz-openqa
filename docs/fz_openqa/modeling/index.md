@@ -8,6 +8,6 @@
         - [Functional](functional.md#functional)
         - [Heads](heads/index.md#heads)
         - [Layers](layers/index.md#layers)
-        - [Model](model.md#model)
+        - [IndentityModel](model.md#model)
         - [Modules](modules/index.md#modules)
         - [Similarities](similarities/index.md#similarities)

@@ -12,9 +12,10 @@ from torch import Tensor
 from ...utils.pretty import pprint_batch
 from .metrics import SafeMetricCollection
 from .metrics import SplitMetrics
-from .utils.gradients import batch_backprop_grads
 from .utils.gradients import GradExpression
+from .utils.gradients import InBatchGradients
 from .utils.gradients import supervised_loss
+from .utils.gradients import VariationalGradients
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
@@ -22,7 +23,7 @@ from fz_openqa.utils.datastruct import Batch
 
 
 class Similarity(Enum):
-    CLS = "cls"
+    DENSE = "dense"
     COLBERT = "colbert"
 
 
@@ -69,17 +70,23 @@ class OptionRetriever(Module):
         max_batch_size: Optional[int] = None,
         eval_topk: Optional[int] = 20,
         resample_k: Optional[int] = None,
-        grad_expr: GradExpression = GradExpression.BATCH_BACKPROP,
+        grad_expr: GradExpression = GradExpression.IN_BATCH,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.grad_expr = GradExpression(grad_expr)
         self.resample_k = resample_k
         self.max_batch_size = max_batch_size
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
-        self.eval_topk = eval_topk
+
+        # init the estimator
+        grad_expr = GradExpression(grad_expr)
+        estimator_cls = {
+            GradExpression.IN_BATCH: InBatchGradients,
+            GradExpression.VARIATIONAL: VariationalGradients,
+        }[grad_expr]
+        self.estimator = estimator_cls(eval_topk=eval_topk)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -176,11 +183,12 @@ class OptionRetriever(Module):
                 )
 
                 # log the retriever accuracy
-                supervised_loss_out = supervised_loss(
-                    retriever_score, d_batch["document.match_score"]
-                )
-                is_supervised_loss_computed = True
-                step_output.update(supervised_loss_out)
+                if "document.match_score" in d_batch.keys():
+                    supervised_loss_out = supervised_loss(
+                        retriever_score, d_batch["document.match_score"]
+                    )
+                    is_supervised_loss_computed = True
+                    step_output.update(supervised_loss_out)
 
                 # sample k documents
                 soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
@@ -217,28 +225,26 @@ class OptionRetriever(Module):
         step_output["retriever/entropy"] = retriever_entropy.detach()
 
         # compute the gradients
-        if self.grad_expr == GradExpression.BATCH_BACKPROP:
-            step_output.update(
-                batch_backprop_grads(
-                    reader_score=reader_score,
-                    retriever_score=retriever_score,
-                    targets=batch["answer.target"],
-                    grad_expr=self.grad_expr,
-                    eval_topk=self.eval_topk,
-                )
+        step_output.update(
+            self.estimator(
+                reader_score=reader_score,
+                retriever_score=retriever_score,
+                targets=batch["answer.target"],
             )
-        else:
-            raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
+        )
 
         # auxiliary loss
-        if self.alpha > 0 or self.resample_k is None:
-            supervised_loss_out = supervised_loss(retriever_score, d_batch["document.match_score"])
-            supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
-            if not is_supervised_loss_computed:
-                step_output.update(supervised_loss_out)
-            if self.alpha > 0:
-                warnings.warn(f"Using alpha={self.alpha}")
-                step_output["loss"] += self.alpha * supervised_loss_
+        if self.alpha > 0 or not is_supervised_loss_computed:
+            if "document.match_score" in d_batch.keys():
+                supervised_loss_out = supervised_loss(
+                    retriever_score, d_batch["document.match_score"]
+                )
+                supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
+                if not is_supervised_loss_computed:
+                    step_output.update(supervised_loss_out)
+                if self.alpha > 0:
+                    warnings.warn(f"Using alpha={self.alpha}")
+                    step_output["loss"] += self.alpha * supervised_loss_
         step_output["retriever/alpha"] = self.alpha
 
         return step_output
@@ -253,7 +259,7 @@ class OptionRetriever(Module):
     ) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
         if not across_batch:
-            if self.similarity == Similarity.CLS:
+            if self.similarity == Similarity.DENSE:
                 return torch.einsum("boh, bodh -> bod", hq, hd)
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
@@ -270,7 +276,7 @@ class OptionRetriever(Module):
             doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
             udoc_ids, uids = torch.unique(doc_ids, return_inverse=True)
             hd = hd[uids]
-            if self.similarity == Similarity.CLS:
+            if self.similarity == Similarity.DENSE:
                 return torch.einsum("boh, mh -> bom", hq, hd)
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)

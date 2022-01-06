@@ -105,9 +105,17 @@ class DataModule(LightningDataModule):
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
         logger.info(f"Updating dataset with <{self.builder.__class__.__name__}>")
+        try:
+            del self.dataset
+        except AttributeError:
+            pass
         self.dataset = self.builder(**kwargs)
 
         # define the collate operator
+        try:
+            del self.collate_pipe
+        except AttributeError:
+            pass
         self.collate_pipe = self.builder.get_collate_pipe()
 
     def train_dataloader(self, *, shuffle: bool = True):

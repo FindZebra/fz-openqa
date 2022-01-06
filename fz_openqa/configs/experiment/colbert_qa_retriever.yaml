@@ -3,13 +3,14 @@
 defaults:
   - base
   - override /model: retriever
-  - override /model/head: cls # todo colbert
-  - override /model/bert: pubmed # todo: pubmed
+  - override /model/bert: pubmed
+  - override /model/head: dense
+  - override /datamodule/index_builder: ${model/head}
+  - override /datamodule/transform: span_dropout
   - override /callbacks:
       - checkpoint
       - progress_bar
-  - override /datamodule/index_builder: dense # todo colbert
-  - override /datamodule/transform: span_dropout
+      - lr_monitor
 
 base:
   seed: null
@@ -38,7 +39,7 @@ model:
 datamodule:
 
   # how often to map the dataset
-  mapping_freq: null
+  dataset_update_freq: null
 
   # dataloader
   train_batch_size: 16
@@ -65,9 +66,6 @@ datamodule:
     train: 20
     validation: 100
     test: 100
-  max_pos_docs: 1
-  filter_unmatched: true
-  select_mode: sample
 
   # tag documents as positive or negative
   relevance_classifier:

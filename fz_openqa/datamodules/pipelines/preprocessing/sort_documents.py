@@ -9,7 +9,10 @@ from fz_openqa.utils.datastruct import Batch
 
 class GenIsPositive(Pipe):
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-        batch["document.is_positive"] = [x > 0 for x in batch["document.match_score"]]
+        if "document.match_score" in batch.keys():
+            batch["document.is_positive"] = [x > 0 for x in batch["document.match_score"]]
+        else:
+            batch["document.is_positive"] = [0 for _ in batch["document.retrieval_score"]]
         return batch
 
 
