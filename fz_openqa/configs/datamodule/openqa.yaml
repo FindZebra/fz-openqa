@@ -7,7 +7,6 @@ defaults:
   - dataset_filter: none
   - sampler: random
   - transform: none
-  - analyses: standard
 
 _target_: fz_openqa.datamodules.DataModule
 
