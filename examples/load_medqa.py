@@ -34,15 +34,16 @@ def run(config: DictConfig) -> None:
     # initialize the data module
     builder = MedQaBuilder(
         tokenizer=tokenizer,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         min_answer_length=config.get("min_answer_length", None),
         num_proc=2,
+        dset_name=config.get("dset_name", "us"),
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_samples()
+    dm.display_samples(n_samples=3)
 
     # access dataset
     rich.print(dm.dataset)

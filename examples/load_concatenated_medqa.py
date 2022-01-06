@@ -33,9 +33,10 @@ def run(config: DictConfig) -> None:
     # initialize the data module
     builder = ConcatMedQaBuilder(
         tokenizer=tokenizer,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=2,
+        dset_name=config.get("dset_name", "us"),
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
