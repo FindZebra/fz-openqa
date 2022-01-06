@@ -5,6 +5,7 @@ defaults:
   - index_builder: elasticsearch
   - relevance_classifier: exact_match
   - transform: none
+  - analyses: standard
 
 _target_: fz_openqa.datamodules.DataModule
 
