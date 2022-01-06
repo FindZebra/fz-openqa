@@ -153,10 +153,8 @@ class TestConcatenatedOpenQaBuilder(TestBuilder):
             'corpus_builder': corpus_builder,
             'index_builder': ElasticSearchIndexBuilder(),
             'relevance_classifier': ExactMatch(),
+            'sampler': Sampler(total=3),
             'n_retrieved_documents': 10,
-            'n_documents': 5,
-            'max_pos_docs': 1,
-            'filter_unmatched': True,
             'num_proc': 2,
             'batch_size': 10,
         }
