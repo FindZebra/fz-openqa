@@ -1,0 +1,13 @@
+defaults:
+  - random
+
+_target_: fz_openqa.datamodules.pipes.SamplerSupervised
+
+# number of positive documents to sample
+n_positives: 1
+
+# whether to sample or to use topk documents
+largest:
+    train: false
+    validation: true
+    test: true

@@ -1,8 +1,11 @@
+import collections
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
@@ -60,7 +63,7 @@ class Model(LightningModule):
         tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
         module: Union[DictConfig, Module],
-        head: Union[DictConfig, Module],
+        head: Union[DictConfig, Module] = None,
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
         num_warmup_steps: int = 1000,
@@ -79,6 +82,9 @@ class Model(LightningModule):
         assert self.hparams["monitor_metric"] == monitor_metric
         assert self.hparams["num_training_steps"] == num_training_steps
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
+
+        # store the state of the optimizer
+        self.opt_states: Optional[Dict] = None
 
         # instantiate the model
         self.module: Optional[Module] = maybe_instantiate(
@@ -200,6 +206,18 @@ class Model(LightningModule):
             num_warmup_steps=self.hparams.num_warmup_steps,
         )
 
+        # if a state is available, set it
+        if self.opt_states is not None:
+            opt_state = self.opt_states.pop("optimizer", None)
+            scheduler_state = self.opt_states.pop("lr_scheduler", None)
+            if opt_state is not None:
+                rich.print(f">> setting optimizer state: {opt_state}")
+                optimizer.load_state_dict(opt_state)
+            if scheduler_state is not None:
+                rich.print(f">> setting scheduler state: {opt_state}")
+                lr_scheduler.load_state_dict(scheduler_state)
+            self.opt_states = None
+
         lr_scheduler_config = {
             # REQUIRED: The scheduler instance
             "scheduler": lr_scheduler,
@@ -223,7 +241,8 @@ class Model(LightningModule):
             "name": None,
         }
 
-        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
+        output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
+        return output
 
     def training_step_end(self, batch: Batch, **kwargs) -> Batch:
         return self._step_end(batch, split=Split.TRAIN)

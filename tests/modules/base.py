@@ -37,6 +37,7 @@ class TestModel(TestCase, ABC):
          "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."]
     ]
     match_score = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]])
+    doc_ids = torch.range(0, match_score.numel() - 1).view(match_score.shape)
 
     # dummy answers
     answers = [["Paris France", "Rocket", "Bike"], ["Truck", "Banana fruit", "Aircraft"]]
@@ -93,7 +94,7 @@ class TestModel(TestCase, ABC):
             CollateField("document",
                          tokenizer=self.tokenizer,
                          level=1,
-                         to_tensor=["match_score"]
+                         to_tensor=["match_score", "row_idx"]
                          ),
             CollateField("question",
                          tokenizer=self.tokenizer,
@@ -123,5 +124,6 @@ class TestModel(TestCase, ABC):
             "document.text": self.documents,
             "answer.text": self.answers,
             "answer.target": self.answer_targets,
-            "document.match_score": self.match_score
+            "document.match_score": self.match_score,
+            "document.row_idx": self.doc_ids
         }

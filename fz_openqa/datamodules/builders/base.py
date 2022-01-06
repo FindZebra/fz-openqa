@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 from abc import ABCMeta
@@ -32,7 +34,12 @@ class DatasetBuilder:
     _cache_type: Optional[Union[Dataset.__class__, DatasetDict.__class__]] = None
     _cache_dir = None
 
-    def __init__(self, *, cache_dir: Optional[str], analyses: Optional[List[Analytic]] = None):
+    def __init__(
+        self,
+        *,
+        cache_dir: Optional[str],
+        analytics: Optional[Analytic | List[Analytic], Dict[Any, Analytic]] = None
+    ):
         if cache_dir is None:
             self._cache_dir = None
         else:
@@ -40,15 +47,19 @@ class DatasetBuilder:
             if not os.path.exists(self._cache_dir):
                 os.makedirs(self._cache_dir)
 
-        if analyses is None:
-            analyses = []
+        if analytics is None:
+            analytics = []
+        elif isinstance(analytics, Analytic):
+            analytics = [analytics]
+        elif isinstance(analytics, dict):
+            analytics = list(analytics.values())
 
-        self.analyses = analyses
+        self.analytics = analytics
 
     def __call__(self, *args, **kwargs):
         dataset = self._call(*args, **kwargs)
 
-        for analysis in self.analyses:
+        for analysis in self.analytics:
             analysis(dataset)
         return dataset
 

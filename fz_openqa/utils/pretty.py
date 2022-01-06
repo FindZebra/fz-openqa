@@ -53,7 +53,11 @@ def get_separator(char="\u2500"):
     return console_width * char
 
 
-def pprint_batch(batch: Batch, header=None, report_nans: bool = False) -> None:
+def pprint_batch(
+    batch: Batch, header=None, report_nans: bool = False, silent: bool = False
+) -> None:
+    if silent:
+        return
     u, exceptions = _repr_batch(batch, header, report_nans=report_nans, rich=True)
     u = get_separator() + "\n" + u
     rich.print(u)

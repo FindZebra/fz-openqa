@@ -3,4 +3,5 @@ defaults:
 
 _target_: fz_openqa.modeling.heads.ColbertHead
 output_size: 32
+downscaling: null
 _id: colbert

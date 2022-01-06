@@ -1,22 +1,29 @@
+import warnings
 from enum import Enum
 from typing import Any
 from typing import Optional
 
+import einops
 import torch
+import torch.nn.functional as F
 from datasets import Split
 from torch import Tensor
 
+from ...utils.pretty import pprint_batch
+from .metrics import SafeMetricCollection
+from .metrics import SplitMetrics
 from .utils.gradients import GradExpression
-from .utils.gradients import in_batch_grads
+from .utils.gradients import InBatchGradients
 from .utils.gradients import supervised_loss
-from .utils.gradients import variational_grads
+from .utils.gradients import VariationalGradients
+from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils.datastruct import Batch
 
 
 class Similarity(Enum):
-    CLS = "cls"
+    DENSE = "dense"
     COLBERT = "colbert"
 
 
@@ -49,70 +56,100 @@ class OptionRetriever(Module):
     ]
 
     # require heads
-    _required_heads = ["question", "document"]
+    _required_heads = [
+        "question_reader",
+        "document_reader",
+        "question_retriever",
+        "document_retriever",
+    ]
 
     def __init__(
         self,
         *args,
-        alpha: float = 0.01,
-        grad_expr: GradExpression = GradExpression.VARIATIONAL,
+        alpha: float = 0,
+        max_batch_size: Optional[int] = None,
+        eval_topk: Optional[int] = 20,
+        resample_k: Optional[int] = None,
+        grad_expr: GradExpression = GradExpression.IN_BATCH,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.grad_expr = GradExpression(grad_expr)
+        self.resample_k = resample_k
+        self.max_batch_size = max_batch_size
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
+
+        # init the estimator
+        grad_expr = GradExpression(grad_expr)
+        estimator_cls = {
+            GradExpression.IN_BATCH: InBatchGradients,
+            GradExpression.VARIATIONAL: VariationalGradients,
+        }[grad_expr]
+        self.estimator = estimator_cls(eval_topk=eval_topk)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
 
+        self.total_logp_metrics = self._init_total_logp_metrics(prefix)
+
         self.retriever_metrics = self._get_base_metrics(
             prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
         )
 
-    def _forward(self, batch: Batch, **kwargs) -> Batch:
-        q_shape = d_shape = None
-        output = {}
-        if "document.input_ids" in batch:
-            d_shape = batch["document.input_ids"].shape
-            # flatten the batch_size and n_options and n_docs dimensions
-            d_batch = flatten_first_dims(
-                batch,
-                n_dims=3,
-                keys=["document.input_ids", "document.attention_mask"],
-            )
+    def _init_total_logp_metrics(self, prefix):
+        metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
+        metrics = SafeMetricCollection(
+            {"reader/total-logp": TotalEpochMetric(**metric_kwargs)},
+            prefix=prefix,
+        )
+        return SplitMetrics(metrics)
 
-            # process the document with the backbone
-            hd = self._backbone(d_batch, prefix="document", head="document", **kwargs)
-            # reshape and return
-            hd = hd.reshape(*d_shape[:3], *hd.shape[1:])
-            output["_hd_"] = hd
+    def _forward(self, batch: Batch, **kwargs) -> Batch:
+        output = {}
+
+        if "document.input_ids" in batch:
+            output.update(self._forward_field(batch, "document", **kwargs))
 
         if "question.input_ids" in batch:
-            q_shape = batch["question.input_ids"].shape
-            # flatten the batch_size and n_options dimensions
-            q_batch = flatten_first_dims(
-                batch,
-                n_dims=2,
-                keys=["question.input_ids", "question.attention_mask"],
-            )
+            output.update(self._forward_field(batch, "question", **kwargs))
 
-            # process the document with the backbone
-            hq = self._backbone(q_batch, prefix="question", head="question", **kwargs)
+        return output
 
-            # reshape and return
-            hq = hq.reshape(*q_shape[:2], *hq.shape[1:])
-            output["_hq_"] = hq
+    def _forward_field(self, batch: Batch, field: str, silent: bool = True, **kwargs) -> Batch:
+        original_shape = batch[f"{field}.input_ids"].shape
+        pprint_batch(batch, f"forward {field}", silent=silent)
+        if self.training:
+            max_batch_size = None
+        else:
+            max_batch_size = self.max_batch_size
 
-        if all(d is not None for d in (d_shape, q_shape)):
-            if not d_shape[:2] == q_shape[:2]:
-                raise ValueError(
-                    f"Expected 2 first dimensions to be equal, "
-                    f"got documents of shape: {d_shape} and "
-                    f"questions of shape{q_shape}"
-                )
+        # flatten the batch
+        flat_batch = flatten_first_dims(
+            batch,
+            n_dims=len(original_shape) - 1,
+            keys=[f"{field}.input_ids", f"{field}.attention_mask"],
+        )
+        # process the document with the backbone
+        h_heads = self._backbone(
+            flat_batch,
+            prefix=f"{field}",
+            heads=[f"{field}_reader", f"{field}_retriever"],
+            max_batch_size=max_batch_size,
+            **kwargs,
+        )
+        pprint_batch(h_heads, f"h_heads {field}", silent=silent)
+
+        # reshape and return
+        output = {}
+        for k, v in h_heads.items():
+            tag = k.split("_")[-1]  # reader / retriever
+            v = v.view(*original_shape[:-1], *v.shape[1:])
+            name = {"document": "hd", "question": "hq"}[field]
+            output[f"_{name}_{tag}_"] = v
+
+        pprint_batch(output, f"output {field}", silent=silent)
 
         return output
 
@@ -122,39 +159,131 @@ class OptionRetriever(Module):
         """
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
-        targets = batch["answer.target"]
-        output = self._forward(batch, **kwargs)
-        hq, hd = (output[k] for k in ["_hq_", "_hd_"])
 
-        # compute the score for each pair `f([q_j; a_j], d_jk)`
-        partial_score = self._compute_score(hd=hd, hq=hq)
+        d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
+        q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
+        n_docs = d_batch["document.input_ids"].shape[2]
+        output = {}
+        step_output = {}
+        is_supervised_loss_computed = False
+        if self.resample_k is not None and n_docs > self.resample_k:
+            warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
 
-        if self.grad_expr in [GradExpression.BATCH_GATHER, GradExpression.BATCH_SUM]:
-            step_output = in_batch_grads(partial_score, targets, grad_expr=self.grad_expr)
-        elif self.grad_expr == GradExpression.VARIATIONAL:
-            step_output = variational_grads(partial_score, targets, grad_expr=self.grad_expr)
+            # compute documents logits
+            with torch.no_grad():
+                d_out = self._forward(d_batch, **kwargs)
+
+            # compute questions logits
+            output.update(self._forward(q_batch, **kwargs))
+
+            # compute the score and sample k without replacement
+            with torch.no_grad():
+                retriever_score = self._compute_score(
+                    hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
+                )
+
+                # log the retriever accuracy
+                if "document.match_score" in d_batch.keys():
+                    supervised_loss_out = supervised_loss(
+                        retriever_score, d_batch["document.match_score"]
+                    )
+                    is_supervised_loss_computed = True
+                    step_output.update(supervised_loss_out)
+
+                # sample k documents
+                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
+                sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
+
+                # re-sample the documents
+                for k, v in d_batch.items():
+                    if isinstance(v, torch.Tensor):
+                        leaf_shape = v.shape[len(sample_ids.shape) :]
+                        _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
+                        _index = _index.expand(*sample_ids.shape, *leaf_shape)
+                        d_batch[k] = v.gather(index=_index, dim=2)
+
         else:
-            raise ValueError(f"Unknown grad_expr: {self.grad_expr}")
+            # compute questions logits
+            output.update(self._forward(q_batch, **kwargs))
+
+        # compute the document logits
+        output.update(self._forward(d_batch, **kwargs))
+        keys = [
+            "_hq_reader_",
+            "_hd_reader_",
+            "_hq_retriever_",
+            "_hd_retriever_",
+        ]
+        hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
+        # compute the score for each pair `f([q_j; a_j], d_jk)`
+        reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
+        retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
+
+        # log retriever entropy
+        retriever_logits = retriever_score.log_softmax(dim=-1)
+        retriever_entropy = -(retriever_logits.exp() * retriever_logits).sum(dim=(1, 2)).mean()
+        step_output["retriever/entropy"] = retriever_entropy.detach()
+
+        # compute the gradients
+        step_output.update(
+            self.estimator(
+                reader_score=reader_score,
+                retriever_score=retriever_score,
+                targets=batch["answer.target"],
+            )
+        )
 
         # auxiliary loss
-        supervised_loss_out = supervised_loss(partial_score, batch["document.match_score"])
-        supervised_loss_ = supervised_loss_out.get("retriever_loss", 0)
-        if self.alpha > 0:
-            step_output["loss"] += self.alpha * supervised_loss_
-        step_output.update(supervised_loss_out)
+        if self.alpha > 0 or not is_supervised_loss_computed:
+            if "document.match_score" in d_batch.keys():
+                supervised_loss_out = supervised_loss(
+                    retriever_score, d_batch["document.match_score"]
+                )
+                supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
+                if not is_supervised_loss_computed:
+                    step_output.update(supervised_loss_out)
+                if self.alpha > 0:
+                    warnings.warn(f"Using alpha={self.alpha}")
+                    step_output["loss"] += self.alpha * supervised_loss_
+        step_output["retriever/alpha"] = self.alpha
 
         return step_output
 
-    def _compute_score(self, *, hd: Tensor, hq: Tensor) -> Tensor:
+    def _compute_score(
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        across_batch: bool = False,
+    ) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
-        if self.similarity == Similarity.CLS:
-            return torch.einsum("boh, bodh -> bod", hq, hd)
-        elif self.similarity == Similarity.COLBERT:
-            scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
-            max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+        if not across_batch:
+            if self.similarity == Similarity.DENSE:
+                return torch.einsum("boh, bodh -> bod", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
-            raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
+            if doc_ids is None:
+                raise ValueError("doc_ids is required for non-element-wise computation")
+
+            # get the unique list of documents vectors
+            hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
+            doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
+            udoc_ids, uids = torch.unique(doc_ids, return_inverse=True)
+            hd = hd[uids]
+            if self.similarity == Similarity.DENSE:
+                return torch.einsum("boh, mh -> bom", hq, hd)
+            elif self.similarity == Similarity.COLBERT:
+                scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
+                max_scores, _ = scores.max(-1)
+                return max_scores.sum(-1)
+            else:
+                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
@@ -180,6 +309,9 @@ class OptionRetriever(Module):
         if retrieval_logits is not None and retrieval_logits.numel() > 0:
             self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
 
+        if "reader/logp" in output:
+            self.total_logp_metrics.update(split, output["reader/logp"], None)
+
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
@@ -196,4 +328,5 @@ class OptionRetriever(Module):
         return {
             **self.metrics.compute(split),
             **self.retriever_metrics.compute(split),
+            **self.total_logp_metrics.compute(split),
         }

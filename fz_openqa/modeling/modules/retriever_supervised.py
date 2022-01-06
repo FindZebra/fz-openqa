@@ -185,7 +185,7 @@ class RetrieverSupervised(Module):
         """
         assert hq.shape[-1] == hd.shape[-1]
         if len(hq.shape) == len(hd.shape):
-            if self.similarity == Similarity.CLS:
+            if self.similarity == Similarity.DENSE:
                 return torch.einsum("nh, mh -> nm", hq, hd)
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("nqh, mdh -> nmqd", hq, hd)
@@ -197,7 +197,7 @@ class RetrieverSupervised(Module):
             assert hq.shape[0] == hd.shape[0]
             assert len(hd.shape) == len(hq.shape) + 1
 
-            if self.similarity == Similarity.CLS:
+            if self.similarity == Similarity.DENSE:
                 return torch.einsum("nh, nmh -> nm", hq, hd)
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("nqh, nmdh -> nmqd", hq, hd)

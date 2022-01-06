@@ -7,6 +7,7 @@ defaults:
   - override /callbacks:
       - checkpoint
       - progress_bar
+      - print_table
   - override /logger: wandb
 
 base:
@@ -35,7 +36,7 @@ datamodule:
   train_batch_size: 16
   valid_batch_size: 100
   max_length: 512
-  use_subset: False
+  use_subset: True
   num_workers: 8
   n_documents: 10
   max_pos_docs: 1

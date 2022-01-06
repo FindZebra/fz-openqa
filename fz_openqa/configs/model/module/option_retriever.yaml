@@ -1,5 +1,8 @@
 _target_: fz_openqa.modeling.modules.OptionRetriever
 
-grad_expr: variational
+grad_expr: in_batch
 alpha: 0
+resample_k: null
+max_tokens: null
+eval_topk: 30
 _id: option_retriever

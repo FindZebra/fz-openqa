@@ -13,14 +13,14 @@ from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
-from .base import Pipe
-from .nesting import Nested
-from .sorting import reindex
+from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.nesting import Nested
+from fz_openqa.datamodules.pipes.sorting import reindex
 from fz_openqa.utils.datastruct import Batch
 
 
-class SelectDocs(Nested):
+class SelectPositives(Nested):
     "Select `total` documents with `max_pos_docs` positive documents (i.e. document.match_score>0)"
 
     def __init__(
@@ -36,7 +36,7 @@ class SelectDocs(Nested):
         id="select-docs",
         **kwargs,
     ):
-        pipe = SelectDocsOneEg(
+        pipe = SelectPositivesOneEg(
             total=total,
             max_pos_docs=max_pos_docs or total,
             pos_select_mode=pos_select_mode,
@@ -45,10 +45,12 @@ class SelectDocs(Nested):
             shuffle=shuffle,
         )
 
-        super(SelectDocs, self).__init__(pipe=pipe, input_filter=HasPrefix(prefix), id=id, **kwargs)
+        super(SelectPositives, self).__init__(
+            pipe=pipe, input_filter=HasPrefix(prefix), id=id, **kwargs
+        )
 
 
-class SelectDocsOneEg(Pipe):
+class SelectPositivesOneEg(Pipe):
     def __init__(
         self,
         *,
@@ -62,7 +64,7 @@ class SelectDocsOneEg(Pipe):
         retrieval_score_key: str = "document.retrieval_score",
         **kwargs,
     ):
-        super(SelectDocsOneEg, self).__init__(**kwargs)
+        super(SelectPositivesOneEg, self).__init__(**kwargs)
         self.total = total
         self.score_key = score_key
         self.retrieval_score_key = retrieval_score_key

@@ -1,0 +1,92 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /model: medqa_reader
+  - override /model/bert: pubmed
+  - override /datamodule/builder: concat_openqa
+  - override /datamodule/index_builder: elasticsearch
+  - override /datamodule/sampler: boost_positives
+  - override /datamodule/transform: none
+  - override /datamodule/dataset_filter: supervised
+  - override /datamodule/builder/analytics:
+      - retriever_accuracy
+  - override /logger: wandb
+  - override /callbacks:
+      - checkpoint
+      - progress_bar
+      - lr_monitor
+
+
+base:
+  seed: null
+  target_metric: validation/reader/Accuracy
+  target_mode: max
+
+
+trainer:
+  gpus: 4
+  strategy: dp
+  min_epochs: 1
+  max_epochs: 1_000
+  gradient_clip_val: 0.5
+  accumulate_grad_batches: 4
+  val_check_interval: 0.5
+
+model:
+  lr: 1e-5
+  weight_decay: 1e-3
+  num_warmup_steps: 1_000
+  num_training_steps: 10_000
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1
+
+
+datamodule:
+  use_subset: true # todo: debug: remove
+  train_batch_size: 4
+  eval_batch_size: 8
+  num_proc: 4
+  num_workers: 16
+  output_columns:
+    - question.input_ids
+    - question.attention_mask
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.retrieval_score
+    - answer.input_ids
+    - answer.attention_mask
+    - answer.target
+
+  # documents
+  n_retrieved_documents: 3
+  n_documents: 3
+
+  # encoding tokens
+  add_encoding_tokens: true
+  add_special_tokens: true
+
+  # tag documents as positive or negative
+  relevance_classifier:
+    interpretable: false
+
+  # OpenQA builder parameters
+  builder:
+    batch_size: 100
+    writer_batch_size: 1_000
+    corpus_builder:
+      to_sentences: false
+      use_subset: true # todo: debug: remove
+      passage_length: 200
+      passage_stride: 200
+
+
+logger: null
+callbacks: null
+
+#logger:
+#  wandb:
+#    group: medqa-reader-only # name your experiment here
