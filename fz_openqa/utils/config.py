@@ -14,6 +14,10 @@ from pytorch_lightning.utilities import rank_zero_only
 YAML_PATTERN = r"^.*\.yaml$"
 
 
+def null_constructor(*args, **kwargs):
+    return None
+
+
 def resolve_config_paths(config: DictConfig, path: str = "", excludes: List[str] = ["hydra"]):
     for k, v in ((k_, v_) for k_, v_ in config.items() if k_ not in excludes):
         if isinstance(v, DictConfig):

@@ -1,6 +1,8 @@
 import os
 
 import hydra
+import numpy as np
+import rich
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
@@ -25,6 +27,10 @@ def run_experiment_with_config(config: DictConfig):
     # - forcing multi-gpu friendly configuration
     # You can safely get rid of this line if you don't want those
     train_utils.extras(config)
+
+    # set random seed if not specified
+    if config.base.get("seed", None) is None:
+        config.base.seed = int(np.random.randint(0, 2 ** 32 - 1))
 
     # save config to file
     with open("config.yaml", "w") as f:

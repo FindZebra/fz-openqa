@@ -9,7 +9,7 @@ from fz_openqa.modeling.heads.base import Head
 
 
 class ClsHead(Head):
-    id: str = "cls"
+    id: str = "dense"
 
     def __init__(
         self,

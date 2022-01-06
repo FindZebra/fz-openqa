@@ -4,7 +4,7 @@
 
 - [Fz-openqa](../README.md#fz-openqa-index) / [Modules](../MODULES.md#fz-openqa-modules) / Examples
     - Modules
-        - [Evaluate Openqa Model](evaluate_openqa_model.md#evaluate-openqa-model)
+        - [Evaluate Openqa IndentityModel](evaluate_openqa_model.md#evaluate-openqa-model)
         - [Exact Match Test](exact_match_test.md#exact-match-test)
         - [Filter Text](filter_text.md#filter-text)
         - [Index Corpus With Es](index_corpus_with_es.md#index-corpus-with-es)

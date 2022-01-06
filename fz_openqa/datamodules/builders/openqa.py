@@ -1,7 +1,8 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: F407
 
 import json
 import logging
+from copy import copy
 from enum import Enum
 from functools import partial
 from typing import Any
@@ -34,7 +35,11 @@ from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
-from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
+from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -70,11 +75,9 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
+        sampler: Sampler,
         n_retrieved_documents: int,
-        n_documents: Optional[int | Dict] = None,
-        max_pos_docs: Optional[int] = None,
-        filter_unmatched: bool = True,
-        select_mode: str = "first",
+        dataset_filter: Optional[DatasetFilter] = None,
         num_proc: int = 2,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
@@ -93,11 +96,6 @@ class OpenQaBuilder(DatasetBuilder):
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
         # transform for the collate_fn
-        if isinstance(transform, (dict, DictConfig)):
-            if len(transform.keys()):
-                transform = instantiate(transform, tokenizer=self.tokenizer)
-            else:
-                transform = None
         self.transform = transform
 
         # index
@@ -109,15 +107,11 @@ class OpenQaBuilder(DatasetBuilder):
 
         # arguments
         self.output_columns = output_columns
-        self.n_documents = n_documents or n_retrieved_documents
-        self.max_pos_docs = max_pos_docs
-        self.select_mode = SelectMode(select_mode)
+        self.sampler = sampler
         self.map_args = {
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
-            "n_documents": self.n_documents,
-            "max_pos_docs": max_pos_docs,
-            "filter_unmatched": filter_unmatched,
+            "dataset_filter": dataset_filter,
             "num_proc": num_proc,
             "batch_size": batch_size,
             "writer_batch_size": writer_batch_size,
@@ -154,6 +148,7 @@ class OpenQaBuilder(DatasetBuilder):
         columns: Optional[List[str]] = None,
         model: Optional[pl.LightningModule] = None,
         trainer: Optional[pl.Trainer] = None,
+        splits: Optional[List[str]] = None,
         **kwargs,
     ) -> OpenQaDataset:
         """
@@ -183,6 +178,10 @@ class OpenQaBuilder(DatasetBuilder):
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder()
 
+        # select splits
+        if splits is not None:
+            dataset = DatasetDict({k: v for k, v in dataset.items() if k in splits})
+
         # build the index, potnetially using a model
         index = self.index_builder(
             dataset=corpus,
@@ -191,8 +190,13 @@ class OpenQaBuilder(DatasetBuilder):
             collate_pipe=self.corpus_builder._get_collate_pipe(),
         )
 
+        # map the corpus to the dataset
+        map_args = copy(self.map_args)
+        for k in list(kwargs.keys()):
+            if k in map_args:
+                map_args[k] = kwargs.pop(k)
         dataset = self.map_dataset(
-            dataset=dataset, corpus=corpus, index=index, **self.map_args, **kwargs
+            dataset=dataset, corpus=corpus, index=index, **map_args, **kwargs
         )
 
         if format is not None:
@@ -218,12 +222,10 @@ class OpenQaBuilder(DatasetBuilder):
         corpus: Dataset,
         index: Index,
         n_retrieved_documents: int,
-        n_documents: int,
-        max_pos_docs: Optional[int],
         num_proc: int,
         batch_size: int,
-        relevance_classifier: RelevanceClassifier,
-        filter_unmatched: bool,
+        relevance_classifier: Optional[RelevanceClassifier],
+        dataset_filter: Optional[DatasetFilter],
         **map_kwargs,
     ) -> DatasetDict:
         """
@@ -280,7 +282,9 @@ class OpenQaBuilder(DatasetBuilder):
                         axis=document_nesting_level,
                         n=n_retrieved_documents,
                         extract_gold=question_nesting_level == 0,
-                    ),
+                    )
+                    if relevance_classifier is not None
+                    else None,
                 ),
                 ("Sort documents", SortDocuments(level=document_nesting_level)),
             ]
@@ -300,9 +304,6 @@ class OpenQaBuilder(DatasetBuilder):
             **map_kwargs,
         }
 
-        # process the dataset with each block
-        original_size = {k: len(dset) for k, dset in dataset.items()}
-
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
@@ -315,27 +316,21 @@ class OpenQaBuilder(DatasetBuilder):
             )
             dataset = mapper(dataset)
 
-        # filter out questions that are not match to any  positive document
-        if filter_unmatched:
+        # free-up GPU memory
+        index.to_cpu()
 
-            def fn(split: Split):
-                return partial(
-                    filter_questions_by_pos_docs,
-                    n_documents=n_documents,
-                    max_pos_docs=max_pos_docs,
-                    split=split,
-                    level=question_nesting_level,
-                )
-
+        # filter the dataset
+        if dataset_filter is not None:
+            original_size = {k: len(dset) for k, dset in dataset.items()}
             dataset = DatasetDict(
                 {
-                    split: dset.filter(fn(split), num_proc=num_proc)
+                    split: dset.filter(partial(dataset_filter, split=split), **map_kwargs)
                     for split, dset in dataset.items()
                 }
             )
 
-        # print the difference in length for each split
-        logger.info(format_size_difference(original_size, dataset))
+            # print the difference in length for each split
+            logger.info(format_size_difference(original_size, dataset))
 
         return dataset
 
@@ -373,11 +368,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
-            self.n_documents,
-            max_pos_docs=self.max_pos_docs,
-            level=document_nesting_level,
-            select_mode=self.select_mode.value,
-            shuffle=False,
+            self.sampler, level=document_nesting_level
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
@@ -398,26 +389,15 @@ class OpenQaBuilder(DatasetBuilder):
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: int | Dict,
+        sampler: Optional[Sampler],
         *,
-        max_pos_docs: Optional[int],
         level: int = 1,
-        select_mode: str = "first",
-        shuffle: bool = False,
     ) -> Optional[Pipe]:
-        if n_documents == 0:
+        if sampler is None:
             return None
 
-        return SelectDocs(
-            total=n_documents,
-            max_pos_docs=max_pos_docs,
-            pos_select_mode=select_mode,
-            neg_select_mode=select_mode,
-            strict=False,
-            update=True,
-            level=level,
-            shuffle=shuffle,
-        )
+        input_filter = HasPrefix(f"{sampler.field}")
+        return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Pretty format a dataset row"""

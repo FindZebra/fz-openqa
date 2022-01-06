@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from fz_openqa.datamodules.pipes.documents import select_values
+from fz_openqa.datamodules.pipes.select_docs import select_values
 
 
 class TestSelectValues(TestCase):

@@ -7,11 +7,11 @@ from datasets import Dataset, DatasetDict, Split
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilder
+from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilder, MedQaTwBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
-from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch
+from fz_openqa.datamodules.pipes import TextFormatter, Pipe, ExactMatch, Sampler
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 
@@ -24,7 +24,7 @@ def get_default_config():
         'use_subset': True,
         'max_length': 512,
         'num_proc': 2,
-        'text_formatter': TextFormatter()
+        'text_formatter': TextFormatter(),
     }
 
 
@@ -89,6 +89,8 @@ class TestMedQaBuilder(TestBuilder):
         self.assertEqual(len(self._dataset[Split.VALIDATION]), 1272)
         self.assertEqual(len(self._dataset[Split.TEST]), 1273)
 
+class TestMedQaTwBuilder(TestBuilder):
+    cls = MedQaTwBuilder
 
 class TestMedQaCorpusBuilder(TestBuilder):
     config_override = {'max_length': None, 'passage_length': 200, 'passage_stride': 200}
@@ -124,10 +126,8 @@ class TestOpenQaBuilder(TestBuilder):
             'corpus_builder': corpus_builder,
             'index_builder': ElasticSearchIndexBuilder(),
             'relevance_classifier': ExactMatch(),
+            'sampler': Sampler(total=3),
             'n_retrieved_documents': 10,
-            'n_documents': 5,
-            'max_pos_docs': 1,
-            'filter_unmatched': True,
             'num_proc': 2,
             'batch_size': 10,
         }
@@ -155,10 +155,8 @@ class TestConcatenatedOpenQaBuilder(TestBuilder):
             'corpus_builder': corpus_builder,
             'index_builder': ElasticSearchIndexBuilder(),
             'relevance_classifier': ExactMatch(),
+            'sampler': Sampler(total=3),
             'n_retrieved_documents': 10,
-            'n_documents': 5,
-            'max_pos_docs': 1,
-            'filter_unmatched': True,
             'num_proc': 2,
             'batch_size': 10,
         }

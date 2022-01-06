@@ -10,7 +10,6 @@ import numpy as np
 import pyarrow as pa
 import rich
 import torch
-import torch.nn.functional as F
 from datasets import Split
 from faiss import IndexReplicas
 from torch import nn
@@ -18,6 +17,8 @@ from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
+from fz_openqa.datamodules.index.utils.maxsim import log_mem_size
+from fz_openqa.datamodules.index.utils.maxsim import MaxSimParallel
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
@@ -26,25 +27,6 @@ from fz_openqa.utils.tensor_arrow import TensorArrowTable
 # required to allow searching faiss with tensors
 
 log = logging.getLogger(__name__)
-
-
-def log_mem_size(x, msg, logger=None):
-    if isinstance(x, torch.Tensor):
-        mem_size = x.element_size() * x.nelement()
-    elif isinstance(x, np.ndarray):
-        mem_size = x.dtype.itemsize * x.size
-    else:
-        raise TypeError(f"Unsupported type {type(x)}")
-    mem_size /= 1024 ** 2
-    prec = "MB"
-    if mem_size > 1024:
-        mem_size /= 1024
-        prec = "GB"
-    msg = f"{msg} mem. size={mem_size:.3f} {prec}, shape={x.shape}, dtype={x.dtype}"
-    if logger is None:
-        rich.print(msg)
-    else:
-        logger.info(msg)
 
 
 class ColbertIndex(FaissIndex):
@@ -63,7 +45,7 @@ class ColbertIndex(FaissIndex):
 
     _emb2pid: Optional[Tensor] = None
     _vectors: Optional[Tensor] = None
-    _max_sim: Optional[MaxSim, nn.DataParallel] = None
+    _max_sim: Optional[MaxSimParallel] = None
     _is_gpu: bool = False
     _max_add_per_gpu = 1 << 25
     _max_num_proc: int = 1
@@ -75,95 +57,85 @@ class ColbertIndex(FaissIndex):
         "_is_gpu",
         "_max_add_per_gpu",
         "keep_maxsim_on_cpu",
+        "maxsim_chunksize",
     ]
 
-    def __init__(self, *args, p: int = 10, keep_maxsim_on_cpu: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        p: int = 100,
+        keep_maxsim_on_cpu: bool = False,
+        maxsim_chunksize: int = 10000,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.p = p
         self.keep_maxsim_on_cpu = keep_maxsim_on_cpu
+        self.maxsim_chunksize = maxsim_chunksize
+
+    def _init_index_and_move_to_gpus(self):
+        """Initialize the FAISS index and the MaxSim object and move to gpus."""
+        n_gpus = faiss.get_num_gpus()
+        faiss_gpus, maxsim_gpus = self._allocate_gpus(n_gpus)
+        if len(faiss_gpus) > 0:
+            if not isinstance(self._index, IndexReplicas):
+                log.info(f"Moving faiss index to gpu {faiss_gpus}")
+                try:
+                    nprobe = self._index.nprobe
+                except Exception:
+                    nprobe = None
+                self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=faiss_gpus)
+                if nprobe is not None:
+                    faiss.GpuParameterSpace().set_index_parameter(
+                        self._index, "nprobe", nprobe
+                    )  # type: ignore
+
+        if self._max_sim is None:
+            if len(maxsim_gpus) > 0:
+                log.info(f"Moving MaxSim to gpu {maxsim_gpus}")
+            self._max_sim = MaxSimParallel(
+                self.vectors,
+                self.emb2pid,
+                device_ids=maxsim_gpus,
+                max_chunksize=self.maxsim_chunksize,
+            )
+
+    def _preprocess_query(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+        """Preprocess the batch before query"""
+        return self.predict_queries(batch, idx=idx, split=split, format=OutputFormat.TORCH)
 
     @torch.no_grad()
-    def _call_batch(
+    def _search_chunk(
         self,
         query: Batch,
         *,
         idx: Optional[List[int]] = None,
         split: Optional[Split] = None,
         k: int = 1,
-        faiss_batch_size: int = 2,
-        output_format: Optional[OutputFormat] = None,
-        **kwargs,
-    ) -> Batch:
-
-        # 1. get query vector
-        query = self.predict_queries(query, format=OutputFormat.TORCH, idx=idx, split=split)
-        q_vectors: Tensor = query[Predict.output_key]
-
-        # 2. get faiss index, and potentially move to gpu
-        n_gpus = faiss.get_num_gpus()
-        faiss_gpus, maxsim_gpus = self._allocate_gpus(n_gpus)
-        if len(faiss_gpus) > 0:
-            if not isinstance(self._index, IndexReplicas):
-                log.info(f"Moving faiss index to gpu {faiss_gpus}")
-                nprobe = self._index.nprobe
-                self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=faiss_gpus)
-                faiss.GpuParameterSpace().set_index_parameter(
-                    self._index, "nprobe", nprobe
-                )  # type: ignore
-
-        # 3. build the MaxSim object
-        if self._max_sim is None:
-            self._max_sim = MaxSim(self.vectors, self.emb2pid)
-            if len(maxsim_gpus) > 0:
-                log.info(f"Moving MaxSim to gpu {maxsim_gpus}")
-                self._max_sim = nn.DataParallel(self._max_sim, device_ids=maxsim_gpus)
-                self._max_sim.to("cuda")
-
-        # 4. query faiss (faiss index + MaxSim Dataparallel)
-        eff_batch_size = faiss_batch_size * max(1, n_gpus)
-        log.debug(f"Searching queries: {q_vectors.shape}, with batch size {eff_batch_size}")
-        search_results = None
-        for i in range(0, q_vectors.shape[0], eff_batch_size):
-            q_vec = q_vectors[i : i + eff_batch_size]
-            r = self._search_vectors(q_vec, k=k, p=self.p, index=self._index, max_sim=self._max_sim)
-
-            if search_results is None:
-                search_results = r
-            else:
-                search_results += r
-
-        return self._format_output(search_results, output_format=output_format)
-
-    @torch.no_grad()
-    def _search_vectors(
-        self,
-        q_vectors: Tensor,
-        *,
-        k: int,
-        p: int,
-        index: FaissIndex | IndexReplicas,
-        max_sim: MaxSim,
         **kwargs,
     ) -> SearchResult:
         """
         Search the index using the `query` and
         return the index of the results within the original dataset.
         """
+        self._init_index_and_move_to_gpus()
         start = time.time()
+        q_vectors: Tensor = query[Predict.output_key]
 
         # 2. query the token index
-        topk_indices = self._query_to_embedding_ids(q_vectors, p, index=index)
+        topk_indices = self._query_to_embedding_ids(q_vectors, self.p, index=self._index)
         faiss_time = time.time()
         log.debug(f"faiss={faiss_time - start:.3f}s, topk_indices={topk_indices.shape}")
 
         # apply max sim
-        if isinstance(max_sim, nn.DataParallel):
-            q_vectors = q_vectors.to("cuda")
-            topk_indices = topk_indices.to("cuda")
+        q_vectors = q_vectors.to(self._max_sim.devices[0], non_blocking=True)
+        topk_indices = topk_indices.to(self._max_sim.devices[0], non_blocking=True)
 
         log.debug(f"Querying maxsim: {q_vectors.shape}, device={q_vectors.device}")
         batch = {"q_vectors": q_vectors, "topk_indices": topk_indices}
-        max_sim_out = max_sim(batch, k=k)
+        max_sim_out = self._max_sim(batch, k=k)
         maxsim_pids, maxsim_scores = max_sim_out["pids"], max_sim_out["scores"]
         log.debug(f"max_sim={time.time() - faiss_time:.3f}s, topk_indices={topk_indices.shape}")
 
@@ -215,9 +187,8 @@ class ColbertIndex(FaissIndex):
     def to_cpu(self):
         super().to_cpu()
         if self._max_sim is not None:
-            if isinstance(self._max_sim, nn.DataParallel):
-                self._max_sim = self._max_sim.module
-            self._max_sim = self._max_sim.to("cpu")
+            del self._max_sim
+            self._max_sim = None
 
     def __del__(self):
         self.to_cpu()
@@ -285,85 +256,3 @@ class ColbertIndex(FaissIndex):
             faiss_gpus = []
             maxsim_gpus = []
         return faiss_gpus, maxsim_gpus
-
-
-class MaxSim(nn.Module):
-    def __init__(self, vectors: Tensor, emb2pid: Tensor):
-        super(MaxSim, self).__init__()
-        self.register_buffer("vectors", vectors)
-        self.register_buffer("emb2pid", emb2pid)
-
-    @torch.no_grad()
-    def forward(self, batch: Batch = None, *, k: int, chunk_size: int = 1000) -> Batch:
-        if batch is None:
-            return self._empty_result(k)
-        q_vectors: Tensor = batch["q_vectors"]
-        topk_indices: Tensor = batch["topk_indices"]
-
-        # 1. get the corresponding document ids
-        pids = self.emb2pid[topk_indices]
-        pids = self._get_unique_pids(pids)
-
-        # 2. retrieve the vectors for each unique document index and compute the similarity
-        scores = torch.zeros(
-            q_vectors.shape[0], pids.shape[1], dtype=q_vectors.dtype, device=q_vectors.device
-        )
-        for i in range(0, pids.shape[1], chunk_size):
-            scores[:, i : i + chunk_size] = self._score(pids[:, i : i + chunk_size], q_vectors)
-
-        # 3. take the top-k results given the MaxSim score
-        p = min(k, scores.shape[-1])
-        scores = scores.to(torch.float32)
-        _, maxsim_idx = torch.topk(scores, k=p, dim=-1, largest=True, sorted=True)
-        # 4. fetch the corresponding document indices and return
-        maxsim_scores = scores.gather(index=maxsim_idx, dim=1)
-        maxsim_pids = pids.gather(index=maxsim_idx, dim=1)
-
-        if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
-            maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
-
-        # padded
-        return {"pids": maxsim_pids, "scores": maxsim_scores}
-
-    def _empty_result(self, k):
-        maxsim_pids = torch.empty((0, k), dtype=torch.long, device=self.vectors.device)
-        maxsim_scores = torch.empty((0, k), dtype=self.vectors.dtype, device=self.vectors.device)
-        return {"pids": maxsim_pids, "scores": maxsim_scores}
-
-    def _pad_outputs(self, k, maxsim_pids, maxsim_scores):
-        # pad maxsim_scores with nans
-        maxsim_scores = self._pad_to_length(maxsim_scores, k, -torch.inf)
-        # pad maxsim_pids with zeros
-        maxsim_pids = self._pad_to_length(maxsim_pids, k, -1)
-        return maxsim_pids, maxsim_scores
-
-    def _pad_to_length(self, values, k, fill_value=torch.nan):
-        if values.shape[1] < k:
-            return F.pad(values, (0, k - values.shape[1]), value=fill_value)
-        else:
-            return values
-
-    def _score(self, pids, q_vectors):
-        d_vectors = self._retrieve_pid_vectors(pids)
-        # apply max sim to the retrieved vectors
-        scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
-        # max. over the documents tokens, for each query token
-        scores, _ = scores.max(axis=-1)
-        # avg over all query tokens
-        scores = scores.mean(axis=-1)
-        # set the score to -inf for the negative pids
-        scores[pids < 0] = -torch.inf
-
-        return scores
-
-    def _retrieve_pid_vectors(self, pids: Tensor) -> Tensor:
-        return self.vectors[pids]
-
-    def _get_unique_pids(self, pids: Tensor, fill_value=-1) -> Tensor:
-        upids = [torch.unique(r) for r in pids]
-        max_length = max(len(r) for r in upids)
-
-        def _pad(r):
-            return F.pad(r, (0, max_length - len(r)), value=fill_value)
-
-        return torch.cat([_pad(p)[None] for p in upids])

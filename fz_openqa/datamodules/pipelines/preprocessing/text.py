@@ -60,7 +60,7 @@ class FormatAndTokenize(Sequential):
         tokenizer: PreTrainedTokenizerFast,
         add_encoding_tokens: bool = True,
         max_length: Optional[int] = 512,
-        spec_token: Optional[str] = None,
+        spec_tokens: Optional[str] = None,
         shape: Optional[List[int]] = None,
         return_token_type_ids: bool = False,
         add_special_tokens: bool = True,
@@ -71,7 +71,12 @@ class FormatAndTokenize(Sequential):
         if shape is None:
             shape = [-1]
 
-        if add_encoding_tokens and spec_token is not None:
+        if isinstance(spec_tokens, str):
+            spec_tokens = [spec_tokens]
+
+        if add_encoding_tokens and spec_tokens is not None:
+            # store `spec_token` to ensure proper fingerprinting
+            spec_token = "".join(spec_tokens)
             add_spec_tokens_pipe = Apply(
                 {key: partial(add_spec_token, spec_token)},
                 element_wise=True,

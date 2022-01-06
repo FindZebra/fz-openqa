@@ -75,6 +75,7 @@ class HfDatasetBuilder(DatasetBuilder):
 
     # HuggingFace dataset id or local path to script
     dset_script_path_or_id = "ptb_text_only"
+    dset_name: Optional[str] = None
 
     # text field from the raw datasets that should be tokenized
     text_field = "sentence"
@@ -157,7 +158,9 @@ class HfDatasetBuilder(DatasetBuilder):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
+        return load_dataset(
+            self.dset_script_path_or_id, name=self.dset_name, cache_dir=self.cache_dir
+        )
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""

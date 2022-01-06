@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from functools import partial
+from typing import Callable
 from typing import List
 from typing import Optional
 from typing import T
@@ -217,7 +220,7 @@ class Nested(ApplyAsFlatten):
     However the all pipe output must have the same batch size.
     """
 
-    def __init__(self, pipe: Pipe, level=1, **kwargs):
+    def __init__(self, pipe: Pipe | Callable, level=1, **kwargs):
         """
         Parameters
         ----------

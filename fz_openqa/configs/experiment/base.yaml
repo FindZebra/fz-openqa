@@ -7,6 +7,7 @@ defaults:
   - override /callbacks:
       - checkpoint
       - progress_bar
+      - print_table
   - override /logger: wandb
 
 base:

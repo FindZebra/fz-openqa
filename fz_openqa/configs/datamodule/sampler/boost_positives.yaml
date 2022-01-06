@@ -1,0 +1,6 @@
+defaults:
+  - random
+
+_target_: fz_openqa.datamodules.pipes.SamplerBoostPositives
+
+n_boosted: 1

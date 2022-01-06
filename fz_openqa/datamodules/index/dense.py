@@ -399,7 +399,7 @@ class FaissIndex(Index):
         dim = vectors.shape[-1]
         factory_str = self.faiss_args.get("factory", None)
         metric_type = self.faiss_args["metric_type"]
-        logger.info(f"Initializing faiss index with {factory_str}")
+        logger.info(f"Initializing faiss index with `{factory_str}`")
         if factory_str is not None:
             self._index = faiss.index_factory(dim, factory_str, metric_type)
         else:
@@ -506,6 +506,25 @@ class FaissIndex(Index):
             The search result for the batch
 
         """
+
+        # move index to GPUs
+        n_gpus = faiss.get_num_gpus()
+        if n_gpus > 0:
+            index = self.index
+            if not isinstance(index, faiss.IndexReplicas):
+                faiss_gpus = list(range(n_gpus))
+                logger.info(f"Moving faiss index to gpu {faiss_gpus}")
+                try:
+                    nprobe = index.nprobe
+                except Exception:
+                    nprobe = None
+                self._index = faiss.index_cpu_to_gpus_list(index, gpus=faiss_gpus)
+                if nprobe is not None:
+                    faiss.GpuParameterSpace().set_index_parameter(
+                        self._index, "nprobe", nprobe
+                    )  # type: ignore
+
+        # search faiss
         vector = self._get_vector_from_batch(query)
         score, indices = self.index.search(vector, k)
         return SearchResult(score=score, index=indices, dataset_size=self.dataset_size, k=k)
@@ -594,8 +613,10 @@ class FaissIndex(Index):
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def to_cpu(self):
-        if isinstance(self._index, faiss.IndexReplicas):
+        try:
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+        except Exception:
+            pass
 
     # def _get_fingerprint_struct(self) -> List | Dict:
     #     """Add the model fingerprint to the struct"""

@@ -3,3 +3,4 @@ defaults:
 
 _target_: fz_openqa.datamodules.builders.MedQaBuilder
 n_query_tokens: 1
+dset_name: us
