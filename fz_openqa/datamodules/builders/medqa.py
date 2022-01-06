@@ -2,7 +2,6 @@ import logging
 from functools import partial
 from typing import Any
 from typing import Dict
-from typing import List
 from typing import Optional
 
 import dill  # type: ignore
@@ -18,8 +17,7 @@ from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.generators import medqa_tw_custom
-from fz_openqa.datamodules.generators import medqa_us_custom
+from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
@@ -52,7 +50,7 @@ class MinLength:
 
 class MedQaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = medqa_us_custom.__file__
+    dset_script_path_or_id = medqa.__file__
 
     # nesting level of the question field
     nesting_level = 0
@@ -89,23 +87,40 @@ class MedQaBuilder(HfDatasetBuilder):
     ]
 
     def __init__(
-        self, *args, min_answer_length: Optional[int] = None, n_query_tokens: int = 1, **kwargs
+        self,
+        *args,
+        min_answer_length: Optional[int] = None,
+        n_query_tokens: int = 1,
+        dset_name: str = "us",
+        **kwargs,
     ):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
         self.n_query_tokens = n_query_tokens
+        self.dset_name = dset_name
 
     def load_base_dataset(self) -> DatasetDict:
-        """Load the base HuggingFace dataset."""
-        return load_dataset(self.dset_script_path_or_id, cache_dir=self.cache_dir)
+        """
+        Loads the base dataset. Multiple dataset names can be passed
+        using "+" as a separator. e.g. "tw+us"
+        """
+        dset_names = sorted(self.dset_name.split("+"))
+
+        kwargs = {"cache_dir": self.cache_dir}
+        dsets = [load_dataset(self.dset_script_path_or_id, name=n, **kwargs) for n in dset_names]
+
+        if len(dsets) == 1:
+            return dsets[0]
+        else:
+            dsets_dict = DatasetDict()
+            for split in dsets[0].keys():
+                split_dsets = concatenate_datasets([d[split] for d in dsets])
+                dsets_dict[split] = split_dsets
+
+            return dsets_dict
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
-        return dataset
-
-    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
-        """Apply processing steps to the dataset.
-        Tokenization and formatting as PyTorch tensors"""
 
         # filter out answers that are too short
         if self.min_answer_length is not None:
@@ -113,6 +128,12 @@ class MedQaBuilder(HfDatasetBuilder):
             lengths = {k: len(d) for k, d in dataset.items()}
             dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
             logger.info(format_size_difference(lengths, dataset))
+
+        return dataset
+
+    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
+        """Apply processing steps to the dataset.
+        Tokenization and formatting as PyTorch tensors"""
 
         # Tokenize the text fields (question and answers)
         if self.tokenizer:
@@ -346,32 +367,3 @@ class ConcatMedQaBuilder(MedQaBuilder):
             repr += line
 
         return repr
-
-
-class MedQaTwBuilder(MedQaBuilder):
-    subset_size = [3]
-    dset_script_path_or_id = medqa_tw_custom.__file__
-
-
-class EnxTwMedQaBuilder(MedQaBuilder):
-    subset_size = [3]
-    dset_script_path_or_id: List = [medqa_us_custom.__file__, medqa_tw_custom.__file__]
-
-    @staticmethod
-    def _load_dataset(script, **kwargs):
-        dataset = load_dataset(script, **kwargs)
-        if isinstance(dataset, DatasetDict):
-            dataset = concatenate_datasets(list(dataset.values()))
-        return dataset
-
-    def load_base_dataset(self) -> DatasetDict:
-        """Loads english and taiwanese MedQA and conatenates them"""
-        kwargs = {"cache_dir": self.cache_dir}
-        dsets = [load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        dsets_dict = DatasetDict()
-        for split in dsets[0].keys():
-            dsets[0][split]
-            split_dsets = concatenate_datasets([d[split] for d in dsets])
-            dsets_dict[split] = split_dsets
-
-        return dsets_dict

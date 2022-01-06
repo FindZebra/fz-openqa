@@ -10,9 +10,7 @@ from rich.logging import RichHandler
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import EnxTwMedQaBuilder
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaTwBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -40,11 +38,12 @@ def run(config: DictConfig) -> None:
         cache_dir=config.get("cache_dir", default_cache_dir),
         min_answer_length=config.get("min_answer_length", None),
         num_proc=2,
+        dset_name=config.get("dset_name", "us"),
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_samples()
+    dm.display_samples(n_samples=3)
 
     # access dataset
     rich.print(dm.dataset)
