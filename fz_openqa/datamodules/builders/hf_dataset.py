@@ -158,10 +158,9 @@ class HfDatasetBuilder(DatasetBuilder):
 
     def load_base_dataset(self) -> DatasetDict:
         """Load the base HuggingFace dataset."""
-        args = [self.dset_script_path_or_id]
-        if self.dset_name is not None:
-            args.append(self.dset_name)
-        return load_dataset(*args, cache_dir=self.cache_dir)
+        return load_dataset(
+            self.dset_script_path_or_id, name=self.dset_name, cache_dir=self.cache_dir
+        )
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""

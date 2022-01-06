@@ -438,7 +438,6 @@ spacy = ">=3.0.1,<3.1.0"
 [package.source]
 type = "url"
 url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz"
-
 [[package]]
 name = "en-core-sci-sm"
 version = "0.4.0"
@@ -453,7 +452,6 @@ spacy = ">=3.0.1,<3.1.0"
 [package.source]
 type = "url"
 url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_sm-0.4.0.tar.gz"
-
 [[package]]
 name = "faiss-cpu"
 version = "1.6.5"
@@ -3736,7 +3734,7 @@ tensorboardx = [
     {file = "tensorboardX-2.4.1.tar.gz", hash = "sha256:5beb5c23f604c7df9a10adcf19b8e4b39fcf35576587d1621dcf9efa7b215460"},
 ]
 thinc = [
-    {file = "thinc-8.0.13-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:f818b9f012169a11beb3561c43dc52080588e50cf495733e492efab8b9b4135e"},
+    {file = "thinc-8.0.13-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:ad8794a76725b85847528fd1a56471d5ac00f4104da8efb065ba572238e381a2"},
     {file = "thinc-8.0.13-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f520daf45b7f42a04363852df43be1b423ae42d9327709d74f6c3279b3f73778"},
     {file = "thinc-8.0.13-cp310-cp310-win_amd64.whl", hash = "sha256:2b217059c9e126220b77e7d6c9da56912c4e1eb4e8a11af14f17752e198e88cc"},
     {file = "thinc-8.0.13-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:0f956c693d180209075703072fd226a24408cbe80eb67bd3b6eea407f61cb283"},
