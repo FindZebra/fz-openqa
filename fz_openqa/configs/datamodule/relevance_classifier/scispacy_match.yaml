@@ -1,4 +1,4 @@
 _target_: fz_openqa.datamodules.pipes.ScispaCyMatch
 _id: scispacy_match
-interpretable: True
+interpretable: false
 version: ${relevance_classifier.version}

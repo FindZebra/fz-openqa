@@ -1,6 +1,6 @@
 _target_: fz_openqa.datamodules.pipes.ScispaCyMatch
 _id: scispacy_match
-interpretable: True
+interpretable: false
 version: v1
 n_entities: 3
 linker_name: umls

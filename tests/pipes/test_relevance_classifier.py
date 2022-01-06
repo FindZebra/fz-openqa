@@ -9,7 +9,7 @@ from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import Exp
 from fz_openqa.datamodules.pipes import Collate, Sequential, PrintBatch
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix, Reduce
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
-from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
+from fz_openqa.datamodules.pipes.relevance import (ExactMatch,
                                                    ScispaCyMatch,
                                                    find_one, find_all, RelevanceClassifier)
 from fz_openqa.utils.functional import infer_batch_size
