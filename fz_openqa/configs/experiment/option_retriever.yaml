@@ -53,10 +53,11 @@ model:
 
 datamodule:
   # how often to map the dataset
-  dataset_update_freq: 15
-  dataset_update_reset_optimizer: true
-  dataset_update_args:
-    relevance_classifier: null
+  dataset_update:
+    freq: 15
+    reset_optimizer: true # todo: test `false`
+    builder_args:
+      relevance_classifier: null
 
   # dataloader
   train_batch_size: 8

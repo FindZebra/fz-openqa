@@ -127,11 +127,9 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Training...
     patch_signal_connector(trainer)
-    dataset_update_freq = config.datamodule.get("dataset_update_freq", None)
-    dataset_update_args = config.datamodule.get("dataset_update_args", {})
-    dataset_update_reset_optimizer = config.datamodule.get("dataset_update_reset_optimizer", False)
-    dataset_update_args = dataset_update_args or {}
-    if dataset_update_freq is not None and dataset_update_freq > 0:
+    dataset_update = config.datamodule.get("dataset_update", None)
+    if dataset_update is not None:
+        dataset_update_freq = dataset_update["freq"]
         log.info(
             f"Starting training with dataset updates "
             f"(max_epochs={trainer.max_epochs}, dataset_update_freq={dataset_update_freq}).."
@@ -141,8 +139,8 @@ def train(config: DictConfig) -> Optional[float]:
             model=model,
             trainer=trainer,
             update_freq=dataset_update_freq,
-            reset_optimizer=dataset_update_reset_optimizer,
-            **dataset_update_args,
+            reset_optimizer=dataset_update.get("reset_optimizer", True),
+            **dataset_update.get("builder_args", {}),
         )
     else:
         log.info(f"Starting training (max_epochs={trainer.max_epochs})..")
