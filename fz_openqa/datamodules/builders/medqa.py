@@ -166,7 +166,7 @@ class MedQaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 
@@ -179,7 +179,7 @@ class MedQaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=self.n_query_tokens * [QUERY_TOKEN],
+            spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
             shape=None,
         )
 
@@ -270,10 +270,10 @@ class ConcatMedQaBuilder(MedQaBuilder):
             logger.info(format_size_difference(lengths, dataset))
 
         # transform questions to metamap entities
-        if self.query_key == "question.metamap":
-            dataset = dataset.map(
-                self.transform_qst, desc="Transform questions to metamap entities"
-            )
+        # if self.query_key == "question.metamap":
+        #     dataset = dataset.map(
+        #         self.transform_qst, desc="Transform questions to metamap entities"
+        #     )
 
         # concat question and answers
         dataset = dataset.map(
@@ -334,7 +334,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
             add_special_tokens=self.add_special_tokens,
-            spec_token=ANS_TOKEN,
+            spec_tokens=ANS_TOKEN,
             shape=[-1, self.n_options],
         )
 

@@ -3,7 +3,7 @@
 defaults:
   - base
   - override /model: medqa_reader
-  - override /model/bert: pubmed
+  - override /model/bert: pubmed_multiple_choice
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: elasticsearch
   - override /datamodule/relevance_classifier: none
