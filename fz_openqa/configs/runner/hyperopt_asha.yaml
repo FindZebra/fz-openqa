@@ -1,5 +1,5 @@
 defaults:
-  - base
+  - default
   - override scheduler: asha
   - override search_alg: hyperopt
 

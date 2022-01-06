@@ -14,6 +14,10 @@ from pytorch_lightning.utilities import rank_zero_only
 YAML_PATTERN = r"^.*\.yaml$"
 
 
+def null_constructor(*args, **kwargs):
+    return None
+
+
 def resolve_config_paths(config: DictConfig, path: str = "", excludes: List[str] = ["hydra"]):
     for k, v in ((k_, v_) for k_, v_ in config.items() if k_ not in excludes):
         if isinstance(v, DictConfig):
@@ -29,6 +33,7 @@ def print_config(
     config: DictConfig,
     fields: Optional[Sequence[str]] = None,
     resolve: bool = True,
+    exclude: Optional[Sequence[str]] = None,
 ) -> None:
     """Prints content of DictConfig using Rich library and its tree structure.
     Args:
@@ -40,8 +45,11 @@ def print_config(
 
     style = "dim"
     tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
+    if exclude is None:
+        exclude = []
 
     fields = fields or config.keys()
+    fields = filter(lambda x: x not in exclude, fields)
     for field in fields:
         branch = tree.add(field, style=style, guide_style=style)
 

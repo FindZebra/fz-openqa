@@ -33,42 +33,55 @@ class TestOptionRetriever(TestModel):
              "It contains algorithms that search in sets of vectors of any size, "
              "up to ones that possibly do not fit in RAM.",
              "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."],
-            ["Rockets are use to fly to space",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, "
-             "up to ones that possibly do not fit in RAM.",
-             "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."],
-            ["Bike is the vehicle of the future",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, "
-             "up to ones that possibly do not fit in RAM.",
-             "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."],
+             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+             ],
+            [
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
+                "It contains algorithms that search in sets of vectors of any size, "
+                "up to ones that possibly do not fit in RAM.",
+                "Rockets are use to fly to space",
+                "It also contains supporting code for evaluation and parameter tuning.",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+            ],
+            [
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
+                "It contains algorithms that search in sets of vectors of any size, "
+                "up to ones that possibly do not fit in RAM.",
+                "It also contains supporting code for evaluation and parameter tuning.",
+                "Bike is the vehicle of the future",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+            ],
         ],
         [
-            ["Truck can carry tons of merchandises.",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, up to ones "
-             "that possibly do not fit in RAM.",
-             "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."],
-            ["A banana is a fruit",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, up to ones "
-             "that possibly do not fit in RAM.",
-             "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."],
-            ["Aircraft can fly across oceans.",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, up to ones "
-             "that possibly do not fit in RAM.",
-             "It also contains supporting code for evaluation and parameter tuning.",
-             "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."]
+            [
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
+                "It contains algorithms that search in sets of vectors of any size, up to ones "
+                "that possibly do not fit in RAM.",
+                "It also contains supporting code for evaluation and parameter tuning.",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+                "Truck can carry tons of merchandises.",
+            ],
+            [
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
+                "It contains algorithms that search in sets of vectors of any size, up to ones "
+                "that possibly do not fit in RAM.",
+                "It also contains supporting code for evaluation and parameter tuning.",
+                "A banana is a fruit",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."
+            ],
+            [
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
+                "It contains algorithms that search in sets of vectors of any size, up to ones "
+                "that possibly do not fit in RAM.",
+                "Aircraft can fly across oceans.",
+                "It also contains supporting code for evaluation and parameter tuning.",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."
+            ]
         ]
     ]
-    match_score = torch.tensor([3 * [[1, 0, 0, 0]], 3 * [[1, 0, 0, 0]]])
+    match_score = torch.tensor([[[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]],
+                                [[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0]]])
+    doc_ids = torch.arange(0, match_score.numel(), 1).view(match_score.shape)
 
     # dummy answers
     answers = [["France", "Rocket", "Bike"], ["Truck", "Fruit", "Aircraft"]]
@@ -103,7 +116,7 @@ class TestOptionRetriever(TestModel):
                 'tokenizer': self.tokenizer,
                 'max_length': 512,
                 'add_special_tokens': True,
-                'spec_token': None,
+                'spec_tokens': None,
                 }
         preprocess = Parallel(
             FormatAndTokenize(
@@ -122,7 +135,7 @@ class TestOptionRetriever(TestModel):
             CollateField("document",
                          tokenizer=self.tokenizer,
                          level=2,
-                         to_tensor=["match_score"]
+                         to_tensor=["match_score", "row_idx"]
                          ),
             CollateField("question",
                          tokenizer=self.tokenizer,
@@ -157,7 +170,7 @@ class TestOptionRetriever(TestModel):
         match the targets `document.match_score`"""
         batch = self.batch
         output = self.model.forward(batch)
-        hq, hd = (output[k] for k in ["_hq_", "_hd_"])
+        hq, hd = (output[k] for k in ["_hq_retriever_", "_hd_retriever_"])
         score = self.model._compute_score(hq=hq, hd=hd)
         targets: Tensor = batch['document.match_score'].argmax(-1)
         preds: Tensor = score.argmax(-1)
@@ -167,23 +180,18 @@ class TestOptionRetriever(TestModel):
         """Test the shape of the returned tensors in `forward`"""
         output = self.model.forward(self.batch)
         self.assertEqual([self.batch_size, self.n_options, self.n_documents],
-                         list(output['_hd_'].shape[:3]))
+                         list(output['_hd_retriever_'].shape[:3]))
         self.assertEqual([self.batch_size, self.n_options],
-                         list(output['_hq_'].shape[:2]))
-
-    def test__reduce_step_output(self):
-        data = {"loss": torch.tensor([0.4, 0.6]),
-                "logp": torch.tensor([0.4, 0.6])}
-
-        output = self.model._reduce_step_output(data)
-        for key in output:
-            print(output[key])
-            self.assertEqual(output[key], 0.5)
+                         list(output['_hq_retriever_'].shape[:2]))
+        self.assertEqual([self.batch_size, self.n_options, self.n_documents],
+                         list(output['_hd_reader_'].shape[:3]))
+        self.assertEqual([self.batch_size, self.n_options],
+                         list(output['_hq_reader_'].shape[:2]))
 
     @torch.enable_grad()
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
-        VERBOSE = True
+        VERBOSE = 0
         if VERBOSE:
             np.set_printoptions(precision=3, suppress=True)
 
@@ -210,10 +218,13 @@ class TestOptionRetriever(TestModel):
 
             if VERBOSE and i % 10 == 0:
                 probs = output['_reader_logits_'].detach().exp().numpy()
-                rich.print(f"{i} - loss={loss:.3f}, probs[0]={probs[0]}, probs[1]={probs[1]}")
+                rich.print(f"{i} - loss={loss:.3f},"
+                           f" probs[0]={probs[0]}, "
+                           f"probs[1]={probs[1]}")
                 doc_probs = output['_doc_logits_'].detach().exp()
                 # doc_dist = (doc_probs - doc_targets).pow(2)
-                # rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
+                if VERBOSE > 5:
+                    rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
         targets = batch['answer.target']

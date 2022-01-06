@@ -4,12 +4,8 @@ from typing import Dict
 from typing import List
 
 from datasets import Dataset
-from datasets import DatasetDict
 
-from ..utils.datastruct import OpenQaDataset
-from ..utils.typing import HfDataset
 from .base import Analytic
-from fz_openqa.datamodules.utils.dataset import get_column_names
 
 
 class CountMatchedQuestions(Analytic):

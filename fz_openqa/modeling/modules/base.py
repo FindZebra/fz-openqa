@@ -10,7 +10,9 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 import torch
+import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
@@ -83,32 +85,24 @@ class Module(nn.Module, ABC):
     # maximum input size
     max_length = 512  # todo: infer
 
-    # require heads
-    _required_heads = ["default"]
-
     def __init__(
         self,
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
-        head: Union[DictConfig, Head],
+        head: Union[DictConfig, Head] = None,
         prefix: str = "",
+        **kwargs,
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
-        tokenizer = maybe_instantiate(tokenizer)
-        self.bert = self._instantiate_bert(bert=bert, tokenizer=tokenizer)
+        self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
+        self.bert: BertPreTrainedModel = self._instantiate_bert(bert=bert, tokenizer=self.tokenizer)
 
-        for k in self._required_heads:
-            assert k in self._required_heads, f"Head {k} is required."
-
-        head = maybe_instantiate(head, bert=self.bert)
-        self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
+        if head is not None:
+            head = maybe_instantiate(head, bert=self.bert)
+            self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
         self._init_metrics(prefix=prefix)
-
-        # check that required heads are initialized
-        msg = f"{self._required_heads} heads must be provided. Found {list(self.heads.keys())}"
-        assert set(self._required_heads).issubset(set(self.heads.keys())), msg
 
     def _backbone(
         self,
@@ -116,8 +110,12 @@ class Module(nn.Module, ABC):
         prefix: Optional[str] = None,
         heads: Optional[List[str]] = None,
         head: Optional[str] = None,
+        max_batch_size: Optional[int] = None,
         **kwargs,
     ) -> Union[Tensor, Dict[str, Tensor]]:
+
+        if head is not None:
+            heads = [head]
 
         # select the keys with prefix
         if prefix is not None:
@@ -130,20 +128,46 @@ class Module(nn.Module, ABC):
                 f"length={batch['input_ids'].shape[1]} > max_length={self.max_length}"
             )
 
+        # get input data
+        inputs_ids = batch["input_ids"][:, : self.max_length]
+        attention_mask = batch["attention_mask"][:, : self.max_length]
+        heads = heads or list(self.heads.keys())
+
+        # process data by chunk
+        output = {key: None for key in heads}
+        bs, seq_len, *_ = inputs_ids.shape
+        if max_batch_size is None:
+            chunk_size = bs
+        else:
+            chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
+
+        for i in range(0, bs, chunk_size):
+            chunk = self._process_tokens(
+                inputs_ids[i : i + chunk_size],
+                attention_mask[i : i + chunk_size],
+                heads=heads,
+                **kwargs,
+            )
+            for key in heads:
+                if output[key] is None:
+                    output[key] = chunk[key]
+                else:
+                    output[key] = torch.cat([output[key], chunk[key]], dim=0)
+
+        if head is not None:
+            return output[head]
+        else:
+            return output
+
+    def _process_tokens(
+        self, input_ids: Tensor, attention_mask: Tensor, heads: List[str], **kwargs
+    ) -> Dict[str, Tensor]:
         # BERT forward pass
-        bert_output = self.bert(
-            batch["input_ids"][:, : self.max_length],
-            batch["attention_mask"][:, : self.max_length],
-            **kwargs,
-        )
+        bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         last_hidden_state = bert_output.last_hidden_state
 
         # process the last hidden state with the heads
-        if head is not None:
-            return self.heads[head](last_hidden_state)
-        else:
-            heads = heads or self.heads.keys()
-            return {k: self.heads[k](last_hidden_state) for k in heads}
+        return {k: self.heads[k](last_hidden_state) for k in heads}
 
     def _instantiate_bert(
         self,
@@ -246,7 +270,7 @@ class Module(nn.Module, ABC):
         A loss that requires outputs from all device must be
         implemented in `_reduce_step_output`"""
         logits = self.forward(batch, **kwargs)
-        nll = torch.nn.functional._batched_cross_entropy(logits, batch["labels"], reduce="none")
+        nll = F._batched_cross_entropy(logits, batch["labels"], reduce="none")
 
         # register internal values (which should not be passed to the pl module) using _<name>_.
         return {

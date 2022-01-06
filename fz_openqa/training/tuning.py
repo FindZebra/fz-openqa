@@ -11,8 +11,6 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from ray import tune
 
-import fz_openqa.utils.config
-import fz_openqa.utils.config_utils
 from fz_openqa.training.experiment import run_experiment_with_config
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.config import print_config

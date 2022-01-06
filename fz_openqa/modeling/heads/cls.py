@@ -9,12 +9,17 @@ from fz_openqa.modeling.heads.base import Head
 
 
 class ClsHead(Head):
-    id: str = "cls"
+    id: str = "dense"
 
     def __init__(
-        self, *, bert: BertPreTrainedModel, output_size: Optional[int], normalize: bool = False
+        self,
+        *,
+        bert: BertPreTrainedModel,
+        output_size: Optional[int],
+        normalize: bool = False,
+        **kwargs
     ):
-        super(ClsHead, self).__init__(bert=bert, output_size=output_size)
+        super(ClsHead, self).__init__(bert=bert, output_size=output_size, **kwargs)
 
         self.normalize = normalize
         if output_size is not None:

@@ -7,7 +7,7 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import RelevanceClassifier
-from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.pipes import SelectPositives
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import Sort
 from fz_openqa.datamodules.pipes.control.batch_condition import HasKeyWithPrefix
@@ -52,7 +52,7 @@ class PostprocessPipe(BlockSequential):
 
             # select `n_documents` where count(match_score) <= max_pos_docs
             # this is only ran if the docs have not been previously selected
-            selector = SelectDocs(
+            selector = SelectPositives(
                 total=n_select_documents,
                 max_pos_docs=max_select_pos_docs,
                 strict=False,

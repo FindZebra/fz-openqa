@@ -1,0 +1,6 @@
+_target_: fz_openqa.datamodules.pipes.dataset_filter.SupervisedDatasetFilter
+
+key: document.match_score
+
+# number of allowed positive documents
+max_positives: null

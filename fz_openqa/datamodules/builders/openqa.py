@@ -1,16 +1,22 @@
+from __future__ import annotations
+
 import json
 import logging
+from copy import copy
 from enum import Enum
 from functools import partial
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
+import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from hydra.utils import instantiate
+from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
@@ -20,20 +26,25 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_qu
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.index.pipes import FetchNestedDocuments
-from fz_openqa.datamodules.index.pipes import SearchCorpus
+from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
+from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import BlockSequential
+from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
-from fz_openqa.datamodules.pipes import SelectDocs
+from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
+from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import remove_columns
+from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -65,14 +76,14 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
+        sampler: Sampler,
         n_retrieved_documents: int,
-        n_documents: Optional[Union[int, Dict]] = None,
-        max_pos_docs: Optional[int] = None,
-        filter_unmatched: bool = True,
-        select_mode: str = "first",
+        dataset_filter: Optional[DatasetFilter] = None,
         num_proc: int = 2,
         batch_size: int = 100,
+        writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
+        transform: Optional[Pipe | DictConfig] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -85,22 +96,22 @@ class OpenQaBuilder(DatasetBuilder):
         self.tokenizer = dataset_builder.tokenizer
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
+        # transform for the collate_fn
+        self.transform = transform
+
         # objects
         self.index_builder = index_builder
 
         # arguments
         self.output_columns = output_columns
-        self.n_documents = n_documents or n_retrieved_documents
-        self.max_pos_docs = max_pos_docs
-        self.select_mode = SelectMode(select_mode)
+        self.sampler = sampler
         self.map_args = {
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
-            "n_documents": self.n_documents,
-            "max_pos_docs": max_pos_docs,
-            "filter_unmatched": filter_unmatched,
+            "dataset_filter": dataset_filter,
             "num_proc": num_proc,
             "batch_size": batch_size,
+            "writer_batch_size": writer_batch_size,
         }
 
     @property
@@ -129,7 +140,13 @@ class OpenQaBuilder(DatasetBuilder):
         return f"{self.__class__.__name__}({args})"
 
     def _call(
-        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+        self,
+        format: Optional[str] = "torch",
+        columns: Optional[List[str]] = None,
+        model: Optional[pl.LightningModule] = None,
+        trainer: Optional[pl.Trainer] = None,
+        splits: Optional[List[str]] = None,
+        **kwargs,
     ) -> OpenQaDataset:
         """
         Build the OpenQA dataset using a base `dataset`, which questions are
@@ -141,8 +158,12 @@ class OpenQaBuilder(DatasetBuilder):
             The format of the dataset (see `Dataset.set_format`)
         columns
             The columns to include in the output dataset.
+        model
+            The model to use for mapping.
+        trainer
+            The trainer to use for mapping.
         kwargs
-            Additional arguments, unused here.
+            Additional arguments, pass to the Dataset.map() in `map_dataset`
         Returns
         -------
         OpenQaDataset
@@ -154,18 +175,35 @@ class OpenQaBuilder(DatasetBuilder):
         dataset = self.dataset_builder(format=None)
         corpus = self.corpus_builder()
 
-        index = self.index_builder(dataset=corpus, **kwargs)
+        # select splits
+        if splits is not None:
+            dataset = DatasetDict({k: v for k, v in dataset.items() if k in splits})
 
-        dataset = self.map_dataset(dataset=dataset, corpus=corpus, index=index, **self.map_args)
+        # build the index, potnetially using a model
+        index = self.index_builder(
+            dataset=corpus,
+            model=model,
+            trainer=trainer,
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
+        )
+
+        # map the corpus to the dataset
+        map_args = copy(self.map_args)
+        for k in list(kwargs.keys()):
+            if k in map_args:
+                map_args[k] = kwargs.pop(k)
+        dataset = self.map_dataset(
+            dataset=dataset, corpus=corpus, index=index, **map_args, **kwargs
+        )
 
         if format is not None:
             dataset = self.set_format(dataset, format=format)
 
         # remove columns that are not needed
-
+        columns = columns or self.output_columns
         if columns is not None:
-            dataset = remove_columns(dataset, columns=columns)
-            corpus = remove_columns(corpus, columns=columns)
+            dataset = keep_only_columns(dataset, columns=columns)
+            corpus = keep_only_columns(corpus, columns=columns)
 
         return OpenQaDataset(dataset=dataset, corpus=corpus, index=index)
 
@@ -181,12 +219,11 @@ class OpenQaBuilder(DatasetBuilder):
         corpus: Dataset,
         index: Index,
         n_retrieved_documents: int,
-        n_documents: int,
-        max_pos_docs: Optional[int],
         num_proc: int,
         batch_size: int,
-        relevance_classifier: RelevanceClassifier,
-        filter_unmatched: bool,
+        relevance_classifier: Optional[RelevanceClassifier],
+        dataset_filter: Optional[DatasetFilter],
+        **map_kwargs,
     ) -> DatasetDict:
         """
         Map the dataset with documents from the corpus.
@@ -194,21 +231,31 @@ class OpenQaBuilder(DatasetBuilder):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
-
         question_nesting_level = self.dataset_builder.nesting_level
         document_nesting_level = self.dataset_builder.nesting_level + 1
 
+        # cache the dataset using `index.model`, so vectors can be reused in `SearchCorpus`
+        # for nested datasets, the dataset is flatten, so the index
+        # in the flatten dataset corresponds to the flattened index
+        # in the call of SearchCorpus.
         if isinstance(index, FaissIndex):
-            if question_nesting_level > 0:
-                raise NotImplementedError
-
             collate_fn = CollateField(
                 "question",
                 tokenizer=self.tokenizer,
                 exclude=["metamap", "text"],
-                level=self.dataset_builder.nesting_level,
+                level=0,
             )
-            index.cache_query_dataset(dataset, collate_fn=collate_fn)
+
+            flat_dataset = self.flatten_dataset(
+                dataset,
+                level=question_nesting_level,
+                keys=["question.input_ids", "question.attention_mask"],
+                desc="Flattening dataset before caching",
+                batched=True,
+                num_proc=num_proc,
+                batch_size=100,
+            )
+            index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
@@ -230,49 +277,71 @@ class OpenQaBuilder(DatasetBuilder):
                         axis=document_nesting_level,
                         n=n_retrieved_documents,
                         extract_gold=question_nesting_level == 0,
-                    ),
+                    )
+                    if relevance_classifier is not None
+                    else None,
                 ),
                 ("Sort documents", SortDocuments(level=document_nesting_level)),
             ]
         )
 
-        # process the dataset with each block
-        original_size = {k: len(dset) for k, dset in dataset.items()}
+        # adjust the batch size to account for the documents
+        map_kwargs = {
+            "num_proc": num_proc,
+            "batch_size": batch_size,
+            "batched": True,
+            # about: writer_batch_size:
+            # to avoid: pyarrow.lib.ArrowInvalid: Invalid null value
+            #   https://github.com/huggingface/datasets/issues/2831
+            # but setting value to high causes the writer to hang:
+            #   https://github.com/huggingface/datasets/issues/482
+            **map_kwargs,
+        }
+
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
             mapper = MapWithFingerprint(
                 block,
-                batched=True,
                 cache_dir=self.dataset_builder.cache_dir,
-                num_proc=num_proc,
-                batch_size=batch_size,
+                **map_kwargs,
                 desc=f"[Mapping] {k}",
+                debug=False,
+                id=k,
             )
             dataset = mapper(dataset)
 
-        # filter out questions that are not match to any  positive document
-        if filter_unmatched:
+        # free-up GPU memory
+        index.to_cpu()
 
-            def fn(split: Split):
-                return partial(
-                    filter_questions_by_pos_docs,
-                    n_documents=n_documents,
-                    max_pos_docs=max_pos_docs,
-                    split=split,
-                    level=question_nesting_level,
-                )
-
+        # filter the dataset
+        if dataset_filter is not None:
+            original_size = {k: len(dset) for k, dset in dataset.items()}
             dataset = DatasetDict(
                 {
-                    split: dset.filter(fn(split), num_proc=num_proc)
+                    split: dset.filter(partial(dataset_filter, split=split), **map_kwargs)
                     for split, dset in dataset.items()
                 }
             )
 
-        # print the difference in length for each split
-        logger.info(format_size_difference(original_size, dataset))
+            # print the difference in length for each split
+            logger.info(format_size_difference(original_size, dataset))
 
         return dataset
+
+    def flatten_dataset(
+        self,
+        dataset: Dataset | DatasetDict,
+        *,
+        level: int = 0,
+        keys: List[str] = None,
+        **map_kwargs,
+    ) -> Dataset:
+
+        dataset = keep_only_columns(dataset, keys)
+        if level == 0:
+            return dataset
+
+        return dataset.map(Flatten(level=level), **map_kwargs)
 
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
@@ -288,22 +357,18 @@ class OpenQaBuilder(DatasetBuilder):
                 to_tensor=["match_score", "retrieval_score"],
                 id="collate-nested-document-attributes",
             ),
-            self.dataset_builder.get_collate_pipe(),
+            self.dataset_builder._get_collate_pipe(),
         )
 
         # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
-            self.n_documents,
-            max_pos_docs=self.max_pos_docs,
-            level=document_nesting_level,
-            select_mode=self.select_mode.value,
-            shuffle=False,
+            self.sampler, level=document_nesting_level
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(columns=self.output_columns),
-            collate_pipe=self.corpus_builder.get_collate_pipe(),
+            collate_pipe=self.corpus_builder._get_collate_pipe(),
             level=document_nesting_level,
         )
 
@@ -312,32 +377,22 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Collate Q&A + document indexes", collate_qad),
                 ("Select documents", select_documents),
                 ("Fetch document data", fetch_documents),
+                ("Transform", self.transform),
             ],
             id="collate-pipeline",
         )
 
     @staticmethod
     def get_select_documents_pipe(
-        n_documents: Union[int, Dict],
+        sampler: Optional[Sampler],
         *,
-        max_pos_docs: Optional[int],
         level: int = 1,
-        select_mode: str = "first",
-        shuffle: bool = False,
     ) -> Optional[Pipe]:
-        if n_documents == 0:
+        if sampler is None:
             return None
 
-        return SelectDocs(
-            total=n_documents,
-            max_pos_docs=max_pos_docs,
-            pos_select_mode=select_mode,
-            neg_select_mode=select_mode,
-            strict=False,
-            update=True,
-            level=level,
-            shuffle=shuffle,
-        )
+        input_filter = HasPrefix(f"{sampler.field}")
+        return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Pretty format a dataset row"""

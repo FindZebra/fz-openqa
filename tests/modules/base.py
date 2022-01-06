@@ -2,6 +2,7 @@ from abc import ABC
 from copy import deepcopy
 from unittest import TestCase
 
+import datasets
 import torch
 import transformers.utils.logging
 from transformers import AutoTokenizer, BertPreTrainedModel, AutoModel
@@ -10,6 +11,7 @@ from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.train_utils import silent_huggingface
 
 
 class TestModel(TestCase, ABC):
@@ -35,6 +37,7 @@ class TestModel(TestCase, ABC):
          "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."]
     ]
     match_score = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]])
+    doc_ids = torch.range(0, match_score.numel() - 1).view(match_score.shape)
 
     # dummy answers
     answers = [["Paris France", "Rocket", "Bike"], ["Truck", "Banana fruit", "Aircraft"]]
@@ -43,7 +46,8 @@ class TestModel(TestCase, ABC):
     def setUp(self) -> None:
         """Instantiate the TestCase with dummy data"""
         torch.set_grad_enabled(False)
-        transformers.logging.set_verbosity(transformers.logging.CRITICAL)
+        silent_huggingface()
+        datasets.set_caching_enabled(False)
         self.batch_size = 2
         self.n_documents = 4
         self.n_options = 3
@@ -66,7 +70,7 @@ class TestModel(TestCase, ABC):
                 'tokenizer': self.tokenizer,
                 'max_length': 512,
                 'add_special_tokens': True,
-                'spec_token': None,
+                'spec_tokens': None,
                 }
         preprocess = Parallel(
             FormatAndTokenize(
@@ -90,7 +94,7 @@ class TestModel(TestCase, ABC):
             CollateField("document",
                          tokenizer=self.tokenizer,
                          level=1,
-                         to_tensor=["match_score"]
+                         to_tensor=["match_score", "row_idx"]
                          ),
             CollateField("question",
                          tokenizer=self.tokenizer,
@@ -120,5 +124,6 @@ class TestModel(TestCase, ABC):
             "document.text": self.documents,
             "answer.text": self.answers,
             "answer.target": self.answer_targets,
-            "document.match_score": self.match_score
+            "document.match_score": self.match_score,
+            "document.row_idx": self.doc_ids
         }

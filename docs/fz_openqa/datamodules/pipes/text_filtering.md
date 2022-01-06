@@ -4,8 +4,8 @@
 
 - [Fz-openqa](../../../README.md#fz-openqa-index) / [Modules](../../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../../index.md#fz-openqa) / [Datamodules](../index.md#datamodules) / [Pipes](index.md#pipes) / Text Filtering
     - [MetaMapFilter](#metamapfilter)
-    - [SciSpacyFilter](#scispacyfilter)
-        - [SciSpacyFilter().filter_one](#scispacyfilterfilter_one)
+    - [SciSpaCyFilter](#scispacyfilter)
+        - [SciSpaCyFilter().filter_one](#scispacyfilterfilter_one)
     - [StopWordsFilter](#stopwordsfilter)
         - [StopWordsFilter().filter_one](#stopwordsfilterfilter_one)
     - [TextFilter](#textfilter)
@@ -32,12 +32,12 @@ based on offline processed MetaMap heuristic
 
 - [TextFilter](#textfilter)
 
-## SciSpacyFilter
+## SciSpaCyFilter
 
 [[find in source code]](blob/master/fz_openqa/datamodules/pipes/text_filtering.py#L34)
 
 ```python
-class SciSpacyFilter(TextFilter):
+class SciSpaCyFilter(TextFilter):
     def __init__(spacy_model=None, **kwargs):
 ```
 
@@ -54,7 +54,7 @@ based on scispacy model in use
 
 - [TextFilter](#textfilter)
 
-### SciSpacyFilter().filter_one
+### SciSpaCyFilter().filter_one
 
 [[find in source code]](blob/master/fz_openqa/datamodules/pipes/text_filtering.py#L62)
 

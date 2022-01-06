@@ -1,13 +1,18 @@
-import logging
 import os
+import sys
+
+import faiss
+
+current_dir = os.path.dirname(os.path.realpath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+import logging
 from pathlib import Path
-from typing import Any
 from typing import Optional
 
 import datasets
 import hydra
-import pytorch_lightning
-import pytorch_lightning as pl
 import rich
 import transformers
 from hydra.utils import instantiate
@@ -15,23 +20,20 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
-from transformers import AutoModel
 
 import fz_openqa
+from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import FzCorpusBuilder
-from fz_openqa.datamodules.builders import FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.index.builder import FaissIndexBuilder
+from fz_openqa.datamodules.index.builder import FaissIndexBuilder, ColbertIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
-from fz_openqa.utils.datastruct import Batch
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +42,6 @@ default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
-
-
-class ZeroShot(pl.LightningModule):
-    def __init__(self, bert_id: str = "dmis-lab/biobert-base-cased-v1.2", **kwargs):
-        super(ZeroShot, self).__init__()
-        self.bert = AutoModel.from_pretrained(bert_id)
-
-    def forward(self, batch: Batch, **kwargs) -> Any:
-        output = {}
-        key_map = {"document": "_hd_", "question": "_hq_"}
-        for prefix in ["document", "question"]:
-            if any(prefix in k for k in batch.keys()):
-                input_ids = batch[f"{prefix}.input_ids"]
-                attention_mask = batch[f"{prefix}.attention_mask"]
-                h = self.bert(input_ids, attention_mask).last_hidden_state
-                output[key_map[prefix]] = h[:, 0, :]
-        return output
 
 
 @hydra.main(
@@ -68,26 +53,38 @@ def run(config):
 
     On the cluster, run:
     ```bash
-    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 +num_workers=10 +use_subset=False
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=2000 \
+    +num_workers=10 +use_subset=True +corpus_subset=False +colbert=True \
+    +factory=\'IVF100,PQ16x8\' \
+    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
+
+
+    CUDA_VISIBLE_DEVICES=4,5,6,7 poetry run python examples/load_mapped_medqa_faiss.py \
+    sys=titan trainer.strategy=dp trainer.gpus=4 +batch_size=1000 \
+    +num_workers=10 +use_subset=False +corpus_subset=False +colbert=True \
+    +factory=\'IVF100,PQ16x8\' \
+    +n_retrieved_documents=1000 +map_batch_size=100 +dtype=float32
+
     ```
     """
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
+    use_colbert = config.get("colbert", False)
     try:
         cache_dir = config.sys.cache_dir
     except Exception:
         cache_dir = default_cache_dir
 
     # load model
-    zero_shot = config.get("zero_shot", False)
+    zero_shot = config.get("zero_shot", True)
     if zero_shot:
-        model = ZeroShot()
+        model = ZeroShot(head="contextual" if use_colbert else "flat", limit_size=32)
     else:
         loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
         if config.get("verbose", False):
@@ -131,17 +128,34 @@ def run(config):
     )
 
     # define the index builder
-    index_builder = FaissIndexBuilder(
+    IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
+
+    faiss_args = {
+        "factory": config.get("factory", "IVF100,PQ16x8"),
+        "metric_type": faiss.METRIC_INNER_PRODUCT,
+        # "n_list": 100,
+        # "n_subvectors": 16,
+        # "n_bits": 8,
+        "nprobe": 32,
+    }
+
+    index_builder = IndexCls(
         model=model,
         trainer=trainer,
         model_output_keys=["_hd_", "_hq_"],
-        collate_pipe=corpus_builder.get_collate_pipe(),
+        collate_pipe=corpus_builder._get_collate_pipe(),
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 4),
             "pin_memory": config.get("pin_memory", True),
         },
         cache_dir=cache_dir,
+        persist_cache=True,
+        progress_bar=True,
+        faiss_train_size=1000 if use_colbert else 10000,
+        faiss_args=faiss_args,
+        dtype=config.get("dtype", "float32"),
+        in_memory=config.get("in_memory", True),
     )
 
     # define the OpenQA builder
@@ -150,12 +164,13 @@ def run(config):
         corpus_builder=corpus_builder,
         index_builder=index_builder,
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=1000,
+        n_retrieved_documents=config.get("n_retrieved_documents", 1000),
         n_documents=10,
         max_pos_docs=1,
         filter_unmatched=True,
-        num_proc=4,
-        batch_size=100,
+        num_proc=config.get("num_proc", 4),
+        batch_size=config.get("map_batch_size", 100),
+        select_mode=config.get("select_mode", "sample"),
     )
 
     # define the data module

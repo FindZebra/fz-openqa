@@ -36,7 +36,7 @@ corpus = MedQaCorpusBuilder(
         num_proc=4,
         filter_mode=None,
         text_cleaner=TextFormatter(remove_symbols=True),
-        analyze=False,
+        analyze_es_tokens=False,
     ),
     verbose=False,
     num_proc=4,

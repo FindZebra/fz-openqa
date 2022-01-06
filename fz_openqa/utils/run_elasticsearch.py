@@ -1,7 +1,6 @@
 import os
 import subprocess
 import time
-from os import popen
 from pathlib import Path
 
 all_subdirs = [d for d in os.listdir(str(Path.home())) if "elasticsearch" in d]

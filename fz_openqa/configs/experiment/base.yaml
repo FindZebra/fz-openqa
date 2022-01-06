@@ -5,8 +5,9 @@ defaults:
   - override /model: ???
   - override /datamodule: openqa
   - override /callbacks:
-    - checkpoint
-    - progress_bar
+      - checkpoint
+      - progress_bar
+      - print_table
   - override /logger: wandb
 
 base:
@@ -26,7 +27,6 @@ trainer:
 model:
   lr: 1e-5
   weight_decay: 1e-4
-  hidden_size: 256
   bert:
     hidden_dropout_prob: 0.1
     attention_probs_dropout_prob: 0.3
@@ -36,7 +36,7 @@ datamodule:
   train_batch_size: 16
   valid_batch_size: 100
   max_length: 512
-  use_subset: False
+  use_subset: True
   num_workers: 8
   n_documents: 10
   max_pos_docs: 1

@@ -1,7 +1,11 @@
+from numbers import Number
 from typing import List
 from typing import Optional
 
+import numpy as np
 import rich
+from torch import Tensor
+from transformers import PreTrainedTokenizerFast
 
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -15,9 +19,10 @@ class PrintBatch(Pipe):
     Print the batch
     """
 
-    def __init__(self, header: Optional[str] = None, **kwargs):
+    def __init__(self, header: Optional[str] = None, report_nans: bool = False, **kwargs):
         super(PrintBatch, self).__init__(**kwargs)
         self.header = header
+        self.report_nans = report_nans
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -26,10 +31,23 @@ class PrintBatch(Pipe):
             header = "PrintBatch"
         if self.id is not None:
             header = f"{header} (id={self.id})"
-        pprint_batch(batch, header=header)
+        pprint_batch(batch, header=header, report_nans=self.report_nans)
         if len(kwargs):
+            kwargs = {k: self._format_kwarg_v(v) for k, v in kwargs.items() if v is not None}
             rich.print(f"PrintBatch input kwargs = {kwargs}")
         return batch
+
+    @staticmethod
+    def _format_kwarg_v(v):
+        u = str(type(v))
+        if isinstance(v, list):
+            u += f" (length={len(v)})"
+        elif isinstance(v, (np.ndarray, Tensor)):
+            u += f" (shape={v.shape})"
+        elif isinstance(v, Number):
+            u += f" (value={v})"
+
+        return u
 
     def _call_egs(self, examples: List[Eg], **kwargs) -> List[Eg]:
         """The call of the pipeline process"""
@@ -50,12 +68,18 @@ class PrintText(Pipe):
     """
 
     def __init__(
-        self, text_key: str, limit: Optional[int] = None, header: Optional[str] = None, **kwargs
+        self,
+        text_key: str,
+        limit: Optional[int] = None,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        header: Optional[str] = None,
+        **kwargs,
     ):
         super(PrintText, self).__init__(**kwargs)
         self.text_key = text_key
         self.limit = limit
         self.header = header
+        self.tokenizer = tokenizer
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
@@ -68,6 +92,8 @@ class PrintText(Pipe):
         else:
             print(f"=== {self.header} : {self.text_key} ===")
         for txt in txts:
+            if self.tokenizer:
+                txt = self.tokenizer.decode(txt)
             print(txt)
         print(get_separator())
 

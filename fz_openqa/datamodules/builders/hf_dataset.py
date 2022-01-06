@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import logging
 import os
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -10,13 +13,15 @@ from datasets import load_dataset
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
+from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import remove_columns
+from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -136,7 +141,7 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return remove_columns(dataset, columns=columns)
+        return keep_only_columns(dataset, columns=columns)
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]
@@ -182,7 +187,19 @@ class HfDatasetBuilder(DatasetBuilder):
         )
         return dataset
 
-    def get_collate_pipe(self) -> Pipe:
+    def get_collate_pipe(
+        self, transform: Optional[Callable | Pipe] = None, columns: Optional[List[str]] = None
+    ) -> Pipe:
+        pipe = self._get_collate_pipe()
+        if columns is not None:
+            pipe = Sequential(pipe, FilterKeys(In(columns)))
+
+        if transform is not None:
+            pipe = Sequential(pipe, transform)
+
+        return pipe
+
+    def _get_collate_pipe(self) -> Pipe:
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 

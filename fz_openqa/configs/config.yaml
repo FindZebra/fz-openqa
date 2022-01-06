@@ -23,8 +23,8 @@ base:
   target_mode: max
 
 # version info (useful for filtering runs on wandb)
-exp_version: 11
-code_version: "0.1.1"
+exp_version: 14
+code_version: "0.1.4"
 
 # base pretrained model
 pretrained_model: ${model.bert.pretrained_model_name_or_path}

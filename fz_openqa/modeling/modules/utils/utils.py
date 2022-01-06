@@ -1,6 +1,6 @@
 from typing import List
+from typing import Optional
 
-import rich
 import torch
 from torch import Tensor
 
@@ -32,7 +32,7 @@ def flatten_first_dims(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
     return {k: batch[k].view(-1, *batch[k].shape[n_dims:]) for k in keys}
 
 
-def batch_cartesian_product(x: Tensor) -> Tensor:
+def batch_cartesian_product(x: List[Tensor], max_size: Optional[int] = None) -> List[Tensor]:
     """
     Cartesian product of a batch of tensors.
 
@@ -45,8 +45,16 @@ def batch_cartesian_product(x: Tensor) -> Tensor:
     Tensor
      tensor of shape (batch_size, n_vecs, n_dims^n_vecs)
     """
-    bs, n_vecs, n_dims = x.shape
-    index = torch.arange(n_dims, device=x.device)
+    x0 = x[0]
+    bs, n_vecs, n_dims = x0.shape
+    if max_size is not None and max_size < n_dims:
+        max_size = None
+    index = torch.arange(n_dims, device=x0.device)
     index = torch.cartesian_prod(*(index for _ in range(n_vecs))).permute(1, 0)
+    if max_size is not None and max_size < index.shape[1]:
+        perm = torch.randperm(index.size(1), device=x0.device)
+        perm = perm[:max_size]
+        perm = perm[None, :].expand(n_vecs, -1)
+        index = index.gather(index=perm, dim=1)
     index = index[None, :, :].expand(bs, *index.shape)
-    return x.gather(dim=2, index=index)
+    return [y.gather(dim=2, index=index) for y in x]

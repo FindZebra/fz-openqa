@@ -9,7 +9,7 @@ from transformers import BertPreTrainedModel
 class Head(nn.Module, ABC):
     id: str = "base"
 
-    def __init__(self, *, bert: BertPreTrainedModel, output_size: int):
+    def __init__(self, *, bert: BertPreTrainedModel, output_size: int, **kwargs):
         super(Head, self).__init__()
         self.input_size = bert.config.hidden_size
         self.output_size = output_size

@@ -26,11 +26,34 @@ class GeneratePassages(Pipe):
         end_tokens: List[int],
         pad_token_id: int,
         verbose: bool = True,
+        global_keys: Optional[List[str]] = None,
         **kwargs,
     ):
+        """
+
+        Parameters
+        ----------
+        size
+            The size of the passage to extract.
+        stride
+            The stride of the passage to extract.
+        start_tokens
+            The tokens to append to the start of each passage
+        end_tokens
+            The tokens to append to the end of each passage
+        pad_token_id
+            The token to use for padding
+        verbose
+            Verbosity level
+        global_keys
+            The document keys to pass to each passage.
+        kwargs
+            Other arguments to pass to the base Pipe class.
+        """
         super(GeneratePassages, self).__init__(**kwargs)
 
         self.verbose = verbose
+        self.global_keys = global_keys
         base_args = {"size": size, "stride": stride}
         self.args = {
             "input_ids": {
@@ -62,6 +85,7 @@ class GeneratePassages(Pipe):
             batch,
             keys=["input_ids", "attention_mask", "offset_mapping"],
             args=self.args,
+            global_keys=self.global_keys,
         )
 
         # extract document.text
@@ -83,6 +107,7 @@ class GeneratePassages(Pipe):
         examples: Dict[str, List[Any]],
         keys: List[str],
         args: Dict[str, Dict[str, Any]],
+        global_keys: Optional[List[str]] = None,
     ) -> Tuple[List[int], Batch]:
         """
         This functions generate the passages for each attribute in `keys`,
@@ -107,17 +132,24 @@ class GeneratePassages(Pipe):
         first_key, *other_keys = keys
         output = defaultdict(list)
         indexes = []
-        for idx, (doc_idx, example) in enumerate(zip(examples["idx"], examples[first_key])):
+        for idx, example in enumerate(examples[first_key]):
+
+            global_values = {}
+            if global_values is not None:
+                global_values = {k: examples[k][idx] for k in global_keys if k in examples.keys()}
 
             # do a first pass to compute the passage masks
             for pas_idx, (passage, passage_mask) in enumerate(
                 gen_passages(example, **args[first_key], return_mask=True)
             ):
                 indexes += [idx]
-                output["idx"].append(doc_idx)
                 output["passage_idx"].append(pas_idx)
                 output["passage_mask"].append(passage_mask)
                 output[first_key].append(passage)
+
+                # append the global values (doc idx, cui, etc...)
+                for k, v in global_values.items():
+                    output[k].append(v)
 
             # do another pass to generate the passages for each remaining attribute
         for key in other_keys:

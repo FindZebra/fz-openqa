@@ -3,35 +3,74 @@
 defaults:
   - base
   - override /model: option_retriever
+  - override /model/bert: pubmed
+  - override /model/head: colbert
   - override /datamodule/builder: concat_openqa
+  - override /datamodule/index_builder: ${model/head}
+  - override /datamodule/sampler: boost_positives
+  - override /datamodule/transform: none
+  - override /datamodule/dataset_filter: none
+  - override /datamodule/builder/analytics:
+      - retriever_accuracy
+  - override /logger: wandb
+  - override /callbacks:
+      - checkpoint
+      - progress_bar
+      - lr_monitor
+
 base:
   seed: null
-  target_metric: validation/reader/logp
+  target_metric: validation/reader/Accuracy
   target_mode: max
+  is_search: false
 
 trainer:
   gpus: 8
   strategy: dp
   min_epochs: 1
-  max_epochs: 1000
+  max_epochs: 1_000
+  gradient_clip_val: 0.5
   accumulate_grad_batches: 4
-  val_check_interval: 300
+  val_check_interval: 0.5
+
+model:
+  lr: 1e-5
+  weight_decay: 1e-3
+  num_warmup_steps: 1_000
+  num_training_steps: 10_000
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1 # todo: changed from 0.3
+  module:
+    resample_k: null
+    alpha: 0
+    max_batch_size: 200
+    eval_topk: 30
+    grad_expr: in_batch
+  head:
+    downscaling: 1 # todo: changed from 2
+    kernel_size: null # todo: changed from 9
 
 datamodule:
-  use_subset: false
+  # how often to map the dataset
+  dataset_update:
+    freq: 15
+    reset_optimizer: true # todo: test `false`
+    builder_args:
+      relevance_classifier: null
+
+  # dataloader
   train_batch_size: 8
-  eval_batch_size: 128
+  eval_batch_size: 64
   num_workers: 16
-  builder:
-    batch_size: 20
-  n_documents:
-    train: 12
-    validation: 12
-    test: 12
-  max_pos_docs: 1
-  filter_unmatched: False
-  select_mode: sample
+  persistent_workers: false
+  pin_memory: true
+
+  # dataset builder
+  use_subset: false
+  num_proc: 4
   output_columns:
+    - answer.target
     - question.input_ids
     - question.attention_mask
     - document.input_ids
@@ -39,7 +78,44 @@ datamodule:
     - document.row_idx
     - document.match_score
     - document.retrieval_score
-    - answer.target
+
+  # documents
+  n_retrieved_documents: 1_000
+  n_documents:
+    train: 10
+    validation: 10
+    test: 10
+
+  # tag documents as positive or negative
+  relevance_classifier:
+    interpretable: false
+
+  # OpenQA builder parameters
+  builder:
+    batch_size: 100
+    writer_batch_size: 1_000
+    dataset_builder:
+      n_query_tokens: 10
+    corpus_builder:
+      use_subset: false
+
+  # Index parameters
+  index_builder:
+    model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
+    keep_maxsim_on_cpu: false
+    p: 100
+    max_chunksize: 1_000
+    maxsim_chunksize: 20_000
+    persist_cache: false
+    faiss_args:
+      factory: IVF100,PQ16x8
+      metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
+      nprobe: 16
+    loader_kwargs:
+      batch_size: 4_000
+      num_workers: 16
+      pin_memory: true
+
 
 logger:
   wandb:

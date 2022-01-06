@@ -1,14 +1,13 @@
+from __future__ import annotations
+
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Union
 
+import rich
 import torch
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.tokenizers.static import ANS_TOKEN
-from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.tokenizers.static import QUERY_TOKEN
 
 
 def add_spec_token(
@@ -25,7 +24,7 @@ def add_spec_token(
     return f"{special_token}{text}"
 
 
-def set_row_idx(example: Dict[str, Any], idx: int, key: str = "idx") -> Dict[str, Any]:
+def set_row_idx(_, idx: int | List[int], key: str = "idx") -> Dict[str, Any]:
     return {key: idx}
 
 
