@@ -23,7 +23,7 @@ class ClsHead(Head):
 
         self.normalize = normalize
         if output_size is not None:
-            self.head = nn.Linear(bert.config.hidden_size, output_size)
+            self.head = nn.Linear(bert.config.hidden_size, output_size, bias=self.bias)
         else:
             self.head = None
 

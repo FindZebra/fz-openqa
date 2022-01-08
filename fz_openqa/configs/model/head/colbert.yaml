@@ -2,6 +2,6 @@ defaults:
   - base
 
 _target_: fz_openqa.modeling.heads.ColbertHead
-output_size: 32
+output_size: 32 # todo: make this smaller
 downscaling: null
 _id: colbert

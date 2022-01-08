@@ -103,7 +103,7 @@ class MaxSimPartition(nn.Module):
         # max. over the documents tokens, for each query token
         scores, _ = scores.max(axis=-1)
         # avg over all query tokens
-        scores = scores.mean(axis=-1)
+        scores = scores.sum(axis=-1)
         # set the score to -inf for the negative pids
         scores[pids < 0] = -torch.inf
 

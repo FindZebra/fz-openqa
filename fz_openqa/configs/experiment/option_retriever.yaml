@@ -47,9 +47,11 @@ model:
     max_batch_size: 200
     eval_topk: 30
     grad_expr: in_batch
+    share_heads: true
   head:
     downscaling: 1 # todo: changed from 2
     kernel_size: null # todo: changed from 9
+    bias: false
 
 datamodule:
   # how often to map the dataset
@@ -79,16 +81,24 @@ datamodule:
     - document.match_score
     - document.retrieval_score
 
-  # documents
+  # documents: retrieval & sampling
   n_retrieved_documents: 1_000
   n_documents:
     train: 10
     validation: 10
-    test: 10
+    test: 20 # changed from 10
 
   # tag documents as positive or negative
   relevance_classifier:
     interpretable: false
+
+  # document sampler
+  sampler:
+    total: ${datamodule.n_documents}
+    largest:
+      train: false
+      validation: true
+      test: true
 
   # OpenQA builder parameters
   builder:
