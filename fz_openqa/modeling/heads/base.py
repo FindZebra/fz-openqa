@@ -9,10 +9,13 @@ from transformers import BertPreTrainedModel
 class Head(nn.Module, ABC):
     id: str = "base"
 
-    def __init__(self, *, bert: BertPreTrainedModel, output_size: int, **kwargs):
+    def __init__(
+        self, *, bert: BertPreTrainedModel, output_size: int, bias: bool = False, **kwargs
+    ):
         super(Head, self).__init__()
         self.input_size = bert.config.hidden_size
         self.output_size = output_size
+        self.bias = bias
 
     @abstractmethod
     def forward(self, last_hidden_state: Tensor, **kwargs) -> Tensor:

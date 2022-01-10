@@ -211,10 +211,10 @@ class Model(LightningModule):
             opt_state = self.opt_states.pop("optimizer", None)
             scheduler_state = self.opt_states.pop("lr_scheduler", None)
             if opt_state is not None:
-                rich.print(f">> setting optimizer state: {opt_state}")
+                rich.print(">> setting optimizer state!")
                 optimizer.load_state_dict(opt_state)
             if scheduler_state is not None:
-                rich.print(f">> setting scheduler state: {opt_state}")
+                rich.print(">> setting scheduler state!")
                 lr_scheduler.load_state_dict(scheduler_state)
             self.opt_states = None
 

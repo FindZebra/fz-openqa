@@ -54,7 +54,8 @@ class Sampler(Pipe):
         return {k: reindex(v, sampled_index) for k, v in batch.items()}
 
     def _sample(self, index: np.ndarray | List, probs: np.ndarray, total: int, largest=None):
-        largest = largest or self.largest
+        if largest is None:
+            largest = self.largest
         if largest:
             sorted_idx = np.argsort(-probs)
             sorted_idx = sorted_idx[:total]
@@ -84,6 +85,7 @@ class Sampler(Pipe):
         largest = self.largest
         if isinstance(largest, (dict, DictConfig)):
             largest = largest[str(split)]
+
         return largest, total
 
 
