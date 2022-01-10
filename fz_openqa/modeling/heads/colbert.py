@@ -20,11 +20,13 @@ class ColbertHead(Head):
         kernel_size: Optional[int] = None,
         downscaling: int = 1,
         normalize: bool = False,
+        use_mask: bool = True,
         **kwargs
     ):
         super(ColbertHead, self).__init__(bert=bert, output_size=output_size, **kwargs)
 
         self.normalize = normalize
+        self.use_mask = use_mask
         if output_size is None and kernel_size is None and downscaling == 1:
             self.head = None
         elif kernel_size is None:
@@ -56,7 +58,7 @@ class ColbertHead(Head):
         if self.normalize:
             context_repr = F.normalize(context_repr, p=2, dim=-1)
 
-        if mask is not None:
+        if mask is not None and self.use_mask:
             context_repr = context_repr * mask.unsqueeze(-1)
 
         return context_repr

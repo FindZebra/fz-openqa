@@ -51,13 +51,16 @@ model:
   head:
     downscaling: 1 # todo: changed from 2
     kernel_size: null # todo: changed from 9
-    bias: false
+    bias: false # todo: changed from false
+    use_mask: true # todo: changed from true
+    output_size: 128 # todo: new (prev=32)
 
 datamodule:
   # how often to map the dataset
   dataset_update:
     freq: 15
     reset_optimizer: false # todo: test `false`
+    index_first_epooch: false
     builder_args:
       relevance_classifier: null
 
@@ -85,7 +88,7 @@ datamodule:
   n_retrieved_documents: 1_000
   n_documents:
     train: 10
-    validation: 10
+    validation: 20
     test: 20 # changed from 10
 
   # tag documents as positive or negative
@@ -115,7 +118,7 @@ datamodule:
     keep_maxsim_on_cpu: false
     p: 100
     max_chunksize: 1_000
-    maxsim_chunksize: 20_000
+    maxsim_chunksize: 10_000 # todo: changed from 20_000
     persist_cache: false
     faiss_args:
       factory: IVF100,PQ16x8
