@@ -83,6 +83,7 @@ datamodule:
     - document.row_idx
     - document.match_score
     - document.retrieval_score
+    - document.retrieval_rank
 
   # documents: retrieval & sampling
   n_retrieved_documents: 1_000
@@ -111,6 +112,8 @@ datamodule:
       n_query_tokens: 10
     corpus_builder:
       use_subset: false
+      passage_length: 200
+      passage_stride: 100
 
   # Index parameters
   index_builder:
