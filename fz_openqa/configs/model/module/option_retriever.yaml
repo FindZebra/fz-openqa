@@ -5,4 +5,5 @@ alpha: 0
 resample_k: null
 max_tokens: null
 eval_topk: 30
+share_heads: true
 _id: option_retriever

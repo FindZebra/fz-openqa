@@ -133,6 +133,20 @@ class SearchResult:
 
         return self
 
+    @property
+    def rank(self):
+        def rank_list(x):
+            return [i for i, s in sorted(enumerate(x), key=lambda x: x[1], reverse=True)]
+
+        if isinstance(self.score, list):
+            return [rank_list(x) for x in self.score]
+        elif isinstance(self.score, np.ndarray):
+            return np.argsort(self.score, axis=-1)[..., ::-1]
+        elif isinstance(self.score, Tensor):
+            return self.score.argsort(dim=-1, descending=True)
+        else:
+            raise TypeError(f"Unsupported type: {type(self.score)}")
+
     def __repr__(self):
         return f"{type(self).__name__}(score={self.score.shape}, index={self.index.shape})"
 
