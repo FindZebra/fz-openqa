@@ -7,3 +7,4 @@ retrieval_score_key: retrieval_score
 field: document
 replace: false
 largest: false
+temperature: 1.0
