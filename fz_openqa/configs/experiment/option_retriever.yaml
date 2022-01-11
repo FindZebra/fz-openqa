@@ -60,7 +60,7 @@ datamodule:
   dataset_update:
     freq: 15
     reset_optimizer: false # todo: test `false`
-    index_first_epooch: false
+    index_first_epoch: false
     builder_args:
       relevance_classifier: null
 
@@ -109,7 +109,7 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      n_query_tokens: 10
+      question_length: 350
     corpus_builder:
       use_subset: false
       passage_length: 200

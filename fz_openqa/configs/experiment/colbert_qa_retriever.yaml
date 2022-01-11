@@ -76,7 +76,7 @@ datamodule:
     batch_size: 100
     writer_batch_size: 10000
     dataset_builder:
-      n_query_tokens: 10
+      question_length: 350
     corpus_builder:
       use_subset: false
 

@@ -15,6 +15,8 @@ from ..pipes.answer_options import ConcatTextFields
 from ..pipes.control.condition import In
 from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
+from ..pipes.nesting import Nested
+from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
@@ -90,13 +92,13 @@ class MedQaBuilder(HfDatasetBuilder):
         self,
         *args,
         min_answer_length: Optional[int] = None,
-        n_query_tokens: int = 1,
+        question_length: Optional[int] = None,
         dset_name: str = "us",
         **kwargs,
     ):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
-        self.n_query_tokens = n_query_tokens
+        self.question_length = question_length
         self.dset_name = dset_name
 
     def load_base_dataset(self) -> DatasetDict:
@@ -172,15 +174,26 @@ class MedQaBuilder(HfDatasetBuilder):
 
     def get_question_tokenizer_pipe(self):
         """create a Pipe to tokenize the questions."""
-        return FormatAndTokenize(
-            prefix="question.",
-            text_formatter=self.text_formatter,
-            tokenizer=self.tokenizer,
-            max_length=self.max_length,
-            add_encoding_tokens=self.add_encoding_tokens,
-            add_special_tokens=self.add_special_tokens,
-            spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
-            shape=None,
+
+        if self.question_length is not None:
+            query_expansion_pipe = QueryExpansionPipe(
+                question_length=self.question_length, tokenizer=self.tokenizer, update=True
+            )
+        else:
+            query_expansion_pipe = None
+
+        return Sequential(
+            FormatAndTokenize(
+                prefix="question.",
+                text_formatter=self.text_formatter,
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                add_encoding_tokens=self.add_encoding_tokens,
+                add_special_tokens=self.add_special_tokens,
+                spec_tokens=QUERY_TOKEN,
+                shape=None,
+            ),
+            query_expansion_pipe,
         )
 
     def _get_collate_pipe(self):
@@ -294,7 +307,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
-            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
+            q_start_tokens.append(QUERY_TOKEN)
 
         add_spec_tokens_pipe = Apply(
             {"question.text": partial(add_spec_token, q_start_tokens)}, element_wise=True
@@ -314,15 +327,29 @@ class ConcatMedQaBuilder(MedQaBuilder):
         )
 
     def get_qa_tokenizer_pipe(self):
-        return FormatAndTokenize(
-            prefix="question.",
-            text_formatter=None,  # <- changed here
-            tokenizer=self.tokenizer,
-            max_length=self.max_length,
-            add_encoding_tokens=self.add_encoding_tokens,
-            add_special_tokens=self.add_special_tokens,
-            spec_tokens=ANS_TOKEN,
-            shape=[-1, self.n_options],
+
+        if self.question_length is not None:
+            query_expansion_pipe = Nested(
+                QueryExpansionPipe(
+                    question_length=self.question_length, tokenizer=self.tokenizer, update=True
+                ),
+                level=1,
+            )
+        else:
+            query_expansion_pipe = None
+
+        return Sequential(
+            FormatAndTokenize(
+                prefix="question.",
+                text_formatter=None,  # <- changed here
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                add_encoding_tokens=self.add_encoding_tokens,
+                add_special_tokens=self.add_special_tokens,
+                spec_tokens=ANS_TOKEN,
+                shape=[-1, self.n_options],
+            ),
+            query_expansion_pipe,
         )
 
     def _get_collate_pipe(self):
