@@ -2,5 +2,5 @@ defaults:
   - base
 
 _target_: fz_openqa.datamodules.builders.MedQaBuilder
-n_query_tokens: null
+question_length: null
 dset_name: us

@@ -220,5 +220,5 @@ class Index(Pipe):
 
         return output
 
-    def to_cpu(self):
+    def free_memory(self):
         pass

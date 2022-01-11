@@ -313,7 +313,7 @@ class OpenQaBuilder(DatasetBuilder):
             dataset = mapper(dataset)
 
         # free-up GPU memory
-        index.to_cpu()
+        index.free_memory()
 
         # filter the dataset
         if dataset_filter is not None:

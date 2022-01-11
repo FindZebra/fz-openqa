@@ -80,7 +80,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")
-    model: LightningModule = instantiate(config.model, _recursive_=False)
+    model: Model = instantiate(config.model, _recursive_=False)
 
     # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
     callbacks: List[Callback] = []
@@ -140,7 +140,7 @@ def train(config: DictConfig) -> Optional[float]:
             trainer=trainer,
             update_freq=dataset_update_freq,
             reset_optimizer=dataset_update.get("reset_optimizer", True),
-            index_first_epooch=dataset_update.get("index_first_epooch", False),
+            index_first_epoch=dataset_update.get("index_first_epoch", False),
             **dataset_update.get("builder_args", {}),
         )
     else:
@@ -200,7 +200,7 @@ def train_with_dataset_updates(
     trainer: Trainer,
     update_freq: int,
     reset_optimizer: bool = False,
-    index_first_epooch: bool = False,
+    index_first_epoch: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -210,7 +210,7 @@ def train_with_dataset_updates(
 
         # update the dataset
         try:
-            if index_first_epooch or trainer.current_epoch > 0:
+            if index_first_epoch or trainer.current_epoch > 0:
                 update_dataset(
                     datamodule, model=model, trainer=trainer, keep_in_memory=True, **kwargs
                 )

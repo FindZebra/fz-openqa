@@ -12,6 +12,7 @@ defaults:
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
+      - retriever_distribution
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
@@ -19,7 +20,7 @@ defaults:
       - lr_monitor
 
 base:
-  seed: null
+  seed: 1  # todo: remove
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
@@ -63,6 +64,7 @@ datamodule:
     index_first_epoch: false
     builder_args:
       relevance_classifier: null
+      batch_size: 1000
 
   # dataloader
   train_batch_size: 8
@@ -120,9 +122,9 @@ datamodule:
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
     p: 100
-    max_chunksize: 1_000
+    max_chunksize: 10_000
     maxsim_chunksize: 10_000 # todo: changed from 20_000
-    persist_cache: false
+    persist_cache: true # todo: remove
     faiss_args:
       factory: IVF100,PQ16x8
       metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
