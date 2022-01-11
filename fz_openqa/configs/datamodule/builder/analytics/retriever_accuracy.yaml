@@ -1,5 +1,6 @@
-_target_: fz_openqa.datamodules.analytics.RetrieverAccuracy
-verbose: true
-output_dir: ${getcwd:}/analytics/
-wandb_log: true
-method: sum
+retriever_accuracy:
+  _target_: fz_openqa.datamodules.analytics.RetrieverAccuracy
+  verbose: true
+  output_dir: ${getcwd:}/analytics/
+  wandb_log: true
+  method: sum

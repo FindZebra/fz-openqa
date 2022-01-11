@@ -3,3 +3,4 @@ from .count_matched_questions import CountMatchedQuestions
 from .plot_match_triggers import PlotTopMatchTriggers
 from .plot_retrieval_score_distribution import PlotScoreDistributions
 from .retriever_accuracy import RetrieverAccuracy
+from .retriever_distribution import RetrieverDistribution
