@@ -17,10 +17,10 @@ from fz_openqa.datamodules.index.utils.maxsim.base_worker import ctx
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import DeviceQueue
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
+from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimOutput
+from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
 from fz_openqa.datamodules.index.utils.maxsim.workers import FaissInput
 from fz_openqa.datamodules.index.utils.maxsim.workers import FaissWorker
-from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimOutput
-from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimRanker
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimReducerWorker
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
@@ -53,28 +53,31 @@ class MaxSim(object):
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],
         faiss_devices: List[int],
-        max_chunksize: Optional[int] = None,
+        max_chunksize: Optional[int] = 10_000,
+        max_queue_size: int = 5,
     ):
         if len(ranking_devices) == 0:
             ranking_devices = [-1]
 
+        reduce_device = format_device(ranking_devices[-1])  # todo
+
         # initialize Input and Output queues
-        master_device = format_device(ranking_devices[0])
-        self.input_queue = DeviceQueue(device=torch.device("cpu"))
+        self.input_queue = DeviceQueue(device=-1)
         self.ranking_input_queues: List[DeviceQueue] = []
         self.ranking_output_queues: List[DeviceQueue] = []
         for device in ranking_devices:
-            q = DeviceQueue(device=device)
+            q = DeviceQueue(device=device, maxsize=max_queue_size)
             self.ranking_input_queues.append(q)
-            q = DeviceQueue(device=None)
+            q = DeviceQueue(device=None, maxsize=max_queue_size)
             self.ranking_output_queues.append(q)
 
-        self.reduce_input_queue = DeviceQueue(device=master_device)
-        self.output_queue = DeviceQueue(device=torch.device("cpu"))
+        reduce_max_queue_size = max_queue_size * len(ranking_devices) if max_queue_size else None
+        self.reduce_input_queue = DeviceQueue(device=reduce_device, maxsize=reduce_max_queue_size)
+        self.output_queue = DeviceQueue(device=torch.device("cpu"), maxsize=max_queue_size)
 
         # initialize the `MaxSimReducerWorker`
         self.reducer_worker = MaxSimReducerWorker(
-            device=format_device(master_device),
+            device=format_device(reduce_device),
             input_queue=self.ranking_output_queues,
             output_queue=[self.output_queue],
             daemon=True,

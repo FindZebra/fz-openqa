@@ -175,8 +175,9 @@ class ColbertIndex(FaissIndex):
         gpus = list(range(n_gpus))
         if n_gpus > 1:
             if not self.keep_maxsim_on_cpu:
-                faiss_gpus = gpus[n_gpus // 2 :]
-                maxsim_gpus = gpus[: n_gpus // 2]
+                n_maxsim = int(n_gpus * 3 / 4)
+                faiss_gpus = gpus[n_maxsim:]
+                maxsim_gpus = gpus[:n_maxsim]
             else:
                 faiss_gpus = gpus
                 maxsim_gpus = []

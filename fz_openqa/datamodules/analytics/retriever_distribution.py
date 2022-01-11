@@ -44,7 +44,6 @@ class RetrieverDistribution(Analytic):
         if not all(np.all(s[:-1] >= s[1:]) for s in probs):
             probs = np.concatenate([s[np.argsort(-s)][None] for s in probs], axis=0)
         pmf = np.cumsum(probs, axis=-1)
-        rich.print(probs[:10, :20])
 
         percentiles = [0.5, 0.9, 0.99]
         output = {}

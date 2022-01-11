@@ -6,7 +6,7 @@ import torch
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
 from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
-from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimOutput
+from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimOutput
 
 
 class TestMaxSim(TestCase):
