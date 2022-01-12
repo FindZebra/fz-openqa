@@ -13,10 +13,11 @@ from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 
 
 def run():
-    corpus_size = 200_000
+    corpus_size = 20_000
     vdim = 128
     seq_len = 200
     vectors = torch.randn(size=(corpus_size, seq_len, vdim))
+    use_half = False
 
     log_mem_size(vectors, "vectors")
     emd2pid = build_emb2pid_from_vectors(vectors)
@@ -31,7 +32,8 @@ def run():
     index.reset()
     del index
 
-    vectors = vectors.to(torch.float16)
+    if use_half:
+        vectors = vectors.to(torch.float16)
 
     rich.print(f"> index: {index_cpu}, size={index_cpu.ntotal}")
     # time.sleep(30)
@@ -40,10 +42,10 @@ def run():
         token_index=index_cpu,
         vectors=vectors,
         emb2pid=emd2pid,
-        max_chunksize=20_000,
+        max_chunksize=1_000,  # 10_000
         max_queue_size=5,
-        ranking_devices=[0, 1, 2, 3, 4, 5],
-        faiss_devices=[6, 7],
+        ranking_devices=[0, 1, 2, 3, 4],
+        faiss_devices=[5, 6],
     )
 
     maxsim.put(WorkerSignal.PRINT, k=None, p=None)
@@ -61,7 +63,9 @@ def run():
     start_time = time.time()
     for iter_idx in range(n_iter):
         for _ in range(n_samples):
-            input_vectors = torch.randn(size=(corpus_size, q_seq_len, vdim), dtype=torch.float16)
+            input_vectors = torch.randn(size=(corpus_size, q_seq_len, vdim))
+            if use_half:
+                input_vectors = input_vectors.to(torch.float16)
             maxsim.put(input_vectors, k=1000, p=100)
         for x in tqdm(iter(maxsim.get()), total=n_samples, desc=f"iter {iter_idx}"):
             pass

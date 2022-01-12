@@ -75,7 +75,7 @@ class MaxSimWorker(TensorWorker):
             scores=scores, pids=pids, k=data.k, boundaries=self.max_sim.boundaries
         )
         self.output(output)
-        del data.q_vectors, data.token_ids, data.k, data.idx
+        # del data.q_vectors, data.token_ids, data.k, data.idx
 
     def cleanup(self):
         del self.max_sim
@@ -127,9 +127,9 @@ class FaissWorker(TensorWorker):
         # rich.print(f"> {type(self).__name__}(id={self.id})")
         assert isinstance(data, FaissInput)
         token_ids = FaissWorker._query_to_embedding_ids(data.q_vectors, data.k, index=self.index)
-        output = MaxSimInput(q_vectors=data.q_vectors.clone(), token_ids=token_ids, k=data.k)
+        output = MaxSimInput(q_vectors=data.q_vectors, token_ids=token_ids, k=data.k)
         self.output(output)
-        del data
+        # del data # todo
 
     def cleanup(self):
         del self.index
@@ -182,7 +182,7 @@ class MaxSimReducerWorker(TensorReducerWorker):
 
         # concatenate
         all_scores, all_pids = (torch.cat(x, dim=-1) for x in (scores, pids))
-        del pids, scores
+        # del pids, scores
 
         # take the top-k results given the MaxSim score
         k_ = min(k, all_scores.shape[-1])
@@ -197,7 +197,7 @@ class MaxSimReducerWorker(TensorReducerWorker):
         output = MaxSimOutput(
             scores=maxsim_scores.clone().cpu(), pids=maxsim_pids.clone().cpu(), k=k, boundaries=None
         )
-        del all_scores, all_pids, maxsim_idx, maxsim_scores, maxsim_pids
+        # del all_scores, all_pids, maxsim_idx, maxsim_scores, maxsim_pids
         return output
 
     def cleanup(self):

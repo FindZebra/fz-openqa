@@ -45,16 +45,16 @@ model:
   module:
     resample_k: null
     alpha: 0
-    max_batch_size: 200
+    max_batch_size: 200 # todo: try increasing this
     eval_topk: 30
     grad_expr: in_batch
-    share_heads: true
+    share_heads: false # todo: update
   head:
     downscaling: 1 # todo: changed from 2
     kernel_size: null # todo: changed from 9
-    bias: false # todo: changed from false
-    use_mask: true # todo: changed from true
-    output_size: 128 # todo: new (prev=32)
+    bias: true # todo: update
+    use_mask: false # todo: update
+    output_size: 32 # todo: update
 
 datamodule:
   # how often to map the dataset
@@ -91,8 +91,8 @@ datamodule:
   n_retrieved_documents: 1_000
   n_documents:
     train: 10
-    validation: 20
-    test: 20 # changed from 10
+    validation: 10 # todo: update
+    test: 10 # todo: update
 
   # tag documents as positive or negative
   relevance_classifier:
@@ -103,8 +103,8 @@ datamodule:
     total: ${datamodule.n_documents}
     largest:
       train: false
-      validation: true
-      test: true
+      validation: false # todo: update
+      test: false # todo: update
 
   # OpenQA builder parameters
   builder:
