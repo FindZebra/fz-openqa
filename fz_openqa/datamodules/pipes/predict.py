@@ -14,6 +14,11 @@ from typing import Optional
 from typing import Sized
 from typing import Union
 
+try:
+    from functools import singledispatchmethod
+except Exception:
+    from singledispatchmethod import singledispatchmethod
+
 import pytorch_lightning as pl
 import torch
 from datasets import Dataset
@@ -276,7 +281,7 @@ class Predict(Pipe):
 
         return {self.output_key: vectors}
 
-    @functools.singledispatchmethod
+    @singledispatchmethod
     @torch.no_grad()
     def cache(
         self,

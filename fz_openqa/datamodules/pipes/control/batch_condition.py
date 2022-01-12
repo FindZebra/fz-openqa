@@ -1,5 +1,9 @@
 import abc
-from functools import singledispatchmethod
+
+try:
+    from functools import singledispatchmethod
+except Exception:
+    from singledispatchmethod import singledispatchmethod
 from typing import List
 
 from fz_openqa.datamodules.pipes.control.condition import Condition
