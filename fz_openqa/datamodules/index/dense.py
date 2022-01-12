@@ -28,7 +28,7 @@ from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from torch import Tensor
 from torch.utils.data import DataLoader
-from tqdm.rich import tqdm
+from tqdm import tqdm
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
