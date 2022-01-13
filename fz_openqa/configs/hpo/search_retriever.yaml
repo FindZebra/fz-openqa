@@ -27,6 +27,7 @@ experiment:
   experiment: retriever_only.yaml
   sys: titan.yaml
   sys.cache_dir: ${sys.cache_dir}
+  sys.shared_cache_dir: ${sys.shared_cache_dir}
   base.target_metric: ${base.target_metric}
   base.target_mode: ${base.target_mode}
   base.seed: null
