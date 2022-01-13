@@ -183,7 +183,10 @@ class Index(Pipe):
         # search the index by chunk
         batch_size = infer_batch_size(query)
         search_results = None
-        eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        if self.max_chunksize is not None:
+            eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        else:
+            eff_batch_size = batch_size
         for i in range(0, batch_size, eff_batch_size):
             chunk_i = slice_batch(query, slice(i, i + eff_batch_size))
             r = self._search_chunk(chunk_i, k=k, **kwargs)
