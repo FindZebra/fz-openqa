@@ -29,6 +29,7 @@ class RetrieverDistribution(Analytic):
 
     requires_columns: List[str] = ["document.retrieval_score"]
     output_file_name = "retrieval_distribution.json"
+    n_samples = 1000
 
     def process_dataset_split(self, dset: Dataset) -> Dict | List:
         """
@@ -38,6 +39,8 @@ class RetrieverDistribution(Analytic):
         scores = safe_cast_to_list(scores)
         scores = np.array(scores)
         scores = scores.reshape(-1, scores.shape[-1])
+        if len(scores) > self.n_samples:
+            scores = scores[np.random.choice(len(scores), self.n_samples, replace=False)]
         probs = Sampler.compute_probs(scores)
 
         # compute probability mass function
