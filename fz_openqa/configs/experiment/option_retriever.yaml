@@ -125,7 +125,7 @@ datamodule:
     faiss_train_size: 1_000_000
     p: 100
     dtype: float32
-    max_chunksize: 1_000_000
+    max_chunksize: null
     maxsim_chunksize: 10_000 # use 10_000 if using float32
     persist_cache: false
     faiss_args:

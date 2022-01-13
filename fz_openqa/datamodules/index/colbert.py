@@ -100,7 +100,10 @@ class ColbertIndex(FaissIndex):
 
         # search the index by chunk
         batch_size = len(q_vectors)
-        eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        if self.max_chunksize is not None:
+            eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        else:
+            eff_batch_size = batch_size
 
         # send all queries to MaxSimParallel
         search_results = None
