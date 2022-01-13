@@ -103,13 +103,12 @@ class ColbertIndex(FaissIndex):
         eff_batch_size = min(max(1, self.max_chunksize), batch_size)
 
         # send all queries to MaxSimParallel
+        search_results = None
         for idx, i in enumerate(range(0, batch_size, eff_batch_size)):
             chunk_i = q_vectors[i : i + eff_batch_size]
-            self._max_sim.put(chunk_i, k=k, p=self.p, idx=idx)
+            data = self._max_sim(chunk_i, k=k, p=self.p, idx=idx)
 
-        # collect the results
-        search_results = None
-        for data in self._max_sim.get():
+            # cast to SearchResult
             r = SearchResult(
                 score=data.scores.numpy(),
                 index=data.pids.cpu().numpy(),

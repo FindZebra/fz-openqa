@@ -1,12 +1,13 @@
 from unittest import TestCase
 
 import faiss
+import rich
 import torch
 
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
 from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
-from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimOutput
+from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 
 
 class TestMaxSim(TestCase):
@@ -31,8 +32,8 @@ class TestMaxSim(TestCase):
                              faiss_devices=[-1])
 
     def test_signals(self):
-        self.maxsim.put(WorkerSignal.PRINT, k=None, p=None)
-        self.maxsim.cuda()
+        self.maxsim(WorkerSignal.PRINT)
+        # self.maxsim.cuda()
         self.maxsim.cpu()
 
     @torch.no_grad()
@@ -41,11 +42,14 @@ class TestMaxSim(TestCase):
         pids = torch.tensor([13, 14, 15, 67, 68, 69])
         input_vectors = self.vectors[pids]
         for _ in range(n_trials):
-            self.maxsim.put(input_vectors, k=10, p=100)
-
-        for x in self.maxsim.get():
+            x = self.maxsim(input_vectors, k=10, p=100)
             assert isinstance(x, MaxSimOutput)
-            assert (x.pids[:, 0] == pids).all()
+            if not (x.pids[:, 0] == pids).all():
+                rich.print("=== target pids[:, 0] ===")
+                rich.print(pids)
+                rich.print("=== pids ===")
+                rich.print(x.pids[:, :10])
+                raise AssertionError("pids are not equal")
 
     def tearDown(self) -> None:
         self.maxsim.terminate()

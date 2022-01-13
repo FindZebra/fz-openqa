@@ -10,6 +10,7 @@ from typing import Union
 
 import faiss
 import numpy as np
+import rich
 import torch
 from torch import Tensor
 
@@ -17,11 +18,12 @@ from fz_openqa.datamodules.index.utils.maxsim.base_worker import ctx
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import DeviceQueue
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimOutput
+from fz_openqa.datamodules.index.utils.maxsim.datastruct import FaissInput
+from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimInput
+from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
-from fz_openqa.datamodules.index.utils.maxsim.workers import FaissInput
-from fz_openqa.datamodules.index.utils.maxsim.workers import FaissWorker
-from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimReducerWorker
+from fz_openqa.datamodules.index.utils.maxsim.reduce import MaxSimReducer
+from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -29,7 +31,7 @@ from fz_openqa.utils.tensor_arrow import TensorArrowTable
 logger = logging.getLogger(__name__)
 
 
-class MaxSim(object):
+class MaxSim(torch.nn.Module):
     """Implement the two steps retrieval process of Colbert: https://arxiv.org/abs/2004.12832
 
     This object functions as a multiprocessing pipeline with 3 types of workers:
@@ -56,59 +58,51 @@ class MaxSim(object):
         max_chunksize: Optional[int] = 10_000,
         max_queue_size: int = 5,
     ):
+        super(MaxSim, self).__init__()
+        # init the token_index
+        self.token_index = TokenIndex(token_index, faiss_devices)
+
+        # Store `emb2pid`
+        self.register_buffer("emb2pid", emb2pid)
+
+        # setup the Rankers
+        # init the devices
         if len(ranking_devices) == 0:
             ranking_devices = [-1]
+        self.ranking_devices = [format_device(d) for d in ranking_devices]
 
-        reduce_device = format_device(ranking_devices[-1])  # todo
+        # Define the vectors partition
+        partition = torch.linspace(0, emb2pid.max() + 1, len(ranking_devices) + 1, dtype=torch.long)
+        partition = torch.cat([partition[:-1, None], partition[1:, None]], dim=1)
+        self.register_buffer("partition", partition)
 
-        # initialize Input and Output queues
-        self.input_queue = DeviceQueue(device=-1)
-        self.ranking_input_queues: List[DeviceQueue] = []
-        self.ranking_output_queues: List[DeviceQueue] = []
+        # Initialize Input and Output queues
+        self.ranking_input_queues: List[ctx.Queue] = []
+        self.ranking_output_queues: List[ctx.Queue] = []
         for device in ranking_devices:
-            q = DeviceQueue(device=device, maxsize=max_queue_size)
+            q = ctx.Queue(maxsize=max_queue_size)
             self.ranking_input_queues.append(q)
-            q = DeviceQueue(device=None, maxsize=max_queue_size)
+            q = ctx.Queue(maxsize=max_queue_size)
             self.ranking_output_queues.append(q)
 
-        reduce_max_queue_size = max_queue_size * len(ranking_devices) if max_queue_size else None
-        self.reduce_input_queue = DeviceQueue(device=reduce_device, maxsize=reduce_max_queue_size)
-        self.output_queue = DeviceQueue(device=torch.device("cpu"), maxsize=max_queue_size)
-
-        # initialize the `MaxSimReducerWorker`
-        self.reducer_worker = MaxSimReducerWorker(
-            device=format_device(reduce_device),
-            input_queue=self.ranking_output_queues,
-            output_queue=[self.output_queue],
-            daemon=True,
-        )
-        self.reducer_worker.start()
+        # Initialize the receiver (one iter for each Worker)
+        self.receivers = [iter(q.get, WorkerSignal.EXIT) for q in self.ranking_output_queues]
 
         # initialize the MaxSim workers
-        self._init_maxsim_rankers(emb2pid, vectors, ranking_devices, max_chunksize)
+        self.maxsim_workers = self._init_maxsim_rankers(vectors, ranking_devices, max_chunksize)
 
-        # initialize the faiss index
-        self.faiss_worker = FaissWorker(
-            token_index,
-            device=faiss_devices,
-            input_queue=self.input_queue,
-            output_queue=self.ranking_input_queues,
-            daemon=True,
-        )
-        self.faiss_worker.start()
+        # initialize the MaxSimReducer
+        self.maxsim_reducer = MaxSimReducer()
 
-    def _init_maxsim_rankers(self, emb2pid, vectors, devices, max_chunksize):
-        partition = np.linspace(0, emb2pid.max() + 1, len(devices) + 1, dtype=int)
-        max_sims = []
+    def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
-        self.maxsim_workers: List[MaxSimWorker] = []
-        for idx, i in enumerate(range((len(partition) - 1))):
-            part = (partition[i], partition[i + 1])
+        maxsim_workers: List[MaxSimWorker] = []
+        for idx, idevice in enumerate(self.ranking_devices):
+            part = self.partition[idx]
 
             # initialize the `MaxSimRanker` given the partition
             worker = self._init_maxsim_worker(
                 vectors,
-                emb2pid,
                 part,
                 max_chunksize=max_chunksize,
                 id=idx,
@@ -117,84 +111,108 @@ class MaxSim(object):
                 output_queue=self.ranking_output_queues[idx],
                 daemon=True,
             )
-            self.maxsim_workers.append(worker)
+            maxsim_workers.append(worker)
 
         # test the consistency of the partition
-        assert len(vectors) == sum(len(w.max_sim.vectors) for w in self.maxsim_workers)
-        assert (vectors[-1].data == self.maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all()
+        assert len(vectors) == sum(len(w.max_sim.vectors) for w in maxsim_workers)
+        assert (vectors[-1].data == maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all()
 
         # start the workers
-        for w in self.maxsim_workers:
+        for w in maxsim_workers:
             w.start()
-        return max_sims
+
+        return maxsim_workers
 
     def _init_maxsim_worker(
         self,
         vectors: Tensor | TensorArrowTable,
-        emb2pid: Tensor | TensorArrowTable,
         part: Tuple[int, int],
         max_chunksize: Optional[int] = None,
         **kwargs,
     ):
-        ranker = MaxSimRanker(emb2pid, vectors, boundaries=part, max_chunksize=max_chunksize)
+        ranker = MaxSimRanker(vectors, boundaries=part, max_chunksize=max_chunksize)
         worker = MaxSimWorker(max_sim=ranker, **kwargs)
         return worker
 
     def cpu(self: T) -> T:
-        self.input_queue.put(WorkerSignal.TO_CPU)
-
-        self._wait_until_acknowledged(WorkerSignal.TO_CPU)
+        try:
+            super(MaxSim, self).cpu()
+        except Exception:
+            pass
+        self.token_index.cpu()
+        self._send_signal(WorkerSignal.TO_CPU)
         return self
+
+    def to(self: T, device: torch.device) -> T:
+        raise NotImplementedError(f"{self.__class__.__name__} does not support to(device)")
 
     def cuda(self: T, device: Optional[Union[int, torch.device]] = None) -> T:
         assert device is None
-        self.input_queue.put(WorkerSignal.TO_CUDA)
-        self._wait_until_acknowledged(WorkerSignal.TO_CUDA)
+        try:
+            super(MaxSim, self).cuda()
+        except Exception:
+            pass
+        self.token_index.cuda()
+        self._send_signal(WorkerSignal.TO_CUDA)
         return self
 
-    def _wait_until_acknowledged(self, signal: WorkerSignal):
-        for output in iter(self.output_queue.get, WorkerSignal.EXIT):
-            if output == signal:
+    def _send_signal(self, signal: WorkerSignal):
+
+        for q in self.ranking_input_queues:
+            q.put(signal)
+
+        while True:
+            data = [next(q, WorkerSignal.EXIT) for q in self.receivers]
+            if all(d == signal for d in data):
                 break
 
         logger.info(f"{signal} acknowledged by all workers")
 
+    def _collect_worker_outputs(self):
+        return [next(q, WorkerSignal.EXIT) for q in self.receivers]
+
+    def _process_batch(self, q_vectors: Tensor, *, p: int, k: int) -> MaxSimOutput:
+        # process q_vectors using the token-level faiss index
+        token_ids = self.token_index(q_vectors, p)
+        pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
+
+        # send the token_ids to each device
+        for q, device in zip(self.ranking_input_queues, self.ranking_devices):
+            q_vectors_i = q_vectors.to(device, non_blocking=True)
+            pids_i = pids.clone().to(device, non_blocking=True)
+            worker_input = MaxSimInput(q_vectors=q_vectors_i, pids=pids_i, k=k)
+            q.put(worker_input)
+
+        # wait for the results to be ready
+        maxsim_outputs = self._collect_worker_outputs()
+
+        # reduce the results
+        return self.maxsim_reducer(maxsim_outputs, k=k)
+
     @torch.no_grad()
-    def put(self, q_vectors: Tensor | WorkerSignal, *, k: int, p: int, idx: Optional[int] = None):
+    def __call__(
+        self, q_vectors: Tensor | WorkerSignal, *, k: int = None, p: int = None
+    ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
-            input_data = FaissInput(q_vectors=q_vectors, k=k, p=p, idx=idx)
-            self.input_queue.put(input_data)
+            assert p is not None and k is not None, "p and k must be specified"
+            return self._process_batch(q_vectors, p=p, k=k)
 
         elif isinstance(q_vectors, WorkerSignal):
             # send the signal through the pipeline
-            signal = q_vectors
-            self.input_queue.put(signal)
-            self._wait_until_acknowledged(signal)
+            self._send_signal(q_vectors)
         else:
             raise TypeError(f"Unsupported type: {type(q_vectors)}")
-
-    def get(self) -> Iterable[MaxSimOutput]:
-        """Gather the output data from the MaxSim pipeline"""
-        self.input_queue.put(WorkerSignal.BATCH_END)
-        for data in iter(self.output_queue.get, WorkerSignal.EXIT):
-            if isinstance(data, MaxSimOutput):
-                yield data
-            elif isinstance(data, WorkerSignal):
-                if data == WorkerSignal.BATCH_END:
-                    break
-                else:
-                    raise RuntimeError(f"Unexpected signal: {data}")
 
     def __del__(self):
         self.terminate()
 
     @property
     def all_workers(self):
-        return self.maxsim_workers + [self.reducer_worker, self.faiss_worker]
+        return self.maxsim_workers
 
     def terminate(self):
-        self.input_queue.put(WorkerSignal.EXIT)
+        self._send_signal(WorkerSignal.EXIT)
         for worker in self.all_workers:
             worker.join()
         for p in self.all_workers:

@@ -13,7 +13,7 @@ from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 
 
 def run():
-    corpus_size = 20_000
+    corpus_size = 200_000
     vdim = 128
     seq_len = 200
     vectors = torch.randn(size=(corpus_size, seq_len, vdim))
@@ -42,33 +42,38 @@ def run():
         token_index=index_cpu,
         vectors=vectors,
         emb2pid=emd2pid,
-        max_chunksize=1_000,  # 10_000
+        max_chunksize=10_000,  # 10_000
         max_queue_size=5,
-        ranking_devices=[0, 1, 2, 3, 4],
-        faiss_devices=[5, 6],
+        ranking_devices=[0, 1, 2, 3, 4, 5],
+        faiss_devices=[6, 7],
     )
 
-    maxsim.put(WorkerSignal.PRINT, k=None, p=None)
+    maxsim(WorkerSignal.PRINT)
     maxsim.cuda()
-    # time.sleep(30)
+    rich.print(">> starting search...")
 
     n_iter = 1
     q_seq_len = 350
     dset_size = 4 * 12_000
-    batch_size = 100
+    batch_size = 1000
     n_samples = dset_size // batch_size
-    index = torch.linspace(0, corpus_size - 1, batch_size, dtype=torch.int64)
-    input_vectors = vectors[index]
-    rich.print(f"> putting vectors: {input_vectors.shape}")
+    # index = torch.linspace(0, corpus_size - 1, batch_size, dtype=torch.int64)
+    # query_vectors = vectors[index]
+    query_vectors = torch.randn(size=(batch_size, q_seq_len, vdim))
+    rich.print(f"> query vectors: {query_vectors.shape}")
     start_time = time.time()
     for iter_idx in range(n_iter):
-        for _ in range(n_samples):
-            input_vectors = torch.randn(size=(corpus_size, q_seq_len, vdim))
+        for _ in tqdm(range(n_samples), desc=f"iter {iter_idx}"):
+            query_vectors = torch.randn(size=(batch_size, q_seq_len, vdim))
             if use_half:
-                input_vectors = input_vectors.to(torch.float16)
-            maxsim.put(input_vectors, k=1000, p=100)
-        for x in tqdm(iter(maxsim.get()), total=n_samples, desc=f"iter {iter_idx}"):
-            pass
+                query_vectors = query_vectors.to(torch.float16)
+            out = maxsim(query_vectors, k=1000, p=100)
+            assert out.pids.shape == (
+                batch_size,
+                1000,
+            ), f"output: {out.scores.shape} + {out.pids.shape}"
+
+        break
 
     rich.print(
         f">> Processed {n_iter * n_samples * batch_size} "
@@ -80,7 +85,9 @@ def run():
     maxsim.terminate()
     rich.print("> DONE.")
 
-    rich.print(x.pids)
+    rich.print(out.pids[:3])
+
+    rich.print(out.scores[:3])
 
 
 if __name__ == "__main__":
