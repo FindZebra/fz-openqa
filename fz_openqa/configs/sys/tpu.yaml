@@ -1,2 +1,5 @@
 defaults:
   - base
+
+
+shared_cache_dir: ${env:SHARED_CACHE_DIR}
