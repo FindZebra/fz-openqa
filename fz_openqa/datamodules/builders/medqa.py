@@ -92,6 +92,7 @@ class MedQaBuilder(HfDatasetBuilder):
         self,
         *args,
         min_answer_length: Optional[int] = None,
+        n_query_tokens: int = 1,
         question_length: Optional[int] = None,
         dset_name: str = "us",
         **kwargs,
@@ -99,6 +100,7 @@ class MedQaBuilder(HfDatasetBuilder):
         super(MedQaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
         self.question_length = question_length
+        self.n_query_tokens = n_query_tokens
         self.dset_name = dset_name
 
     def load_base_dataset(self) -> DatasetDict:
@@ -190,7 +192,7 @@ class MedQaBuilder(HfDatasetBuilder):
                 max_length=self.max_length,
                 add_encoding_tokens=self.add_encoding_tokens,
                 add_special_tokens=self.add_special_tokens,
-                spec_tokens=QUERY_TOKEN,
+                spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
                 shape=None,
             ),
             query_expansion_pipe,
@@ -307,7 +309,7 @@ class ConcatMedQaBuilder(MedQaBuilder):
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
-            q_start_tokens.append(QUERY_TOKEN)
+            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 
         add_spec_tokens_pipe = Apply(
             {"question.text": partial(add_spec_token, q_start_tokens)}, element_wise=True
