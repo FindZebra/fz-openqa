@@ -71,9 +71,21 @@ class OptionRetriever(Module):
         eval_topk: Optional[int] = 20,
         resample_k: Optional[int] = None,
         grad_expr: GradExpression = GradExpression.IN_BATCH,
+        head_map: None = None,
+        share_heads: bool = True,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
+        assert head_map is None, "`head_map` cannot be set manually for this model."
+        if share_heads:
+            head_map = {
+                "question_reader": "reader",
+                "document_reader": "reader",
+                "question_retriever": "retriever",
+                "document_retriever": "retriever",
+            }
+
+        super().__init__(*args, head_map=head_map, **kwargs)
+
         self.resample_k = resample_k
         self.max_batch_size = max_batch_size
         head = next(iter(self.heads.values()))

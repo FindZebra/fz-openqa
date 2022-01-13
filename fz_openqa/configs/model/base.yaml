@@ -6,7 +6,7 @@ _target_: fz_openqa.modeling.Model
 
 bert_id: ${model.bert.pretrained_model_name_or_path}
 tokenizer: ${datamodule.tokenizer}
-cache_dir: ${sys.cache_dir}
+cache_dir: ${sys.shared_cache_dir}
 lr: 3e-5
 weight_decay: 0.01
 monitor_metric: ${base.target_metric}

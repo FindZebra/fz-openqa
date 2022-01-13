@@ -2,7 +2,14 @@ import json
 import logging
 from abc import abstractmethod
 from copy import copy
-from functools import singledispatchmethod
+
+try:
+    from functools import singledispatchmethod
+except Exception:
+    from singledispatchmethod import singledispatchmethod
+
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 from typing import Callable

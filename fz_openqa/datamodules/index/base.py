@@ -6,6 +6,7 @@ from enum import Enum
 from typing import List
 from typing import Optional
 
+import numpy as np
 import rich
 from datasets import Dataset
 
@@ -16,6 +17,7 @@ from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class IndexMode(Enum):
@@ -53,6 +55,7 @@ class Index(Pipe):
         index_output_key: str = "row_idx",
         score_output_key: str = "retrieval_score",
         analyzed_output_key: str = "analyzed_tokens",
+        rank_output_key: str = "retrieval_rank",
         # `Pipe` arguments
         id: Optional[str] = None,
         update: bool = False,
@@ -101,6 +104,7 @@ class Index(Pipe):
         self.index_output_key = index_output_key
         self.score_output_key = score_output_key
         self.analyzed_output_key = analyzed_output_key
+        self.rank_output_key = rank_output_key
 
         # call the Pipe __init__
         assert input_filter is None, "input_filter is set automatically, please do not set it"
@@ -179,7 +183,10 @@ class Index(Pipe):
         # search the index by chunk
         batch_size = infer_batch_size(query)
         search_results = None
-        eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        if self.max_chunksize is not None:
+            eff_batch_size = min(max(1, self.max_chunksize), batch_size)
+        else:
+            eff_batch_size = batch_size
         for i in range(0, batch_size, eff_batch_size):
             chunk_i = slice_batch(query, slice(i, i + eff_batch_size))
             r = self._search_chunk(chunk_i, k=k, **kwargs)
@@ -202,6 +209,7 @@ class Index(Pipe):
         output = {
             self.index_output_key: search_results.index,
             self.score_output_key: search_results.score,
+            self.rank_output_key: search_results.rank,
         }
 
         if search_results.tokens is not None:
@@ -215,5 +223,5 @@ class Index(Pipe):
 
         return output
 
-    def to_cpu(self):
+    def free_memory(self):
         pass

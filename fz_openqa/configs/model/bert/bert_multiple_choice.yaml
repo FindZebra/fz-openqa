@@ -1,6 +1,6 @@
 _target_: transformers.AutoModelForMultipleChoice.from_pretrained
 
 pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.2
-cache_dir: ${sys.cache_dir}
+cache_dir: ${sys.shared_cache_dir}
 hidden_dropout_prob: 0.1
 attention_probs_dropout_prob: 0.1

@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - override /sys: tpu.yaml
+
+
+trainer:
+  gpus: null
+  strategy: null
+  tpu_cores: 8

@@ -8,7 +8,6 @@ import rich
 from omegaconf import DictConfig
 from rich.logging import RichHandler
 
-import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.medqa import MedQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -25,9 +24,6 @@ def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     datasets.set_caching_enabled(True)
 
-    # define the default cache location
-    default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
-
     # initialize the tokenizer
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
@@ -35,9 +31,9 @@ def run(config: DictConfig) -> None:
     builder = MedQaBuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", False),
-        cache_dir=config.get("cache_dir", default_cache_dir),
-        min_answer_length=config.get("min_answer_length", None),
-        num_proc=2,
+        cache_dir=config.sys.cache_dir,
+        question_length=config.get("question_length", None),
+        num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "us"),
     )
     dm = DataModule(builder=builder)

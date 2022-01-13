@@ -20,16 +20,18 @@ class ColbertHead(Head):
         kernel_size: Optional[int] = None,
         downscaling: int = 1,
         normalize: bool = False,
+        use_mask: bool = True,
         **kwargs
     ):
         super(ColbertHead, self).__init__(bert=bert, output_size=output_size, **kwargs)
 
         self.normalize = normalize
+        self.use_mask = use_mask
         if output_size is None and kernel_size is None and downscaling == 1:
             self.head = None
         elif kernel_size is None:
             assert downscaling == 1
-            self.head = nn.Linear(bert.config.hidden_size, output_size)
+            self.head = nn.Linear(bert.config.hidden_size, output_size, bias=self.bias)
         else:
             self.head = nn.Conv1d(
                 bert.config.hidden_size,
@@ -37,9 +39,12 @@ class ColbertHead(Head):
                 kernel_size=(kernel_size,),
                 stride=(downscaling,),
                 padding=(kernel_size // 2,),
+                bias=self.bias,
             )
 
-    def forward(self, last_hidden_state: Tensor, **kwargs) -> Tensor:
+    def forward(
+        self, last_hidden_state: Tensor, *, mask: Optional[Tensor] = None, **kwargs
+    ) -> Tensor:
         context_repr = last_hidden_state
 
         if self.head is not None:
@@ -52,5 +57,8 @@ class ColbertHead(Head):
 
         if self.normalize:
             context_repr = F.normalize(context_repr, p=2, dim=-1)
+
+        if mask is not None and self.use_mask:
+            context_repr = context_repr * mask.unsqueeze(-1)
 
         return context_repr

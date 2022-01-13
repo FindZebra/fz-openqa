@@ -36,6 +36,7 @@ datamodule:
       batch_size: 4000
     persist_cache: true
     cache_dir: ${sys.cache_dir}
+    shared_cache_dir: ${sys.shared_cache_dir}
     verbose: true
     progress_bar: true
     dtype: float32

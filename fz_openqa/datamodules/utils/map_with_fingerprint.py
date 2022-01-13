@@ -14,6 +14,7 @@ from datasets import DatasetDict
 
 from fz_openqa.datamodules.index import FaissIndex
 from fz_openqa.datamodules.index.index_pipes import SearchCorpus
+from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential

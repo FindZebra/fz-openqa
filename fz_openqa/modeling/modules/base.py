@@ -1,4 +1,5 @@
 import collections
+import json
 import re
 import warnings
 from abc import ABC
@@ -6,6 +7,8 @@ from abc import abstractmethod
 from copy import deepcopy
 from typing import Any
 from typing import Dict
+from typing import Iterable
+from typing import Iterator
 from typing import List
 from typing import Optional
 from typing import Union
@@ -28,8 +31,7 @@ from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
-
-FEATURE_PATTERN = re.compile("^_{1}[a-zA-Z0-9]+_{1}$")
+from fz_openqa.utils.pretty import pprint_batch
 
 
 def init_default_heads():
@@ -42,6 +44,46 @@ def init_default_heads():
             }
         }
     )
+
+
+def is_feature_name(x):
+    return str(x).startswith("_") and str(x).endswith("_")
+
+
+class HeadGroup(nn.ModuleDict):
+    """A class representing a dictionary of heads.
+    Heads parameters can be shared via the argument `mapping`."""
+
+    def __init__(self, head: Head, *, keys: List[str], mapping: Optional[Dict[str, str]] = None):
+        if mapping is None:
+            mapping = {k: k for k in keys}
+        super().__init__({k: deepcopy(head) for k in set(mapping.values())})
+        self._head_mapping = mapping
+
+    def __getitem__(self, key) -> Head:
+        key = self._head_mapping[key]
+        return super().__getitem__(key)  # type: ignore
+
+    def values(self) -> Iterable[Head]:
+        return (self.__getitem__(k) for k in self.keys())
+
+    def keys(self) -> Iterable[str]:
+        return self._head_mapping.keys()
+
+    def __len__(self) -> int:
+        return len(list(self.keys()))
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.keys())
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._modules
+
+    def __repr__(self):
+        u = super().__repr__()
+        u = u[:-1]
+        u += f"\n  mapping={json.dumps(self._head_mapping, indent=4)}\n)"
+        return u
 
 
 class Module(nn.Module, ABC):
@@ -91,6 +133,7 @@ class Module(nn.Module, ABC):
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
         head: Union[DictConfig, Head] = None,
+        head_map: Optional[Dict[str, str]] = None,
         prefix: str = "",
         **kwargs,
     ):
@@ -99,9 +142,10 @@ class Module(nn.Module, ABC):
         self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
         self.bert: BertPreTrainedModel = self._instantiate_bert(bert=bert, tokenizer=self.tokenizer)
 
+        # initialize the heads
         if head is not None:
             head = maybe_instantiate(head, bert=self.bert)
-            self.heads = nn.ModuleDict({k: deepcopy(head) for k in self._required_heads})
+            self.heads = HeadGroup(head, keys=self._required_heads, mapping=head_map)
         self._init_metrics(prefix=prefix)
 
     def _backbone(
@@ -167,7 +211,7 @@ class Module(nn.Module, ABC):
         last_hidden_state = bert_output.last_hidden_state
 
         # process the last hidden state with the heads
-        return {k: self.heads[k](last_hidden_state) for k in heads}
+        return {k: self.heads[k](last_hidden_state, mask=attention_mask) for k in heads}
 
     def _instantiate_bert(
         self,
@@ -219,7 +263,6 @@ class Module(nn.Module, ABC):
 
         Implement `_step` for each sub-class.
         """
-        # todo: before dispatching to devices: filter the fields to keep only the required ones
         self._check_features(batch, self._required_eval_feature_names)
         return self._step(batch, **kwargs)
 
@@ -251,7 +294,7 @@ class Module(nn.Module, ABC):
             assert split is not None
             self.update_metrics(output, split)
 
-        # filter internal
+        # filter internal values (e.g. __targets__
         if filter_features:
             output = self._filter_features_from_output(output)
         return output
@@ -349,7 +392,7 @@ class Module(nn.Module, ABC):
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:
         """filter the internal values such as _logits_ or _targets_"""
-        return {k: v for k, v in output.items() if not re.match(FEATURE_PATTERN, k)}
+        return {k: v for k, v in output.items() if not is_feature_name(k)}
 
     @staticmethod
     def _select(prefix: str, batch: Batch) -> Batch:

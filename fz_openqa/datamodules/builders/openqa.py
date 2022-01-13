@@ -62,11 +62,13 @@ class OpenQaBuilder(DatasetBuilder):
         "document.row_idx",
         "document.retrieval_score",
         "document.match_score",
+        "document.retrieval_rank",
     ]
 
     _pt_attributes = [
         "document.match_score",
         "document.retrieval_score",
+        "document.retrieval_rank",
     ]
 
     def __init__(
@@ -311,7 +313,7 @@ class OpenQaBuilder(DatasetBuilder):
             dataset = mapper(dataset)
 
         # free-up GPU memory
-        index.to_cpu()
+        index.free_memory()
 
         # filter the dataset
         if dataset_filter is not None:
@@ -354,7 +356,7 @@ class OpenQaBuilder(DatasetBuilder):
             CollateField(
                 "document",
                 level=document_nesting_level,
-                to_tensor=["match_score", "retrieval_score"],
+                to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
                 id="collate-nested-document-attributes",
             ),
             self.dataset_builder._get_collate_pipe(),

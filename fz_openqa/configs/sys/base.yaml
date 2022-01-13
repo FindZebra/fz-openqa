@@ -5,3 +5,6 @@ work_dir: ${hydra:runtime.cwd}
 
 # path to folder with data
 cache_dir: ${sys.work_dir}/cache/
+
+# path to data that should be shared across experiments (BERT, datasets, etc.)
+shared_cache_dir: ${sys.cache_dir}
