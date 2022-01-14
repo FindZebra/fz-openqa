@@ -113,7 +113,7 @@ class ColbertIndex(FaissIndex):
 
             # cast to SearchResult
             r = SearchResult(
-                score=data.scores.numpy(),
+                score=data.scores.cpu().numpy(),
                 index=data.pids.cpu().numpy(),
                 dataset_size=self.dataset_size,
                 k=k,

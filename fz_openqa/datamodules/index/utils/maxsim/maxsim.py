@@ -92,7 +92,7 @@ class MaxSim(torch.nn.Module):
         self.maxsim_workers = self._init_maxsim_rankers(vectors, ranking_devices, max_chunksize)
 
         # initialize the MaxSimReducer
-        self.maxsim_reducer = MaxSimReducer()
+        self.maxsim_reducer = MaxSimReducer(device=ranking_devices[-1])
 
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
@@ -191,7 +191,7 @@ class MaxSim(torch.nn.Module):
 
     @torch.no_grad()
     def __call__(
-        self, q_vectors: Tensor | WorkerSignal, *, k: int = None, p: int = None
+        self, q_vectors: Tensor | WorkerSignal, *, k: int = None, p: int = None, **kwargs
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):

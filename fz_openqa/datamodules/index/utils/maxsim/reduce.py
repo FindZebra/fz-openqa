@@ -13,10 +13,10 @@ from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 class MaxSimReducer(object):
     """Reduce the `MaxSimOutput`s from each `MaxSimWorker` to a single `MaxSimOutput`"""
 
-    def __init__(self, output_device: None | int | torch.device = None):
-        if output_device is None:
-            output_device = torch.device("cpu")
-        self.output_device = output_device
+    def __init__(self, device: None | int | torch.device = None):
+        if device is None:
+            device = torch.device("cpu")
+        self.device = device
 
     def __call__(self, data: List[MaxSimOutput], k: int) -> MaxSimOutput:
         assert isinstance(data, list)
@@ -29,7 +29,10 @@ class MaxSimReducer(object):
         # send to device
         devices = list(set(s.device for s in scores))
         if len(devices) > 1:
-            device = devices[0]
+            if self.device is None:
+                device = devices[0]
+            else:
+                device = self.device
             scores = [s.to(device, non_blocking=True) for s in scores]
             pids = [p.to(device, non_blocking=True) for p in pids]
 
@@ -47,8 +50,8 @@ class MaxSimReducer(object):
         if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
             maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
         output = MaxSimOutput(
-            scores=maxsim_scores.to(self.output_device, non_blocking=True),
-            pids=maxsim_pids.to(self.output_device, non_blocking=True),
+            scores=maxsim_scores.to(self.device, non_blocking=True),
+            pids=maxsim_pids.to(self.device, non_blocking=True),
             k=k,
             boundaries=None,
         )

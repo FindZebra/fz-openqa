@@ -266,13 +266,13 @@ class TensorArrowTable(TensorArrowBase):
     def _build_index(self):
         index_table = self._load_table(self.index_path)
         columns = index_table.column_names
-        start = index_table.column(columns._index("start"))
-        stop = index_table.column(columns._index("stop"))
+        start = index_table.column(columns.index("start"))
+        stop = index_table.column(columns.index("stop"))
         start = torch.from_numpy(start.to_numpy())
         stop = torch.from_numpy(stop.to_numpy())
         self._index = torch.cat([start[:, None], stop[:, None]], dim=1).contiguous()
 
-        shapes = index_table.column(columns._index("shape"))
+        shapes = index_table.column(columns.index("shape"))
         self._shapes = torch.tensor(shapes.to_pylist())
 
         if self.are_shapes_equal(self._shapes):
