@@ -8,24 +8,27 @@ from typing import List
 from typing import Optional
 
 import datasets
+import jsondiff
 import pytorch_lightning as pl
 import rich
 import torch
 from datasets import Split
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from pytorch_lightning import Callback
 from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
-from torch.optim.lr_scheduler import LambdaLR
 
 from fz_openqa.callbacks.index_openqa import IndexOpenQaCallback
 from fz_openqa.datamodules import DataModule
+from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
@@ -52,6 +55,10 @@ def train(config: DictConfig) -> Optional[float]:
     # avoid "too many open files" error
     torch.multiprocessing.set_sharing_strategy("file_system")
 
+    # load checkpoint manager
+    checkpoint_manager = load_checkpoint(config.get("checkpoint", None), config=config)
+
+    # log paths
     log.info(f"work_dir={config.sys.work_dir}")
     log.info(f"cache_dir={os.path.abspath(config.sys.cache_dir)}")
     log.info(f"Experiment working directory: {os.getcwd()}")
@@ -60,27 +67,20 @@ def train(config: DictConfig) -> Optional[float]:
     if "seed" in config:
         seed_everything(config.base.seed, workers=True)
 
-    # Init Lightning datamodule
-    log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: DataModule = instantiate(config.datamodule)
-
     # only preprocess the data if there is no trainer
     if config.get("trainer", None) is None:
+        log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
+        datamodule: DataModule = instantiate(config.datamodule)
         # datamodule.prepare_data()
         datamodule.setup()
         return
 
-    # display dataset
-    # datamodule.prepare_data()
-    datamodule.setup()
-    if config.verbose:
-        rich.print(datamodule.dataset)
-        pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
-        datamodule.display_samples(n_samples=1)
-
     # Init Lightning Module
-    log.info(f"Instantiating Module <{config.model._target_}>")
-    model: Model = instantiate(config.model, _recursive_=False)
+    model = instantiate_model(
+        config,
+        checkpoint_manager=checkpoint_manager,
+        restore_from_checkpoint=config.get("restore_from_checkpoint", False),
+    )
 
     # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
     callbacks: List[Callback] = []
@@ -89,13 +89,6 @@ def train(config: DictConfig) -> Optional[float]:
             if "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
                 callback = instantiate(cb_conf)
-                if isinstance(callback, IndexOpenQaCallback):
-                    log.info(
-                        f"Attaching datamodule <{type(datamodule).__name__}> "
-                        f"to {type(callback).__name__}"
-                    )
-                    callback.attach(datamodule)
-
                 callbacks.append(callback)
 
     # Init Lightning loggers
@@ -108,11 +101,23 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init Lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
+    # todo: resume trainer from checkpoint with state (require updating Lightning)
     trainer: Trainer = instantiate(
         config.trainer,
         callbacks=callbacks,
         logger=logger,
     )
+
+    # instantiate the datamodule
+    log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
+    datamodule: DataModule = instantiate(config.datamodule)
+    setup_model = instantiate_setup_model(config.get("setup_with_model", None), main_model=model)
+    # datamodule.prepare_data()
+    datamodule.setup(trainer=trainer, model=setup_model)
+    if config.verbose:
+        rich.print(datamodule.dataset)
+        pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
+        datamodule.display_samples(n_samples=1)
 
     # Log config to all lightning loggers
     log.info("Logging hyperparameters.")
@@ -170,6 +175,66 @@ def train(config: DictConfig) -> Optional[float]:
     optimized_metric = config.get("optimized_metric")
     if optimized_metric:
         return trainer.callback_metrics[optimized_metric]
+
+
+def instantiate_model(
+    config: DictConfig,
+    *,
+    checkpoint_manager: Optional[CheckpointLoader] = None,
+    restore_from_checkpoint=False,
+):
+    """Instantiate the model from the config or load from checkpoint."""
+    if checkpoint_manager is None:
+        restore_from_checkpoint = False
+    if not restore_from_checkpoint:
+        log.info(f"Instantiating Module <{config.model._target_}>")
+        model: Model = instantiate(config.model, _recursive_=False)
+    else:
+        log.info(f"Loading Module <{config.model._target_}> from checkpoint")
+        model: Model = checkpoint_manager.load_model(last=config.get("checkpoint_type", "last"))
+    return model
+
+
+def load_checkpoint(
+    checkpoint_path: Optional[str], *, config: DictConfig
+) -> Optional[CheckpointLoader]:
+    """Load a CheckpointLoader from a checkpoint path and print the
+    difference between the `checkpoint.config` and the `config`."""
+    if checkpoint_path is not None:
+        checkpoint = CheckpointLoader(checkpoint_path)
+        # todo: move to original directory
+        # todo: os.chdir(checkpoint.config.sys.workdir)
+        # todo: config.sys.workdir = checkpoint.config.sys.workdir
+        rich.print(get_separator())
+        rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
+        rich.print(
+            jsondiff.diff(
+                OmegaConf.to_container(checkpoint.config, resolve=False),
+                OmegaConf.to_container(config, resolve=False),
+                syntax="symmetric",
+            )
+        )
+        rich.print(get_separator())
+        return checkpoint
+    else:
+        return None
+
+
+def instantiate_setup_model(setup_with_model: DictConfig, *, main_model: Model) -> Optional[Model]:
+    """
+    Instantiate the model used to setup the dataset.
+    if `setup_with_model` is a string, it will be interpreted as the path to a checkpoint.
+    if `setup_with_model` is `True`, the main model will be used.
+    """
+
+    if isinstance(setup_with_model, str):
+        log.info(f"Setup model: Instantiating from path <{setup_with_model}>")
+        return CheckpointLoader(setup_with_model).load_model(checkpoint_type="best")
+    elif isinstance(setup_with_model, bool) and setup_with_model:
+        log.info(f"Setup model: Using main model <{type(main_model)}>")
+        return main_model
+    else:
+        return None
 
 
 def patch_signal_connector(trainer: Trainer):
@@ -279,4 +344,5 @@ def update_dataset(
     log.info("Updating dataset...")
     start_time = time.time()
     datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
+    datamodule.display_samples(n_samples=1)
     log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
