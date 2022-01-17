@@ -29,7 +29,8 @@ class RetrieverDistribution(Analytic):
 
     requires_columns: List[str] = ["document.retrieval_score"]
     output_file_name = "retrieval_distribution.json"
-    n_samples = 1000
+    n_samples = 5000
+    _allow_wandb: True
 
     def process_dataset_split(self, dset: Dataset) -> Dict | List:
         """

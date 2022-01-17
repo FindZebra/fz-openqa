@@ -30,6 +30,7 @@ class RetrieverAccuracy(Analytic):
 
     requires_columns: List[str] = ["document.retrieval_score", "answer.target"]
     output_file_name = "retrieval_accuracy.json"
+    _allow_wandb: True
 
     def __init__(self, *args, method: str = "sum", **kwargs):
         super().__init__(*args, **kwargs)
