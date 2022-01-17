@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -22,7 +24,9 @@ logger = logging.getLogger("fz_openqa.index.static")
 
 
 class StaticIndex(Index):
+    _max_num_proc: int = 1
     default_key = None
+    document_lookup: Dict[Any, List[int]] = None
     no_fingerprint: List[str] = Index.no_fingerprint + ["document_lookup"]
 
     def input_keys(self, mode: Optional[IndexMode] = None) -> List[str]:
@@ -47,9 +51,11 @@ class StaticIndex(Index):
         # set a unique index name
         self._set_index_name(dataset=dataset)
         dataset = keep_only_columns(dataset, self.input_keys(IndexMode.INDEX))
-        self.document_lookup = defaultdict(list)
+        document_lookup = defaultdict(set)
         for row_idx, doc_id in enumerate(dataset[f"{self.index_field}.idx"]):
-            self.document_lookup[doc_id].append(row_idx)
+            document_lookup[doc_id] |= {row_idx}
+
+        self.document_lookup = {idx: list(ids) for idx, ids in document_lookup.items()}
 
         logger.info(
             f"n_documents={len(self.document_lookup.keys())}, "

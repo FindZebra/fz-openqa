@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import warnings
 from enum import Enum
 from typing import Any
 from typing import Optional
 
 import einops
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -73,6 +76,7 @@ class OptionRetriever(Module):
         grad_expr: GradExpression = GradExpression.IN_BATCH,
         head_map: None = None,
         share_heads: bool = True,
+        temperature: float = 1.0,
         **kwargs,
     ):
         assert head_map is None, "`head_map` cannot be set manually for this model."
@@ -91,6 +95,7 @@ class OptionRetriever(Module):
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
+        self.temperature = temperature
 
         # init the estimator
         grad_expr = GradExpression(grad_expr)
@@ -179,29 +184,34 @@ class OptionRetriever(Module):
         step_output = {}
         is_supervised_loss_computed = False
 
-        # todo: expand d_batch -- cleanup
-        doc_shape = d_batch["document.input_ids"].shape
-        query_shape = q_batch["question.input_ids"].shape
-        if len(doc_shape) == len(query_shape):
+        # Register the document and question shape
+        # if the documents are of shape [batch_size, n_docs, seq_len], documents
+        # will be expanded to shape [batch_size, n_options, seq_len].
+        doc_shape = d_batch["document.input_ids"].shape[:-1]
+        query_shape = q_batch["question.input_ids"].shape[:-1]
+        if len(doc_shape) != 3:
+            assert len(doc_shape) == 2
             doc_target_shape = (doc_shape[0], query_shape[1], doc_shape[1])
         else:
             doc_target_shape = None
 
-        pprint_batch(d_batch, "Option retriever", silent=silent)
+        pprint_batch(d_batch, f"Option retriever::d_batch::in: {doc_target_shape}", silent=silent)
+        pprint_batch(q_batch, "Option retriever::q_batch::in", silent=silent)
 
         if self.resample_k is not None:
-
             pprint_batch(d_batch, "d_batch", silent=silent)
 
-            # compute documents logits
+            # compute documents logits, and potentially expand to match
+            # the shape [batch_size, n_options, n_documents, ...]
             with torch.no_grad():
                 d_out = self._forward(d_batch, silent=silent, **kwargs)
-                self._expand_to_shape(d_out, doc_target_shape)  # todo
+                d_out = {k: self._expand_to_shape(v, doc_target_shape) for k, v in d_out.items()}
 
-            # compute questions logits
+            # compute questions logits, shape [batch_size, n_options, ...]
             output.update(self._forward(q_batch, silent=silent, **kwargs))
+            pprint_batch({**output, **d_out}, "Option retriever::resampling::input", silent=silent)
 
-            # compute the score and sample k without replacement
+            # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
                 retriever_score = self._compute_score(
                     hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
@@ -216,26 +226,32 @@ class OptionRetriever(Module):
                     step_output.update(supervised_loss_out)
 
                 # sample k documents
-                # todo: mask the one with retrieve  score = -inf
-                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
+                original_retrieval_score = d_batch.get("document.retrieval_score", None)
+                rich.print(original_retrieval_score.flip(1))
+                self._mask_scores(original_retrieval_score, retriever_score)
+                soft_samples = F.gumbel_softmax(
+                    retriever_score / self.temperature, hard=False, dim=-1
+                )
                 sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
 
                 # re-sample the documents
                 for k, v in d_batch.items():
+                    v = self._expand_to_shape(v, doc_target_shape)
+                    v = self._select_with_index(v, sample_ids)
                     if isinstance(v, torch.Tensor):
-                        leaf_shape = v.shape[len(sample_ids.shape) :]
-                        _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
-                        _index = _index.expand(*sample_ids.shape, *leaf_shape)
-                        d_batch[k] = v.gather(index=_index, dim=2)
+                        v = v.contiguous()
+                    d_batch[k] = v
 
+                pprint_batch(d_batch, "Option retriever::resampling::output", silent=silent)
         else:
-            # compute questions logits
+            # compute the questions logits
             output.update(self._forward(q_batch, **kwargs))
 
         # compute the document logits
         d_out = self._forward(d_batch, **kwargs)
-        self._expand_to_shape(d_out, doc_target_shape)  # todo
         output.update(d_out)
+        pprint_batch(output, "Option retriever::outputs::final", silent=silent)
+
         keys = [
             "_hq_reader_",
             "_hd_reader_",
@@ -277,12 +293,34 @@ class OptionRetriever(Module):
 
         return step_output
 
-    def _expand_to_shape(self, d_out, doc_target_shape):
-        if doc_target_shape is not None:
-            for key, x in d_out.items():
-                x = x.unsqueeze(1)
-                x = x.expand(*doc_target_shape[:2], *x.shape[2:])
-                d_out[key] = x
+    @staticmethod
+    def _mask_scores(original_retrieval_score, retriever_score):
+        if original_retrieval_score is not None:
+            retrieval_score = OptionRetriever._expand_to_shape(
+                original_retrieval_score, retriever_score.shape
+            )
+            retriever_score[retrieval_score < -1e12] = -float("inf")
+
+    @staticmethod
+    def _select_with_index(v: Any | Tensor, index: Tensor) -> Any | Tensor:
+        if isinstance(v, torch.Tensor):
+            return v
+        leaf_shape = v.shape[len(index.shape) :]
+        _index = index.view(*index.shape, *(1 for _ in leaf_shape))
+        _index = _index.expand(*index.shape, *leaf_shape)
+        v = v.gather(index=_index, dim=2)
+        return v
+
+    @staticmethod
+    def _expand_to_shape(x: Tensor, doc_target_shape: Optional[torch.Size]) -> Tensor:
+        if doc_target_shape is None:
+            return x
+        elif x.shape[: len(doc_target_shape)] != doc_target_shape:
+            x = x.unsqueeze(1)
+            x = x.expand(*doc_target_shape[:2], *x.shape[2:])
+            return x
+        else:
+            return x
 
     def _compute_score(
         self,

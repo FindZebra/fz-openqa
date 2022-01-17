@@ -35,7 +35,7 @@ def pad_second_dim(arr: Array2d, *, k: int, fill_token: Any) -> Array2d:
     Pad second dimension to length k.
     """
     if isinstance(arr, list):
-        pad_fn = partial(pad_to_length, fill_token=-1, length=k)
+        pad_fn = partial(pad_to_length, fill_token=fill_token, length=k)
         return list(map(pad_fn, arr))
     elif isinstance(arr, np.ndarray):
         if arr.shape[1] == k:
@@ -55,6 +55,7 @@ def replace_neg_values(arr: Array, *, new_value_range: Tuple[int, int]) -> Array
     """
     Replace all occurrences of replace_token in arr with new_token.
     """
+
     if isinstance(arr, list):
         has_neg_index = any(i < 0 for i in flatten_json_struct(arr))
         if has_neg_index:
@@ -97,9 +98,14 @@ class SearchResult:
         k: int,
     ):
 
+        if not all(len(x) <= k for x in score):
+            raise ValueError(
+                f"All results must have length <= k. Found: " f"{[len(x) for x in score]}"
+            )
+
         # pad to length
         index = pad_second_dim(index, k=k, fill_token=-1)
-        score = pad_second_dim(score, k=k, fill_token=-np.float("inf"))
+        score = pad_second_dim(score, k=k, fill_token=-float("inf"))
         if tokens is not None:
             tokens = pad_second_dim(tokens, k=k, fill_token=[])
 
