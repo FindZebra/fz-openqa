@@ -4,6 +4,7 @@ from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ExtractGoldAnswer
 from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
@@ -49,7 +50,11 @@ class FetchAndClassifyDocuments(Sequential):
         super().__init__(
             ApplyAsFlatten(
                 FetchDocuments(
-                    corpus_dataset=corpus_dataset, keys=[f"{classifier.document_field}.text"]
+                    corpus_dataset=corpus_dataset,
+                    keys=[
+                        f"{classifier.document_field}.text",
+                        f"{classifier.document_field}.question_idx",
+                    ],
                 ),
                 input_filter=In([f"{classifier.document_field}.row_idx"]),
                 update=True,
@@ -61,6 +66,7 @@ class FetchAndClassifyDocuments(Sequential):
                     f"{classifier.document_field}.row_idx",
                     f"{classifier.answer_field}.text",
                     f"{classifier.answer_field}.target",
+                    f"{classifier.answer_field}.idx",
                 ]
             ),
         )
@@ -114,12 +120,15 @@ class ExpandAndClassify(Sequential):
             extract_pipe = None
 
         # keys to expand
-        expand_targets = [f"{classifier.answer_field}.{k}" for k in ["text", "synonyms"]]
+        expand_level_1 = [f"{classifier.answer_field}.idx"]
+        expand_targets = [f"{classifier.answer_field}.{k}" for k in ["text", "synonyms", "idx"]]
 
         # initialize the Pipeline
         super().__init__(
             extract_pipe,
             FilterKeys(Not(In([f"{classifier.answer_field}.target"]))),
+            # temporary hack: expand the question id for the SupervisedMatch (QuALITY dataset)
+            Expand(axis=1, n=4, input_filter=In(expand_level_1), update=True),
             Expand(axis=axis, n=n, input_filter=In(expand_targets), update=True),
             ApplyAsFlatten(classifier, level=level),
             input_filter=input_filter,

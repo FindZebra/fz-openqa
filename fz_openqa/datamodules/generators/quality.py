@@ -23,8 +23,8 @@ _HOMEPAGE = "https://github.com/nyu-mll/quality"
 _LICENSE = ""
 # The HuggingFace dataset library don't host the datasets but only point to the original files
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
-# todo: _URL = "https://github.com/nyu-mll/quality/raw/main/data/QuALITY.v0.9.zip"
-_URL = "/Users/valv/Downloads/QuALITY.v0.9.zip"
+_URL = "https://github.com/nyu-mll/quality/raw/main/data/QuALITY.v0.9.zip"
+# _URL = "/Users/valv/Downloads/QuALITY.v0.9.zip"
 
 
 class QualityConfig(datasets.BuilderConfig):
@@ -66,6 +66,7 @@ class QuALITY(datasets.GeneratorBasedBuilder):
                         "question.idx": datasets.Value("int32"),
                         "question.text": datasets.Value("string"),
                         "document.idx": datasets.Value("int32"),
+                        "question.document_idx": datasets.Value("int32"),
                         "document.title": datasets.Value("string"),
                         "document.text": datasets.Value("string"),
                         "answer.text": datasets.Sequence(datasets.Value("string")),
@@ -85,7 +86,7 @@ class QuALITY(datasets.GeneratorBasedBuilder):
                     {
                         "question.idx": datasets.Value("int32"),
                         "question.text": datasets.Value("string"),
-                        "document.idx": datasets.Value("int32"),
+                        "question.document_idx": datasets.Value("int32"),
                         "answer.text": datasets.Sequence(datasets.Value("string")),
                         "answer.target": datasets.Value("int32"),
                         "question.difficulty": datasets.Value("string"),
@@ -104,6 +105,7 @@ class QuALITY(datasets.GeneratorBasedBuilder):
                         "document.idx": datasets.Value("int32"),
                         "document.text": datasets.Value("string"),
                         "document.title": datasets.Value("string"),
+                        "document.question_idx": datasets.Sequence(datasets.Value("int32")),
                     }
                 ),
                 supervised_keys=None,
@@ -145,12 +147,19 @@ class QuALITY(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         if self.config.name == "documents":
             with open(filepath, "r") as f:
+                q_idx = 0
                 for doc_idx, line in enumerate(f.readlines()):
                     data = json.loads(line)
+                    q_ids = []
+                    for _ in data["questions"]:
+                        q_ids.append(q_idx)
+                        q_idx += 1
+
                     row = {
                         "document.idx": doc_idx,
                         "document.text": data["article"],
                         "document.title": data["title"],
+                        "document.question_idx": q_ids,
                     }
                     yield doc_idx, row
         else:
@@ -163,12 +172,13 @@ class QuALITY(datasets.GeneratorBasedBuilder):
                         row = {
                             "question.text": question["question"],
                             "question.idx": q_idx,
-                            "document.idx": doc_idx,
+                            "question.document_idx": doc_idx,
                             "question.difficulty": "hard" if question["difficult"] else "easy",
                             "answer.text": question["options"],
                             "answer.target": target - 1,
                         }
                         if self.config.name == "full":
+                            row["document.idx"] = doc_idx
                             row["document.text"] = data["article"]
                             row["document.title"] = data["title"]
 

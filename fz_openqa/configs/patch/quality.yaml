@@ -1,0 +1,48 @@
+# @package _global_
+
+defaults:
+  - override /model/bert: roberta-base #deberta-v3-base
+  - override /model/head: colbert
+  - override /datamodule/index_builder: static
+  - override /datamodule/relevance_classifier: none
+  - override /datamodule/transform: squeeze_documents
+  - override /datamodule/sampler: none
+
+trainer:
+  accumulate_grad_batches: 2
+  val_check_interval: 0.5
+
+## activate dynamic resampling in the model
+model:
+  module:
+    resample_k: 10
+    max_batch_size: 200
+    output_size: 128
+  bert:
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.3 #  updated
+
+
+# override the builder parameters to use the quality builder
+datamodule:
+  num_workers: 8
+  train_batch_size: 16
+  eval_batch_size: 32
+  dataset_update: null
+  n_retrieved_documents: 200
+  n_documents:
+    train: 20
+    validation: 20 # todo: update
+    test: 20 # todo: update
+  builder:
+    dataset_builder:
+      dset_name: quality
+    corpus_builder:
+      _target_: fz_openqa.datamodules.builders.QuALITYCorpusBuilder
+      passage_length: 200
+      passage_stride: 150
+
+
+logger:
+  wandb:
+    group: option-retriever-quality

@@ -111,6 +111,7 @@ def train(config: DictConfig) -> Optional[float]:
     # instantiate the datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: DataModule = instantiate(config.datamodule)
+    rich.print(datamodule)
     setup_model = instantiate_setup_model(config.get("setup_with_model", None), main_model=model)
     # datamodule.prepare_data()
     datamodule.setup(trainer=trainer, model=setup_model)
@@ -344,5 +345,5 @@ def update_dataset(
     log.info("Updating dataset...")
     start_time = time.time()
     datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
-    datamodule.display_samples(n_samples=1)
+    # datamodule.display_samples(n_samples=1)
     log.info(f"Dataset updated in {time.time() - start_time:.2f}s")

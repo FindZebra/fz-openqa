@@ -16,19 +16,21 @@ def format_row_flat_questions(
 
     repr = dataset_builder.format_row(row)
     repr += get_separator("-") + "\n"
-    repr += (
-        f"* Documents: n={len(row['document.text'])}, "
-        f"n_positive={sum(row['document.match_score'] > 0)}, "
+    repr += f"* Documents: n={len(row['document.text'])}"
+    if "document.match_score" in row:
+        repr += f", n_positive={sum(row['document.match_score'] > 0)}, "
         f"n_negative={sum(row['document.match_score'] == 0)}\n"
-    )
+    repr += "\n"
     for j in range(min(len(row["document.text"]), 3)):
         repr += get_separator(".") + "\n"
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
+        match_score = row.get("document.match_score", None)
+        match_score = match_score[j] if match_score is not None else None
         repr += (
             f"|-* Document #{1 + j}, "
             f"score={row['document.retrieval_score'][j]:.2f}, "
-            f"match_score={row['document.match_score'][j]}, "
+            f"match_score={match_score}, "
             f"match_on={match_on}\n"
         )
 

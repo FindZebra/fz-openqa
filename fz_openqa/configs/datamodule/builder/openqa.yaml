@@ -1,5 +1,5 @@
 defaults:
-  - medqa@dataset_builder
+  - qa@dataset_builder
   - medqa_corpus@corpus_builder
   - analytics: none
 

@@ -17,8 +17,8 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.index import FaissIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
@@ -84,8 +84,8 @@ def run(config: DictConfig) -> None:
     ]
 
     # setup the dataset builder
-    logger.info(f"Initialize dataset <{MedQaBuilder.__name__}>")
-    dataset_builder = MedQaBuilder(
+    logger.info(f"Initialize dataset <{QaBuilder.__name__}>")
+    dataset_builder = QaBuilder(
         tokenizer=loader.tokenizer,
         use_subset=config.get("use_subset", True),
         cache_dir=cache_dir,

@@ -97,6 +97,12 @@ class SearchResult:
         k: int,
     ):
 
+        # pad to length
+        index = pad_second_dim(index, k=k, fill_token=-1)
+        score = pad_second_dim(score, k=k, fill_token=-np.float("inf"))
+        if tokens is not None:
+            tokens = pad_second_dim(tokens, k=k, fill_token=[])
+
         self.score = score
         self.index = index
         self.tokens = tokens
@@ -111,12 +117,6 @@ class SearchResult:
         assert len(self.score) == len(self.index)
         if self.tokens:
             assert len(self.score) == len(self.tokens)
-
-        # pad to length
-        self.index = pad_second_dim(self.index, k=self.k, fill_token=-1)
-        self.score = pad_second_dim(self.score, k=self.k, fill_token=-np.float("inf"))
-        if self.tokens is not None:
-            self.tokens = pad_second_dim(self.tokens, k=self.k, fill_token=[])
 
         # replace zero_index
         if self.dataset_size is not None:

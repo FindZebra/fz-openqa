@@ -8,7 +8,7 @@
 #### Attributes
 
 - `corpus` - load the corpus object: `MedQaCorpusBuilder(tokenizer=tokenizer, to_sent...`
-- `dm` - load the QA dataset: `MedQaBuilder(tokenizer=tokenizer, train_batch_s...`
+- `dm` - load the QA dataset: `QaBuilder(tokenizer=tokenizer, train_batch_s...`
 - `batch` - 1 do a pipe to concat question + answer option: `pipe(batch)`
 
 ## randargmax

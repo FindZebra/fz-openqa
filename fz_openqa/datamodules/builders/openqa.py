@@ -20,7 +20,7 @@ from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder
+from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions
 from fz_openqa.datamodules.index import FaissIndex
@@ -74,10 +74,10 @@ class OpenQaBuilder(DatasetBuilder):
     def __init__(
         self,
         *,
-        dataset_builder: MedQaBuilder,
+        dataset_builder: QaBuilder,
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
-        relevance_classifier: RelevanceClassifier,
+        relevance_classifier: Optional[RelevanceClassifier],
         sampler: Sampler,
         n_retrieved_documents: int,
         dataset_filter: Optional[DatasetFilter] = None,

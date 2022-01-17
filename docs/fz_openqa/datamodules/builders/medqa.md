@@ -3,21 +3,21 @@
 > Auto-generated documentation for [fz_openqa.datamodules.builders.medqa](blob/master/fz_openqa/datamodules/builders/medqa.py) module.
 
 - [Fz-openqa](../../../README.md#fz-openqa-index) / [Modules](../../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../../index.md#fz-openqa) / [Datamodules](../index.md#datamodules) / [Builders](index.md#builders) / Medqa
-    - [MedQaBuilder](#medqabuilder)
-        - [MedQaBuilder().filter_dataset](#medqabuilderfilter_dataset)
-        - [MedQaBuilder().format_row](#medqabuilderformat_row)
-        - [MedQaBuilder().get_answer_tokenizer_pipe](#medqabuilderget_answer_tokenizer_pipe)
-        - [MedQaBuilder().get_collate_pipe](#medqabuilderget_collate_pipe)
-        - [MedQaBuilder().get_question_tokenizer_pipe](#medqabuilderget_question_tokenizer_pipe)
-        - [MedQaBuilder().load_base_dataset](#medqabuilderload_base_dataset)
-        - [MedQaBuilder().preprocess_dataset](#medqabuilderpreprocess_dataset)
+    - [QaBuilder](#medqabuilder)
+        - [QaBuilder().filter_dataset](#medqabuilderfilter_dataset)
+        - [QaBuilder().format_row](#medqabuilderformat_row)
+        - [QaBuilder().get_answer_tokenizer_pipe](#medqabuilderget_answer_tokenizer_pipe)
+        - [QaBuilder().get_collate_pipe](#medqabuilderget_collate_pipe)
+        - [QaBuilder().get_question_tokenizer_pipe](#medqabuilderget_question_tokenizer_pipe)
+        - [QaBuilder().load_base_dataset](#medqabuilderload_base_dataset)
+        - [QaBuilder().preprocess_dataset](#medqabuilderpreprocess_dataset)
 
-## MedQaBuilder
+## QaBuilder
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L29)
 
 ```python
-class MedQaBuilder(HfDatasetBuilder):
+class QaBuilder(HfDatasetBuilder):
 ```
 
 #### Attributes
@@ -29,7 +29,7 @@ class MedQaBuilder(HfDatasetBuilder):
 - `n_options` - number of options: `4`
 - `column_names` - output columns: `['answer.text', 'answer.input_ids', 'answer.att...`
 
-### MedQaBuilder().filter_dataset
+### QaBuilder().filter_dataset
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L67)
 
@@ -43,7 +43,7 @@ Apply filter operation to the dataset and return
 
 - [HfDataset](../utils/typing.md#hfdataset)
 
-### MedQaBuilder().format_row
+### QaBuilder().format_row
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L133)
 
@@ -53,7 +53,7 @@ def format_row(row: Dict[str, Any]) -> str:
 
 Decode and print one row from the batch
 
-### MedQaBuilder().get_answer_tokenizer_pipe
+### QaBuilder().get_answer_tokenizer_pipe
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L97)
 
@@ -61,7 +61,7 @@ Decode and print one row from the batch
 def get_answer_tokenizer_pipe():
 ```
 
-### MedQaBuilder().get_collate_pipe
+### QaBuilder().get_collate_pipe
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L120)
 
@@ -69,7 +69,7 @@ def get_answer_tokenizer_pipe():
 def get_collate_pipe():
 ```
 
-### MedQaBuilder().get_question_tokenizer_pipe
+### QaBuilder().get_question_tokenizer_pipe
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L108)
 
@@ -79,7 +79,7 @@ def get_question_tokenizer_pipe():
 
 create a Pipe to tokenize the questions.
 
-### MedQaBuilder().load_base_dataset
+### QaBuilder().load_base_dataset
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L63)
 
@@ -89,7 +89,7 @@ def load_base_dataset() -> DatasetDict:
 
 Load the base HuggingFace dataset.
 
-### MedQaBuilder().preprocess_dataset
+### QaBuilder().preprocess_dataset
 
 [[find in source code]](blob/master/fz_openqa/datamodules/builders/medqa.py#L71)
 

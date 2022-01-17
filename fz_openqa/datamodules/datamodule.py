@@ -192,9 +192,12 @@ class DataModule(LightningDataModule):
         pprint_batch(batch)
         print(get_separator())
         print("=== example ===")
-        for i in range(min(n_samples, infer_batch_size(batch))):
-            print(get_separator())
-            self.display_one_sample({k: v[i] for k, v in batch.items()})
+        try:
+            for i in range(min(n_samples, infer_batch_size(batch))):
+                print(get_separator())
+                self.display_one_sample({k: v[i] for k, v in batch.items()})
+        except Exception as e:
+            logger.exception(e)
         print(get_separator("="))
 
     def display_one_sample(self, example: Dict[str, torch.Tensor]):

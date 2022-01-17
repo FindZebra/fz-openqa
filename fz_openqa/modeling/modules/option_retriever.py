@@ -143,6 +143,7 @@ class OptionRetriever(Module):
             n_dims=len(original_shape) - 1,
             keys=[f"{field}.input_ids", f"{field}.attention_mask"],
         )
+
         # process the document with the backbone
         h_heads = self._backbone(
             flat_batch,
@@ -165,7 +166,7 @@ class OptionRetriever(Module):
 
         return output
 
-    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
+    def _step(self, batch: Batch, silent=True, **kwargs: Any) -> Batch:
         """
         Compute the forward pass for the question and the documents.
         """
@@ -174,19 +175,31 @@ class OptionRetriever(Module):
 
         d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
-        n_docs = d_batch["document.input_ids"].shape[2]
         output = {}
         step_output = {}
         is_supervised_loss_computed = False
-        if self.resample_k is not None and n_docs > self.resample_k:
-            warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
+
+        # todo: expand d_batch -- cleanup
+        doc_shape = d_batch["document.input_ids"].shape
+        query_shape = q_batch["question.input_ids"].shape
+        if len(doc_shape) == len(query_shape):
+            doc_target_shape = (doc_shape[0], query_shape[1], doc_shape[1])
+        else:
+            doc_target_shape = None
+
+        pprint_batch(d_batch, "Option retriever", silent=silent)
+
+        if self.resample_k is not None:
+
+            pprint_batch(d_batch, "d_batch", silent=silent)
 
             # compute documents logits
             with torch.no_grad():
-                d_out = self._forward(d_batch, **kwargs)
+                d_out = self._forward(d_batch, silent=silent, **kwargs)
+                self._expand_to_shape(d_out, doc_target_shape)  # todo
 
             # compute questions logits
-            output.update(self._forward(q_batch, **kwargs))
+            output.update(self._forward(q_batch, silent=silent, **kwargs))
 
             # compute the score and sample k without replacement
             with torch.no_grad():
@@ -203,6 +216,7 @@ class OptionRetriever(Module):
                     step_output.update(supervised_loss_out)
 
                 # sample k documents
+                # todo: mask the one with retrieve  score = -inf
                 soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
                 sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
 
@@ -219,7 +233,9 @@ class OptionRetriever(Module):
             output.update(self._forward(q_batch, **kwargs))
 
         # compute the document logits
-        output.update(self._forward(d_batch, **kwargs))
+        d_out = self._forward(d_batch, **kwargs)
+        self._expand_to_shape(d_out, doc_target_shape)  # todo
+        output.update(d_out)
         keys = [
             "_hq_reader_",
             "_hd_reader_",
@@ -261,6 +277,13 @@ class OptionRetriever(Module):
 
         return step_output
 
+    def _expand_to_shape(self, d_out, doc_target_shape):
+        if doc_target_shape is not None:
+            for key, x in d_out.items():
+                x = x.unsqueeze(1)
+                x = x.expand(*doc_target_shape[:2], *x.shape[2:])
+                d_out[key] = x
+
     def _compute_score(
         self,
         *,
@@ -276,7 +299,7 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
+                return max_scores.mean(-1)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
@@ -293,7 +316,7 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
+                return max_scores.mean(-1)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 

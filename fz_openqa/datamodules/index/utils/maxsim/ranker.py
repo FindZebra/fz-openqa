@@ -109,8 +109,8 @@ class MaxSimRanker(nn.Module):
         scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
         # max. over the documents tokens, for each query token
         scores, _ = scores.max(axis=-1)
-        # avg over all query tokens
-        scores = scores.sum(axis=-1)
+        # avg over all query tokens (length dimension)
+        scores = scores.mean(axis=-1)
         # set the score to -inf for the negative pids
         scores[pids < 0] = -torch.inf
 

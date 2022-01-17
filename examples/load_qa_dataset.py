@@ -8,10 +8,8 @@ import rich
 from omegaconf import DictConfig
 from rich.logging import RichHandler
 
-import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder
-from fz_openqa.datamodules.builders.quality import QuALITYBuilder
+from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -30,12 +28,13 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = QuALITYBuilder(
+    builder = QaBuilder(
         tokenizer=tokenizer,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.sys.cache_dir,
-        min_answer_length=config.get("min_answer_length", None),
-        num_proc=2,
+        question_length=config.get("question_length", None),
+        num_proc=config.get("num_proc", 2),
+        dset_name=config.get("dset_name", "medqa-us"),
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()

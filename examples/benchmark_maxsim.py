@@ -13,7 +13,7 @@ from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 
 
 def run():
-    corpus_size = 200_000
+    corpus_size = 10_000
     vdim = 128
     seq_len = 200
     vectors = torch.randn(size=(corpus_size, seq_len, vdim))
@@ -42,7 +42,7 @@ def run():
         token_index=index_cpu,
         vectors=vectors,
         emb2pid=emd2pid,
-        max_chunksize=10_000,  # 10_000
+        max_chunksize=1_000,  # 10_000
         max_queue_size=5,
         ranking_devices=[0, 1, 2, 3, 4, 5],
         faiss_devices=[6, 7],
@@ -62,8 +62,10 @@ def run():
     query_vectors = torch.randn(size=(batch_size, q_seq_len, vdim))
     rich.print(f"> query vectors: {query_vectors.shape}")
     start_time = time.time()
-    for iter_idx in range(n_iter):
-        for _ in tqdm(range(n_samples), desc=f"iter {iter_idx}"):
+    # for iter_idx in range(n_iter):
+    while True:
+        for _ in tqdm(range(n_samples)):
+            time.sleep(1)  # todo
             query_vectors = torch.randn(size=(batch_size, q_seq_len, vdim))
             if use_half:
                 query_vectors = query_vectors.to(torch.float16)
@@ -72,8 +74,6 @@ def run():
                 batch_size,
                 1000,
             ), f"output: {out.scores.shape} + {out.pids.shape}"
-
-        break
 
     rich.print(
         f">> Processed {n_iter * n_samples * batch_size} "

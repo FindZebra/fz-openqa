@@ -16,6 +16,8 @@ from .basic import ReplaceInKeys
 from .batchify import AsBatch
 from .batchify import Batchify
 from .batchify import DeBatchify
+from .collapse_documents import CollapseDocuments
+from .collapse_documents import SqueezeDocuments
 from .collate import ApplyToEachExample
 from .collate import Collate
 from .collate import DeCollate
@@ -38,6 +40,7 @@ from .relevance import ExactMatch
 from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
+from .relevance import SupervisedMatch
 from .sampler import Sampler
 from .sampler import SamplerBoostPositives
 from .sampler import SamplerSupervised

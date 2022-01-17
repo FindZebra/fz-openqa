@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.medqa import ConcatMedQaBuilder
+from fz_openqa.datamodules.builders.qa import ConcatQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -31,13 +31,13 @@ def run(config: DictConfig) -> None:
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize the data module
-    builder = ConcatMedQaBuilder(
+    builder = ConcatQaBuilder(
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         question_length=config.get("question_length", None),
         num_proc=config.get("num_proc", 2),
-        dset_name=config.get("dset_name", "us"),
+        dset_name=config.get("dset_name", "medqa-us"),
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()

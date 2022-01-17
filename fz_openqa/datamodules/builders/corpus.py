@@ -8,6 +8,7 @@ from typing import List
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -77,6 +78,7 @@ class CorpusBuilder(HfDatasetBuilder):
         "document.passage_idx",
         "document.row_idx",
         "document.idx",
+        "document.question_idx",
     ]
 
     def __init__(
@@ -187,9 +189,6 @@ class CorpusBuilder(HfDatasetBuilder):
             desc="Tokenizing documents and extracting overlapping passages",
         )
 
-        # todo: only for debugging
-        # exit()
-
         # append the prefix "document."
         for attr in dataset.column_names:
             dataset = dataset.rename_column(attr, f"document.{attr}")
@@ -207,7 +206,7 @@ class CorpusBuilder(HfDatasetBuilder):
         return dataset
 
     def get_generate_sentences_pipe(self):
-        return GenerateSentences(global_keys=["idx", "cui", "title"])
+        return GenerateSentences(global_keys=["idx", "cui", "title", "question_idx"])
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -217,7 +216,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["idx", "cui", "title"],
+            global_keys=["idx", "cui", "title", "question_idx"],
             verbose=self.verbose,
         )
 
@@ -256,7 +255,9 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate
-        raw_text_pipe = Collate(keys=["document.text"])
+        raw_collate_pipe = Collate(
+            keys=["document.text", "document.title", "document.question_idx"]
+        )
 
         # collate simple attributes
         simple_attr_pipe = collate.CollateAsTensor(
@@ -271,7 +272,7 @@ class CorpusBuilder(HfDatasetBuilder):
         # collate the questions attributes (question.input_ids, question.idx, ...)
         document_pipe = CollateTokens("document.", tokenizer=self.tokenizer)
 
-        return Parallel(raw_text_pipe, simple_attr_pipe, document_pipe)
+        return Parallel(raw_collate_pipe, simple_attr_pipe, document_pipe)
 
     def format_row(self, row: Dict[str, Any]) -> str:
         """Decode and print one example from the batch"""
@@ -291,6 +292,12 @@ class MedQaCorpusBuilder(CorpusBuilder):
 class FzCorpusBuilder(CorpusBuilder):
     subset_size = [20]
     dset_script_path_or_id = fz_corpus.__file__
+
+
+class QuALITYCorpusBuilder(CorpusBuilder):
+    subset_size = [10]
+    dset_script_path_or_id = quality.__file__
+    dset_name = "documents"
 
 
 class WikipediaCorpusBuilder(CorpusBuilder):
@@ -341,9 +348,3 @@ class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
         return concatenate_datasets(dsets)
-
-
-class QuALITYCorpusBuilder(CorpusBuilder):
-    subset_size = [10]
-    dset_script_path_or_id = quality.__file__
-    dset_name = "documents"
