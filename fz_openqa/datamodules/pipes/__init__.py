@@ -40,7 +40,6 @@ from .relevance import ExactMatch
 from .relevance import MetaMapMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
-from .relevance import SupervisedMatch
 from .sampler import Sampler
 from .sampler import SamplerBoostPositives
 from .sampler import SamplerSupervised

@@ -51,10 +51,7 @@ class FetchAndClassifyDocuments(Sequential):
             ApplyAsFlatten(
                 FetchDocuments(
                     corpus_dataset=corpus_dataset,
-                    keys=[
-                        f"{classifier.document_field}.text",
-                        f"{classifier.document_field}.question_idx",
-                    ],
+                    keys=[f"{classifier.document_field}.text"],
                 ),
                 input_filter=In([f"{classifier.document_field}.row_idx"]),
                 update=True,
@@ -120,15 +117,12 @@ class ExpandAndClassify(Sequential):
             extract_pipe = None
 
         # keys to expand
-        expand_level_1 = [f"{classifier.answer_field}.idx"]
-        expand_targets = [f"{classifier.answer_field}.{k}" for k in ["text", "synonyms", "idx"]]
+        expand_targets = [f"{classifier.answer_field}.{k}" for k in ["text", "synonyms"]]
 
         # initialize the Pipeline
         super().__init__(
             extract_pipe,
             FilterKeys(Not(In([f"{classifier.answer_field}.target"]))),
-            # temporary hack: expand the question id for the SupervisedMatch (QuALITY dataset)
-            Expand(axis=1, n=4, input_filter=In(expand_level_1), update=True),
             Expand(axis=axis, n=n, input_filter=In(expand_targets), update=True),
             ApplyAsFlatten(classifier, level=level),
             input_filter=input_filter,

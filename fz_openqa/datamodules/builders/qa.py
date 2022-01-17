@@ -330,19 +330,14 @@ class ConcatQaBuilder(QaBuilder):
                 axis=1,
                 n=self.n_options,
                 update=True,
-                input_filter=In(["question.text", "question.document_idx"]),
+                input_filter=In(["question.text"]),
             ),
-            Parallel(
-                FilterKeys(In(["question.document_idx"])),
-                ApplyAsFlatten(
-                    ConcatTextFields(
-                        keys=["answer.text", "question.text"], new_key="question.text"
-                    ),
-                    level=1,
-                    input_filter=In(["question.text", "answer.text"]),
-                ),
+            ApplyAsFlatten(
+                ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
+                level=1,
+                input_filter=In(["question.text", "answer.text"]),
             ),
-            input_filter=In(["question.text", "answer.text", "question.document_idx"]),
+            input_filter=In(["question.text", "answer.text"]),
         )
 
     def get_qa_tokenizer_pipe(self):

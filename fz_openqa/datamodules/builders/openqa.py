@@ -80,6 +80,7 @@ class OpenQaBuilder(DatasetBuilder):
         relevance_classifier: Optional[RelevanceClassifier],
         sampler: Sampler,
         n_retrieved_documents: int,
+        document_nesting_level: Optional[int] = None,
         dataset_filter: Optional[DatasetFilter] = None,
         num_proc: int = 2,
         batch_size: int = 100,
@@ -93,6 +94,11 @@ class OpenQaBuilder(DatasetBuilder):
         # sub-builders
         self.dataset_builder = dataset_builder
         self.corpus_builder = corpus_builder
+
+        # nesting levels
+        if document_nesting_level is None:
+            document_nesting_level = self.dataset_builder.nesting_level + 1
+        self.document_nesting_level = document_nesting_level
 
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
@@ -234,7 +240,6 @@ class OpenQaBuilder(DatasetBuilder):
         deleting the the dataset, see issue #114.
         """
         question_nesting_level = self.dataset_builder.nesting_level
-        document_nesting_level = self.dataset_builder.nesting_level + 1
 
         # cache the dataset using `index.model`, so vectors can be reused in `SearchCorpus`
         # for nested datasets, the dataset is flatten, so the index
@@ -267,7 +272,10 @@ class OpenQaBuilder(DatasetBuilder):
                     SearchCorpus(
                         index,
                         k=n_retrieved_documents,
-                        level=question_nesting_level,
+                        # The search is applied to the flattened dataset,
+                        # the right nesting level corresponds is always
+                        # the one of the documents minus 1: {question : [doc_1, doc_2, ...]}
+                        level=self.document_nesting_level - 1,
                     ),
                 ),
                 (
@@ -275,15 +283,20 @@ class OpenQaBuilder(DatasetBuilder):
                     FetchAndClassifyDocuments(
                         corpus_dataset=corpus,
                         classifier=relevance_classifier,
-                        level=document_nesting_level,
-                        axis=document_nesting_level,
+                        level=self.document_nesting_level,
+                        axis=self.document_nesting_level,
                         n=n_retrieved_documents,
-                        extract_gold=question_nesting_level == 0,
+                        # When the documents are nested by one level, only the
+                        # gold answer is used to compute the match score. When
+                        # the level == 2, the match score is computed using each
+                        # answer option, therefore there is no need for extracitng
+                        # the gold answer.
+                        extract_gold=self.document_nesting_level < 2,
                     )
                     if relevance_classifier is not None
                     else None,
                 ),
-                ("Sort documents", SortDocuments(level=document_nesting_level)),
+                ("Sort documents", SortDocuments(level=self.document_nesting_level)),
             ]
         )
 
@@ -348,14 +361,12 @@ class OpenQaBuilder(DatasetBuilder):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
-        document_nesting_level = self.dataset_builder.nesting_level + 1
-
         # A. Collate all attributes stored in `self.dataset`
         # document attributes are collated at level 0
         collate_qad = Parallel(
             CollateField(
                 "document",
-                level=document_nesting_level,
+                level=self.document_nesting_level,
                 to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
                 id="collate-nested-document-attributes",
             ),
@@ -364,14 +375,14 @@ class OpenQaBuilder(DatasetBuilder):
 
         # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
-            self.sampler, level=document_nesting_level
+            self.sampler, level=self.document_nesting_level
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(columns=self.output_columns),
             collate_pipe=self.corpus_builder._get_collate_pipe(),
-            level=document_nesting_level,
+            level=self.document_nesting_level,
         )
 
         return BlockSequential(
@@ -403,6 +414,8 @@ class OpenQaBuilder(DatasetBuilder):
         if self.dataset_builder.nesting_level == 0:
             return format_row_flat_questions(row, **args)
         elif self.dataset_builder.nesting_level == 1:
-            return format_row_nested_questions(row, **args)
+            return format_row_nested_questions(
+                row, document_nesting_level=self.document_nesting_level, **args
+            )
         else:
             raise ValueError(f"Unsupported nesting level: {self.dataset_builder.nesting_level}")

@@ -111,7 +111,6 @@ def train(config: DictConfig) -> Optional[float]:
     # instantiate the datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: DataModule = instantiate(config.datamodule)
-    rich.print(datamodule)
     setup_model = instantiate_setup_model(config.get("setup_with_model", None), main_model=model)
     # datamodule.prepare_data()
     datamodule.setup(trainer=trainer, model=setup_model)

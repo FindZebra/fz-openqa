@@ -1,3 +1,0 @@
-_target_: fz_openqa.datamodules.pipes.SupervisedMatch
-_id: exact_match
-interpretable: False

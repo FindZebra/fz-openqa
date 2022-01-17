@@ -423,22 +423,3 @@ class ScispaCyMatch(AliasBasedMatch):
             # update the pair and return
             pair.answer[f"{self.answer_field}.aliases"] = answer_aliases
             yield pair
-
-
-class SupervisedMatch(RelevanceClassifier):
-    def __init__(self, *args, answer_field: str = None, **kwargs):
-        if answer_field is not None:
-            warnings.warn("answer_field is set automatically to `question`")
-        answer_field = "question"
-
-        super().__init__(*args, answer_field=answer_field, **kwargs)
-
-    def _get_matches(self, pair: Pair) -> List[str]:
-        document_question_ids = pair.document[f"{self.document_field}.question_idx"]
-        question_id = pair.answer[f"{self.answer_field}.idx"]
-
-        if question_id in document_question_ids:
-            title = pair.document.get(f"{self.document_field}.title", "...")
-            return [f"question_idx={question_id}, title={title}"]
-        else:
-            return []

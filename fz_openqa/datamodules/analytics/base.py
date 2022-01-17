@@ -61,20 +61,25 @@ class Analytic:
         None
 
         """
-        columns = get_column_names(dataset)
-        for c in self.requires_columns:
-            assert c in columns, (
-                f"{type(self).__name__} requires {self.requires_columns}. " f"Found {columns}"
-            )
+        try:
+            columns = get_column_names(dataset)
+            for c in self.requires_columns:
+                assert c in columns, (
+                    f"{type(self).__name__} requires {self.requires_columns}. " f"Found {columns}"
+                )
 
-        if isinstance(dataset, DatasetDict):
-            results = {split: self.process_dataset_split(dset) for split, dset in dataset.items()}
-        elif isinstance(dataset, Dataset):
-            results = {"all": self.process_dataset_split(dataset)}
-        else:
-            raise TypeError(f"Unsupported type {type(dataset)}")
+            if isinstance(dataset, DatasetDict):
+                results = {
+                    split: self.process_dataset_split(dset) for split, dset in dataset.items()
+                }
+            elif isinstance(dataset, Dataset):
+                results = {"all": self.process_dataset_split(dataset)}
+            else:
+                raise TypeError(f"Unsupported type {type(dataset)}")
 
-        return self._process_results(results)
+            return self._process_results(results)
+        except Exception:
+            logger.exception(f"Error while processing {type(self).__name__}")
 
     @abc.abstractmethod
     def process_dataset_split(self, dset: Dataset) -> Dict | List:

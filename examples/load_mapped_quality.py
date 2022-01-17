@@ -5,6 +5,7 @@ import hydra
 import rich
 
 from fz_openqa import configs
+from fz_openqa.datamodules.builders import ConcatQaBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.builders import QuALITYCorpusBuilder
@@ -30,7 +31,8 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the builder
-    dataset_builder = QaBuilder(
+    Cls = ConcatQaBuilder if config.get("concat", True) else QaBuilder
+    dataset_builder = Cls(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
@@ -46,6 +48,8 @@ def run(config):
         text_formatter=text_formatter,
         use_subset=False,
         cache_dir=config.sys.cache_dir,
+        passage_length=200,
+        passage_stride=150,
         num_proc=4,
     )
 
@@ -54,9 +58,10 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=StaticIndexBuilder(),
-        relevance_classifier=None,
+        relevance_classifier=ExactMatch(interpretable=True),
         sampler=Sampler(total=10),
-        n_retrieved_documents=1000,
+        n_retrieved_documents=200,
+        document_nesting_level=1,
         num_proc=4,
         batch_size=100,
         analytics=None,
