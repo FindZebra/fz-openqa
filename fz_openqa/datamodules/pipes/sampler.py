@@ -26,6 +26,7 @@ class Sampler(Pipe):
         field="document",
         replace: bool = False,
         largest: bool | Dict[Split, bool] = False,
+        temperature: float = 1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -35,47 +36,64 @@ class Sampler(Pipe):
         self.field = field
         self.replace = replace
         self.largest = largest
+        self.temperature = temperature
 
         super(Sampler, self).__init__(**kwargs)
 
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
-        largest, total = self._get_args(split)
+        largest, total, temperature = self._get_args(split)
 
         logits = batch[self.retrieval_score_key]
-        probs = self.compute_probs(logits)
 
         # sample
-        index = np.arange(len(probs))
-        sampled_index = self._sample(index, probs, total, largest=largest)
+        index = np.arange(len(logits))
+        sampled_index = self._sample(
+            index, logits=logits, total=total, largest=largest, temperature=temperature
+        )
 
         # re-index and return
         return {k: reindex(v, sampled_index) for k, v in batch.items()}
 
-    def _sample(self, index: np.ndarray | List, probs: np.ndarray, total: int, largest=None):
-        if largest is None:
-            largest = self.largest
+    def _sample(
+        self,
+        index: np.ndarray | List,
+        *,
+        logits: np.ndarray,
+        total: int,
+        largest: bool,
+        temperature: float,
+    ) -> np.ndarray:
+
+        assert temperature > 0, "temperature must be positive"
+
         if largest:
-            sorted_idx = np.argsort(-probs)
+            sorted_idx = np.argsort(-logits)
             sorted_idx = sorted_idx[:total]
             sampled_index = [index[i] for i in sorted_idx]
         else:
+            probs = self.compute_probs(logits, temperature=temperature)
             sampled_index = np.random.choice(index, size=total, p=probs, replace=self.replace)
         return sampled_index
 
     @staticmethod
     def compute_probs(
-        logits: Tensor | np.ndarray, min_value: Optional[float] = 1e-40
+        logits: Tensor | np.ndarray,
+        temperature: float = 1.0,
+        min_prob_value: Optional[float] = 1e-40,
     ) -> np.ndarray:
         if isinstance(logits, Tensor):
             logits = logits.detach().cpu().numpy()
-        logits = np.nan_to_num(logits, nan=-1e3, posinf=1e3, neginf=-1e3)
-        probs = softmax(logits)
 
-        if min_value is not None:
-            probs = np.maximum(probs, min_value)
-            probs = probs / np.sum(probs)
+        logits = logits - np.max(logits, axis=-1, keepdims=True)
+        logits = np.nan_to_num(logits, nan=-1e6, posinf=1e3, neginf=-1e6)
+        probs = softmax(logits / temperature, axis=-1)
+
+        if min_prob_value is not None:
+            probs = np.maximum(probs, min_prob_value)
+            probs = probs / np.sum(probs, axis=-1, keepdims=True)
+
         return probs
 
     def _get_args(self, split):
@@ -85,8 +103,24 @@ class Sampler(Pipe):
         largest = self.largest
         if isinstance(largest, (dict, DictConfig)):
             largest = largest[str(split)]
+        temperature = self.temperature
+        if isinstance(temperature, (dict, DictConfig)):
+            temperature = temperature[str(split)]
 
-        return largest, total
+        return largest, total, temperature
+
+
+class FirstN(Sampler):
+    def __init__(self, *, total: int, **kwargs):
+        super().__init__(total=total, **kwargs)
+
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
+    ) -> Batch:
+        largest, total, temperature = self._get_args(split)
+        index = np.arange(total)
+        # re-index and return
+        return {k: reindex(v, index) for k, v in batch.items()}
 
 
 class SamplerSupervised(Sampler):
@@ -99,7 +133,7 @@ class SamplerSupervised(Sampler):
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
-        largest, total = self._get_args(split)
+        largest, total, temperature = self._get_args(split)
 
         logits = batch[self.retrieval_score_key]
 
@@ -115,9 +149,10 @@ class SamplerSupervised(Sampler):
         # sample positives
         if self.n_positives > 0 and len(pos_indexes) > 0:
             pos_logits = logits[pos_indexes]
-            pos_probs = self.compute_probs(pos_logits)
             n = min(self.n_positives, total, len(pos_indexes))
-            sampled_pos_indexes = self._sample(pos_indexes, pos_probs, n, largest=largest)
+            sampled_pos_indexes = self._sample(
+                pos_indexes, logits=pos_logits, total=n, largest=largest, temperature=temperature
+            )
         else:
             sampled_pos_indexes = []
 
@@ -125,9 +160,10 @@ class SamplerSupervised(Sampler):
         n = max(0, total - len(sampled_pos_indexes))
         if len(neg_indexes) > 0 and n > 0:
             neg_logits = logits[neg_indexes]
-            neg_probs = self.compute_probs(neg_logits)
             n = min(len(neg_indexes), n)
-            sampled_neg_indexes = self._sample(neg_indexes, neg_probs, n, largest=largest)
+            sampled_neg_indexes = self._sample(
+                neg_indexes, logits=neg_logits, total=n, largest=largest, temperature=temperature
+            )
         else:
             sampled_neg_indexes = []
 
@@ -142,8 +178,13 @@ class SamplerSupervised(Sampler):
             other_indexes = [i for i in range(len(logits)) if i not in sampled_indexes]
             assert len(other_indexes) >= n
             other_logits = logits[other_indexes]
-            other_probs = self.compute_probs(other_logits)
-            sampled_other_indexes = self._sample(other_indexes, other_probs, n, largest=largest)
+            sampled_other_indexes = self._sample(
+                other_indexes,
+                logits=other_logits,
+                total=n,
+                largest=largest,
+                temperature=temperature,
+            )
 
         # re-index and return
         sampled_indexes = np.concatenate([sampled_indexes, sampled_other_indexes], axis=0)
@@ -162,7 +203,7 @@ class SamplerBoostPositives(Sampler):
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
-        largest, total = self._get_args(split)
+        largest, total, temperature = self._get_args(split)
 
         logits = batch[self.retrieval_score_key]
 
@@ -176,9 +217,10 @@ class SamplerBoostPositives(Sampler):
         # sample positives
         if self.n_boosted > 0 and len(pos_indexes) > 0:
             pos_logits = logits[pos_indexes]
-            pos_probs = self.compute_probs(pos_logits)
             n = min(self.n_boosted, total, len(pos_indexes))
-            sampled_pos_indexes = self._sample(pos_indexes, pos_probs, n, largest=largest)
+            sampled_pos_indexes = self._sample(
+                pos_indexes, logits=pos_logits, total=n, largest=largest, temperature=temperature
+            )
         else:
             sampled_pos_indexes = []
 
@@ -187,15 +229,19 @@ class SamplerBoostPositives(Sampler):
         other_indexes = [i for i in range(len(logits)) if i not in sampled_pos_indexes]
         if len(other_indexes) > 0 and n > 0:
             other_logits = logits[other_indexes]
-            other_probs = self.compute_probs(other_logits)
             try:
-                sampled_other_indexes = self._sample(other_indexes, other_probs, n, largest=largest)
+                sampled_other_indexes = self._sample(
+                    other_indexes,
+                    logits=other_logits,
+                    total=n,
+                    largest=largest,
+                    temperature=temperature,
+                )
             except Exception as e:
                 rich.print(
                     f"indexes: {len(logits)}, n: {n}, "
                     f"other_indexes: {other_indexes}, "
                     f"sampled_pos_indexes: {sampled_pos_indexes}, "
-                    f"other_probs: {other_probs}, "
                     f"other_logits: {other_logits}"
                 )
                 raise e

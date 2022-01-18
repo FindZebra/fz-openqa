@@ -28,7 +28,8 @@ experiment:
   environ: dp8-full.yaml
   corpus: none.yaml
   sys: titan.yaml
-  cache_dir: ${sys.cache_dir}
+  sys.cache_dir: ${sys.cache_dir}
+  sys.shared_cache_dir: ${sys.shared_cache_dir}
   base.target_metric: ${base.target_metric}
   base.target_mode: ${base.target_mode}
   seed: null

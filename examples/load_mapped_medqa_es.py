@@ -14,9 +14,9 @@ from fz_openqa import configs
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
 from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
 from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
-from fz_openqa.datamodules.builders import MedQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
@@ -41,7 +41,7 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = MedQaBuilder(
+    dataset_builder = QaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),

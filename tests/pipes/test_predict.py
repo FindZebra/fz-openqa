@@ -10,7 +10,7 @@ import torch
 from datasets import DatasetDict
 from transformers import AutoTokenizer
 
-from fz_openqa.datamodules.builders import FzCorpusBuilder, MedQaBuilder
+from fz_openqa.datamodules.builders import FzCorpusBuilder, QaBuilder
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import get_batch_eg, cast_values_to_numpy
@@ -100,7 +100,7 @@ class TestPredict(TestCase):
     def test_cached_predict_dataset_dict(self):
         """Test that the output of the pipe with caching is
         the same as when using the model directly (using DatasetDict)."""
-        dataset_builder = MedQaBuilder(
+        dataset_builder = QaBuilder(
             tokenizer=self.tokenizer,
             use_subset=True,
             add_encoding_tokens=False,

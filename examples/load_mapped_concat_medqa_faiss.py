@@ -22,7 +22,7 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import MedQaBuilder, ConcatMedQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
 from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -95,7 +95,7 @@ def run(config):
     text_formatter = TextFormatter(lowercase=True)
 
     # define the medqa builder
-    dataset_builder = ConcatMedQaBuilder(
+    dataset_builder = ConcatQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),

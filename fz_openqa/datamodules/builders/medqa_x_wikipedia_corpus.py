@@ -17,7 +17,7 @@ from datasets import Split
 from rich.progress import track
 
 from fz_openqa.datamodules.builders import DatasetBuilder
-from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.builders.utils.gdrive import Gdrive
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
@@ -134,7 +134,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
     def __init__(
         self,
         *,
-        dataset_builder: MedQaBuilder,
+        dataset_builder: QaBuilder,
         query_articles: Callable = QueryWikiAPI(text_key="answer.text"),
         num_proc: int = 4,
         batch_size: int = 10,

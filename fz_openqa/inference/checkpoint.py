@@ -10,10 +10,8 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa import configs
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
-from fz_openqa.utils.datastruct import PathLike
 
 logger = logging.getLogger(__name__)
 
@@ -81,18 +79,21 @@ class CheckpointLoader:
     def print_config(self, **kwargs):
         print_config(self.config, resolve=False, **kwargs)
 
-    def model_checkpoint(self, last=False) -> Union[None, Path]:
+    def model_checkpoint_path(self, match: Optional[str] = None) -> Optional[Path]:
         checkpoints = (self.checkpoint_dir / "checkpoints").iterdir()
         checkpoints = filter(lambda x: x.suffix == ".ckpt", checkpoints)
-        if last:
-            checkpoints = filter(lambda x: "last" in x.name, checkpoints)
-        else:
-            checkpoints = filter(lambda x: "last" not in x.name, checkpoints)
-
+        if match is not None:
+            checkpoints = filter(lambda x: match in x.name, checkpoints)
         try:
             return next(iter(checkpoints))
         except StopIteration:
             return None
+
+    def model_checkpoint(self, last=False) -> Union[None, Path]:
+        if last:
+            return self.model_checkpoint_path(match="last")
+        else:
+            return self.model_checkpoint_path(match="best")
 
     def load_tokenizer(self):
         return instantiate(self.config.datamodule.tokenizer)
@@ -113,10 +114,9 @@ class CheckpointLoader:
     def load_bert(self):
         return instantiate(self.config.model.bert)
 
-    def load_model(self, last=False, zero_shot: bool = False, **kwargs) -> Model:
+    def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
-
-        path = self.model_checkpoint(last=last)
+        path = self.model_checkpoint_path(match=checkpoint_type)
         if path is not None and not zero_shot:
             logger.info(f"Loading model from checkpoint: {path}")
             # need to override the saved `tokenizer` and `bert` hyperparameters

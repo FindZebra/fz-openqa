@@ -1,5 +1,5 @@
 defaults:
-  - medqa@dataset_builder
+  - qa@dataset_builder
   - medqa_corpus@corpus_builder
   - analytics: none
 
@@ -14,3 +14,6 @@ output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}
 batch_size: 100
+
+# nesting level
+document_nesting_level: 1

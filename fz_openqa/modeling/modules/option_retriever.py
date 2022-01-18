@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import warnings
 from enum import Enum
 from typing import Any
+from typing import Dict
 from typing import Optional
 
 import einops
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -73,6 +77,7 @@ class OptionRetriever(Module):
         grad_expr: GradExpression = GradExpression.IN_BATCH,
         head_map: None = None,
         share_heads: bool = True,
+        temperature: float = 1.0,
         **kwargs,
     ):
         assert head_map is None, "`head_map` cannot be set manually for this model."
@@ -91,6 +96,7 @@ class OptionRetriever(Module):
         head = next(iter(self.heads.values()))
         self.similarity = Similarity(head.id)
         self.alpha = alpha
+        self.temperature = temperature
 
         # init the estimator
         grad_expr = GradExpression(grad_expr)
@@ -129,13 +135,21 @@ class OptionRetriever(Module):
 
         return output
 
-    def _forward_field(self, batch: Batch, field: str, silent: bool = True, **kwargs) -> Batch:
+    def _forward_field(
+        self,
+        batch: Batch,
+        field: str,
+        silent: bool = True,
+        max_batch_size: Optional[int] = None,
+        **kwargs,
+    ) -> Batch:
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
-        if self.training:
-            max_batch_size = None
-        else:
+
+        if max_batch_size is None:
             max_batch_size = self.max_batch_size
+        elif max_batch_size < 0:
+            max_batch_size = None
 
         # flatten the batch
         flat_batch = flatten_first_dims(
@@ -143,6 +157,7 @@ class OptionRetriever(Module):
             n_dims=len(original_shape) - 1,
             keys=[f"{field}.input_ids", f"{field}.attention_mask"],
         )
+
         # process the document with the backbone
         h_heads = self._backbone(
             flat_batch,
@@ -165,7 +180,7 @@ class OptionRetriever(Module):
 
         return output
 
-    def _step(self, batch: Batch, **kwargs: Any) -> Batch:
+    def _step(self, batch: Batch, silent=True, **kwargs: Any) -> Batch:
         """
         Compute the forward pass for the question and the documents.
         """
@@ -174,21 +189,45 @@ class OptionRetriever(Module):
 
         d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
-        n_docs = d_batch["document.input_ids"].shape[2]
         output = {}
         step_output = {}
         is_supervised_loss_computed = False
-        if self.resample_k is not None and n_docs > self.resample_k:
-            warnings.warn(f"Resampling documents from {n_docs} to {self.resample_k}")
+        # `max_batch_size` is used to limit the number of samples in the batch, it is
+        # only used during eval, except when resampling..
+        max_batch_size_eval = -1 if self.training else self.max_batch_size
 
-            # compute documents logits
+        # Register the document and question shape
+        # if the documents are of shape [batch_size, n_docs, seq_len], documents
+        # will be expanded to shape [batch_size, n_options, seq_len].
+        doc_shape = d_batch["document.input_ids"].shape[:-1]
+        query_shape = q_batch["question.input_ids"].shape[:-1]
+        if len(doc_shape) != 3:
+            assert len(doc_shape) == 2
+            doc_target_shape = (doc_shape[0], query_shape[1], doc_shape[1])
+        else:
+            doc_target_shape = None
+
+        pprint_batch(d_batch, f"Option retriever::d_batch::in: {doc_target_shape}", silent=silent)
+        pprint_batch(q_batch, "Option retriever::q_batch::in", silent=silent)
+
+        if self.resample_k is not None:
+            pprint_batch(d_batch, "d_batch", silent=silent)
+
+            # compute documents logits, and potentially expand to match
+            # the shape [batch_size, n_options, n_documents, ...]
             with torch.no_grad():
-                d_out = self._forward(d_batch, **kwargs)
+                d_out = self._forward(
+                    d_batch, silent=silent, max_batch_size=self.max_batch_size, **kwargs
+                )
+                d_out = {k: self._expand_to_shape(v, doc_target_shape) for k, v in d_out.items()}
 
-            # compute questions logits
-            output.update(self._forward(q_batch, **kwargs))
+            # compute questions logits, shape [batch_size, n_options, ...]
+            output.update(
+                self._forward(q_batch, silent=silent, max_batch_size=max_batch_size_eval, **kwargs)
+            )
+            pprint_batch({**output, **d_out}, "Option retriever::resampling::input", silent=silent)
 
-            # compute the score and sample k without replacement
+            # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
                 retriever_score = self._compute_score(
                     hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
@@ -203,23 +242,31 @@ class OptionRetriever(Module):
                     step_output.update(supervised_loss_out)
 
                 # sample k documents
-                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
+                original_retrieval_score = d_batch.get("document.retrieval_score", None)
+                retriever_score = self._mask_scores(retriever_score, original_retrieval_score)
+                soft_samples = F.gumbel_softmax(
+                    retriever_score / self.temperature, hard=False, dim=-1
+                )
                 sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
 
                 # re-sample the documents
                 for k, v in d_batch.items():
+                    v = self._expand_to_shape(v, doc_target_shape)
+                    v = self._select_with_index(v, sample_ids)
                     if isinstance(v, torch.Tensor):
-                        leaf_shape = v.shape[len(sample_ids.shape) :]
-                        _index = sample_ids.view(*sample_ids.shape, *(1 for _ in leaf_shape))
-                        _index = _index.expand(*sample_ids.shape, *leaf_shape)
-                        d_batch[k] = v.gather(index=_index, dim=2)
+                        v = v.contiguous()
+                    d_batch[k] = v
 
+                pprint_batch(d_batch, "Option retriever::resampling::output", silent=silent)
         else:
-            # compute questions logits
-            output.update(self._forward(q_batch, **kwargs))
+            # compute the questions logits
+            output.update(self._forward(q_batch, max_batch_size=max_batch_size_eval, **kwargs))
 
         # compute the document logits
-        output.update(self._forward(d_batch, **kwargs))
+        d_out = self._forward(d_batch, max_batch_size=max_batch_size_eval, **kwargs)
+        output.update(d_out)
+        pprint_batch(output, "Option retriever::outputs::final", silent=silent)
+
         keys = [
             "_hq_reader_",
             "_hd_reader_",
@@ -231,10 +278,13 @@ class OptionRetriever(Module):
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
-        # log retriever entropy
-        retriever_logits = retriever_score.log_softmax(dim=-1)
-        retriever_entropy = -(retriever_logits.exp() * retriever_logits).sum(dim=(1, 2)).mean()
-        step_output["retriever/entropy"] = retriever_entropy.detach()
+        # retriever diagnostics
+        self._retriever_diagnostics(
+            retriever_score,
+            batch.get("document.retrieval_score", None),
+            batch.get("document.retrieval_rank", None),
+            output=step_output,
+        )
 
         # compute the gradients
         step_output.update(
@@ -261,6 +311,83 @@ class OptionRetriever(Module):
 
         return step_output
 
+    @staticmethod
+    @torch.no_grad()
+    def _retriever_diagnostics(
+        retriever_score: Tensor,
+        retrieval_scores: Optional[Tensor],
+        retrieval_rank: Optional[Tensor],
+        *,
+        output: Dict,
+    ):
+        """
+        Compute diagnostics for the rank of the retrieved documents.
+
+        NB: `retriever_probs` corresponds to the probs of the trained model whereas
+        `retrieval_*` correspond to the probs of the model used for indexing.
+        """
+
+        retriever_probs = retriever_score.softmax(dim=-1)
+
+        # entropy `H(p(D | q, A))`
+        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=-1)
+        output["retriever/entropy"] = retriever_entropy.mean()
+
+        if retrieval_scores is not None:
+            #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
+            M = retrieval_scores.max(dim=-1, keepdim=True).values
+            retrieval_scores = retrieval_scores - M
+            retrieval_scores = retrieval_scores.clip(min=-1e6)
+            retrieval_log_probs = retrieval_scores.log_softmax(dim=-1)
+
+            # `KL( p(D|q, A) || r(D|q, A) )`
+            kl_div = retriever_probs * (retriever_probs.log() - retrieval_log_probs)
+            kl_div = kl_div.sum(dim=-1)
+            output["retriever/kl_div"] = kl_div.mean()
+
+        # retrieval rank weighted by the retriever probs
+        if retrieval_rank is not None:
+            weighted_rank = retriever_probs * retrieval_rank
+            output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
+
+        # min-max of the retrieval rank
+        output["retriever/n_samples"] = retrieval_rank.size(-1)
+        output["retriever/max_sampled_rank"] = (retrieval_rank.max(dim=-1).values).float().mean()
+        output["retriever/min_sampled_rank"] = (retrieval_rank.min(dim=-1).values).float().mean()
+
+    @staticmethod
+    def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:
+        if original_retrieval_score is not None:
+            retrieval_score = OptionRetriever._expand_to_shape(
+                original_retrieval_score, retriever_score.shape
+            )
+            # consider thant `retrieval_score` falling bellow this threshold are
+            # are documents added as padding (see `SearchResult`)
+            retriever_score[retrieval_score < -1e15] = -float("inf")
+
+        return retriever_score
+
+    @staticmethod
+    def _select_with_index(v: Any | Tensor, index: Tensor) -> Any | Tensor:
+        if not isinstance(v, torch.Tensor):
+            return v
+        leaf_shape = v.shape[len(index.shape) :]
+        _index = index.view(*index.shape, *(1 for _ in leaf_shape))
+        _index = _index.expand(*index.shape, *leaf_shape)
+        v = v.gather(index=_index, dim=2)
+        return v
+
+    @staticmethod
+    def _expand_to_shape(x: Tensor, doc_target_shape: Optional[torch.Size]) -> Tensor:
+        if doc_target_shape is None:
+            return x
+        elif x.shape[: len(doc_target_shape)] != doc_target_shape:
+            x = x.unsqueeze(1)
+            x = x.expand(*doc_target_shape[:2], *x.shape[2:])
+            return x
+        else:
+            return x
+
     def _compute_score(
         self,
         *,
@@ -276,7 +403,7 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
+                return max_scores.mean(-1)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
@@ -293,20 +420,21 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
+                return max_scores.mean(-1)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
-        Gather losses and logits from all devides and return
+        Gather losses and logits from all devices and return
         """
 
         # average losses
-        for k in ["loss", "reader/logp"]:
-            y = output.get(k, None)
-            if y is not None:
-                output[k] = y.mean()
+        for k, v in output.items():
+            if not str(k).startswith("_") and not str(k).endswith("_"):
+                if isinstance(v, torch.Tensor):
+                    v = v.float().mean()
+                output[k] = v
 
         return output
 

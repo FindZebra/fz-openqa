@@ -6,8 +6,12 @@ from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
+from typing import Optional
 from typing import T
+from typing import Tuple
 from typing import Union
+
+import rich
 
 
 def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Union[List, Dict]:
@@ -55,7 +59,7 @@ def flatten_json_struct(data: Union[List, Dict]) -> Iterable[Any]:
         Leaves of json-like structure
     """
     if isinstance(data, dict):
-        for x in data.values():
+        for key, x in data.items():
             for leaf in flatten_json_struct(x):
                 yield leaf
     elif isinstance(data, list):
@@ -66,7 +70,46 @@ def flatten_json_struct(data: Union[List, Dict]) -> Iterable[Any]:
         yield data
 
 
-def reduce_json_struct(data: Union[List, Dict], reduce_op: Callable[[Iterable[T]], T]) -> T:
+def get_named_attributes(
+    data: Union[List, Dict],
+    key_filter: Optional[Callable[[str], bool]] = None,
+    current_key: Optional[str] = None,
+) -> Iterable[Tuple[str, Any]]:
+    """
+    Get the flatten named attributes from a json-like structure.
+
+    NB: Only attributes registered as a dictionary (with a key) are returned.
+
+    Parameters
+    ----------
+    data
+    key_filter
+    current_key
+
+    Returns
+    -------
+
+    """
+    if isinstance(data, dict):
+        for key, x in data.items():
+            for leaf in get_named_attributes(x, current_key=key, key_filter=key_filter):
+                yield leaf
+    elif isinstance(data, list):
+        for x in data:
+            for leaf in get_named_attributes(x, key_filter=key_filter):
+                yield leaf
+    elif current_key is not None:
+        if key_filter is None or key_filter(current_key):
+            yield (current_key, data)
+    else:
+        pass
+
+
+def reduce_json_struct(
+    data: Union[List, Dict],
+    reduce_op: Callable[[Iterable[T]], T],
+    key_filter: Optional[Callable[[T], bool]] = None,
+) -> T:
     """
     Reduce a json-like structure
     Parameters
@@ -79,5 +122,9 @@ def reduce_json_struct(data: Union[List, Dict], reduce_op: Callable[[Iterable[T]
     -------
     reduced json-like structure
     """
-    leaves = flatten_json_struct(data)
+    if key_filter is not None:
+        named_leaves = get_named_attributes(data, key_filter=key_filter)
+        leaves = (v for k, v in named_leaves)
+    else:
+        leaves = flatten_json_struct(data)
     return reduce_op(leaves)

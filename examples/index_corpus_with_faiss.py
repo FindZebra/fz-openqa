@@ -1,7 +1,7 @@
 import os
 import sys
 
-from fz_openqa.datamodules.builders import MedQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -188,7 +188,7 @@ def run(config: DictConfig) -> None:
     )
 
     # search for the whole dataset
-    question_collate = MedQaBuilder._get_collate_pipe(corpus_builder)
+    question_collate = QaBuilder._get_collate_pipe(corpus_builder)
     query_dset = index(query_dset, k=3, collate_fn=question_collate, trainer=trainer)
     pprint_batch(query_dset[:3], "search whole dataset - results")
 

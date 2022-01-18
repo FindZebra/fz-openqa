@@ -15,3 +15,4 @@ print_config: True
 verbose: True
 work_dir: ${sys.work_dir}
 cache_dir: ${sys.cache_dir}
+shared_cache_dir: ${sys.shared_cache_dir}

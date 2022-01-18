@@ -31,8 +31,7 @@ from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
-
-FEATURE_PATTERN = re.compile("^_{1}[a-zA-Z0-9]+_{1}$")
+from fz_openqa.utils.pretty import pprint_batch
 
 
 def init_default_heads():
@@ -45,6 +44,10 @@ def init_default_heads():
             }
         }
     )
+
+
+def is_feature_name(x):
+    return str(x).startswith("_") and str(x).endswith("_")
 
 
 class HeadGroup(nn.ModuleDict):
@@ -260,7 +263,6 @@ class Module(nn.Module, ABC):
 
         Implement `_step` for each sub-class.
         """
-        # todo: before dispatching to devices: filter the fields to keep only the required ones
         self._check_features(batch, self._required_eval_feature_names)
         return self._step(batch, **kwargs)
 
@@ -292,7 +294,7 @@ class Module(nn.Module, ABC):
             assert split is not None
             self.update_metrics(output, split)
 
-        # filter internal
+        # filter internal values (e.g. __targets__
         if filter_features:
             output = self._filter_features_from_output(output)
         return output
@@ -390,7 +392,7 @@ class Module(nn.Module, ABC):
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:
         """filter the internal values such as _logits_ or _targets_"""
-        return {k: v for k, v in output.items() if not re.match(FEATURE_PATTERN, k)}
+        return {k: v for k, v in output.items() if not is_feature_name(k)}
 
     @staticmethod
     def _select(prefix: str, batch: Batch) -> Batch:

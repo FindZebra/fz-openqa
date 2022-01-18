@@ -1,0 +1,6 @@
+defaults:
+  - base
+
+_target_: fz_openqa.datamodules.builders.QaBuilder
+question_length: null
+dset_name: medqa-us

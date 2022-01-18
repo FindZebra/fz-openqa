@@ -4,6 +4,7 @@ from transformers import PreTrainedTokenizerFast
 from .static import ADDITIONAL_SPECIAL_TOKENS
 from .static import ANS_TOKEN
 from .static import DOC_TOKEN
+from .static import QUERY_MASK
 from .static import QUERY_TOKEN
 
 SPECIAL_TOKENS = {
@@ -25,7 +26,7 @@ def init_pretrained_tokenizer(
 
 def test_special_token_encoding(tokenizer):
     text = "hello world!"
-    for t in [QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN]:
+    for t in [QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN, QUERY_MASK]:
         t_id = tokenizer.get_vocab()[t]
         tokens = tokenizer(f"{t}{text}").input_ids
         assert tokens[0] == tokenizer.cls_token_id

@@ -62,12 +62,10 @@ class MapWithFingerprint:
 
         # process dataset
         for key, dset in dataset.items():
-
-            # adjust kwargs
+            # override the `num_proc`
             kwargs = self.map_kwargs.copy()
-            if isinstance(self.pipe, SearchCorpus) and isinstance(self.pipe.index, FaissIndex):
-                # FaissIndex is made to work in on thread only
-                kwargs["num_proc"] = 1
+            if self.pipe.max_num_proc is not None:
+                kwargs["num_proc"] = max(1, min(kwargs.get("num_proc", 1), self.pipe.max_num_proc))
 
             # adjust the batch size to be at least `num_proc
             kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])

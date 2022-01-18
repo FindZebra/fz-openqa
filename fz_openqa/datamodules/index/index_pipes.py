@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from functools import partial
 from typing import List
 from typing import Optional
 
 import pyarrow as pa
+import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index

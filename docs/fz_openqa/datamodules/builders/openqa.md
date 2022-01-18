@@ -21,7 +21,7 @@
 ```python
 class OpenQaBuilder(DatasetBuilder):
     def __init__(
-        dataset_builder: MedQaBuilder,
+        dataset_builder: QaBuilder,
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: RelevanceClassifier,
@@ -40,7 +40,7 @@ class OpenQaBuilder(DatasetBuilder):
 - [CorpusBuilder](corpus.md#corpusbuilder)
 - [DatasetBuilder](base.md#datasetbuilder)
 - [IndexBuilder](../index/builder.md#indexbuilder)
-- [MedQaBuilder](medqa.md#medqabuilder)
+- [QaBuilder](medqa.md#medqabuilder)
 
 ### OpenQaBuilder().format_row
 

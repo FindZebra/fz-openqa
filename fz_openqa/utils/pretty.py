@@ -11,6 +11,7 @@ from datasets import arrow_dataset
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.json_struct import flatten_json_struct
 from fz_openqa.utils.shape import infer_batch_shape
@@ -39,13 +40,24 @@ def pretty_decode(
     if isinstance(tokens, np.ndarray):
         tokens = tokens.tolist()
 
+    # count special tokens
     n_pad_tokens = tokens.count(tokenizer.pad_token_id)
+    qmask_token_id = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
+    n_qmask_tokens = tokens.count(qmask_token_id)
+
+    # decode
     txt = tokenizer.decode(tokens, **kwargs)
-    txt = f"{style_in}`{txt.replace('[PAD]', '').strip()}`{style_out}"
-    if only_text:
-        return txt
-    else:
-        return f"length={len(tokens)}, padding={n_pad_tokens}, " f"text: {txt}"
+    txt = txt.replace("[PAD]", "")
+    txt = txt.replace(QUERY_MASK, "")
+    txt = f"{style_in}`{txt.strip()}"
+
+    if not only_text:
+        txt = f"length={len(tokens)}, padding={n_pad_tokens}, " f"text: {txt}"
+        if n_qmask_tokens > 0:
+            txt += f" +{n_qmask_tokens} x {QUERY_MASK}"
+
+    txt += f"`{style_out}"
+    return txt
 
 
 def get_separator(char="\u2500"):

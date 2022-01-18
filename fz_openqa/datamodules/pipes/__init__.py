@@ -16,6 +16,8 @@ from .basic import ReplaceInKeys
 from .batchify import AsBatch
 from .batchify import Batchify
 from .batchify import DeBatchify
+from .collapse_documents import CollapseDocuments
+from .collapse_documents import SqueezeDocuments
 from .collate import ApplyToEachExample
 from .collate import Collate
 from .collate import DeCollate
@@ -30,6 +32,7 @@ from .meta import Sequential
 from .nesting import ApplyAsFlatten
 from .nesting import Flatten
 from .nesting import Nest
+from .option_dropout import OptionDropout
 from .passage import GeneratePassages
 from .pprint import PrintBatch
 from .pprint import PrintText
@@ -47,7 +50,6 @@ from .text_filtering import SciSpaCyFilter
 from .text_filtering import StopWordsFilter
 from .text_filtering import TextFilter
 from .text_formatter import TextFormatter
-from .tokenizer import CleanupPadTokens
 from .tokenizer import TokenizerPipe
 from .torch import Forward
 from .torch import Itemize

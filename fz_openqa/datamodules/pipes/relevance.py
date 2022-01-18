@@ -1,5 +1,6 @@
 import itertools
 import re
+import warnings
 from functools import partial
 from itertools import zip_longest
 from typing import Any

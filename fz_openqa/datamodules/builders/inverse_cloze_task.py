@@ -131,6 +131,10 @@ class InverseClozeTaskBuilder(DatasetBuilder):
             "writer_batch_size": writer_batch_size,
         }
 
+        raise NotImplementedError(
+            "Need to refactor for using `question_length` instead of `n_query_tokens`"
+        )
+
     @property
     def column_names(self):
         return list(set(self._column_names + self.corpus_builder.column_names))

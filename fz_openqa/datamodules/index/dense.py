@@ -28,7 +28,7 @@ from faiss.swigfaiss import Index as FaissSwigIndex
 from pytorch_lightning import Trainer
 from torch import Tensor
 from torch.utils.data import DataLoader
-from tqdm.rich import tqdm
+from tqdm import tqdm
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
@@ -114,7 +114,7 @@ class FaissIndex(Index):
     """
 
     default_key = ["input_ids", "attention_mask"]
-    _index: FaissSwigIndex = None
+    _index: Optional[FaissSwigIndex] = None
     model: Callable = None
     _vectors_table: Optional[TensorArrowTable] = None
     _master: bool = True
@@ -248,6 +248,7 @@ class FaissIndex(Index):
             self.index_file.parent.mkdir(parents=True, exist_ok=True)
             self._build(dataset, vector_file=self.vector_file, **kwargs)
             self._write_index()
+            self._build_ends()
 
         # display file sizes
         display_file_size("index", self.index_file, print_fn=logger.info)
@@ -328,11 +329,12 @@ class FaissIndex(Index):
         if pbar is not None:
             pbar.close()
 
-        self._train_ends()
         logger.info(
-            f"Index is_trained={self._index.is_trained}, "
-            f"size={self._index.ntotal}, type={type(self._index)}"
+            f"Index size={self._index.ntotal}, "
+            f"type={type(self._index)}, "
+            f"is_trained={self._index.is_trained}"
         )
+        self._train_ends()
 
     def _cache_vectors(
         self,
@@ -436,7 +438,11 @@ class FaissIndex(Index):
 
     def _train_ends(self):
         """move the index back to CPU if it was moved to GPU"""
-        self.to_cpu()
+        self.cpu()
+
+    def _build_ends(self):
+        """cleanup the index"""
+        pass
 
     def _train(self, vectors: torch.Tensor):
         """
@@ -548,7 +554,7 @@ class FaissIndex(Index):
     ) -> Dataset:
         trainer = trainer or self.trainer
         if trainer:
-            self.to_cpu()
+            self.free_memory()
             self.cache_query_dataset(
                 dataset, collate_fn=collate_fn, trainer=trainer, persist_cache=persist_cache
             )
@@ -608,11 +614,14 @@ class FaissIndex(Index):
         self.__dict__.update(state)
 
     def __del__(self):
-        self.to_cpu()
+        self.free_memory()
         if self._master and self.persist_cache is False:
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
-    def to_cpu(self):
+    def free_memory(self):
+        return self.cpu()
+
+    def cpu(self):
         try:
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
         except Exception:
@@ -629,10 +638,10 @@ class FaissIndex(Index):
         return self._index is None or self._index.is_trained
 
     @property
-    def index(self) -> FaissIndex:
+    def index(self) -> Index:
         if self._index is None:
             self._read_index()
-        return self._index  # type: ignore
+        return self._index
 
     @property
     def ntotal(self):

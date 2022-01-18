@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from pathlib import Path
 from typing import Dict
 from typing import List
@@ -38,6 +39,7 @@ class ElasticSearchIndex(Index):
     preprocessing_pipe: Optional[Pipe] = None
     default_key: str = "text"
     no_fingerprint: List[str] = Index.no_fingerprint + ["engine", "prep_map_kwargs"]
+    _es_chunk_size: int = 10
 
     def _prepare_index(
         self,
@@ -59,6 +61,11 @@ class ElasticSearchIndex(Index):
         self.engine = ElasticSearchEngine(analyze=analyze_es_tokens)
         self.es_body = es_body
         self.analyze_es_tokens = analyze_es_tokens
+
+        # override max_chunk_size
+        if self.max_chunksize != self._es_chunk_size:
+            warnings.warn(f"max_chunksize is set to {self.max_chunksize}")
+        self.max_chunksize = self._es_chunk_size
 
         # input keys
         msg = f"ElasticSearch Index is only implemented for one key. Got {self.required_keys}"

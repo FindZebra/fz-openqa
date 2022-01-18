@@ -10,6 +10,7 @@ from typing import Union
 import numpy as np
 from torch import Tensor
 
+from ...utils.pretty import pprint_batch
 from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe
@@ -172,7 +173,8 @@ class ApplyAsFlatten(Pipe):
         explain = "Applying a pipe that changes the batch size might have caused this issue."
         if new_shape != input_shape:
             raise ValueError(
-                f"{new_shape} != {input_shape}. {explain}\n"
+                f"{new_shape} != {input_shape}. Level={self.flatten.level}. "
+                f"{explain}\n"
                 f"{repr_batch(batch, header='ApplyAsFlatten output batch')}"
             )
         return output
