@@ -38,6 +38,14 @@ class TextFormatter(Pipe):
         if self.lowercase:
             text = text.lower()
 
+        if self.remove_symbols:
+            # text = re.sub(r"[^\w]", " ", text)
+            text = re.sub("[^A-Za-z0-9]+ ", " ", text)
+
+        if self.remove_breaks:
+            # text = re.sub(r"[\n\r\t]+", " ", text)
+            text = text.strip()
+
         if self.aggressive_cleaning:
             # quick and dirty fix (trying to solve issue #80), doesn't fix it
             # todo: do this in a more principled and efficient way
@@ -59,12 +67,6 @@ class TextFormatter(Pipe):
         if self.remove_hex:
             # remove hex characters (e.g. \xe2\x80\x94\xe2\x80\x89)
             text = re.sub(r"[^\x00-\x7f]+", " ", text)
-
-        if self.remove_breaks:
-            text = re.sub(r"[\n\r\t]+", " ", text)
-
-        if self.remove_symbols:
-            text = re.sub(r"([^a-zA-Z0-9\.])", " ", text)
 
         return text
 

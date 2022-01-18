@@ -1,4 +1,4 @@
 defaults:
   - openqa
   - concat_medqa@dataset_builder
-  - medqa_corpus@corpus_builder
+  - wikipedia_corpus@corpus_builder

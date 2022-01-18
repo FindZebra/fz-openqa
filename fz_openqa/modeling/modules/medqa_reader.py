@@ -51,7 +51,7 @@ class MedQaReader(Module):
         self.answer_metrics = self._get_base_metrics(prefix=prefix)
 
     def _forward(self, batch: Batch, targets: Optional[Tensor] = None, **kwargs) -> Batch:
-        DEBUG = False
+        DEBUG = True
         if DEBUG:
             pprint_batch(batch, "batch")
             # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
@@ -64,7 +64,7 @@ class MedQaReader(Module):
                 print(100 * "=")
                 rich.print(f"- batch el #{i+1}")
                 tokens = batch["qad.input_ids"][i]
-                for j in range(2):
+                for j in range(4):
                     rich.print(f"- option #{j+1}")
                     print(100 * "-")
                     # rich.print(f"[red] {tokens[j].tolist()}")

@@ -76,7 +76,7 @@ def train(config: DictConfig) -> Optional[float]:
     if config.verbose:
         rich.print(datamodule.dataset)
         pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
-        datamodule.display_samples(n_samples=1)
+        # datamodule.display_samples(n_samples=1)
 
     # Init Lightning Module
     log.info(f"Instantiating Module <{config.model._target_}>")
