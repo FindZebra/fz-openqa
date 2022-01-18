@@ -16,6 +16,7 @@ from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import OptionDropout
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import TextFormatter
+from fz_openqa.datamodules.pipes.sampler import FirstN
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 
@@ -25,6 +26,7 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 )
 def run(config):
     datasets.set_caching_enabled(True)
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
 
     # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(
@@ -37,7 +39,7 @@ def run(config):
     dataset_builder = Cls(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.sys.cache_dir,
         dset_name="quality",
         question_length=120,
@@ -56,16 +58,25 @@ def run(config):
         num_proc=4,
     )
 
+    # transform: option dropout
+    if config.get("option_dropout", False):
+        option_dropout = OptionDropout(
+            update=True,
+            keys=["question.input_ids", "question.attention_mask", "answer.text", "question.text"],
+        )
+    else:
+        option_dropout = None
+
     # define the OpenQA builder
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=StaticIndexBuilder(),
-        relevance_classifier=ExactMatch(interpretable=False),
-        sampler=Sampler(total=10),
-        n_retrieved_documents=200,
+        relevance_classifier=None,  # ExactMatch(interpretable=False),
+        sampler=None,  # ,FirstN(total=10),
+        n_retrieved_documents=180,
         document_nesting_level=1,
-        transform=OptionDropout(update=True),
+        transform=option_dropout,
         num_proc=4,
         batch_size=100,
         analytics=[
@@ -77,8 +88,8 @@ def run(config):
     dm = DataModule(builder=builder)
 
     # preprocess the data
-    dm.setup()
-    dm.display_samples(n_samples=3)
+    dm.setup(keep_in_memory=True)
+    dm.display_samples(n_samples=1)
 
     # access dataset
     rich.print(dm.dataset)

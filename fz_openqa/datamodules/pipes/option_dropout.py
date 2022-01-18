@@ -41,8 +41,14 @@ class OptionDropout(Pipe):
         # get the tensors
         target = batch[self.target_key]
         values = {k: v for k, v in batch.items() if k in self.keys}  # todo: refactor
-        eg = list(values.values())[0]
+        eg = [x for x in values.values() if isinstance(x, torch.Tensor)][0]
         n_options = eg.shape[1]
+        for k, v in values.items():
+            if isinstance(v, torch.Tensor) and not v.shape[1] == n_options:
+                raise ValueError(
+                    f"Attribute {k} doesn't have the right number of "
+                    f"options ({n_options}), found {v.shape[1]} (shape={v.shape})"
+                )
 
         # define sampling probs
         logits = torch.ones(eg.shape[0], n_options, dtype=torch.float32, device=eg.device)

@@ -100,13 +100,13 @@ def repr_documents(row, locator, **decode_kwargs) -> str:
     for j in range(min(len(row["document.input_ids"]), 5)):
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
-        repr += f"|---* {locator} - Document #{1 + j}"
+        repr += f"|---* {locator} - Document #{1 + j} "
+        repr += f"(id={row['document.idx'][j]}, row_idx={row['document.row_idx'][j]}), "
+        repr += f"score={row['document.retrieval_score'][j]:.2f}, "
         if "document.match_score" in row:
-            repr += (
-                f", score={row['document.retrieval_score'][j]:.2f}, "
-                f"match_score={row['document.match_score'][j]}, "
-                f"match_on={match_on}"
-            )
+            repr += f"match_score={row['document.match_score'][j]}, " f"match_on={match_on}"
+        if "document.question_idx" in row:
+            repr += f", question_idx={row['document.question_idx'][j]}"
         repr += "\n"
 
         doc_style = "yellow" if match_on else "white"

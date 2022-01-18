@@ -108,6 +108,19 @@ class Sampler(Pipe):
         return largest, total, temperature
 
 
+class FirstN(Sampler):
+    def __init__(self, *, total: int, **kwargs):
+        super().__init__(total=total, **kwargs)
+
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
+    ) -> Batch:
+        largest, total, temperature = self._get_args(split)
+        index = np.arange(total)
+        # re-index and return
+        return {k: reindex(v, index) for k, v in batch.items()}
+
+
 class SamplerSupervised(Sampler):
     """Sample"""
 

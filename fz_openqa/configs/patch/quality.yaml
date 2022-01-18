@@ -6,10 +6,11 @@ defaults:
   - override /datamodule/index_builder: static
   - override /datamodule/relevance_classifier: none
   - override /datamodule/sampler: none
+  - override /datamodule/transform: option_dropout_quality
 
 trainer:
   gpus: 8
-  accumulate_grad_batches: 4
+  accumulate_grad_batches: 2
   val_check_interval: 0.5
 
 ## activate dynamic resampling in the model
@@ -27,7 +28,7 @@ model:
 datamodule:
   # dataloaders
   num_workers: 8
-  train_batch_size: 8
+  train_batch_size: 16
   eval_batch_size: 32
 
   # dataset update (none, done dynamically within the model)

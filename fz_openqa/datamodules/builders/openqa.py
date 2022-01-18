@@ -11,11 +11,8 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
-from datasets import Split
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
@@ -38,10 +35,8 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
 from fz_openqa.datamodules.pipes.nesting import Nested
-from fz_openqa.datamodules.utils.dataset import filter_questions_by_pos_docs
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
@@ -78,9 +73,10 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: Optional[RelevanceClassifier],
-        sampler: Sampler,
+        sampler: Optional[Sampler],
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,
+        sort_documents: bool = False,
         dataset_filter: Optional[DatasetFilter] = None,
         num_proc: int = 2,
         batch_size: int = 100,
@@ -117,6 +113,7 @@ class OpenQaBuilder(DatasetBuilder):
             "relevance_classifier": relevance_classifier,
             "n_retrieved_documents": n_retrieved_documents,
             "dataset_filter": dataset_filter,
+            "sort_documents": sort_documents,
             "num_proc": num_proc,
             "batch_size": batch_size,
             "writer_batch_size": writer_batch_size,
@@ -231,6 +228,7 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int,
         relevance_classifier: Optional[RelevanceClassifier],
         dataset_filter: Optional[DatasetFilter],
+        sort_documents: bool,
         **map_kwargs,
     ) -> DatasetDict:
         """
@@ -296,7 +294,10 @@ class OpenQaBuilder(DatasetBuilder):
                     if relevance_classifier is not None
                     else None,
                 ),
-                ("Sort documents", SortDocuments(level=self.document_nesting_level)),
+                (
+                    "Sort documents",
+                    SortDocuments(level=self.document_nesting_level) if sort_documents else None,
+                ),
             ]
         )
 

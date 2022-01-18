@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
@@ -55,7 +56,7 @@ class StaticIndex(Index):
         for row_idx, doc_id in enumerate(dataset[f"{self.index_field}.idx"]):
             document_lookup[doc_id] |= {row_idx}
 
-        self.document_lookup = {idx: list(ids) for idx, ids in document_lookup.items()}
+        self.document_lookup = {idx: list(sorted(ids)) for idx, ids in document_lookup.items()}
 
         logger.info(
             f"n_documents={len(self.document_lookup.keys())}, "
@@ -72,7 +73,7 @@ class StaticIndex(Index):
     def _search_chunk(self, query: Batch, *, k: int, **kwargs) -> SearchResult:
         """Search the index for the given query."""
         doc_ids = query[f"{self.query_field}.document_idx"]
-        rows_ids = [self.document_lookup[doc_id] for doc_id in doc_ids]
+        rows_ids = [copy(self.document_lookup[doc_id]) for doc_id in doc_ids]
 
         # build the results
         return SearchResult(
