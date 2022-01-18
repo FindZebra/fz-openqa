@@ -1,0 +1,5 @@
+base.seed:
+  _target_: ray.tune.grid_search
+  values:
+    - 2
+    - 3

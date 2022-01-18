@@ -2,8 +2,9 @@ from .base import DatasetBuilder
 from .corpus import CorpusBuilder
 from .corpus import FzCorpusBuilder
 from .corpus import FZxMedQaCorpusBuilder
+from .corpus import FZxMedQaxWikiCorpusBuilder
 from .corpus import MedQaCorpusBuilder
-from .corpus import WikipediaCorpusBuilder
+from .corpus import MedWikipediaCorpusBuilder
 from .fz_queries import FzQueriesBuilder
 from .hf_dataset import HfDatasetBuilder
 from .inverse_cloze_task import InverseClozeTaskBuilder
