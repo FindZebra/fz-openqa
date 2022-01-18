@@ -5,6 +5,7 @@ from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.index.dense import FaissIndex
 from fz_openqa.datamodules.index.es import ElasticSearchIndex
+from fz_openqa.datamodules.index.static import StaticIndex
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class ColbertIndexBuilder(IndexBuilder):
 
 class ElasticSearchIndexBuilder(IndexBuilder):
     cls = ElasticSearchIndex
+
+
+class StaticIndexBuilder(IndexBuilder):
+    cls = StaticIndex
 
 
 class FaissOrEsIndexBuilder(IndexBuilder):

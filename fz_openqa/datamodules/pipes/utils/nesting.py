@@ -103,7 +103,7 @@ def reconcat(values: List[Any], original_type: Type):
 
 
 def expand_and_repeat(x: T, axis: int, n: int = 1) -> T:
-    """Expand by the axis and repeat `n` times"""
+    """Expand the axis and repeat `n` times"""
     shape = infer_shape(x)
     if axis < 0:
         axis = len(shape)

@@ -1,10 +1,14 @@
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 from transformers import PreTrainedTokenizerFast
 
+from ...tokenizers.static import QUERY_MASK
+from ...utils.pretty import pprint_batch
 from .base import Pipe
+from .control.condition import HasPrefix
 from .control.condition import In
 from fz_openqa.modeling.functional import TorchBatch
 from fz_openqa.utils.datastruct import Batch
@@ -62,50 +66,70 @@ class TokenizerPipe(Pipe):
         return batch
 
 
-class CleanupPadTokens(Pipe):
-    """
-    Remove pad tokens from all input_ids and corresponding attention_mask.
-    Quick and ugly fix, sorry about that!
-    """
+class QueryExpansionPipe(Pipe):
+    def __init__(
+        self,
+        *,
+        prefix: Optional[str] = "question.",
+        question_length: int = 512,
+        tokenizer: PreTrainedTokenizerFast,
+        **kwargs,
+    ):
+        if prefix is not None:
+            input_filter = HasPrefix(prefix)
+        else:
+            input_filter = None
+        super(QueryExpansionPipe, self).__init__(**kwargs, input_filter=input_filter)
+        self.prefix = prefix if prefix is not None else ""
+        self.max_length: int = question_length
+        self.sep_token_id: int = tokenizer.sep_token_id
+        self.q_mask_token_id: int = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
 
-    def __init__(self, tokenizer: PreTrainedTokenizerFast):
-        self.pad_tok = tokenizer.pad_token_id
+    @staticmethod
+    def _last_idx(values: List, target) -> Optional[int]:
+        if target in values:
+            return len(values) - values[::-1].index(target) - 1
+        else:
+            return None
 
-    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
-        for k in batch.keys():
-            if str(k).endswith(".input_ids"):
-                all_tokens = batch[k]
-                k_attn = k.replace(".input_ids", ".attention_mask")
-                all_attn = batch[k_attn]
-                assert isinstance(all_tokens, list), "not implemented for other types"
+    def _insert_mapping(
+        self, input_ids: List[int], attention_mask: List[int]
+    ) -> Tuple[List[int], List[int]]:
+        """insert the q_mask_token_id after the `sep_token` if available, else at the end"""
+        end_of_seq_idx = None
+        if self.sep_token_id is not None:
+            end_of_seq_idx = QueryExpansionPipe._last_idx(input_ids, self.sep_token_id)
+        if end_of_seq_idx is None:
+            if attention_mask[-1] == 0:
+                end_of_seq_idx = attention_mask.index(0)
+            else:
+                end_of_seq_idx = len(input_ids) - 1
 
-                # iterate examples
-                new_tokens = []
-                new_attn = []
-                for i in range(len(all_tokens)):
-                    tok_i = all_attn[i]
-                    atn_i = all_attn[i]
-                    if isinstance(tok_i[0], (list,)):
-                        new_tokens_i = []
-                        new_attn_i = []
-                        for j in range(len(tok_i)):
-                            tok_ij = tok_i[j]
-                            atn_ij = atn_i[j]
-                            tok_ij, atn_ij = self.filter_tokens(tok_ij, atn_ij)
-                            new_tokens_i += [tok_ij]
-                            new_attn_i += [atn_ij]
-                        new_tokens += [new_tokens_i]
-                        new_attn += [new_attn_i]
-                    else:
-                        tok_i, atn_i = self.filter_tokens(tok_i, atn_i)
-                        new_tokens += [tok_i]
-                        new_attn += [atn_i]
+        # update the input_ids and the attention_mask, QMASK tokens are not masked out.
+        input_ids = input_ids[:end_of_seq_idx] + [self.q_mask_token_id] * (
+            self.max_length - end_of_seq_idx
+        )
+        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (self.max_length - end_of_seq_idx)
+        return input_ids, attention_mask
 
-                batch[k] = new_tokens
-                batch[k_attn] = new_attn
+    def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
 
-        return batch
+        # pprint_batch(batch, type(self).__name__ + f"  mask: {self.q_mask_token_id}")
 
-    def filter_tokens(self, tokens, attn):
-        tokens, atten = zip(*((t, a) for t, a in zip(tokens, attn) if t != self.pad_tok))
-        return list(tokens), list(atten)
+        input_ids_key = f"{self.prefix}input_ids"
+        attention_mask_key = f"{self.prefix}attention_mask"
+
+        new_input_ids = []
+        new_attention_mask = []
+        for ids, mask in zip(batch[input_ids_key], batch[attention_mask_key]):
+            ids, mask = self._insert_mapping(ids, mask)
+            new_input_ids += [ids]
+            new_attention_mask += [mask]
+
+        data = {
+            input_ids_key: new_input_ids,
+            attention_mask_key: new_attention_mask,
+        }
+
+        # pprint_batch(data, type(self).__name__ + " output")
+        return data

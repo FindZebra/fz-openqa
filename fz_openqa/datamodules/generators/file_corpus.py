@@ -29,9 +29,9 @@ class CorpusGenerator(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "idx": datasets.Value("int32"),
-                    "text": datasets.Value("string"),
-                    "title": datasets.Value("string"),
+                    "document.idx": datasets.Value("int32"),
+                    "document.text": datasets.Value("string"),
+                    "document.title": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -55,4 +55,4 @@ class CorpusGenerator(datasets.GeneratorBasedBuilder):
         """Yields examples."""
         for i, fn in enumerate(self.config.data_files):
             with open(fn, "r") as f:
-                yield i, {"idx": i, "text": f.read(), "title": "title"}
+                yield i, {"document.idx": i, "document.text": f.read(), "document.title": "title"}

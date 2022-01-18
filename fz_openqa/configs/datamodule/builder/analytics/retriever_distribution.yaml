@@ -1,0 +1,6 @@
+retriever_distribution:
+  _target_: fz_openqa.datamodules.analytics.RetrieverDistribution
+
+  verbose: true
+  output_dir: ${getcwd:}/analytics/
+  wandb_log: true

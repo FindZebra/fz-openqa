@@ -1,5 +1,10 @@
 defaults:
   - openqa
-  - concat_medqa@dataset_builder
+  - concat_qa@dataset_builder
   - medqa_corpus@corpus_builder
   - analytics: none
+
+
+
+# nesting level
+document_nesting_level: 2

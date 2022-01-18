@@ -12,6 +12,8 @@ from typing import Union
 
 from datasets import Dataset
 from datasets import DatasetDict
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 from fz_openqa.datamodules.analytics.base import Analytic
 from fz_openqa.datamodules.pipes import Pipe
@@ -38,7 +40,7 @@ class DatasetBuilder:
         self,
         *,
         cache_dir: Optional[str],
-        analytics: Optional[Analytic | List[Analytic], Dict[Any, Analytic]] = None
+        analytics: Optional[Analytic | List[Analytic], Dict[str, Analytic]] = None,
     ):
         if cache_dir is None:
             self._cache_dir = None
@@ -47,21 +49,32 @@ class DatasetBuilder:
             if not os.path.exists(self._cache_dir):
                 os.makedirs(self._cache_dir)
 
-        if analytics is None:
-            analytics = []
-        elif isinstance(analytics, Analytic):
-            analytics = [analytics]
-        elif isinstance(analytics, dict):
-            analytics = list(analytics.values())
-
+        if isinstance(analytics, DictConfig):
+            analytics = OmegaConf.to_object(analytics)
         self.analytics = analytics
 
     def __call__(self, *args, **kwargs):
         dataset = self._call(*args, **kwargs)
 
-        for analysis in self.analytics:
-            analysis(dataset)
+        self.run_analytics(dataset)
+
         return dataset
+
+    def run_analytics(self, dataset):
+        if self.analytics is None:
+            return
+        elif isinstance(self.analytics, list):
+            for a in self.analytics:
+                a(dataset)
+        elif isinstance(self.analytics, dict):
+            for k, v in self.analytics.items():
+                v(dataset)
+        elif isinstance(self.analytics, Analytic):
+            self.analytics(dataset)
+        else:
+            raise TypeError(
+                f"Analytics must be a list, dict or Analytic, " f"got {type(self.analytics)}"
+            )
 
     @abstractmethod
     def _call(self, *args, **kwargs) -> Union[Dataset, DatasetDict]:

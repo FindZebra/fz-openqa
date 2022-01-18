@@ -1,0 +1,13 @@
+defaults:
+  - base
+
+_target_: fz_openqa.datamodules.index.StaticIndexBuilder
+
+# input keys
+required_keys: null
+
+# default values
+k: 10
+
+# logging
+id: static-index

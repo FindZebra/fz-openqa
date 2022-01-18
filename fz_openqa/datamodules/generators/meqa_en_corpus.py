@@ -36,9 +36,9 @@ class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "idx": datasets.Value("int32"),
-                    "text": datasets.Value("string"),
-                    "title": datasets.Value("string"),
+                    "document.idx": datasets.Value("int32"),
+                    "document.text": datasets.Value("string"),
+                    "document.title": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -71,4 +71,4 @@ class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
         ]
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
-                yield i, {"text": f.read(), "idx": i, "title": ""}
+                yield i, {"document.text": f.read(), "document.idx": i, "document.title": ""}

@@ -4,6 +4,7 @@ from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ExtractGoldAnswer
 from fz_openqa.datamodules.pipes import FilterKeys
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
@@ -49,7 +50,8 @@ class FetchAndClassifyDocuments(Sequential):
         super().__init__(
             ApplyAsFlatten(
                 FetchDocuments(
-                    corpus_dataset=corpus_dataset, keys=[f"{classifier.document_field}.text"]
+                    corpus_dataset=corpus_dataset,
+                    keys=[f"{classifier.document_field}.text"],
                 ),
                 input_filter=In([f"{classifier.document_field}.row_idx"]),
                 update=True,
@@ -61,6 +63,7 @@ class FetchAndClassifyDocuments(Sequential):
                     f"{classifier.document_field}.row_idx",
                     f"{classifier.answer_field}.text",
                     f"{classifier.answer_field}.target",
+                    f"{classifier.answer_field}.idx",
                 ]
             ),
         )

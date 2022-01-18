@@ -7,7 +7,7 @@ from datasets import Dataset, DatasetDict, Split
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder, FzCorpusBuilder, \
     FZxMedQaCorpusBuilder
 from fz_openqa.datamodules.builders.hf_dataset import HfDatasetBuilder
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder, ConcatMedQaBuilder, MedQaTwBuilder
+from fz_openqa.datamodules.builders.qa import QaBuilder, ConcatQaBuilder
 from fz_openqa.datamodules.builders.openqa import OpenQaBuilder
 from fz_openqa.datamodules.index import ElasticSearchIndex, ElasticSearchIndexBuilder
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
@@ -81,16 +81,13 @@ class TestBuilder(TestCase):
 
 class TestMedQaBuilder(TestBuilder):
     config_override = {'use_subset': False}
-    cls = MedQaBuilder
+    cls = QaBuilder
 
     def test_split_lengths(self):
         """Test the size of the splits"""
         self.assertEqual(len(self._dataset[Split.TRAIN]), 10178)
         self.assertEqual(len(self._dataset[Split.VALIDATION]), 1272)
         self.assertEqual(len(self._dataset[Split.TEST]), 1273)
-
-class TestMedQaTwBuilder(TestBuilder):
-    cls = MedQaTwBuilder
 
 class TestMedQaCorpusBuilder(TestBuilder):
     config_override = {'max_length': None, 'passage_length': 200, 'passage_stride': 200}
@@ -107,7 +104,7 @@ class TestFZxMedQaCorpusBuilder(TestMedQaCorpusBuilder):
 @unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
 class TestOpenQaBuilder(TestBuilder):
     cls = OpenQaBuilder
-    dset_cls = MedQaBuilder
+    dset_cls = QaBuilder
 
     def get_default_config(self):
         # dataset builder
@@ -136,7 +133,7 @@ class TestOpenQaBuilder(TestBuilder):
 @unittest.skipUnless(ping_es(), "Elastic Search is not reachable.")
 class TestConcatenatedOpenQaBuilder(TestBuilder):
     cls = OpenQaBuilder
-    dset_cls = ConcatMedQaBuilder
+    dset_cls = ConcatQaBuilder
 
     def get_default_config(self):
         # dataset builder

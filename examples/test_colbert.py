@@ -35,8 +35,8 @@ class IndentityModel(nn.Module):
 
 @torch.no_grad()
 def run():
-    # logging.basicConfig(level=logging.DEBUG)
-    trainer = Trainer(gpus=8, strategy="dp")
+    logging.basicConfig(level=logging.DEBUG)
+    trainer = Trainer(gpus=4, strategy="dp")
     seed_everything(42)
 
     # Load the dataset
@@ -66,7 +66,7 @@ def run():
         max_chunksize=1000,
         maxsim_chunksize=10000,
     )
-    index.to_cpu()
+    index.free_memory()
 
     # search
     rich.print("[green]=== searching Index ===")

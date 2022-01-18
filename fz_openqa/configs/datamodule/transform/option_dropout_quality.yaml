@@ -1,0 +1,5 @@
+defaults:
+  - option_dropout
+keys:
+  - question.input_ids
+  - question.attention_mask

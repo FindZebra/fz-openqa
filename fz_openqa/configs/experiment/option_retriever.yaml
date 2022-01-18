@@ -8,18 +8,19 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/head}
   - override /datamodule/sampler: boost_positives
-  - override /datamodule/transform: none
+  - override /datamodule/transform: option_dropout # todo: run [:F]
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
+      - sequence_lengths
+      - retriever_distribution
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
-      - progress_bar
       - lr_monitor
 
 base:
-  seed: null
+  seed: 2789492787  # todo: remove [run:A]
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
@@ -40,40 +41,41 @@ model:
   num_training_steps: 50_000
   bert:
     hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1 # todo: changed from 0.3
+    attention_probs_dropout_prob: 0.1 # todo: updated [run:B] reverted: [run:C]
   module:
     resample_k: null
     alpha: 0
-    max_batch_size: 200
+    max_batch_size: 200 # todo: try increasing this
     eval_topk: 30
     grad_expr: in_batch
-    share_heads: true
+    share_heads: false # todo: update
   head:
     downscaling: 1 # todo: changed from 2
     kernel_size: null # todo: changed from 9
-    bias: false # todo: changed from false
-    use_mask: true # todo: changed from true
-    output_size: 128 # todo: new (prev=32)
+    bias: true # todo: update
+    use_mask: false # todo: update
+    output_size: 32 # todo: update
 
 datamodule:
   # how often to map the dataset
   dataset_update:
     freq: 15
     reset_optimizer: false # todo: test `false`
-    index_first_epooch: false
+    index_first_epoch: false
     builder_args:
       relevance_classifier: null
+      # batch_size: 1000  # todo: remove [run:A]
 
   # dataloader
-  train_batch_size: 8
+  train_batch_size: 16 # todo: run [:F]
   eval_batch_size: 64
   num_workers: 16
-  persistent_workers: false
   pin_memory: true
 
   # dataset builder
   use_subset: false
-  num_proc: 4
+  corpus_subset: false
+  num_proc: 8
   output_columns:
     - answer.target
     - question.input_ids
@@ -89,8 +91,8 @@ datamodule:
   n_retrieved_documents: 1_000
   n_documents:
     train: 10
-    validation: 20
-    test: 20 # changed from 10
+    validation: 10
+    test: 10
 
   # tag documents as positive or negative
   relevance_classifier:
@@ -99,6 +101,7 @@ datamodule:
   # document sampler
   sampler:
     total: ${datamodule.n_documents}
+    temperature: 1
     largest:
       train: false
       validation: true
@@ -109,19 +112,23 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
+      dset_name: medqa-us
+      question_length: null
       n_query_tokens: 10
     corpus_builder:
-      use_subset: false
+      use_subset: ${datamodule.corpus_subset}
       passage_length: 200
-      passage_stride: 100
+      passage_stride: 100 # todo: updated [:D] - reverted
 
   # Index parameters
   index_builder:
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
+    faiss_train_size: 1_000_000
     p: 100
-    max_chunksize: 1_000
-    maxsim_chunksize: 10_000 # todo: changed from 20_000
+    dtype: float32  # todo: updated [run:B]
+    max_chunksize: null
+    maxsim_chunksize: 4_000 # todo: updated [run:B]
     persist_cache: false
     faiss_args:
       factory: IVF100,PQ16x8

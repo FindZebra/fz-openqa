@@ -8,7 +8,7 @@ defaults:
 # OpenQA builder parameters
 builder:
   dataset_builder:
-    n_query_tokens: 10 # todo: debug
+    question_length: 350
 
 # Index parameters
 index_builder:

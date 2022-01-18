@@ -1,5 +1,6 @@
 from typing import Optional
 
+import numpy as np
 import torch.nn.functional as F
 from torch import nn
 from torch import Tensor
@@ -35,5 +36,6 @@ class ClsHead(Head):
 
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
+            # cls_repr /= float(cls_repr.shape[-1])**0.5
 
         return cls_repr

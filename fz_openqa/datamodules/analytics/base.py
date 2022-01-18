@@ -36,8 +36,9 @@ class Analytic:
 
     requires_columns: List[str] = []
     output_file_name: str = "analytic.json"
+    _allow_wandb: bool = False
 
-    def __init__(self, *, output_dir: str, verbose: bool = False, wandb_log: bool = False):
+    def __init__(self, *, output_dir: str, verbose: bool = True, wandb_log: bool = False):
         super().__init__()
         self.verbose = verbose
         self.wandb_log = wandb_log
@@ -61,20 +62,33 @@ class Analytic:
         None
 
         """
-        columns = get_column_names(dataset)
-        for c in self.requires_columns:
-            assert c in columns, (
-                f"{type(self).__name__} requires {self.requires_columns}. " f"Found {columns}"
-            )
-
-        if isinstance(dataset, DatasetDict):
-            results = {split: self.process_dataset_split(dset) for split, dset in dataset.items()}
-        elif isinstance(dataset, Dataset):
-            results = {"all": self.process_dataset_split(dataset)}
+        if isinstance(dataset, Dataset):
+            size = len(dataset)
+        elif isinstance(dataset, DatasetDict):
+            size = {k: len(d) for k, d in dataset.items()}
         else:
-            raise TypeError(f"Unsupported type {type(dataset)}")
+            raise ValueError(f"Unsupported dataset type: {type(dataset)}")
 
-        return self._process_results(results)
+        logger.info(f"Running {type(self).__name__} dataset of size {size}")
+        try:
+            columns = get_column_names(dataset)
+            for c in self.requires_columns:
+                assert c in columns, (
+                    f"{type(self).__name__} requires {self.requires_columns}. " f"Found {columns}"
+                )
+
+            if isinstance(dataset, DatasetDict):
+                results = {
+                    split: self.process_dataset_split(dset) for split, dset in dataset.items()
+                }
+            elif isinstance(dataset, Dataset):
+                results = {"all": self.process_dataset_split(dataset)}
+            else:
+                raise TypeError(f"Unsupported type {type(dataset)}")
+
+            return self._process_results(results)
+        except Exception:
+            logger.exception(f"Error while processing {type(self).__name__}")
 
     @abc.abstractmethod
     def process_dataset_split(self, dset: Dataset) -> Dict | List:
@@ -117,13 +131,19 @@ class Analytic:
 
     def log_to_wandb(self, results: List | Dict):
         """Log results to wandb"""
+        if not self._allow_wandb:
+            return
         name = camel_to_snake(type(self).__name__)
-        self._log_leaf_to_wandb(name, results)
+        try:
+            self._log_leaf_to_wandb(name, results)
+        except Exception as e:
+            logger.warning(f"Could not log to wandb: {e}")
 
     @staticmethod
     def _log_leaf_to_wandb(key, value):
         if isinstance(value, dict):
             for k, v in value.items():
                 Analytic._log_leaf_to_wandb(f"{key}/{k}", v)
+
         else:
             wandb.log({key: value})

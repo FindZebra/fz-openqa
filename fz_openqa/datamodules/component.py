@@ -154,12 +154,10 @@ class Component:
 
         return fingerprints
 
-    def _get_fingerprint_struct(self, exclude: Optional[List[str]] = None) -> List | Dict:
+    def _get_fingerprint_struct(self) -> List | Dict:
         """get the fingerprint for each element in the JSON-like representation
         of the object, and exclude all parameters stated in `no_fingerprint`"""
-        exclude = exclude or []
-        exclude.extend(self.no_fingerprint or [])
-        data = self.to_json_struct(exclude_no_recursive=exclude)
+        data = self.to_json_struct(fingerprint_mode=True)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
             """return the fingerprint, excepts if key==__name__"""
@@ -178,6 +176,7 @@ class Component:
         exclude_no_recursive: Optional[List[str]] = None,
         include_only: Optional[List[str]] = None,
         include_class_attributes: bool = False,
+        fingerprint_mode: bool = False,
         **kwargs,
     ) -> Dict[str, Any]:
         """
@@ -193,6 +192,7 @@ class Component:
             "exclude": exclude,
             "include_only": include_only,
             "include_class_attributes": include_class_attributes,
+            "fingerprint_mode": fingerprint_mode,
             **kwargs,
         }
         attributes = self._get_attributes(include_class_attributes=include_class_attributes)
@@ -202,6 +202,9 @@ class Component:
 
         if exclude_no_recursive is None:
             exclude_no_recursive = []
+
+        if fingerprint_mode and self.no_fingerprint is not None:
+            exclude_no_recursive.extend(self.no_fingerprint)
 
         exclude = exclude + exclude_no_recursive
 

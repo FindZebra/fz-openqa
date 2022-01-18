@@ -6,4 +6,5 @@ defaults:
 
 trainer:
   gpus: null
+  strategy: null
   tpu_cores: 8

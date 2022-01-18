@@ -128,7 +128,7 @@ class ElasticSearchEngine:
 
         request = [item for sublist in zip(req_head, req_body) for item in sublist]
 
-        result = self.instance.msearch(body=request)
+        result = self.instance.msearch(body=request, request_timeout=200)
 
         indexes, scores, contents = [], [], []
         for query in result["responses"]:

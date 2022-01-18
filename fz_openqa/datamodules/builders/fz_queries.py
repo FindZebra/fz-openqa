@@ -3,10 +3,10 @@ from functools import partial
 from typing import Any
 from typing import Dict
 
-from fz_openqa.datamodules.builders.medqa import MedQaBuilder
-from fz_openqa.datamodules.builders.medqa import MinLength
+from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
+from fz_openqa.datamodules.pipes.min_length import MinLength
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -15,7 +15,7 @@ from fz_openqa.utils.pretty import pretty_decode
 logger = logging.getLogger(__name__)
 
 
-class FzQueriesBuilder(MedQaBuilder):
+class FzQueriesBuilder(QaBuilder):
     dset_script_path_or_id = fz_queries.__file__
 
     # nesting level of the question field

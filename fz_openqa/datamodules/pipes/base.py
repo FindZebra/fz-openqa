@@ -451,18 +451,23 @@ class Pipe(Component):
     def max_num_proc(self) -> Optional[int]:
         """
         Maximum number of workers to use, check all children and takes the minimum value
+
+        todo: investigate why the values needs to be filtered by type
+         (type of `_max_num_proc`: `int` returned as well)
         """
-        all_max_num_procs = self.to_json_struct(
-            include_only=["_max_num_proc"], include_class_attributes=True
-        )
+        json_struct = self.to_json_struct(include_class_attributes=True)
 
         def safe_min(x):
-            try:
+            x = [y for y in x if isinstance(y, int)]
+            if len(x):
                 return min(x)
-            except ValueError:
+            else:
                 return None
 
-        return reduce_json_struct(all_max_num_procs, reduce_op=safe_min)
+        def key_filter(key):
+            return key == "_max_num_proc"
+
+        return reduce_json_struct(json_struct, reduce_op=safe_min, key_filter=key_filter)
 
     def _filter_keys(self, batch: Batch) -> Batch:
         """
