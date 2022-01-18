@@ -8,10 +8,11 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/head}
   - override /datamodule/sampler: boost_positives
-  - override /datamodule/transform: none
+  - override /datamodule/transform: option_dropout # todo: run [:F]
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
+      - sequence_lengths
       # todo: fix that: - retriever_distribution
   - override /logger: wandb
   - override /callbacks:
@@ -67,7 +68,7 @@ datamodule:
       # batch_size: 1000  # todo: remove [run:A]
 
   # dataloader
-  train_batch_size: 8
+  train_batch_size: 16 # todo: run [:F]
   eval_batch_size: 64
   num_workers: 16
   pin_memory: true

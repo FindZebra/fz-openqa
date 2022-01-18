@@ -32,6 +32,7 @@ from .meta import Sequential
 from .nesting import ApplyAsFlatten
 from .nesting import Flatten
 from .nesting import Nest
+from .option_dropout import OptionDropout
 from .passage import GeneratePassages
 from .pprint import PrintBatch
 from .pprint import PrintText

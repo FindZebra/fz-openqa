@@ -6,7 +6,6 @@ from typing import Any
 from typing import Optional
 
 import einops
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -134,13 +133,21 @@ class OptionRetriever(Module):
 
         return output
 
-    def _forward_field(self, batch: Batch, field: str, silent: bool = True, **kwargs) -> Batch:
+    def _forward_field(
+        self,
+        batch: Batch,
+        field: str,
+        silent: bool = True,
+        max_batch_size: Optional[int] = None,
+        **kwargs,
+    ) -> Batch:
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
-        if self.training:
-            max_batch_size = None
-        else:
+
+        if max_batch_size is None:
             max_batch_size = self.max_batch_size
+        elif max_batch_size < 0:
+            max_batch_size = None
 
         # flatten the batch
         flat_batch = flatten_first_dims(
@@ -183,6 +190,9 @@ class OptionRetriever(Module):
         output = {}
         step_output = {}
         is_supervised_loss_computed = False
+        # `max_batch_size` is used to limit the number of samples in the batch, it is
+        # only used during eval, except when resampling..
+        max_batch_size_eval = -1 if self.training else self.max_batch_size
 
         # Register the document and question shape
         # if the documents are of shape [batch_size, n_docs, seq_len], documents
@@ -204,11 +214,15 @@ class OptionRetriever(Module):
             # compute documents logits, and potentially expand to match
             # the shape [batch_size, n_options, n_documents, ...]
             with torch.no_grad():
-                d_out = self._forward(d_batch, silent=silent, **kwargs)
+                d_out = self._forward(
+                    d_batch, silent=silent, max_batch_size=self.max_batch_size, **kwargs
+                )
                 d_out = {k: self._expand_to_shape(v, doc_target_shape) for k, v in d_out.items()}
 
             # compute questions logits, shape [batch_size, n_options, ...]
-            output.update(self._forward(q_batch, silent=silent, **kwargs))
+            output.update(
+                self._forward(q_batch, silent=silent, max_batch_size=max_batch_size_eval, **kwargs)
+            )
             pprint_batch({**output, **d_out}, "Option retriever::resampling::input", silent=silent)
 
             # compute the score `log p(d |q, a)`and sample `k` documents without replacement
@@ -227,7 +241,6 @@ class OptionRetriever(Module):
 
                 # sample k documents
                 original_retrieval_score = d_batch.get("document.retrieval_score", None)
-                rich.print(original_retrieval_score.flip(1))
                 self._mask_scores(original_retrieval_score, retriever_score)
                 soft_samples = F.gumbel_softmax(
                     retriever_score / self.temperature, hard=False, dim=-1
@@ -245,10 +258,10 @@ class OptionRetriever(Module):
                 pprint_batch(d_batch, "Option retriever::resampling::output", silent=silent)
         else:
             # compute the questions logits
-            output.update(self._forward(q_batch, **kwargs))
+            output.update(self._forward(q_batch, max_batch_size=max_batch_size_eval, **kwargs))
 
         # compute the document logits
-        d_out = self._forward(d_batch, **kwargs)
+        d_out = self._forward(d_batch, max_batch_size=max_batch_size_eval, **kwargs)
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
@@ -299,11 +312,13 @@ class OptionRetriever(Module):
             retrieval_score = OptionRetriever._expand_to_shape(
                 original_retrieval_score, retriever_score.shape
             )
-            retriever_score[retrieval_score < -1e12] = -float("inf")
+            # consider thant `retrieval_score` falling bellow this threshold are
+            # are documents added as padding (see `SearchResult`)
+            retriever_score[retrieval_score < -1e15] = -float("inf")
 
     @staticmethod
     def _select_with_index(v: Any | Tensor, index: Tensor) -> Any | Tensor:
-        if isinstance(v, torch.Tensor):
+        if not isinstance(v, torch.Tensor):
             return v
         leaf_shape = v.shape[len(index.shape) :]
         _index = index.view(*index.shape, *(1 for _ in leaf_shape))
