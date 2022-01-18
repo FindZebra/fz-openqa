@@ -8,15 +8,15 @@ defaults:
   - override /datamodule/sampler: none
 
 trainer:
-  gpus: 1
-  accumulate_grad_batches: 2
+  gpus: 8
+  accumulate_grad_batches: 4
   val_check_interval: 0.5
 
 ## activate dynamic resampling in the model
 model:
   module:
-    resample_k: 20
-    max_batch_size: 200
+    resample_k: 10
+    max_batch_size: 1000
     output_size: 128
   bert:
     hidden_dropout_prob: 0.1
@@ -27,16 +27,14 @@ model:
 datamodule:
   # dataloaders
   num_workers: 8
-#  train_batch_size: 16
-#  eval_batch_size: 32
-  train_batch_size: 1
-  eval_batch_size: 1
+  train_batch_size: 8
+  eval_batch_size: 32
 
   # dataset update (none, done dynamically within the model)
   dataset_update: null
 
   # documents
-  n_retrieved_documents: 195
+  n_retrieved_documents: 196
   builder:
     # QuALITY questions are the same for each option, therefore the nesting level is 1.
     document_nesting_level: 1
@@ -44,6 +42,8 @@ datamodule:
     # update the builer parameters to use the quality builder
     dataset_builder:
       dset_name: quality
+      question_length: 120
+      n_query_tokens: 1
     corpus_builder:
       _target_: fz_openqa.datamodules.builders.QuALITYCorpusBuilder
       passage_length: 200

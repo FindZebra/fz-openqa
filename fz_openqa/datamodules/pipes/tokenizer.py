@@ -105,10 +105,11 @@ class QueryExpansionPipe(Pipe):
             else:
                 end_of_seq_idx = len(input_ids) - 1
 
+        # update the input_ids and the attention_mask, QMASK tokens are not masked out.
         input_ids = input_ids[:end_of_seq_idx] + [self.q_mask_token_id] * (
             self.max_length - end_of_seq_idx
         )
-        attention_mask = attention_mask[:end_of_seq_idx] + [0] * (self.max_length - end_of_seq_idx)
+        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (self.max_length - end_of_seq_idx)
         return input_ids, attention_mask
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:

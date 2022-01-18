@@ -23,6 +23,8 @@ from fz_openqa.utils.json_struct import flatten_json_struct
 
 Array2d = Union[List[List[Any]], np.ndarray, Tensor]
 
+FLOAT_INF: float = 1e-18
+
 
 def pad_to_length(lst: List[T], *, length: int, fill_token: T) -> List[T]:
     if len(lst) < length:

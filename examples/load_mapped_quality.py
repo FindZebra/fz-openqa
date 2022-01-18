@@ -5,6 +5,7 @@ import hydra
 import rich
 
 from fz_openqa import configs
+from fz_openqa.datamodules.analytics import SequenceLengths
 from fz_openqa.datamodules.builders import ConcatQaBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.builders import QaBuilder
@@ -12,6 +13,7 @@ from fz_openqa.datamodules.builders import QuALITYCorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import StaticIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes import OptionDropout
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -38,6 +40,7 @@ def run(config):
         use_subset=config.get("use_subset", True),
         cache_dir=config.sys.cache_dir,
         dset_name="quality",
+        question_length=120,
         num_proc=4,
     )
     dataset_builder.subset_size = [200, 50, 50]
@@ -58,13 +61,16 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=StaticIndexBuilder(),
-        relevance_classifier=ExactMatch(interpretable=True),
+        relevance_classifier=ExactMatch(interpretable=False),
         sampler=Sampler(total=10),
         n_retrieved_documents=200,
         document_nesting_level=1,
+        transform=OptionDropout(update=True),
         num_proc=4,
         batch_size=100,
-        analytics=None,
+        analytics=[
+            SequenceLengths(verbose=True, output_dir="./analytics/"),
+        ],
     )
 
     # define the data module
