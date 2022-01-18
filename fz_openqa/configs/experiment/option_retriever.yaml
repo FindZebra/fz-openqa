@@ -13,11 +13,10 @@ defaults:
   - override /datamodule/builder/analytics:
       - retriever_accuracy
       - sequence_lengths
-      # todo: fix that: - retriever_distribution
+      - retriever_distribution
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
-      # - progress_bar
       - lr_monitor
 
 base:
@@ -92,8 +91,8 @@ datamodule:
   n_retrieved_documents: 1_000
   n_documents:
     train: 10
-    validation: 10 # todo: update
-    test: 10 # todo: update
+    validation: 10
+    test: 10
 
   # tag documents as positive or negative
   relevance_classifier:
@@ -102,10 +101,11 @@ datamodule:
   # document sampler
   sampler:
     total: ${datamodule.n_documents}
+    temperature: 1
     largest:
       train: false
-      validation: true # todo: remove [run:A]
-      test: true # todo: remove [run:A]
+      validation: true
+      test: true
 
   # OpenQA builder parameters
   builder:

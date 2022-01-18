@@ -85,13 +85,15 @@ class Sampler(Pipe):
     ) -> np.ndarray:
         if isinstance(logits, Tensor):
             logits = logits.detach().cpu().numpy()
+
         logits = logits - np.max(logits, axis=-1, keepdims=True)
         logits = np.nan_to_num(logits, nan=-1e6, posinf=1e3, neginf=-1e6)
-        probs = softmax(logits / temperature)
+        probs = softmax(logits / temperature, axis=-1)
 
         if min_prob_value is not None:
             probs = np.maximum(probs, min_prob_value)
-            probs = probs / np.sum(probs)
+            probs = probs / np.sum(probs, axis=-1, keepdims=True)
+
         return probs
 
     def _get_args(self, split):

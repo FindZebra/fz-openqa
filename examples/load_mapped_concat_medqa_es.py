@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from pytorch_lightning import seed_everything
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics import RetrieverAccuracy
+from fz_openqa.datamodules.analytics import RetrieverDistribution
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
 from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
 from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
@@ -20,6 +22,8 @@ from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes import SamplerBoostPositives
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
@@ -36,17 +40,11 @@ def run(config):
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
-
-    # define the default cache location
-    default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
-    try:
-        cache_dir = config["sys"]["cache_dir"]
-    except Exception:
-        cache_dir = default_cache_dir
 
     # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
@@ -57,7 +55,8 @@ def run(config):
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
-        cache_dir=cache_dir,
+        cache_dir=config.sys.cache_dir,
+        dset_name=config.get("dset_name", "medqa-us"),
         num_proc=4,
     )
     dataset_builder.subset_size = [200, 50, 50]
@@ -67,7 +66,7 @@ def run(config):
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=False,
-        cache_dir=cache_dir,
+        cache_dir=config.sys.cache_dir,
         num_proc=4,
     )
 
@@ -77,25 +76,23 @@ def run(config):
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(),
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=1000,
-        n_documents=10,
-        max_pos_docs=1,
-        filter_unmatched=config.get("filter_unmatched", False),
-        select_mode=config.get("select_mode", "sample"),
+        n_retrieved_documents=21,
+        sampler=Sampler(total=10),  # SamplerBoostPositives(total=10, n_boosted=1),
         num_proc=config.get("num_proc", 2),
-        batch_size=config.get("batch_size", 10),
-        analyses=[
+        batch_size=config.get("batch_size", 100),
+        analytics=[
             RetrieverAccuracy(output_dir="./analyses", verbose=True),
+            RetrieverDistribution(output_dir="./analyses", verbose=True),
         ],
     )
 
     # define the data module
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, num_workers=0)
 
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=3)
+    dm.display_samples(n_samples=1)
 
     # access dataset
     rich.print(dm.dataset)

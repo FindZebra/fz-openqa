@@ -25,12 +25,13 @@ def safe_cast_to_list(x: Any) -> Any:
 
 
 class RetrieverDistribution(Analytic):
-    """Report the di"""
+    """Report statistics on the retriever distribution."""
 
     requires_columns: List[str] = ["document.retrieval_score"]
     output_file_name = "retrieval_distribution.json"
-    n_samples = 5000
-    _allow_wandb: True
+    n_samples: int = 5000
+    percentiles: List[int] = [95]
+    _allow_wandb: bool = True
 
     def process_dataset_split(self, dset: Dataset) -> Dict | List:
         """
@@ -42,27 +43,31 @@ class RetrieverDistribution(Analytic):
         scores = scores.reshape(-1, scores.shape[-1])
         if len(scores) > self.n_samples:
             scores = scores[np.random.choice(len(scores), self.n_samples, replace=False)]
+
+        # compute the probabilities
         probs = Sampler.compute_probs(scores)
+
+        # compute the entropy
+        entropy = -np.sum(probs * np.log(probs), axis=-1)
 
         # compute probability mass function
         if not all(np.all(s[:-1] >= s[1:]) for s in probs):
             probs = np.concatenate([s[np.argsort(-s)][None] for s in probs], axis=0)
         pmf = np.cumsum(probs, axis=-1)
+        assert (
+            np.abs(pmf[..., -1] - 1) < 1e-6
+        ).all(), f"probabilities don't sum to one: {pmf[..., -1]}"
 
-        percentiles = [0.5, 0.9, 0.99]
-        output = {}
-        for p in percentiles:
+        # prepare the output and the percentiles for the rank of `p(d|q) == x`
+        output = {"entropy": f"{entropy.mean():.3f}", "n_samples": f"{len(scores)}"}
+        for p in self.percentiles:
+            p = p / 100.0
             arg_pmf = np.argmin(np.abs(pmf - p), axis=-1)
             arg_pmf = arg_pmf.astype(np.float32)
             output[f"rank_pmf={p:.2f}"] = {
-                "n": f"{len(arg_pmf)}",
-                "mean": f"{np.mean(arg_pmf):.1f}",
-                "std": f"{np.std(arg_pmf):.1f}",
-                "p10": f"{np.percentile(arg_pmf, 10):.1f}",
-                "p25": f"{np.percentile(arg_pmf, 25):.1f}",
                 "p50": f"{np.percentile(arg_pmf, 50):.1f}",
-                "p75": f"{np.percentile(arg_pmf, 75):.1f}",
-                "p90": f"{np.percentile(arg_pmf, 90):.1f}",
+                "p95": f"{np.percentile(arg_pmf, 95):.1f}",
+                "p99": f"{np.percentile(arg_pmf, 95):.1f}",
             }
 
         return output
