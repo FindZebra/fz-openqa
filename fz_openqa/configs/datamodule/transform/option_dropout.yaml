@@ -6,7 +6,7 @@ keys:
   - question.attention_mask
   - document.input_ids
   - document.attention_mask
-  - documents.retrieval_score
+  - document.retrieval_score
   - document.retrieval_rank
   - document.row_idx
 update: true

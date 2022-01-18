@@ -160,8 +160,7 @@ class Model(LightningModule):
     ):
         """
         Log all data from the input Batch. Only tensors with one elements are logged.
-        Each key is formatted as: `prefix/key` where prefix is usually
-        the split id.
+        Each key is formatted as: `prefix/key` where prefix is usually the `Split`.
         """
         for k, v in data.items():
             key = "/".join(u for u in (prefix, self.module.task_id, k) if u is not None)
