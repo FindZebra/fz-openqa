@@ -3,9 +3,11 @@ from __future__ import annotations
 import warnings
 from enum import Enum
 from typing import Any
+from typing import Dict
 from typing import Optional
 
 import einops
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -276,10 +278,13 @@ class OptionRetriever(Module):
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
-        # log retriever entropy
-        retriever_logits = retriever_score.log_softmax(dim=-1)
-        retriever_entropy = -(retriever_logits.exp() * retriever_logits).sum(dim=(1, 2)).mean()
-        step_output["retriever/entropy"] = retriever_entropy.detach()
+        # retriever diagnostics
+        self._retriever_diagnostics(
+            retriever_score,
+            batch.get("document.retrieval_score", None),
+            batch.get("document.retrieval_rank", None),
+            output=step_output,
+        )
 
         # compute the gradients
         step_output.update(
@@ -305,6 +310,50 @@ class OptionRetriever(Module):
         step_output["retriever/alpha"] = self.alpha
 
         return step_output
+
+    @staticmethod
+    @torch.no_grad()
+    def _retriever_diagnostics(
+        retriever_score: Tensor,
+        retrieval_scores: Optional[Tensor],
+        retrieval_rank: Optional[Tensor],
+        *,
+        output: Dict,
+    ):
+        """
+        Compute diagnostics for the rank of the retrieved documents.
+
+        NB: `retriever_probs` corresponds to the probs of the trained model whereas
+        `retrieval_*` correspond to the probs of the model used for indexing.
+        """
+
+        retriever_probs = retriever_score.softmax(dim=-1)
+
+        # entropy `H(p(D | q, A))`
+        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=(1, 2))
+        output["retriever/entropy"] = retriever_entropy.mean()
+
+        if retrieval_scores is not None:
+            #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
+            M = retrieval_scores.max(dim=-1, keepdim=True).values
+            retrieval_scores = retrieval_scores - M
+            retrieval_scores = retrieval_scores.clip(min=-1e6)
+            retrieval_log_probs = retrieval_scores.log_softmax(dim=-1)
+
+            # `KL( p(D|q, A) || r(D|q, A) )`
+            kl_div = retriever_probs * (retriever_probs.log() - retrieval_log_probs)
+            kl_div = kl_div.sum(dim=(1, 2))
+            output["retriever/kl_div"] = kl_div.mean()
+
+        # retrieval rank weighted by the retriever probs
+        if retrieval_rank is not None:
+            weighted_rank = retriever_probs * retrieval_rank
+            output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
+
+        # min-max of the retrieval rank
+        output["retriever/n_samples"] = retrieval_rank.size(-1)
+        output["retriever/max_sampled_rank"] = (retrieval_rank.max(dim=-1).values).float().mean()
+        output["retriever/min_sampled_rank"] = (retrieval_rank.min(dim=-1).values).float().mean()
 
     @staticmethod
     def _mask_scores(original_retrieval_score, retriever_score):

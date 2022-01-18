@@ -183,19 +183,24 @@ class DataModule(LightningDataModule):
         return f"{self.__class__.__name__}(\nbuilder={self.builder}\n)"
 
     @rank_zero_only
-    def display_samples(self, n_samples: int = 1):
+    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False):
         """Sample a batch and pretty print it."""
-        batch = next(iter(self.train_dataloader()))
+        train_batch = next(iter(self.train_dataloader()))
+
         print(get_separator("="))
-        print("=== Batch ===")
+        print("=== training Batch ===")
+        pprint_batch(train_batch)
         print(get_separator())
-        pprint_batch(batch)
-        print(get_separator())
+        if show_valid_batch:
+            print("=== valid. Batch ===")
+            valid_batch = next(iter(self.val_dataloader()))
+            pprint_batch(valid_batch)
+            print(get_separator())
         print("=== example ===")
         try:
-            for i in range(min(n_samples, infer_batch_size(batch))):
+            for i in range(min(n_samples, infer_batch_size(train_batch))):
                 print(get_separator())
-                self.display_one_sample({k: v[i] for k, v in batch.items()})
+                self.display_one_sample({k: v[i] for k, v in train_batch.items()})
         except Exception as e:
             logger.exception(e)
         print(get_separator("="))

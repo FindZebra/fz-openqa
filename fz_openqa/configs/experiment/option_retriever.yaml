@@ -24,6 +24,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
+  exp_info: "Experimenting with OptionDropout + DPR: this runs uses `update_freq=5` (prev. value=15)."
 
 trainer:
   gpus: 8
@@ -59,7 +60,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 15
+    freq: 5 # todo: run [:G]
     reset_optimizer: false # todo: test `false`
     index_first_epoch: false
     builder_args:
