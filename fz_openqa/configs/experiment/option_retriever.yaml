@@ -114,7 +114,7 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us
-      question_length: null
+      question_length: null # todo: experiment with this
       n_query_tokens: 10
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}

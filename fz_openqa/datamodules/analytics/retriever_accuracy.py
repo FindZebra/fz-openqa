@@ -39,6 +39,8 @@ class RetrieverAccuracy(Analytic):
     def process_dataset_split(self, dset: Dataset) -> Dict | List:
         """
         Report on a specific split of the dataset.
+
+        # todo: memory opt. : batched version
         """
         scores = dset["document.retrieval_score"]
         scores = safe_cast_to_list(scores)

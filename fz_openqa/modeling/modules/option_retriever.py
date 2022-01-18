@@ -243,7 +243,7 @@ class OptionRetriever(Module):
 
                 # sample k documents
                 original_retrieval_score = d_batch.get("document.retrieval_score", None)
-                self._mask_scores(original_retrieval_score, retriever_score)
+                retriever_score = self._mask_scores(retriever_score, original_retrieval_score)
                 soft_samples = F.gumbel_softmax(
                     retriever_score / self.temperature, hard=False, dim=-1
                 )
@@ -330,7 +330,7 @@ class OptionRetriever(Module):
         retriever_probs = retriever_score.softmax(dim=-1)
 
         # entropy `H(p(D | q, A))`
-        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=(1, 2))
+        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=-1)
         output["retriever/entropy"] = retriever_entropy.mean()
 
         if retrieval_scores is not None:
@@ -342,7 +342,7 @@ class OptionRetriever(Module):
 
             # `KL( p(D|q, A) || r(D|q, A) )`
             kl_div = retriever_probs * (retriever_probs.log() - retrieval_log_probs)
-            kl_div = kl_div.sum(dim=(1, 2))
+            kl_div = kl_div.sum(dim=-1)
             output["retriever/kl_div"] = kl_div.mean()
 
         # retrieval rank weighted by the retriever probs
@@ -356,7 +356,7 @@ class OptionRetriever(Module):
         output["retriever/min_sampled_rank"] = (retrieval_rank.min(dim=-1).values).float().mean()
 
     @staticmethod
-    def _mask_scores(original_retrieval_score, retriever_score):
+    def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:
         if original_retrieval_score is not None:
             retrieval_score = OptionRetriever._expand_to_shape(
                 original_retrieval_score, retriever_score.shape
@@ -364,6 +364,8 @@ class OptionRetriever(Module):
             # consider thant `retrieval_score` falling bellow this threshold are
             # are documents added as padding (see `SearchResult`)
             retriever_score[retrieval_score < -1e15] = -float("inf")
+
+        return retriever_score
 
     @staticmethod
     def _select_with_index(v: Any | Tensor, index: Tensor) -> Any | Tensor:
@@ -424,14 +426,15 @@ class OptionRetriever(Module):
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
-        Gather losses and logits from all devides and return
+        Gather losses and logits from all devices and return
         """
 
         # average losses
-        for k in ["loss", "reader/logp"]:
-            y = output.get(k, None)
-            if y is not None:
-                output[k] = y.mean()
+        for k, v in output.items():
+            if not str(k).startswith("_") and not str(k).endswith("_"):
+                if isinstance(v, torch.Tensor):
+                    v = v.float().mean()
+                output[k] = v
 
         return output
 
