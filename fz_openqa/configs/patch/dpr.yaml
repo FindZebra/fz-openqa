@@ -3,7 +3,6 @@
 defaults:
   - override /model/head: dense
   - override /datamodule/index_builder: ${model/head}
-  - override /datamodule/relevance_classifier: none # todo [:F]
 
 ## activate dynamic resampling in the model
 model:
@@ -13,14 +12,6 @@ model:
     normalize: false
 
 datamodule:
-
-  # dataset re-indexing
-  dataset_update:
-    # freq: 5 # todo [:E] --reverted [:F
-    reset_optimizer: false
-    index_first_epoch: false
-    builder_args:
-      relevance_classifier: null
 
   # index
   index_builder:
