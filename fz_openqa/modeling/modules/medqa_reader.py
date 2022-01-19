@@ -51,7 +51,7 @@ class MedQaReader(Module):
         self.answer_metrics = self._get_base_metrics(prefix=prefix)
 
     def _forward(self, batch: Batch, targets: Optional[Tensor] = None, **kwargs) -> Batch:
-        DEBUG = True
+        DEBUG = False
         if DEBUG:
             pprint_batch(batch, "batch")
             # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)

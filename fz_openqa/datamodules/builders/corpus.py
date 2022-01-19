@@ -335,6 +335,30 @@ class FZxMedQaCorpusBuilder(CorpusBuilder):
         return concatenate_datasets(dsets)
 
 
+class MedQaxMedWikiCorpusBuilder(CorpusBuilder):
+    subset_size = [3]
+    dset_script_path_or_id: List = [
+        medwiki_corpus.__file__,
+        meqa_en_corpus.__file__,
+    ]
+
+    def load_base_dataset(self) -> DatasetDict:
+        assert self.input_dir is None
+        kwargs = {"cache_dir": self.cache_dir}
+        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
+        shared_columns = set.intersection(*[set(dset.column_names) for dset in dsets])
+        if any(shared_columns != set(dset.column_names) for dset in dsets):
+
+            def drop_cols(dset: Dataset):
+                cols = set(dset.column_names)
+                cols_to_drop = cols - shared_columns
+                logger.warning(f"Dropping columns {cols_to_drop} from dataset")
+                return dset.remove_columns(list(cols_to_drop))
+
+            dsets = [drop_cols(dset) for dset in dsets]
+        return concatenate_datasets(dsets)
+
+
 class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
     subset_size = [3]
     dset_script_path_or_id: List = [

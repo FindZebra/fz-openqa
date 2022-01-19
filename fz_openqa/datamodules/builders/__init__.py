@@ -4,6 +4,7 @@ from .corpus import FzCorpusBuilder
 from .corpus import FZxMedQaCorpusBuilder
 from .corpus import FZxMedQaxWikiCorpusBuilder
 from .corpus import MedQaCorpusBuilder
+from .corpus import MedQaxMedWikiCorpusBuilder
 from .corpus import MedWikipediaCorpusBuilder
 from .corpus import QuALITYCorpusBuilder
 from .corpus import WikipediaCorpusBuilder

@@ -39,7 +39,7 @@ model:
   num_training_steps: 10_000
   bert:
     hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.3 # TODO: test 0.5
+    attention_probs_dropout_prob: 0.1 # TODO: test 0.5
 
 datamodule:
   use_subset: false # todo: debug: remove
@@ -91,7 +91,7 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      dset_name: us # todo: change to TW
+      dset_name: medqa-us # todo: change to TW
       min_answer_length: 3
     corpus_builder:
       to_sentences: false
@@ -105,4 +105,4 @@ datamodule:
 
 logger:
   wandb:
-    group: baseline-reader-wiki-dropout # name your experiment here
+    group: baseline-reader-sampling-medqawiki # name your experiment here
