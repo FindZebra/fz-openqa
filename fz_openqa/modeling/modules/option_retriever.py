@@ -331,12 +331,13 @@ class OptionRetriever(Module):
 
         retriever_probs = retriever_score.softmax(dim=-1)
 
-        # arg_i(cdf=0.9)
+        # arg_i(cdf=p)
         idx = retriever_probs.sort(dim=-1, descending=True).indices
         sorted_probs = retriever_probs.gather(dim=-1, index=idx)
         cdf = sorted_probs.cumsum(dim=-1)
-        arg_cdf_90 = (cdf - 0.9).abs().argmin(dim=-1)
-        output["retriever/arg_cdf_90"] = arg_cdf_90.mean()
+        for p in [0.5, 0.9]:
+            arg_cdf_90 = 1 + (cdf - p).abs().argmin(dim=-1)
+            output[f"retriever/arg_cdf_{int(100*p)}"] = arg_cdf_90.float().mean()
 
         # entropy `H(p(D | q, A))`
         retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=(1, 2))
@@ -363,7 +364,7 @@ class OptionRetriever(Module):
             # rank of the most likely document
             top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
             top_rank = retrieval_rank.gather(dim=2, index=top_idx)
-            output["retriever/top_rank"] = top_rank.mean()
+            output["retriever/top_rank"] = top_rank.float().mean()
 
             # min-max of the retrieval rank
             output["retriever/n_samples"] = retrieval_rank.size(-1)

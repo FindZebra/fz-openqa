@@ -9,6 +9,7 @@ defaults:
 
 trainer:
   gpus: 1
+  accumulate_grad_batches: 2
 
 ## activate dynamic resampling in the model
 model:
@@ -20,6 +21,8 @@ model:
     grad_expr: reinforce
 
 datamodule:
+  train_batch_size: 16
+  num_workers: 4
   # dataset re-indexing
   dataset_update: null
 #    # freq: 5 # todo [:E] --reverted [:F

@@ -63,7 +63,7 @@ datamodule:
   dataset_update:
     freq: 5 #
     reset_optimizer: false
-    index_first_epoch: true # todo: run [:G]
+    index_first_epoch: false # todo: run [:G]
     builder_args:
       relevance_classifier: null
 
