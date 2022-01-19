@@ -1,27 +1,33 @@
 from __future__ import annotations
 
-from typing import Any
+import logging
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import numpy as np
 import rich
+import torch
 from datasets import Dataset
-from scipy.special import softmax
-from torch import Tensor
+from datasets import Split
+from tqdm import tqdm
 
 from ..pipes import Sampler
+from ..utils.dataset import keep_only_columns
 from .base import Analytic
 
 
-def safe_cast_to_list(x: Any) -> Any:
-    if isinstance(x, list):
-        return [safe_cast_to_list(y) for y in x]
-    elif isinstance(x, Tensor):
-        if x.dim() == 0:
-            return x.item()
+def safe_concatenate(scores):
+    if isinstance(scores, list):
+        if isinstance(scores[0], (torch.Tensor, np.ndarray)):
+            if isinstance(scores[0], torch.Tensor):
+                scores = [s.cpu().numpy() for s in scores]
+            return np.concatenate([s[None] for s in scores])
         else:
-            return [safe_cast_to_list(y) for y in x]
+            scores = [safe_concatenate(s) for s in scores]
+            return safe_concatenate(scores)
+    else:
+        return scores
 
 
 class RetrieverDistribution(Analytic):
@@ -29,23 +35,45 @@ class RetrieverDistribution(Analytic):
 
     requires_columns: List[str] = ["document.retrieval_score"]
     output_file_name = "retrieval_distribution.json"
-    n_samples: int = 5000
+    n_samples: int = 1000
+    batch_size: int = 1000
     percentiles: List[int] = [95]
     _allow_wandb: bool = True
 
-    def process_dataset_split(self, dset: Dataset) -> Dict | List:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """
         Report on a specific split of the dataset.
         """
-        scores = dset["document.retrieval_score"]
-        scores = safe_cast_to_list(scores)
-        scores = np.array(scores)
-        scores = scores.reshape(-1, scores.shape[-1])
-        if len(scores) > self.n_samples:
-            scores = scores[np.random.choice(len(scores), self.n_samples, replace=False)]
+        scores = None
+        dset = keep_only_columns(dset, ["document.retrieval_score"])
+        n_steps = len(dset) // self.batch_size
+        for i in tqdm(
+            range(0, len(dset), self.batch_size),
+            desc=f"{type(self).__name__}, split={split}",
+            disable=not self.verbose,
+            leave=False,
+        ):
+            row = dset[i : i + self.batch_size]
+            scores_i = self._get_scores(
+                row, key="document.retrieval_score", n_samples=self.n_samples // n_steps
+            )
+            if scores is None:
+                scores = scores_i
+            else:
+                scores = np.concatenate([scores, scores_i])[: self.n_samples]
+
+        rich.print(f">>> scores; {scores.shape}")
 
         # compute the probabilities
         probs = Sampler.compute_probs(scores)
+
+        # save probs to file
+        output = self.output_dir / self.output_file_name.replace(".json", "") / f"probs-{split}.npy"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        logging.getLogger(__name__).info(f"Saving probabilities to {output}")
+        np.save(output.name, probs)
 
         # compute the entropy
         entropy = -np.sum(probs * np.log(probs), axis=-1)
@@ -71,3 +99,11 @@ class RetrieverDistribution(Analytic):
             }
 
         return output
+
+    def _get_scores(self, row: Dict | Dataset, *, key: str, n_samples: int) -> np.ndarray:
+        scores = row[key]
+        scores = safe_concatenate(scores)
+        scores = scores.reshape(-1, scores.shape[-1])
+        if len(scores) > n_samples:
+            scores = scores[np.random.choice(len(scores), n_samples, replace=False)]
+        return scores

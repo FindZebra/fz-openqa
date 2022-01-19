@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Union
 
 import plotly.graph_objects as go
@@ -14,6 +15,7 @@ import rich
 import wandb
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import Split
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -79,10 +81,11 @@ class Analytic:
 
             if isinstance(dataset, DatasetDict):
                 results = {
-                    split: self.process_dataset_split(dset) for split, dset in dataset.items()
+                    split: self.process_dataset_split(dset, split=split)
+                    for split, dset in dataset.items()
                 }
             elif isinstance(dataset, Dataset):
-                results = {"all": self.process_dataset_split(dataset)}
+                results = {"all": self.process_dataset_split(dataset, split="all")}
             else:
                 raise TypeError(f"Unsupported type {type(dataset)}")
 
@@ -91,7 +94,9 @@ class Analytic:
             logger.exception(f"Error while processing {type(self).__name__}")
 
     @abc.abstractmethod
-    def process_dataset_split(self, dset: Dataset) -> Dict | List:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """Process and report on a specific split of the dataset."""
         raise NotImplementedError
 
