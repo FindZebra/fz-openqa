@@ -18,6 +18,7 @@ from .metrics import SafeMetricCollection
 from .metrics import SplitMetrics
 from .utils.gradients import GradExpression
 from .utils.gradients import InBatchGradients
+from .utils.gradients import ReinforceGradients
 from .utils.gradients import supervised_loss
 from .utils.gradients import VariationalGradients
 from .utils.total_epoch_metric import TotalEpochMetric
@@ -103,6 +104,7 @@ class OptionRetriever(Module):
         estimator_cls = {
             GradExpression.IN_BATCH: InBatchGradients,
             GradExpression.VARIATIONAL: VariationalGradients,
+            GradExpression.REINFORCE: ReinforceGradients,
         }[grad_expr]
         self.estimator = estimator_cls(eval_topk=eval_topk)
 
@@ -281,8 +283,8 @@ class OptionRetriever(Module):
         # retriever diagnostics
         self._retriever_diagnostics(
             retriever_score,
-            batch.get("document.retrieval_score", None),
-            batch.get("document.retrieval_rank", None),
+            d_batch.get("document.retrieval_score", None),
+            d_batch.get("document.retrieval_rank", None),
             output=step_output,
         )
 
@@ -329,8 +331,15 @@ class OptionRetriever(Module):
 
         retriever_probs = retriever_score.softmax(dim=-1)
 
+        # arg_i(cdf=0.9)
+        idx = retriever_probs.sort(dim=-1, descending=True).indices
+        sorted_probs = retriever_probs.gather(dim=-1, index=idx)
+        cdf = sorted_probs.cumsum(dim=-1)
+        arg_cdf_90 = (cdf - 0.9).abs().argmin(dim=-1)
+        output["retriever/arg_cdf_90"] = arg_cdf_90.mean()
+
         # entropy `H(p(D | q, A))`
-        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=-1)
+        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=(1, 2))
         output["retriever/entropy"] = retriever_entropy.mean()
 
         if retrieval_scores is not None:
@@ -342,18 +351,28 @@ class OptionRetriever(Module):
 
             # `KL( p(D|q, A) || r(D|q, A) )`
             kl_div = retriever_probs * (retriever_probs.log() - retrieval_log_probs)
-            kl_div = kl_div.sum(dim=-1)
+            kl_div = kl_div.sum(dim=(1, 2))
             output["retriever/kl_div"] = kl_div.mean()
 
-        # retrieval rank weighted by the retriever probs
+        # retrieval rank info
         if retrieval_rank is not None:
+            # retrieval rank weighted by the probability of the retrieved document
             weighted_rank = retriever_probs * retrieval_rank
             output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
 
-        # min-max of the retrieval rank
-        output["retriever/n_samples"] = retrieval_rank.size(-1)
-        output["retriever/max_sampled_rank"] = (retrieval_rank.max(dim=-1).values).float().mean()
-        output["retriever/min_sampled_rank"] = (retrieval_rank.min(dim=-1).values).float().mean()
+            # rank of the most likely document
+            top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
+            top_rank = retrieval_rank.gather(dim=2, index=top_idx)
+            output["retriever/top_rank"] = top_rank.mean()
+
+            # min-max of the retrieval rank
+            output["retriever/n_samples"] = retrieval_rank.size(-1)
+            output["retriever/max_sampled_rank"] = (
+                (retrieval_rank.max(dim=-1).values).float().mean()
+            )
+            output["retriever/min_sampled_rank"] = (
+                (retrieval_rank.min(dim=-1).values).float().mean()
+            )
 
     @staticmethod
     def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:

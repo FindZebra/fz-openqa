@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+import rich
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -15,6 +16,7 @@ from fz_openqa.utils.pretty import pprint_batch
 class GradExpression(Enum):
     VARIATIONAL = "variational"
     IN_BATCH = "in_batch"
+    REINFORCE = "reinforce"
 
 
 @dataclass
@@ -132,8 +134,29 @@ class VariationalGradients(Estimator):
 
     def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
         lb_logp_a = (q.logp_a__d + q.log_p_d__a.sum(dim=1, keepdim=True)).sum(dim=2)
-        lb_logp_a_star = torch.gather(lb_logp_a, dim=1, index=targets).squeeze(1)
+        lb_logp_a_star = torch.gather(lb_logp_a, dim=1, index=targets[:, None]).squeeze(1)
         return -1 * (lb_logp_a_star).mean(-1)
+
+
+class ReinforceGradients(Estimator):
+    """Compute the gradients using Reinforce and assuming the proposal distributiuon to be the
+    current retriever."""
+
+    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
+        # todo: expand the `row_ids` and use masking row_ids[row_ids!=row_id] = 0
+        # loss for the reader
+        logp_a__d = q.logp_a__d.sum(2)
+        logp_a_star__d = torch.gather(logp_a__d, dim=1, index=targets[:, None])
+        reader_loss = -1 * logp_a_star__d
+
+        # loss for the retriever
+        logp_a__d_ = q.logp_a__d.detach()
+        logp_a_hat = logp_a__d_.sum(dim=2, keepdim=True)
+        logp_a_hat = 1.0 / logp_a__d_.size(2) * (logp_a_hat - logp_a__d_)
+        Z = logp_a__d_ - logp_a_hat
+        retriever_loss = -1 * (Z * q.log_p_d__a).sum(dim=(1, 2))
+
+        return reader_loss + retriever_loss
 
 
 def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
