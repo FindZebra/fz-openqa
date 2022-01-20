@@ -1,6 +1,5 @@
 import abc
 import warnings
-from dataclasses import asdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -14,6 +13,7 @@ from torch.nn import functional as F
 
 from .utils import batch_cartesian_product
 from fz_openqa.datamodules.index.utils.io import log_mem_size
+from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 
 
@@ -116,7 +116,7 @@ class Estimator:
             eval_topk=self.eval_topk,
             debug=self.debug,
         )
-        loss = self.compute_loss(q, targets=targets, pids=pids)
+        loss = self.compute_loss(q, targets=targets, retriever_score=retriever_score)
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),
@@ -152,42 +152,136 @@ class ReinforceGradients(Estimator):
     """Compute the gradients using Reinforce with leave-one-out baseline."""
 
     def compute_loss(
-        self, q: Quantities, *, targets: Tensor, pids: Tensor = None, **kwargs
+        self, q: Quantities, *, targets: Tensor, retriever_score: Tensor = None, **kwargs
     ) -> torch.Tensor:
-        if pids is None:
+        if retriever_score is None:
             raise ValueError(f"pids must be provided for {type(self).__name__}")
 
-        # loss for the reader
+        # loss for the reader: E[ \sum_D \nabla p(q_star | q, A, D)]
         logp_a__d = q.logp_a__d.sum(2)
         logp_a_star__d = torch.gather(logp_a__d, dim=1, index=targets[:, None]).squeeze(1)
-        reader_loss = -1 * logp_a_star__d
+        p_a_star__d = logp_a_star__d.exp()
+        reader_loss = -1 * p_a_star__d
 
-        # loss for the retriever).squeeze(1)
+        # loss for the retriever: REINFORCE
+        use_baseline = True
         index = targets[:, None, None].expand(*targets.shape, 1, q.logp_a__d.shape[2])
         logp_a_star__D = torch.gather(q.logp_a__d, dim=1, index=index).squeeze(1)
-        # missing gather in
-        p_a_star__D = logp_a_star__D
-        # logp_a_star_hat = self._score_estimate(q.log_p_d__a_no_perm.to(torch.float16),
-        # pids=pids.to(torch.int32))
-        logp_a_star_hat = torch.zeros_like(logp_a_star__D)
-        Z_diff = p_a_star__D - logp_a_star_hat.to(logp_a_star__D.dtype)
-        log_p_D_Q = q.log_p_d__a.sum(1)
-        retriever_loss = -1 * (Z_diff.detach() * log_p_D_Q).sum(dim=(-1))
+        score = logp_a_star__D.exp()
 
-        # rich.print(f">> retriever_loss: {retriever_loss.shape},
-        # reader_loss: {reader_loss.shape}")
-        # rich.print(f">> exp: Z_diff: {Z_diff.mean(-1)},
-        # logp_a_star__D: {logp_a_star__D.mean(-1)}")
-        # with torch.no_grad():
-        #     for j in range(Z_diff.shape[1]):
-        #         rich.print(f"> Z_diff: {Z_diff[0, j]}, x: {logp_a_star__D[0,j]},
-        #         x:hat: {logp_a_star_hat[0, j]}")
+        if not use_baseline:
+            baseline = torch.zeros_like(score)
+        else:
+            rich.print(f">> expanded:shaped: {q.logp_a__d.shape}")
+            baseline = self.baseline(retriever_score, targets, log_p_d__a=q.log_p_d__a)
+            rich.print(f"> baseline: {baseline.shape}, score:{score.shape}")
+
+        log_p_D_A = q.log_p_d__a.sum(1)
+        controlled_score = (score.unsqueeze(-1) - baseline).detach()
+        retriever_loss = -1 * (controlled_score * log_p_D_A).sum(dim=(-1))
+
+        rich.print(
+            f">> retriever_loss: {retriever_loss.shape}, " f"reader_loss: {reader_loss.shape}"
+        )
+        rich.print(
+            f">> exp: Z_diff: {controlled_score.mean(-1)}, "
+            f"logp_a_star__D: {logp_a_star__D.mean(-1)}"
+        )
+        with torch.no_grad():
+            for j in range(controlled_score.shape[1]):
+                rich.print(
+                    f"> Z_diff: {controlled_score[0, j]}, "
+                    f"x: {score[0]}, "
+                    f"x:hat: {(baseline)[0, j]}"
+                )
 
         return reader_loss + retriever_loss
 
     @staticmethod
     @torch.no_grad()
-    def _score_estimate(scores: Tensor, *, pids: Tensor) -> Tensor:
+    def baseline(retriever_score: Tensor, targets: Tensor, **kwargs) -> Tensor:
+        """Compute the controlled score for the given targets."""
+
+        # todo: debug
+        idx = torch.arange(0, retriever_score.numel())
+        retriever_score = idx.view(retriever_score.shape)
+
+        bs, n_opts, n_docs = retriever_score.shape
+        m_docs = (n_opts - 1) ** n_docs
+
+        # generate an index of size [n_docs, n_docs-1] where
+        #  each row `i` is contains indices: [0 ...i-1 ... i+1 ... n_docs-1]
+        # https://discuss.pytorch.org/t/keep-off-diagonal-elements-only-from-square-matrix/54379
+        no_id_index = torch.arange(0, n_opts, 1, device=retriever_score.device, dtype=torch.long)
+        no_id_index = no_id_index.view(1, n_opts).expand(n_opts, n_opts)
+        no_id_index = (
+            no_id_index.flatten()[1:]
+            .view(n_opts - 1, n_opts + 1)[:, :-1]
+            .reshape(n_opts, n_opts - 1)
+        )
+        rich.print(f">> no_id_index: {no_id_index}")
+
+        # get a matrix of score of shape [bs, n_opts, n_docs, n_docs-1]
+        rich.print(f">> input_scores: {retriever_score.shape}")
+        scores = retriever_score.view(bs, 1, n_opts, n_docs).expand(bs, n_opts, n_opts, n_docs)
+        _index = no_id_index.view(1, *no_id_index.shape, 1).expand(bs, *no_id_index.shape, n_docs)
+        scores = scores.gather(dim=2, index=_index)
+        rich.print(f">> scores: {scores.shape}")
+
+        # compute the score permutations for the `n_docs-1`
+        in_pattern = "bs n_opts m_opts x_docs"
+        out_pattern = "(bs n_opts) m_opts x_docs"
+        scores = einops.rearrange(scores, f"{in_pattern} -> {out_pattern}")
+        rich.print(f">> flat::scores: {scores.shape}")
+        scores, *_ = batch_cartesian_product([scores])
+        scores = einops.rearrange(scores, f"{out_pattern} -> {in_pattern}", bs=bs)
+        rich.print(f">> perm::scores: {scores.shape}")
+
+        # add the idenity to the score
+        _scores = -1 * torch.ones(
+            bs, n_opts, n_opts, m_docs, dtype=scores.dtype, device=scores.device
+        )
+        _index = no_id_index.view(1, *no_id_index.shape, 1).expand(bs, *no_id_index.shape, m_docs)
+        rich.print(f">> _index: {_index.shape}")
+        _scores.scatter_(dim=2, index=_index, src=scores)
+
+        rich.print(f">> 1:_scores: {_scores.shape}")
+        rich.print(_scores[0])
+
+        rich.print(f">>>>> _scores: {_scores.shape}, retriever_score: {retriever_score.shape}")
+
+        _index = torch.arange(0, n_opts, 1, device=retriever_score.device, dtype=torch.long)
+        rich.print(f"# index: {_index}")
+        _index = _index.view(1, 1, n_opts, 1, 1).expand(bs, n_opts, n_opts, n_docs, m_docs)
+        src = retriever_score.view(bs, 1, n_opts, n_docs, 1).repeat(1, n_opts, 1, 1, 1)
+        src = torch.repeat_interleave(src, m_docs, dim=-1)
+        _scores = _scores.view(bs, n_opts, n_opts, 1, m_docs).repeat(1, 1, 1, n_docs, 1)
+        # src = -7 * torch.ones_like(src)
+        rich.print(f">>> src: {src.shape}, _index:{_index.shape}, _scores: {_scores.shape}")
+        _scores.scatter_(dim=1, index=_index, src=src)
+        _scores = einops.rearrange(_scores, "... n_docs m_docs -> ... (n_docs m_docs)")
+
+        rich.print(f">> 2:_scores: {_scores.shape}")
+        rich.print(_scores[0, :])
+        print(get_separator())
+        # rich.print(src[0, 0])
+        # print(get_separator())
+        rich.print(retriever_score[0])
+
+        exit()
+
+        # compute the baseline
+        log_p_A_D = scores.log_softmax(dim=1)
+        _targets = targets.view(bs, 1, 1, 1).expand(bs, n_opts, n_docs, m_docs)
+        log_p_a_star_D = log_p_A_D.gather(dim=1, index=_targets)
+        p_a_star_D = log_p_a_star_D.exp()
+        return p_a_star_D.mean(dim=-1)
+
+        exit()
+
+    @staticmethod
+    @torch.no_grad()
+    def __expand_version_score_estimate(scores: Tensor, *, pids: Tensor) -> Tensor:
 
         DEBUG = 100
 
