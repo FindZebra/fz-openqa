@@ -2,26 +2,27 @@
 
 defaults:
   - override /model/bert: mini
-  - override /model/head: dense
+  - override /model/head: colbert
   - override /datamodule/index_builder: ${model/head}
   - override /datamodule/relevance_classifier: exact_match
 
 
 trainer:
   gpus: 1
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 4
 
 ## activate dynamic resampling in the model
 model:
   head:
-    output_size: 768 # next exp
+    output_size: 128
     max_batch_size: 300
     normalize: false
   module:
     grad_expr: reinforce
 
 datamodule:
-  train_batch_size: 16
+  train_batch_size: 8
+  eval_batch_size: 8
   num_workers: 4
   # dataset re-indexing
   dataset_update: null

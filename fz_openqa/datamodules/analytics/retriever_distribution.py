@@ -6,7 +6,6 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-import rich
 import torch
 from datasets import Dataset
 from datasets import Split
@@ -57,23 +56,21 @@ class RetrieverDistribution(Analytic):
         ):
             row = dset[i : i + self.batch_size]
             scores_i = self._get_scores(
-                row, key="document.retrieval_score", n_samples=self.n_samples // n_steps
+                row, key="document.retrieval_score", n_samples=self.n_samples // max(1, n_steps)
             )
             if scores is None:
                 scores = scores_i
             else:
                 scores = np.concatenate([scores, scores_i])[: self.n_samples]
 
-        rich.print(f">>> scores; {scores.shape}")
+        # save scores to file
+        self._save_array(scores, "scores", split)
 
         # compute the probabilities
         probs = Sampler.compute_probs(scores)
 
         # save probs to file
-        output = self.output_dir / self.output_file_name.replace(".json", "") / f"probs-{split}.npy"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        logging.getLogger(__name__).info(f"Saving probabilities to {output}")
-        np.save(output.name, probs)
+        self._save_array(probs, "probs", split)
 
         # compute the entropy
         entropy = -np.sum(probs * np.log(probs), axis=-1)
@@ -99,6 +96,21 @@ class RetrieverDistribution(Analytic):
             }
 
         return output
+
+    def _save_array(self, probs, name, split):
+        idx = 0
+        max_trials = 100
+        directory = self.output_dir / self.output_file_name.replace(".json", "")
+        directory.mkdir(parents=True, exist_ok=True)
+        while idx >= 0 and idx < max_trials:
+            output = directory / f"{name}-{split}-{idx}.npy"
+            if not output.exists():
+                idx = -1
+            else:
+                idx += 1
+
+        np.save(output.name, probs)
+        logging.getLogger(__name__).info(f"saved {name} to {output}")
 
     def _get_scores(self, row: Dict | Dataset, *, key: str, n_samples: int) -> np.ndarray:
         scores = row[key]

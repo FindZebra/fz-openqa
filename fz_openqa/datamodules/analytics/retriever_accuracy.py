@@ -89,7 +89,6 @@ class RetrieverAccuracy(Analytic):
             all_targets, all_preds, labels=labels, output_dict=True, digits=3
         )
         report_dict = {k: v for k, v in report_dict.items() if k in ["macro avg", "accuracy"]}
-        rich.print(report_dict)
 
         return {"dict": report_dict, "str": report_str}
 

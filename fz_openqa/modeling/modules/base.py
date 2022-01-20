@@ -331,21 +331,21 @@ class Module(nn.Module, ABC):
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         logits, targets = (output[k] for k in ("_logits_", "_targets_"))
-        self.metrics.update(split, logits, targets)
+        self.reader_metrics.update(split, logits, targets)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
         reset all the metrics.
         """
-        self.metrics.reset(split)
+        self.reader_metrics.reset(split)
 
     def compute_metrics(self, split: Optional[Split] = None) -> Batch:
         """
         Compute the metrics for the given `split` else compute the metrics for all splits.
         The metrics are return after computation.
         """
-        return self.metrics.compute(split)
+        return self.reader_metrics.compute(split)
 
     @staticmethod
     def _get_base_metrics(
@@ -387,7 +387,7 @@ class Module(nn.Module, ABC):
         return SplitMetrics(metrics)
 
     def _init_metrics(self, prefix: str):
-        self.metrics = self._get_base_metrics(prefix=prefix)
+        self.reader_metrics = self._get_base_metrics(prefix=prefix)
 
     @staticmethod
     def _filter_features_from_output(output: Batch) -> Batch:

@@ -1,4 +1,4 @@
-retriever_distribution:
+sequence_lengths:
   _target_: fz_openqa.datamodules.analytics.SequenceLengths
 
   verbose: true

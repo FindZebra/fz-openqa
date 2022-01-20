@@ -9,7 +9,7 @@ defaults:
   - override /datamodule/index_builder: ${model/head}
   - override /datamodule/sampler: boost_positives
   - override /datamodule/transform: none
-  - override /datamodule/relevance_classifier: none # todo
+  - override /datamodule/relevance_classifier: none
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
@@ -25,7 +25,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "DPR + no ES. NB"
+  exp_info: "DPR + no ES. REINFORCE grads"
 
 trainer:
   gpus: 8
@@ -63,7 +63,7 @@ datamodule:
   dataset_update:
     freq: 5 #
     reset_optimizer: false
-    index_first_epoch: false # todo: run [:G]
+    index_first_epoch: false
     builder_args:
       relevance_classifier: null
 

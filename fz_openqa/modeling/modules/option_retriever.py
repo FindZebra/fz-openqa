@@ -110,13 +110,14 @@ class OptionRetriever(Module):
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-        self.metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
-
-        self.total_logp_metrics = self._init_total_logp_metrics(prefix)
+        self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
+        self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
 
         self.retriever_metrics = self._get_base_metrics(
             prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
         )
+
+        # self.total_logp_metrics = self._init_total_logp_metrics(prefix)
 
     def _init_total_logp_metrics(self, prefix):
         metric_kwargs = {"compute_on_step": False, "dist_sync_on_step": True}
@@ -293,6 +294,7 @@ class OptionRetriever(Module):
             self.estimator(
                 reader_score=reader_score,
                 retriever_score=retriever_score,
+                pids=d_batch["document.row_idx"],
                 targets=batch["answer.target"],
             )
         )
@@ -329,7 +331,8 @@ class OptionRetriever(Module):
         `retrieval_*` correspond to the probs of the model used for indexing.
         """
 
-        retriever_probs = retriever_score.softmax(dim=-1)
+        retriever_log_probs = retriever_score.log_softmax(dim=-1)
+        retriever_probs = retriever_log_probs.exp()
 
         # arg_i(cdf=p)
         idx = retriever_probs.sort(dim=-1, descending=True).indices
@@ -340,7 +343,7 @@ class OptionRetriever(Module):
             output[f"retriever/arg_cdf_{int(100*p)}"] = arg_cdf_90.float().mean()
 
         # entropy `H(p(D | q, A))`
-        retriever_entropy = -(retriever_probs * retriever_probs.log()).sum(dim=(1, 2))
+        retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
         output["retriever/entropy"] = retriever_entropy.mean()
 
         if retrieval_scores is not None:
@@ -351,7 +354,7 @@ class OptionRetriever(Module):
             retrieval_log_probs = retrieval_scores.log_softmax(dim=-1)
 
             # `KL( p(D|q, A) || r(D|q, A) )`
-            kl_div = retriever_probs * (retriever_probs.log() - retrieval_log_probs)
+            kl_div = retriever_probs * (retriever_log_probs - retrieval_log_probs)
             kl_div = kl_div.sum(dim=(1, 2))
             output["retriever/kl_div"] = kl_div.mean()
 
@@ -460,8 +463,11 @@ class OptionRetriever(Module):
 
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
-        logits, targets = (output.get(k, None) for k in ("_reader_logits_", "_reader_targets_"))
-        self.metrics.update(split, logits, targets)
+        reader_logits = output.get("_reader_logits_", None)
+        reader_targets = output.get("_reader_targets_", None)
+        retriever_reading_logits = output.get("_retriever_reading_logits_", None)
+        self.reader_metrics.update(split, reader_logits, reader_targets)
+        self.retriever_reading_metrics.update(split, retriever_reading_logits, reader_targets)
 
         retrieval_logits, retrieval_targets = (
             output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
@@ -469,15 +475,16 @@ class OptionRetriever(Module):
         if retrieval_logits is not None and retrieval_logits.numel() > 0:
             self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
 
-        if "reader/logp" in output:
-            self.total_logp_metrics.update(split, output["reader/logp"], None)
+        # if "reader/logp" in output:
+        #     self.total_logp_metrics.update(split, output["reader/logp"], None)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
         reset all the metrics.
         """
-        self.metrics.reset(split)
+        self.reader_metrics.reset(split)
+        self.retriever_reading_metrics.reset(split)
         self.retriever_metrics.reset(split)
 
     def compute_metrics(self, split: Optional[Split] = None) -> Batch:
@@ -486,7 +493,8 @@ class OptionRetriever(Module):
         The metrics are return after computation.
         """
         return {
-            **self.metrics.compute(split),
+            **self.reader_metrics.compute(split),
+            **self.retriever_reading_metrics.compute(split),
             **self.retriever_metrics.compute(split),
-            **self.total_logp_metrics.compute(split),
+            # **self.total_logp_metrics.compute(split),
         }
