@@ -55,3 +55,4 @@ from .tokenizer import TokenizerPipe
 from .torch import Forward
 from .torch import Itemize
 from .torch import ToNumpy
+from .view import View

@@ -3,32 +3,31 @@
 defaults:
   - base
   - override /model: medqa_reader
-  - override /model/bert: pubmed
+  - override /model/bert: pubmed_multiple_choice
   - override /datamodule/builder: concat_openqa
-  - override /datamodule/index_builder: elasticsearch
+  - override /datamodule/index_builder: none
+  - override /datamodule/relevance_classifier: none
   - override /datamodule/sampler: boost_positives
-  - override /datamodule/transform: none
-  - override /datamodule/dataset_filter: supervised
-  - override /datamodule/builder/analytics:
-      - retriever_accuracy
+  - override /datamodule/transform: view_reader_concat
+  - override /datamodule/dataset_filter: none
+#  - override /datamodule/builder/analytics: none
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - progress_bar
       - lr_monitor
 
-
 base:
-  seed: null
+  seed: 1
   target_metric: validation/reader/Accuracy
   target_mode: max
 
 
 trainer:
-  gpus: 4
+  gpus: 8
   strategy: dp
   min_epochs: 1
-  max_epochs: 1_000
+  max_epochs: 30
   gradient_clip_val: 0.5
   accumulate_grad_batches: 4
   val_check_interval: 0.5
@@ -40,15 +39,14 @@ model:
   num_training_steps: 10_000
   bert:
     hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1
-
+    attention_probs_dropout_prob: 0.1 # TODO: test 0.5
 
 datamodule:
-  use_subset: true # todo: debug: remove
-  train_batch_size: 4
-  eval_batch_size: 8
+  use_subset: false # todo: debug: remove
+  train_batch_size: 16
+  eval_batch_size: 32
   num_proc: 4
-  num_workers: 16
+  num_workers: 4
   output_columns:
     - question.input_ids
     - question.attention_mask
@@ -61,9 +59,24 @@ datamodule:
     - answer.attention_mask
     - answer.target
 
+  text_formatter:
+    remove_breaks: True
+    remove_ref: True
+    lowercase: True
+    remove_symbols: False
+    aggressive_cleaning: False
+
   # documents
-  n_retrieved_documents: 3
+  n_retrieved_documents: 100
   n_documents: 3
+
+  # document sampler
+  sampler:
+    total: ${datamodule.n_documents}
+    largest:
+      train: false
+      validation: true
+      test: true
 
   # encoding tokens
   add_encoding_tokens: true
@@ -77,16 +90,20 @@ datamodule:
   builder:
     batch_size: 100
     writer_batch_size: 1_000
+    dataset_builder:
+      dset_name: medqa-us # todo: change to TW
+      n_query_tokens: 1
+      min_answer_length: 3
     corpus_builder:
       to_sentences: false
-      use_subset: true # todo: debug: remove
+      use_subset: false # todo: debug: remove
       passage_length: 200
       passage_stride: 200
 
 
-logger: null
-callbacks: null
+#logger: null
+#callbacks: null
 
-#logger:
-#  wandb:
-#    group: medqa-reader-only # name your experiment here
+logger:
+  wandb:
+    group: debugging # name your experiment here
