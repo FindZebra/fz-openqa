@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: F407
 
 import logging
 import os
@@ -63,7 +63,8 @@ def train(config: DictConfig) -> Optional[float]:
         override_config=DictConfig({"sys": config.sys}),
         ref_config=config,
     )
-    override_config(config, checkpoint_manager.config, config.get("config_overrides", []))
+    if checkpoint_manager is not None:
+        override_config(config, checkpoint_manager.config, config.get("config_overrides", []))
 
     # log paths
     log.info(f"work_dir={config.sys.work_dir}")

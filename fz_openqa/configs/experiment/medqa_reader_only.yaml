@@ -5,7 +5,7 @@ defaults:
   - override /model: medqa_reader
   - override /model/bert: pubmed_multiple_choice
   - override /datamodule/builder: concat_openqa
-  - override /datamodule/index_builder: elasticsearch
+  - override /datamodule/index_builder: dense
   - override /datamodule/relevance_classifier: none
   - override /datamodule/sampler: boost_positives
   - override /datamodule/transform: view_reader_concat
@@ -61,9 +61,9 @@ datamodule:
 
   text_formatter:
     remove_breaks: True
-    remove_ref: False
+    remove_ref: True
     lowercase: True
-    remove_symbols: True
+    remove_symbols: False
     aggressive_cleaning: False
 
   # documents
@@ -74,9 +74,9 @@ datamodule:
   sampler:
     total: ${datamodule.n_documents}
     largest:
-      train: false
-      validation: false
-      test: false
+      train: true
+      validation: true
+      test: true
 
   # encoding tokens
   add_encoding_tokens: true
@@ -92,6 +92,7 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us # todo: change to TW
+      n_query_tokens: 1
       min_answer_length: 3
     corpus_builder:
       to_sentences: false
@@ -105,4 +106,4 @@ datamodule:
 
 logger:
   wandb:
-    group: baseline-reader-sampling-medqawiki # name your experiment here
+    group: baseline-reader-sampling-wiki-v2 # name your experiment here
