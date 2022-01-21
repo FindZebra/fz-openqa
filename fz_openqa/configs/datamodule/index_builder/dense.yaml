@@ -4,19 +4,23 @@ defaults:
 _target_: fz_openqa.datamodules.index.FaissOrEsIndexBuilder
 
 faiss_args:
-  factory: IVF100,PQ16x8
+  factory: Flat
   metric_type: 0 # faiss.METRIC_INNER_PRODUCT
-  nprobe: 32
+  nprobe: 16
 
 loader_kwargs:
   batch_size: 1000
   num_workers: 8
   pin_memory: true
 
-faiss_train_size: 10000
+faiss_train_size: 1000000
 in_memory: true
 dtype: float32
-model_output_keys: [_hq_, _hd_]
+p: 100
+max_chunksize: null
+maxsim_chunksize: 4000
+keep_maxsim_on_cpu: false
+model_output_keys: [_hq_retriever_, _hd_retriever_]
 persist_cache: false
 cache_dir: ${sys.cache_dir}
 progress_bar: true

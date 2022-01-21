@@ -5,7 +5,7 @@ defaults:
   - override /model: medqa_reader
   - override /model/bert: pubmed_multiple_choice
   - override /datamodule/builder: concat_openqa
-  - override /datamodule/index_builder: elasticsearch
+  - override /datamodule/index_builder: dense
   - override /datamodule/relevance_classifier: none
   - override /datamodule/sampler: boost_positives
   - override /datamodule/transform: view_reader_concat
@@ -39,7 +39,7 @@ model:
   num_training_steps: 10_000
   bert:
     hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1 # TODO: test 0.5
+    attention_probs_dropout_prob: 0.3 # TODO: test 0.5
 
 datamodule:
   use_subset: false # todo: debug: remove
@@ -61,9 +61,9 @@ datamodule:
 
   text_formatter:
     remove_breaks: True
-    remove_ref: False
+    remove_ref: True
     lowercase: True
-    remove_symbols: True
+    remove_symbols: False
     aggressive_cleaning: False
 
   # documents
@@ -91,7 +91,7 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      dset_name: medqa-us # todo: change to TW
+      dset_name: us # todo: change to TW
       min_answer_length: 3
     corpus_builder:
       to_sentences: false

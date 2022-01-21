@@ -1,9 +1,12 @@
+from __future__ import annotations  # noqa: F407
+
 import logging
 import os
 import threading
 import time
 import warnings
 from functools import partial
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -23,7 +26,6 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
 
-from fz_openqa.callbacks.index_openqa import IndexOpenQaCallback
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
@@ -56,7 +58,13 @@ def train(config: DictConfig) -> Optional[float]:
     torch.multiprocessing.set_sharing_strategy("file_system")
 
     # load checkpoint manager
-    checkpoint_manager = load_checkpoint(config.get("checkpoint", None), config=config)
+    checkpoint_manager = load_checkpoint(
+        config.get("checkpoint", None),
+        override_config=DictConfig({"sys": config.sys}),
+        ref_config=config,
+    )
+    if checkpoint_manager is not None:
+        override_config(config, checkpoint_manager.config, config.get("config_overrides", []))
 
     # log paths
     log.info(f"work_dir={config.sys.work_dir}")
@@ -177,6 +185,17 @@ def train(config: DictConfig) -> Optional[float]:
         return trainer.callback_metrics[optimized_metric]
 
 
+def override_config(config: DictConfig, from_config: DictConfig, overrides: List):
+    for key_path in overrides:
+        ref = config
+        ckpt = from_config
+        *key_path, final_key = key_path.split(".")
+        for key in key_path:
+            ref = ref[key]
+            ckpt = ckpt[key]
+        ref[final_key] = ckpt[final_key]
+
+
 def instantiate_model(
     config: DictConfig,
     *,
@@ -196,25 +215,29 @@ def instantiate_model(
 
 
 def load_checkpoint(
-    checkpoint_path: Optional[str], *, config: DictConfig
+    checkpoint_path: Optional[str],
+    *,
+    override_config: Optional[DictConfig],
+    ref_config: Optional[DictConfig],
 ) -> Optional[CheckpointLoader]:
     """Load a CheckpointLoader from a checkpoint path and print the
     difference between the `checkpoint.config` and the `config`."""
     if checkpoint_path is not None:
-        checkpoint = CheckpointLoader(checkpoint_path)
+        checkpoint = CheckpointLoader(checkpoint_path, override=override_config)
         # todo: move to original directory
         # todo: os.chdir(checkpoint.config.sys.workdir)
         # todo: config.sys.workdir = checkpoint.config.sys.workdir
-        rich.print(get_separator())
-        rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
-        rich.print(
-            jsondiff.diff(
-                OmegaConf.to_container(checkpoint.config, resolve=False),
-                OmegaConf.to_container(config, resolve=False),
-                syntax="symmetric",
+        if ref_config is not None:
+            rich.print(get_separator())
+            rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
+            rich.print(
+                jsondiff.diff(
+                    OmegaConf.to_container(checkpoint.config, resolve=False),
+                    OmegaConf.to_container(ref_config, resolve=False),
+                    syntax="symmetric",
+                )
             )
-        )
-        rich.print(get_separator())
+            rich.print(get_separator())
         return checkpoint
     else:
         return None
