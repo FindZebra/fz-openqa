@@ -75,8 +75,8 @@ datamodule:
     total: ${datamodule.n_documents}
     largest:
       train: false
-      validation: false
-      test: false
+      validation: true
+      test: true
 
   # encoding tokens
   add_encoding_tokens: true
@@ -105,4 +105,4 @@ datamodule:
 
 logger:
   wandb:
-    group: baseline-reader-sampling-medqawiki # name your experiment here
+    group: baseline-reader-sampling-v2 # name your experiment here
