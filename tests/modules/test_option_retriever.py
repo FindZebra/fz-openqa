@@ -15,7 +15,7 @@ from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, App
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
 from fz_openqa.datamodules.utils.transformations import add_spec_token
-from fz_openqa.modeling.heads import ClsHead
+from fz_openqa.modeling.heads import ClsHead, ColbertHead
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.modeling.modules.utils.gradients import GradExpression
 from fz_openqa.utils.pretty import pprint_batch
@@ -92,7 +92,7 @@ class TestOptionRetriever(TestModel):
 
     def setUp(self) -> None:
         super(TestOptionRetriever, self).setUp()
-        head = ClsHead(bert=self.bert, output_size=None)
+        head = ColbertHead(bert=self.bert, output_size=32)
         self.model = OptionRetriever(bert=self.bert,
                                      tokenizer=self.tokenizer,
                                      head=head,
@@ -201,7 +201,7 @@ class TestOptionRetriever(TestModel):
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
         VERBOSE = 1
-        seed_everything(42)
+        seed_everything(1)
         if VERBOSE:
             np.set_printoptions(precision=3, suppress=True)
 
@@ -248,7 +248,7 @@ class TestOptionRetriever(TestModel):
             rich.print(f">>> probs: {probs}")
             rich.print(f">>> probs.target: {target_probs}")
 
-            doc_score = output['_doc_logits_'].detach().exp()
-            rich.print(f"doc probs: \n{doc_score.numpy()}")
+            doc_score = output['_doc_logits_'].detach()
+            rich.print(f"doc logits: \n{doc_score.numpy()}")
 
         self.assertTrue((target_probs > 0.5).all())

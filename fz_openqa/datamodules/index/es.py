@@ -49,6 +49,7 @@ class ElasticSearchIndex(Index):
         es_body: Optional[Dict] = DEFAULT_ES_BODY,
         analyze_es_tokens: Optional[bool] = False,
         prep_map_kwargs: Optional[Dict] = None,
+        es_temperature: Optional[float] = 1.0,
         **kwargs,
     ):
 
@@ -61,6 +62,7 @@ class ElasticSearchIndex(Index):
         self.engine = ElasticSearchEngine(analyze=analyze_es_tokens)
         self.es_body = es_body
         self.analyze_es_tokens = analyze_es_tokens
+        self.temperature = es_temperature
 
         # override max_chunk_size
         if self.max_chunksize != self._es_chunk_size:
@@ -143,6 +145,9 @@ class ElasticSearchIndex(Index):
             analyzed_tokens = self.engine.es_analyze_text(self.index_name, contents)
         else:
             analyzed_tokens = None
+
+        if self.temperature is not None:
+            scores = [[s / self.temperature for s in s_list] for s_list in scores]
 
         # build the results
         return SearchResult(

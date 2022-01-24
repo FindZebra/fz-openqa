@@ -28,6 +28,10 @@ from fz_openqa.modeling.heads import ClsHead
 from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.metrics import SplitMetrics
+from fz_openqa.tokenizers.static import ANS_TOKEN
+from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.tokenizers.static import QUERY_MASK
+from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
@@ -155,6 +159,7 @@ class Module(nn.Module, ABC):
         heads: Optional[List[str]] = None,
         head: Optional[str] = None,
         max_batch_size: Optional[int] = None,
+        mask: Optional[Tensor] = None,
         **kwargs,
     ) -> Union[Tensor, Dict[str, Tensor]]:
 
@@ -186,10 +191,15 @@ class Module(nn.Module, ABC):
             chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
 
         for i in range(0, bs, chunk_size):
+            if mask is None:
+                mask_ = None
+            else:
+                mask_ = mask[i : i + chunk_size]
             chunk = self._process_tokens(
                 inputs_ids[i : i + chunk_size],
                 attention_mask[i : i + chunk_size],
                 heads=heads,
+                mask=mask_,
                 **kwargs,
             )
             for key in heads:
@@ -204,14 +214,19 @@ class Module(nn.Module, ABC):
             return output
 
     def _process_tokens(
-        self, input_ids: Tensor, attention_mask: Tensor, heads: List[str], **kwargs
+        self,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+        heads: List[str],
+        mask: Optional[Tensor] = None,
+        **kwargs,
     ) -> Dict[str, Tensor]:
         # BERT forward pass
         bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         last_hidden_state = bert_output.last_hidden_state
 
         # process the last hidden state with the heads
-        return {k: self.heads[k](last_hidden_state, mask=attention_mask) for k in heads}
+        return {k: self.heads[k](last_hidden_state, mask=mask) for k in heads}
 
     def _instantiate_bert(
         self,
@@ -228,9 +243,34 @@ class Module(nn.Module, ABC):
         bert: BertPreTrainedModel = maybe_instantiate(bert, **kwargs)
 
         # extend BERT embeddings for the added special tokens
-        # TODO: CRITICAL: check this does not affect the model
-        #  this might explain the drop of performances
-        bert.resize_token_embeddings(len(tokenizer))
+        if bert.get_input_embeddings().weight.shape[0] != len(tokenizer):
+            bert.resize_token_embeddings(len(tokenizer))
+
+            emb_map = {
+                QUERY_MASK: tokenizer.pad_token_id,
+                # QUERY_TOKEN: tokenizer.sep_token_id,
+                # DOC_TOKEN: tokenizer.sep_token_id,
+                # ANS_TOKEN: tokenizer.sep_token_id,
+            }
+
+            embs = bert.get_input_embeddings()
+            self.spec_tokens = {}
+            for token, target_idx in emb_map.items():
+                tok_id = tokenizer.encode(token, add_special_tokens=False)[0]
+                self.spec_tokens[token] = tok_id
+                embs.weight.data[tok_id] = embs.weight.data[target_idx]
+            bert.set_input_embeddings(embs)
+            bert.tie_weights()
+
+            e = bert.get_input_embeddings().weight
+            q_mask_id = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
+            doc_id = tokenizer.encode(DOC_TOKEN, add_special_tokens=False)[0]
+            assert (e[q_mask_id] == e[tokenizer.pad_token_id]).all()
+            print(f"embs[q_mask_id] = {e[q_mask_id].mean()}")
+            print(f"embs[pad_token_id] = {e[tokenizer.pad_token_id].mean()}")
+            print(f"embs[doc_id] = {e[doc_id].mean()}")
+            print(f"embs[sep_token_id] = {e[tokenizer.sep_token_id].mean()}")
+
         return bert
 
     def forward(self, batch: Batch, **kwargs):

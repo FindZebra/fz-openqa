@@ -4,7 +4,6 @@ defaults:
   - override /model/bert: mini
   - override /model/head: colbert
   - override /datamodule/index_builder: ${model/head}
-  - override /datamodule/relevance_classifier: exact_match
 
 
 trainer:

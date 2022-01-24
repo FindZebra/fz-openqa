@@ -80,7 +80,7 @@ class RetrieverDistribution(Analytic):
             probs = np.concatenate([s[np.argsort(-s)][None] for s in probs], axis=0)
         pmf = np.cumsum(probs, axis=-1)
         assert (
-            np.abs(pmf[..., -1] - 1) < 1e-6
+            np.abs(pmf[..., -1] - 1) < 1e-3
         ).all(), f"probabilities don't sum to one: {pmf[..., -1]}"
 
         # prepare the output and the percentiles for the rank of `p(d|q) == x`

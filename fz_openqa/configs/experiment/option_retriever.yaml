@@ -21,11 +21,11 @@ defaults:
       - lr_monitor
 
 base:
-  seed: 2789492787  # todo: remove
+  seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "DPR + no ES. REINFORCE grads"
+  exp_info: "Colbert + REINFORCE + untruncated query expansion + ES temperature=10."
 
 trainer:
   gpus: 8
@@ -37,7 +37,7 @@ trainer:
   val_check_interval: 0.5
 
 model:
-  lr: 1e-5
+  lr: 3e-6
   weight_decay: 1e-3
   num_warmup_steps: 1_000
   num_training_steps: 50_000
@@ -49,19 +49,19 @@ model:
     alpha: 0
     max_batch_size: 200
     eval_topk: 30
-    grad_expr: in_batch
+    grad_expr: reinforce
     share_heads: false
   head:
     downscaling: 1
     kernel_size: null
     bias: true
-    use_mask: false
-    output_size: 32
+    use_mask: true
+    output_size: 64
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 5 #
+    freq: 10
     reset_optimizer: false
     index_first_epoch: false
     builder_args:
@@ -89,7 +89,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 1_000
+  n_retrieved_documents: 100
   n_documents:
     train: 10
     validation: 10
@@ -114,8 +114,9 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us
-      question_length: null # todo: experiment with this
-      n_query_tokens: 10
+      question_length: 32 # todo : 32 and without truncation
+      n_query_tokens: 1 #1:  todo: next exp
+      max_length: 512
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
@@ -123,6 +124,7 @@ datamodule:
 
   # Index parameters
   index_builder:
+    es_temperature: 10.
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000

@@ -1,20 +1,50 @@
 import abc
+import time
 import warnings
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+from typing import Dict
+from typing import List
 from typing import Optional
+from typing import Tuple
 
 import einops
 import numpy as np
 import rich
 import torch
+from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 
 from .utils import batch_cartesian_product
 from fz_openqa.datamodules.index.utils.io import log_mem_size
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
+
+
+@torch.no_grad()
+def plot_scores(scores, controlled_scores):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    sns.set()
+    colors = sns.color_palette()
+
+    rich.print(f">> scores: {scores.shape}")
+    rich.print(f">> controlled_scores: {controlled_scores.shape}")
+
+    scores = scores.detach().cpu().numpy()
+    controlled_scores = controlled_scores.detach().cpu().numpy()
+
+    for k in range(scores.shape[0]):
+        rich.print(f">> score: {scores[k]}, controlled_score: {controlled_scores[k]}")
+
+    sns.distplot(scores, bins=10, color=colors[0], label="score")
+    sns.distplot(controlled_scores, bins=10, color=colors[1], label="controlled")
+    plt.axvline(x=np.mean(scores), color=colors[0])
+    plt.axvline(x=np.mean(controlled_scores), color=colors[1])
+    plt.legend()
+    plt.show()
 
 
 class GradExpression(Enum):
@@ -23,12 +53,16 @@ class GradExpression(Enum):
     REINFORCE = "reinforce"
 
 
+class Space(Enum):
+    EXP = "exp"
+    LOG = "log"
+
+
 @dataclass
 class Quantities:
     """A small helper class to store the different terms involved in evaluating
     the likelihood."""
 
-    score: Tensor
     logp_a__d: Tensor
     log_p_d__a: Tensor
     log_p_d__a_no_perm: Tensor
@@ -37,8 +71,9 @@ class Quantities:
     logp_a_star__d: Tensor
 
 
-class Estimator:
+class Estimator(nn.Module):
     def __init__(self, eval_topk: Optional[int] = None, debug: bool = False):
+        super().__init__()
         self.eval_topk = eval_topk
         self.debug = debug
 
@@ -92,7 +127,6 @@ class Estimator:
         logp_a = (logp_a__d + log_p_d__a.sum(dim=1, keepdim=True)).logsumexp(dim=2)
         logp_a_star = torch.gather(logp_a, dim=1, index=targets).squeeze(1)
         return Quantities(
-            score=reader_score,
             logp_a__d=logp_a__d,
             log_p_d__a=log_p_d__a,
             log_p_d__a_no_perm=log_p_d__a_no_perm,
@@ -107,7 +141,7 @@ class Estimator:
         retriever_score: Tensor,
         reader_score: Tensor,
         targets: Tensor,
-        pids: Optional[Tensor] = None,
+        retrieval_score: Optional[Tensor] = None,
     ):
         q = self.evaluate_likelihood_terms(
             retriever_score,
@@ -116,7 +150,13 @@ class Estimator:
             eval_topk=self.eval_topk,
             debug=self.debug,
         )
-        loss = self.compute_loss(q, targets=targets, retriever_score=retriever_score)
+        loss, diagnostics = self.compute_loss(
+            q,
+            targets=targets,
+            reader_score=reader_score,
+            retriever_score=retriever_score,
+            retrieval_score=retrieval_score,
+        )
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),
@@ -124,10 +164,13 @@ class Estimator:
             "_reader_targets_": targets.detach(),
             "_doc_logits_": q.log_p_d__a_no_perm.detach(),
             "_retriever_reading_logits_": q.log_p_d__a_no_perm.sum(-1).detach(),
+            **diagnostics,
         }
 
     @abc.abstractmethod
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
+    def compute_loss(
+        self, q: Quantities, *, targets: Tensor, **kwargs
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         ...
 
 
@@ -135,149 +178,240 @@ class InBatchGradients(Estimator):
     """Compute the gradients of the option retriever assuming the current
     batch to be the whole dataset."""
 
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
-        return -1 * (q.logp_a_star).mean(-1)
+    def compute_loss(
+        self, q: Quantities, *, targets: Tensor, **kwargs
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        return -1 * (q.logp_a_star).mean(-1), {}
 
 
 class VariationalGradients(Estimator):
     """Compute the gradients using a Variational Lower Bound."""
 
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
+    def compute_loss(
+        self, q: Quantities, *, targets: Tensor, **kwargs
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         lb_logp_a = (q.logp_a__d + q.log_p_d__a.sum(dim=1, keepdim=True)).sum(dim=2)
         lb_logp_a_star = torch.gather(lb_logp_a, dim=1, index=targets[:, None]).squeeze(1)
-        return -1 * (lb_logp_a_star).mean(-1)
+        return -1 * (lb_logp_a_star).mean(-1), {}
 
 
 class ReinforceGradients(Estimator):
-    """Compute the gradients using Reinforce with leave-one-out baseline."""
+    """Compute the gradients using Reinforce with leave-one-out baseline and importance-weighting"""
+
+    max_baseline_samples: int = 5
+    baseline_dtype = None
+    space: Space = Space.LOG
 
     def compute_loss(
-        self, q: Quantities, *, targets: Tensor, retriever_score: Tensor = None, **kwargs
-    ) -> torch.Tensor:
-        if retriever_score is None:
-            raise ValueError(f"pids must be provided for {type(self).__name__}")
+        self,
+        q: Quantities,
+        *,
+        targets: Tensor,
+        reader_score: Tensor = None,
+        retriever_score: Tensor = None,
+        retrieval_score: Tensor = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        if reader_score is None:
+            raise ValueError(f"reader_score must be provided for {type(self).__name__}")
 
         # loss for the reader: E[ \sum_D \nabla p(q_star | q, A, D)]
         logp_a__d = q.logp_a__d.sum(2)
         logp_a_star__d = torch.gather(logp_a__d, dim=1, index=targets[:, None]).squeeze(1)
-        p_a_star__d = logp_a_star__d.exp()
-        reader_loss = -1 * p_a_star__d
+        if self.space == Space.EXP:
+            reader_loss = -1 * logp_a_star__d.exp()
+        elif self.space == Space.LOG:
+            reader_loss = -1 * logp_a_star__d
+        else:
+            raise ValueError("space must be either 'exp' or 'log'")
 
         # loss for the retriever: REINFORCE
         use_baseline = True
+        use_importance_weights = False
         index = targets[:, None, None].expand(*targets.shape, 1, q.logp_a__d.shape[2])
         logp_a_star__D = torch.gather(q.logp_a__d, dim=1, index=index).squeeze(1)
-        score = logp_a_star__D.exp()
-
-        if not use_baseline:
-            baseline = torch.zeros_like(score)
+        if self.space == Space.EXP:
+            # todo: use log sum exp trick to compute log of the sum of exp
+            score = logp_a_star__D.exp()
+        elif self.space == Space.LOG:
+            score = logp_a_star__D
         else:
-            rich.print(f">> expanded:shaped: {q.logp_a__d.shape}")
-            baseline = self.baseline(retriever_score, targets, log_p_d__a=q.log_p_d__a)
-            rich.print(f"> baseline: {baseline.shape}, score:{score.shape}")
+            raise ValueError("space must be either 'exp' or 'log'")
+
+        if use_baseline and self.training:
+            # rich.print(f">> expanded:shaped: {q.logp_a__d.shape}")
+            baseline = self.baseline(
+                reader_score,
+                targets=targets,
+                retriever_scores=retriever_score,
+                max_samples=self.max_baseline_samples,
+                dtype=self.baseline_dtype,
+                space=self.space,
+            )
+            # rich.print(f"> baseline: {baseline.shape}, score:{score.shape}")
+        else:
+            baseline = 0
+
+        if use_importance_weights and retrieval_score is not None and self.training:
+            importance_weight = self.importance_weights(q.log_p_d__a, retrieval_score)
+            ess = importance_weight.sum(-1).pow(2) / importance_weight.pow(2).sum(-1)
+            ess = ess.mean()
+        else:
+            importance_weight = 1.0
+            ess = None
 
         log_p_D_A = q.log_p_d__a.sum(1)
-        controlled_score = (score.unsqueeze(-1) - baseline).detach()
+        controlled_score = (importance_weight * (score - baseline)).detach()
         retriever_loss = -1 * (controlled_score * log_p_D_A).sum(dim=(-1))
 
-        rich.print(
-            f">> retriever_loss: {retriever_loss.shape}, " f"reader_loss: {reader_loss.shape}"
-        )
-        rich.print(
-            f">> exp: Z_diff: {controlled_score.mean(-1)}, "
-            f"logp_a_star__D: {logp_a_star__D.mean(-1)}"
-        )
-        with torch.no_grad():
-            for j in range(controlled_score.shape[1]):
-                rich.print(
-                    f"> Z_diff: {controlled_score[0, j]}, "
-                    f"x: {score[0]}, "
-                    f"x:hat: {(baseline)[0, j]}"
-                )
+        # plot_scores(score[0], controlled_score[0])
+        # time.sleep(3)
 
-        return reader_loss + retriever_loss
+        return reader_loss + retriever_loss, {"retriever/ess": ess}
 
     @staticmethod
     @torch.no_grad()
-    def baseline(retriever_score: Tensor, targets: Tensor, **kwargs) -> Tensor:
+    def importance_weights(log_p_d__a: Tensor, retrieval_score: Tensor) -> Tensor:
+
+        # clip the retrieval score for stability
+        M = retrieval_score.max(dim=-1).values.unsqueeze(-1)
+        retrieval_score = retrieval_score - M
+        retrieval_score = retrieval_score.clip_(min=-1e3)
+
+        # compute the permutations of the retrieval scores for each D in D^(M)
+        retrieval_score, *_ = batch_cartesian_product([retrieval_score])
+
+        # compute log q(D|A)
+        normalizer = retrieval_score.logsumexp(dim=2, keepdim=True)
+        log_q_d__a = retrieval_score - normalizer
+
+        # product over options
+        log_q_d__a = log_q_d__a.sum(dim=1)
+        log_p_d__a = log_p_d__a.sum(dim=1)
+
+        # return w = p(D | A) / q(D | A)
+        log_w = log_p_d__a - log_q_d__a
+        w = log_w.exp()
+
+        # clip for stability
+        w = log_w.clip(max=10)
+
+        return w
+
+    @staticmethod
+    @torch.no_grad()
+    def baseline(
+        reader_scores: Tensor,
+        *,
+        targets: Tensor,
+        retriever_scores: Tensor = None,
+        dtype: Optional[torch.dtype] = None,
+        max_samples: int = 10,
+        space: Space = Space.LOG,
+        **kwargs,
+    ) -> Tensor:
         """Compute the controlled score for the given targets."""
+        DEBUG = False
+        if max_samples >= reader_scores.shape[-1]:
+            retriever_scores = None
+        if dtype is not None:
+            original_dtype = reader_scores.dtype
+            reader_scores = reader_scores.to(dtype)
+        else:
+            original_dtype = None
+        if retriever_scores is not None:
+            retriever_scores = retriever_scores.to(dtype)
 
-        # todo: debug
-        idx = torch.arange(0, retriever_score.numel())
-        retriever_score = idx.view(retriever_score.shape)
-
-        bs, n_opts, n_docs = retriever_score.shape
-        m_docs = (n_opts - 1) ** n_docs
+        bs, n_opts, n_docs = reader_scores.shape
 
         # generate an index of size [n_docs, n_docs-1] where
         #  each row `i` is contains indices: [0 ...i-1 ... i+1 ... n_docs-1]
         # https://discuss.pytorch.org/t/keep-off-diagonal-elements-only-from-square-matrix/54379
-        no_id_index = torch.arange(0, n_opts, 1, device=retriever_score.device, dtype=torch.long)
-        no_id_index = no_id_index.view(1, n_opts).expand(n_opts, n_opts)
+        no_id_index = torch.arange(0, n_docs, 1, device=reader_scores.device, dtype=torch.long)
+        no_id_index = no_id_index.view(1, n_docs).expand(n_docs, n_docs)
         no_id_index = (
             no_id_index.flatten()[1:]
-            .view(n_opts - 1, n_opts + 1)[:, :-1]
-            .reshape(n_opts, n_opts - 1)
+            .view(n_docs - 1, n_docs + 1)[:, :-1]
+            .reshape(n_docs, n_docs - 1)
         )
-        rich.print(f">> no_id_index: {no_id_index}")
 
-        # get a matrix of score of shape [bs, n_opts, n_docs, n_docs-1]
-        rich.print(f">> input_scores: {retriever_score.shape}")
-        scores = retriever_score.view(bs, 1, n_opts, n_docs).expand(bs, n_opts, n_opts, n_docs)
-        _index = no_id_index.view(1, *no_id_index.shape, 1).expand(bs, *no_id_index.shape, n_docs)
-        scores = scores.gather(dim=2, index=_index)
-        rich.print(f">> scores: {scores.shape}")
+        # rich.print(f">> no_id_index: {no_id_index}")
 
-        # compute the score permutations for the `n_docs-1`
-        in_pattern = "bs n_opts m_opts x_docs"
-        out_pattern = "(bs n_opts) m_opts x_docs"
-        scores = einops.rearrange(scores, f"{in_pattern} -> {out_pattern}")
-        rich.print(f">> flat::scores: {scores.shape}")
-        scores, *_ = batch_cartesian_product([scores])
-        scores = einops.rearrange(scores, f"{out_pattern} -> {in_pattern}", bs=bs)
-        rich.print(f">> perm::scores: {scores.shape}")
+        def expand_and_index(scores, index):
+            """Expands the scores of shape [ns, n_opts, n_docs] to scores
+            of shape [bs, n_opts, n_docs, n_docs-1]"""
+            if scores is None:
+                return
+            scores = scores.view(bs, n_opts, 1, n_docs).expand(bs, n_opts, n_docs, n_docs)
+            return scores.gather(dim=3, index=index)
 
-        # add the idenity to the score
-        _scores = -1 * torch.ones(
-            bs, n_opts, n_opts, m_docs, dtype=scores.dtype, device=scores.device
-        )
-        _index = no_id_index.view(1, *no_id_index.shape, 1).expand(bs, *no_id_index.shape, m_docs)
-        rich.print(f">> _index: {_index.shape}")
-        _scores.scatter_(dim=2, index=_index, src=scores)
+        _index = no_id_index.view(1, 1, *no_id_index.shape).expand(bs, n_opts, *no_id_index.shape)
+        reader_scores = expand_and_index(reader_scores, _index)
+        retriever_scores = expand_and_index(retriever_scores, _index)
+        if DEBUG:
+            rich.print(f">> scores::gather::1 {reader_scores.shape}")
 
-        rich.print(f">> 1:_scores: {_scores.shape}")
-        rich.print(_scores[0])
+        # M^K permutations of the scores across dim 3: the resulting tensors are of shape
+        # [bs, n_opts, n_docs^M, n_docs-1]
+        reader_scores, retriever_scores = batch_cartesian_product([reader_scores, retriever_scores])
+        if DEBUG:
+            log_mem_size(reader_scores, "retriever_scores::expand::1")
+            log_mem_size(retriever_scores, "retriever_scores::expand::1")
 
-        rich.print(f">>>>> _scores: {_scores.shape}, retriever_score: {retriever_score.shape}")
+        # truncate the `reader_scores` to the `top(max_samples)` according to the `retriever_scores`
+        if retriever_scores is not None:
+            _index = retriever_scores.argsort(dim=-1, descending=True)[..., :max_samples]
+            reader_scores = reader_scores.gather(dim=-1, index=_index)
+            del _index, retriever_scores
 
-        _index = torch.arange(0, n_opts, 1, device=retriever_score.device, dtype=torch.long)
-        rich.print(f"# index: {_index}")
-        _index = _index.view(1, 1, n_opts, 1, 1).expand(bs, n_opts, n_opts, n_docs, m_docs)
-        src = retriever_score.view(bs, 1, n_opts, n_docs, 1).repeat(1, n_opts, 1, 1, 1)
-        src = torch.repeat_interleave(src, m_docs, dim=-1)
-        _scores = _scores.view(bs, n_opts, n_opts, 1, m_docs).repeat(1, 1, 1, n_docs, 1)
-        # src = -7 * torch.ones_like(src)
-        rich.print(f">>> src: {src.shape}, _index:{_index.shape}, _scores: {_scores.shape}")
-        _scores.scatter_(dim=1, index=_index, src=src)
-        _scores = einops.rearrange(_scores, "... n_docs m_docs -> ... (n_docs m_docs)")
+        if DEBUG:
+            log_mem_size(reader_scores, "retriever_scores::truncated::2")
 
-        rich.print(f">> 2:_scores: {_scores.shape}")
-        rich.print(_scores[0, :])
-        print(get_separator())
-        # rich.print(src[0, 0])
-        # print(get_separator())
-        rich.print(retriever_score[0])
+        def flatten_and_prod(scores: List[Tensor]):
+            """permutations of the dimension -1 of K-1 scores, resulting in
+            a matrix of shape [bs, n_opts, n_docs^M, (n_docs-1)^M]"""
+            in_pattern = "bs n_opts m_docs x_docs"
+            out_pattern = "(bs m_docs) n_opts x_docs"
 
-        exit()
+            scores = [
+                einops.rearrange(s, f"{in_pattern} -> {out_pattern}") if s is not None else None
+                for s in scores
+            ]
+            scores = batch_cartesian_product(scores)
+            scores = [
+                einops.rearrange(s, f"{out_pattern} -> {in_pattern}", bs=bs)
+                if s is not None
+                else None
+                for s in scores
+            ]
+            return scores
 
-        # compute the baseline
-        log_p_A_D = scores.log_softmax(dim=1)
-        _targets = targets.view(bs, 1, 1, 1).expand(bs, n_opts, n_docs, m_docs)
-        log_p_a_star_D = log_p_A_D.gather(dim=1, index=_targets)
-        p_a_star_D = log_p_a_star_D.exp()
-        return p_a_star_D.mean(dim=-1)
+        reader_scores, *_ = flatten_and_prod([reader_scores])
+        if DEBUG:
+            log_mem_size(reader_scores, "retriever_scores::expanded::3")
 
-        exit()
+        if not reader_scores.is_cuda:
+            # softmax not implemented for half precision on cpu
+            reader_scores = reader_scores.float()
+
+        # compute the baseline 1/N \sum_j p(a_star | q, A, D_j)
+        log_p_A_D = reader_scores.log_softmax(dim=1)
+        _targets = targets.view(bs, 1, 1, 1).expand(bs, 1, *log_p_A_D.shape[-2:])
+        log_p_a_star_D = log_p_A_D.gather(dim=1, index=_targets).squeeze(1)
+
+        if space == Space.EXP:
+            N = log_p_a_star_D.shape[-1]
+            log_sum_p_a_star_D = log_p_a_star_D.logsumexp(dim=-1)
+            baseline = log_sum_p_a_star_D / N
+        elif space == Space.LOG:
+            baseline = log_p_a_star_D.mean(dim=-1)
+        else:
+            raise ValueError(f"Unknown space: {space}")
+
+        if original_dtype is not None:
+            baseline.to(original_dtype)
+
+        return baseline
 
     @staticmethod
     @torch.no_grad()

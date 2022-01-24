@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import string
 import warnings
 from enum import Enum
 from typing import Any
@@ -108,6 +109,26 @@ class OptionRetriever(Module):
         }[grad_expr]
         self.estimator = estimator_cls(eval_topk=eval_topk)
 
+        # init the QMASK gate parameter
+        self.qmask_gate = torch.nn.Parameter(torch.tensor(0.0))
+
+        # punctuation masking
+        self.skiplist = [
+            self.tokenizer.encode(symbol, add_special_tokens=False)[0]
+            for symbol in string.punctuation
+        ]
+
+        # reader attention head
+        head_output_size = next(iter(self.heads.values())).output_size // 2
+        dropout = self.bert.config.attention_probs_dropout_prob
+        num_heads = 4
+        self.reader_attn = torch.nn.MultiheadAttention(
+            head_output_size,
+            dropout=dropout,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
@@ -161,12 +182,30 @@ class OptionRetriever(Module):
             keys=[f"{field}.input_ids", f"{field}.attention_mask"],
         )
 
+        # compute question output mask
+        if field == "question":
+            # inputs_ids = flat_batch["question.input_ids"]
+            mask = flat_batch["question.attention_mask"].float()
+            # qmask_id = self.spec_tokens[QUERY_MASK]
+            # mask = torch.where(inputs_ids == qmask_id, self.qmask_gate, mask)
+        elif field == "document":
+            inputs_ids = flat_batch["document.input_ids"]
+            mask = flat_batch["document.attention_mask"].float()
+            cond = mask
+            for w in self.skiplist:
+                cond *= inputs_ids != w
+            mask = torch.where(cond, mask, 0)
+            rich.print(f">>> doc_mask: {mask[0]}")
+        else:
+            mask = None
+
         # process the document with the backbone
         h_heads = self._backbone(
             flat_batch,
             prefix=f"{field}",
             heads=[f"{field}_reader", f"{field}_retriever"],
             max_batch_size=max_batch_size,
+            mask=mask,
             **kwargs,
         )
         pprint_batch(h_heads, f"h_heads {field}", silent=silent)
@@ -278,8 +317,13 @@ class OptionRetriever(Module):
         ]
         hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
         # compute the score for each pair `f([q_j; a_j], d_jk)`
-        reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
-        retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
+        # reader_score = self._compute_reader_scores(hd=hd_reader, hq=hq_reader)
+        reader_score = self._compute_score(
+            hd=hd_reader, hq=hq_reader, mask=q_batch["question.attention_mask"]
+        )
+        retriever_score = self._compute_score(
+            hd=hd_retriever, hq=hq_retriever, mask=q_batch["question.attention_mask"]
+        )
 
         # retriever diagnostics
         self._retriever_diagnostics(
@@ -294,7 +338,7 @@ class OptionRetriever(Module):
             self.estimator(
                 reader_score=reader_score,
                 retriever_score=retriever_score,
-                pids=d_batch["document.row_idx"],
+                retrieval_score=d_batch.get("document.retrieval_score"),
                 targets=batch["answer.target"],
             )
         )
@@ -335,12 +379,11 @@ class OptionRetriever(Module):
         retriever_probs = retriever_log_probs.exp()
 
         # arg_i(cdf=p)
-        idx = retriever_probs.sort(dim=-1, descending=True).indices
-        sorted_probs = retriever_probs.gather(dim=-1, index=idx)
+        sorted_probs = retriever_probs.sort(dim=-1, descending=True).values
         cdf = sorted_probs.cumsum(dim=-1)
         for p in [0.5, 0.9]:
             arg_cdf_90 = 1 + (cdf - p).abs().argmin(dim=-1)
-            output[f"retriever/arg_cdf_{int(100*p)}"] = arg_cdf_90.float().mean()
+            output[f"retriever/arg_cdf_{int(100 * p)}"] = arg_cdf_90.float().mean()
 
         # entropy `H(p(D | q, A))`
         retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
@@ -418,6 +461,7 @@ class OptionRetriever(Module):
         hq: Tensor,
         doc_ids: Optional[Tensor] = None,
         across_batch: bool = False,
+        mask: Optional[Tensor] = None,
     ) -> Tensor:
         """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
         if not across_batch:
@@ -426,7 +470,10 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.mean(-1)
+                if mask is None:
+                    return max_scores.mean(-1)
+                else:
+                    return (max_scores * mask) / mask.sum(dim=-1, keepdim=True)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
@@ -443,9 +490,35 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                return max_scores.mean(-1)
+                if mask is None:
+                    return max_scores.mean(-1)
+                else:
+                    return (max_scores * mask) / mask.sum(dim=-1, keepdim=True)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
+
+    def _compute_reader_scores(
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+    ):
+
+        bs, n_opts, n_docs, doc_len, hdim = hd.shape
+        bs, n_opts, q_len, hdim = hq.shape
+
+        hd = einops.rearrange(hd, "bs opts docs ... -> (bs docs opts) ...")
+        hq = hq.view(bs, n_opts, 1, q_len, hdim).expand(bs, n_opts, n_docs, q_len, hdim)
+        hq = einops.rearrange(hq, "bs opts docs ... -> (bs docs opts) ...")
+
+        W, Q = hq.chunk(2, dim=-1)
+        K, V = hd.chunk(2, dim=-1)
+
+        Z, *_ = self.reader_attn(Q, K, V)
+        score = Z + W
+        score = score.sum(-1).mean(-1)
+
+        return score.view(bs, n_opts, n_docs)
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

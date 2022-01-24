@@ -59,6 +59,7 @@ class ColbertHead(Head):
             context_repr = F.normalize(context_repr, p=2, dim=-1)
 
         if mask is not None and self.use_mask:
-            context_repr = context_repr * mask.unsqueeze(-1)
+            mask = mask[:, : context_repr.shape[1]].unsqueeze(-1)
+            context_repr = context_repr * mask
 
         return context_repr
