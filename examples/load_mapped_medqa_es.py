@@ -21,6 +21,7 @@ from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
@@ -64,14 +65,12 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(),
+        sampler=PrioritySampler(total=10),
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=1000,
-        n_documents=10,
-        max_pos_docs=1,
-        filter_unmatched=config.get("filter_unmatched", False),
+        n_retrieved_documents=100,
         num_proc=2,
         batch_size=50,
-        analyses=[
+        analytics=[
             CountMatchedQuestions(output_dir="./analyses", verbose=True),
             PlotScoreDistributions(output_dir="./analyses", verbose=True),
             PlotTopMatchTriggers(output_dir="./analyses", verbose=True),

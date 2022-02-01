@@ -3,14 +3,17 @@ from __future__ import annotations
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import numpy as np
 import rich
+import torch
 from datasets import Split
 from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
+from ...utils.pretty import pprint_batch
 from .base import Pipe
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
@@ -252,3 +255,54 @@ class SamplerBoostPositives(Sampler):
         sampled_indexes = np.concatenate([sampled_pos_indexes, sampled_other_indexes], axis=0)
         sampled_indexes = sampled_indexes.astype(np.long)
         return {k: reindex(v, sampled_indexes) for k, v in batch.items()}
+
+
+class PrioritySampler(Sampler):
+    """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
+
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
+    ) -> Batch:
+        largest, total, temperature = self._get_args(split)
+
+        logits = batch[self.retrieval_score_key]
+        logits = logits / temperature
+
+        # sample
+        z, log_pz = self.sample(logits, total, largest=largest)
+        retrieval_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
+
+        # re-index and return
+        output = {k: reindex(v, z) for k, v in batch.items()}
+        output[f"{self.field}.retrieval_log_prob"] = log_pz
+        output[f"{self.field}.retrieval_log_Z"] = retrieval_log_Z
+
+        return output
+
+    @staticmethod
+    def sample(
+        logits: torch.Tensor, m: int, largest: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Sample `log p(z)` using priority sampling with subset of size `m`
+
+        Args:
+            logits (torch.Tensor): un-normalized logits of the distribution
+            m (int): size of the subset to sample
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: sampled index and log probs
+        """
+        log_pz = logits.log_softmax(dim=-1)
+        if largest:
+            u = 0.5 * torch.ones_like(log_pz)
+        else:
+            u = torch.rand_like(log_pz)
+        log_u = u.clamp(min=1e-20).log()
+        keys = log_pz - log_u
+        z = keys.argsort(dim=-1, descending=True)[..., : m + 1]
+        z_tau = z[..., -1:]
+        log_tau = keys.gather(-1, index=z_tau)[..., :1]
+        z = z[..., :m]
+        log_pz = log_pz.gather(dim=-1, index=z)
+        log_pz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
+        return z, log_pz
