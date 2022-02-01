@@ -1,4 +1,5 @@
 import abc
+import math
 import time
 import warnings
 from dataclasses import dataclass
@@ -215,26 +216,74 @@ class ReinforceGradients(Estimator):
         if reader_score is None:
             raise ValueError(f"reader_score must be provided for {type(self).__name__}")
 
+        diagnostics = {}
+        use_baseline = True
+        use_importance_weights = True
+        iw_expr = 2
+        if retrieval_score is None:
+            retrieval_score = retriever_score.detach()
+
+        # expand retriever and retrieval scores
+        retriever_score_ = retriever_score
+        retriever_score, retrieval_score = batch_cartesian_product(
+            [retriever_score, retrieval_score]
+        )
+
+        # compute log_zeta
+        log_zeta = retriever_score - retrieval_score
+        log_N = math.log(log_zeta.shape[-1])
+        log_E_zeta = log_zeta.logsumexp(dim=-1, keepdim=True) - log_N
+
+        # compute the importance weights
+        if use_importance_weights and self.training:
+            with torch.no_grad():
+                if iw_expr == 1:
+                    log_w = log_zeta - log_E_zeta
+                elif iw_expr == 2:
+                    log_w = retriever_score.log_softmax(dim=-1) - retrieval_score.log_softmax(
+                        dim=-1
+                    )
+                else:
+                    raise ValueError(f"Invalid iw_expr={iw_expr}")
+                log_w = log_w.sum(1)
+                w = log_w.exp()
+                diagnostics["retriever/w-max"] = w.max()
+
+                # truncate
+                # rich.print(f"> w: {w.min()} : {w.max()} ({w.mean()})")
+                # w = w.clamp(max=1e2)
+
+                # effective sample size
+                ess = w.sum(-1).pow(2) / w.pow(2).sum(-1)
+                ess = ess.mean()
+                diagnostics["retriever/ess"] = ess
+
+                # rich.print(f"> ESS: {ess}")
+        else:
+            w = torch.ones_like(
+                log_zeta[
+                    :,
+                    0,
+                ]
+            )
+
+        index = targets[:, None, None].expand(*targets.shape, 1, q.logp_a__d.shape[2])
+        logp_a_star__D = torch.gather(q.logp_a__d, dim=1, index=index).squeeze(1)
+
         # loss for the reader: E[ \sum_D \nabla p(q_star | q, A, D)]
-        logp_a__d = q.logp_a__d.sum(2)
-        logp_a_star__d = torch.gather(logp_a__d, dim=1, index=targets[:, None]).squeeze(1)
         if self.space == Space.EXP:
-            reader_loss = -1 * logp_a_star__d.exp()
+            reader_loss = -1 * (w * logp_a_star__D.exp()).sum(-1)
         elif self.space == Space.LOG:
-            reader_loss = -1 * logp_a_star__d
+            reader_loss = -1 * (w * logp_a_star__D).sum(-1)
         else:
             raise ValueError("space must be either 'exp' or 'log'")
 
         # loss for the retriever: REINFORCE
-        use_baseline = True
-        use_importance_weights = False
-        index = targets[:, None, None].expand(*targets.shape, 1, q.logp_a__d.shape[2])
-        logp_a_star__D = torch.gather(q.logp_a__d, dim=1, index=index).squeeze(1)
         if self.space == Space.EXP:
             # todo: use log sum exp trick to compute log of the sum of exp
-            score = logp_a_star__D.exp()
+            score = logp_a_star__D.exp().detach()
         elif self.space == Space.LOG:
-            score = logp_a_star__D
+            score = logp_a_star__D.detach()
         else:
             raise ValueError("space must be either 'exp' or 'log'")
 
@@ -243,7 +292,7 @@ class ReinforceGradients(Estimator):
             baseline = self.baseline(
                 reader_score,
                 targets=targets,
-                retriever_scores=retriever_score,
+                retriever_scores=retriever_score_,
                 max_samples=self.max_baseline_samples,
                 dtype=self.baseline_dtype,
                 space=self.space,
@@ -252,22 +301,20 @@ class ReinforceGradients(Estimator):
         else:
             baseline = 0
 
-        if use_importance_weights and retrieval_score is not None and self.training:
-            importance_weight = self.importance_weights(q.log_p_d__a, retrieval_score)
-            ess = importance_weight.sum(-1).pow(2) / importance_weight.pow(2).sum(-1)
-            ess = ess.mean()
-        else:
-            importance_weight = 1.0
-            ess = None
-
+        # compute an estimate of log_p_D_A
+        # normalizer = (log_zeta - log_E_zeta).exp().detach() * log_zeta
+        # log_p_D_A = retriever_score - normalizer
+        # log_p_D_A = log_p_D_A.sum(1)
         log_p_D_A = q.log_p_d__a.sum(1)
-        controlled_score = (importance_weight * (score - baseline)).detach()
+
+        # compute the final loss
+        controlled_score = (w * (score - baseline)).detach()
         retriever_loss = -1 * (controlled_score * log_p_D_A).sum(dim=(-1))
 
         # plot_scores(score[0], controlled_score[0])
         # time.sleep(3)
 
-        return reader_loss + retriever_loss, {"retriever/ess": ess}
+        return reader_loss + retriever_loss, diagnostics
 
     @staticmethod
     @torch.no_grad()
@@ -294,7 +341,7 @@ class ReinforceGradients(Estimator):
         w = log_w.exp()
 
         # clip for stability
-        w = log_w.clip(max=10)
+        w = w.clip(max=10)
 
         return w
 

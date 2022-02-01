@@ -6,7 +6,6 @@ import threading
 import time
 import warnings
 from functools import partial
-from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -25,6 +24,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.trainer.states import TrainerStatus
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
@@ -314,10 +314,13 @@ def train_with_dataset_updates(
                 val_dataloaders=datamodule.val_dataloader(),
             )
 
+            # increment the epoch counter by one, seems to be missing in the original code
+            trainer.fit_loop.current_epoch += 1
+
             log.info(f"Epoch {trainer.current_epoch} completed.")
             if trainer.current_epoch >= max_epochs:
                 break
-            elif trainer.current_epoch < trainer.fit_loop.max_epochs - 1:
+            if trainer.state.status == TrainerStatus.INTERRUPTED:
                 log.info(
                     f"Training interrupted. "
                     f"Epochs remaining: {trainer.fit_loop.max_epochs - trainer.current_epoch}"

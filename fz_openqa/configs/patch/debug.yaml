@@ -2,7 +2,7 @@
 
 defaults:
   - override /model/bert: mini
-  - override /model/head: colbert
+  - override /model/head: dense
   - override /datamodule/index_builder: ${model/head}
 
 
@@ -35,9 +35,9 @@ datamodule:
   # dataset
   builder:
     dataset_builder:
-      use_subset: False
+      use_subset: True
     corpus_builder:
-      use_subset: False
+      use_subset: True
 
   # index
   index_builder:

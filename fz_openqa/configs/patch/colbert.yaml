@@ -8,7 +8,7 @@ defaults:
 # OpenQA builder parameters
 builder:
   dataset_builder:
-    question_length: 350
+    query_expansion: 350
 
 # Index parameters
 index_builder:

@@ -43,7 +43,7 @@ datamodule:
     # update the builer parameters to use the quality builder
     dataset_builder:
       dset_name: quality
-      question_length: 120
+      query_expansion: 32
       n_query_tokens: 1
     corpus_builder:
       _target_: fz_openqa.datamodules.builders.QuALITYCorpusBuilder

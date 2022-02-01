@@ -70,7 +70,7 @@ class QueryExpansionPipe(Pipe):
         self,
         *,
         prefix: Optional[str] = "question.",
-        question_length: int = 512,
+        question_length: int = 32,
         tokenizer: PreTrainedTokenizerFast,
         **kwargs,
     ):
@@ -111,7 +111,9 @@ class QueryExpansionPipe(Pipe):
         input_ids = input_ids[:end_of_seq_idx] + [self.q_mask_token_id] * (
             self.question_length - end_of_seq_idx
         )
-        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (self.max_length - end_of_seq_idx)
+        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (
+            self.question_length - end_of_seq_idx
+        )
         return input_ids, attention_mask
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:

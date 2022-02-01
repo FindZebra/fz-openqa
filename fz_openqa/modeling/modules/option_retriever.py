@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import string
 import warnings
 from enum import Enum
@@ -8,6 +9,7 @@ from typing import Dict
 from typing import Optional
 
 import einops
+import numpy as np
 import rich
 import torch
 import torch.nn.functional as F
@@ -119,15 +121,101 @@ class OptionRetriever(Module):
         ]
 
         # reader attention head
-        head_output_size = next(iter(self.heads.values())).output_size // 2
-        dropout = self.bert.config.attention_probs_dropout_prob
-        num_heads = 4
-        self.reader_attn = torch.nn.MultiheadAttention(
-            head_output_size,
-            dropout=dropout,
-            num_heads=num_heads,
-            batch_first=True,
+        hdim = 256
+        bert_output_size = self.bert.config.hidden_size
+        self.reader_num_attention_heads = 8
+        self.reader_kv = torch.nn.Linear(bert_output_size, 2 * hdim)
+        self.reader_q = torch.nn.Linear(bert_output_size, hdim)
+        self.reader_residual = torch.nn.Linear(bert_output_size, hdim)
+        self.reader_attention_dropout = torch.nn.Dropout(
+            self.bert.config.attention_probs_dropout_prob
         )
+        self.reader_hidden_dropout = torch.nn.Dropout(self.bert.config.hidden_dropout_prob)
+        self.reader_norm = torch.nn.LayerNorm(hdim)
+        self.reader_projection = torch.nn.Linear(hdim, 3 * hdim)
+
+        # init
+        self.reader_kv.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        self.reader_q.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        self.reader_residual.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        self.reader_projection.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        self.reader_kv.bias.data.zero_()
+        self.reader_q.bias.data.zero_()
+        self.reader_residual.bias.data.zero_()
+        self.reader_projection.bias.data.zero_()
+        self.reader_norm.bias.data.zero_()
+        self.reader_norm.weight.data.fill_(1.0)
+
+    def _compute_reader_scores(
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+        mask: Optional[Tensor] = None,
+    ):
+        # pprint_batch({"hd": hd, "hq": hq, "mask": mask}, "Soft reader scores")
+
+        bs, n_opts, n_docs, doc_len, hdim = hd.shape
+        bs, n_opts, q_len, hdim = hq.shape
+
+        # compute the features for the attention layer
+        q = self.reader_q(hq)
+        q = einops.rearrange(
+            q, "bs opts l (heads h) -> bs opts heads l h", heads=self.reader_num_attention_heads
+        )
+        kv = self.reader_kv(hd)
+        kv = einops.rearrange(
+            kv,
+            "bs opts docs l (heads h) -> bs opts docs heads l h",
+            heads=self.reader_num_attention_heads,
+        )
+        k, v = kv.chunk(2, dim=-1)
+
+        # compute the cross-attention weights
+        weights = torch.einsum("bohux, bodhvx -> bodhuv", q, k)
+        weights = weights / math.sqrt(weights.shape[-1])
+        weights = weights.softmax(dim=-1)
+        weights = self.reader_attention_dropout(weights)
+
+        # cross-attention out
+        h_qd = torch.einsum("bodhuv, bodhvx -> bodhux", weights, v)
+        h_qd = einops.rearrange(
+            h_qd,
+            "bs opts docs heads l h -> bs opts docs l (heads h)",
+            heads=self.reader_num_attention_heads,
+        )
+
+        # apply dropout + layer norm + residual
+        h_qd = self.reader_hidden_dropout(h_qd)
+        skip = self.reader_residual(hq).unsqueeze(2)
+        h_qd = self.reader_norm(h_qd + skip)
+
+        # pprint_batch({"h_qd": h_qd}, "Soft reader scores : 2")
+
+        # final self-attention layer
+        qkv = self.reader_projection(h_qd)
+        qkv = einops.rearrange(
+            qkv,
+            "bs opts docs l (heads h) -> bs opts docs heads l h",
+            heads=self.reader_num_attention_heads,
+        )
+        q, k, v = qkv.chunk(3, dim=-1)
+        q = q[..., 0, :]  # select the CLS token of the query
+
+        # compute the self-attention weights
+        weights = torch.einsum("bodhx, bodhvx -> bodhv", q, k)
+        weights = weights / math.sqrt(weights.shape[-1])
+        if mask is not None:
+            mask_ = mask.bool()
+            mask_ = mask_.view(*mask_.shape[:2], 1, 1, mask_.shape[-1])
+            weights = weights.masked_fill(~mask_, -float("inf"))
+        weights = weights.softmax(dim=-1)
+        weights = self.reader_attention_dropout(weights)
+
+        # compute the final score of shape [bs, n_opts, n_docs]
+        score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
+
+        return score
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -185,17 +273,16 @@ class OptionRetriever(Module):
         # compute question output mask
         if field == "question":
             # inputs_ids = flat_batch["question.input_ids"]
-            mask = flat_batch["question.attention_mask"].float()
+            mask = torch.ones_like(flat_batch["question.attention_mask"].float())
+            mask[mask == self._pad_token_id] = 0
             # qmask_id = self.spec_tokens[QUERY_MASK]
             # mask = torch.where(inputs_ids == qmask_id, self.qmask_gate, mask)
         elif field == "document":
             inputs_ids = flat_batch["document.input_ids"]
-            mask = flat_batch["document.attention_mask"].float()
-            cond = mask
+            mask = torch.ones_like(flat_batch["document.attention_mask"].float())
+            mask[mask == self._pad_token_id] = 0
             for w in self.skiplist:
-                cond *= inputs_ids != w
-            mask = torch.where(cond, mask, 0)
-            rich.print(f">>> doc_mask: {mask[0]}")
+                mask[inputs_ids == w] = 0
         else:
             mask = None
 
@@ -208,12 +295,15 @@ class OptionRetriever(Module):
             mask=mask,
             **kwargs,
         )
+        if "last_hidden_state" in h_heads.keys():
+            h_heads[f"{field}_last_hidden_state"] = h_heads.pop("last_hidden_state")
         pprint_batch(h_heads, f"h_heads {field}", silent=silent)
 
         # reshape and return
         output = {}
         for k, v in h_heads.items():
-            tag = k.split("_")[-1]  # reader / retriever
+            _, *tag = k.split("_")  # reader / retriever
+            tag = "_".join(tag)
             v = v.view(*original_shape[:-1], *v.shape[1:])
             name = {"document": "hd", "question": "hq"}[field]
             output[f"_{name}_{tag}_"] = v
@@ -302,10 +392,12 @@ class OptionRetriever(Module):
                 pprint_batch(d_batch, "Option retriever::resampling::output", silent=silent)
         else:
             # compute the questions logits
-            output.update(self._forward(q_batch, max_batch_size=max_batch_size_eval, **kwargs))
+            output.update(
+                self._forward(q_batch, max_batch_size=max_batch_size_eval, silent=silent, **kwargs)
+            )
 
         # compute the document logits
-        d_out = self._forward(d_batch, max_batch_size=max_batch_size_eval, **kwargs)
+        d_out = self._forward(d_batch, max_batch_size=max_batch_size_eval, silent=silent, **kwargs)
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
@@ -317,7 +409,9 @@ class OptionRetriever(Module):
         ]
         hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
         # compute the score for each pair `f([q_j; a_j], d_jk)`
-        # reader_score = self._compute_reader_scores(hd=hd_reader, hq=hq_reader)
+        # reader_score = self._compute_reader_scores(hd=output["_hd_last_hidden_state_"],
+        #                                            hq=output["_hq_last_hidden_state_"],
+        #                                            mask=q_batch["question.attention_mask"])
         reader_score = self._compute_score(
             hd=hd_reader, hq=hq_reader, mask=q_batch["question.attention_mask"]
         )
@@ -409,7 +503,7 @@ class OptionRetriever(Module):
 
             # rank of the most likely document
             top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
-            top_rank = retrieval_rank.gather(dim=2, index=top_idx)
+            top_rank = retrieval_rank.gather(dim=-1, index=top_idx)
             output["retriever/top_rank"] = top_rank.float().mean()
 
             # min-max of the retrieval rank
@@ -470,10 +564,8 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                if mask is None:
-                    return max_scores.mean(-1)
-                else:
-                    return (max_scores * mask) / mask.sum(dim=-1, keepdim=True)
+                return max_scores.sum(-1)
+
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
         else:
@@ -490,35 +582,9 @@ class OptionRetriever(Module):
             elif self.similarity == Similarity.COLBERT:
                 scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
                 max_scores, _ = scores.max(-1)
-                if mask is None:
-                    return max_scores.mean(-1)
-                else:
-                    return (max_scores * mask) / mask.sum(dim=-1, keepdim=True)
+                return max_scores.sum(-1)
             else:
                 raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
-
-    def _compute_reader_scores(
-        self,
-        *,
-        hd: Tensor,
-        hq: Tensor,
-    ):
-
-        bs, n_opts, n_docs, doc_len, hdim = hd.shape
-        bs, n_opts, q_len, hdim = hq.shape
-
-        hd = einops.rearrange(hd, "bs opts docs ... -> (bs docs opts) ...")
-        hq = hq.view(bs, n_opts, 1, q_len, hdim).expand(bs, n_opts, n_docs, q_len, hdim)
-        hq = einops.rearrange(hq, "bs opts docs ... -> (bs docs opts) ...")
-
-        W, Q = hq.chunk(2, dim=-1)
-        K, V = hd.chunk(2, dim=-1)
-
-        Z, *_ = self.reader_attn(Q, K, V)
-        score = Z + W
-        score = score.sum(-1).mean(-1)
-
-        return score.view(bs, n_opts, n_docs)
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

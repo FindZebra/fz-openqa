@@ -183,7 +183,7 @@ class Module(nn.Module, ABC):
         heads = heads or list(self.heads.keys())
 
         # process data by chunk
-        output = {key: None for key in heads}
+        output = {}
         bs, seq_len, *_ = inputs_ids.shape
         if max_batch_size is None:
             chunk_size = bs
@@ -202,8 +202,8 @@ class Module(nn.Module, ABC):
                 mask=mask_,
                 **kwargs,
             )
-            for key in heads:
-                if output[key] is None:
+            for key in chunk.keys():
+                if key not in output.keys():
                     output[key] = chunk[key]
                 else:
                     output[key] = torch.cat([output[key], chunk[key]], dim=0)
@@ -226,7 +226,10 @@ class Module(nn.Module, ABC):
         last_hidden_state = bert_output.last_hidden_state
 
         # process the last hidden state with the heads
-        return {k: self.heads[k](last_hidden_state, mask=mask) for k in heads}
+        output = {"last_hidden_state": last_hidden_state}
+        for k in heads:
+            output[k] = self.heads[k](last_hidden_state, mask=mask)
+        return output
 
     def _instantiate_bert(
         self,
@@ -248,28 +251,28 @@ class Module(nn.Module, ABC):
 
             emb_map = {
                 QUERY_MASK: tokenizer.pad_token_id,
-                # QUERY_TOKEN: tokenizer.sep_token_id,
-                # DOC_TOKEN: tokenizer.sep_token_id,
-                # ANS_TOKEN: tokenizer.sep_token_id,
+                QUERY_TOKEN: tokenizer.sep_token_id,
+                DOC_TOKEN: tokenizer.sep_token_id,
+                ANS_TOKEN: tokenizer.sep_token_id,
             }
 
-            embs = bert.get_input_embeddings()
+            # embs = bert.get_input_embeddings()
             self.spec_tokens = {}
             for token, target_idx in emb_map.items():
                 tok_id = tokenizer.encode(token, add_special_tokens=False)[0]
                 self.spec_tokens[token] = tok_id
-                embs.weight.data[tok_id] = embs.weight.data[target_idx]
-            bert.set_input_embeddings(embs)
-            bert.tie_weights()
+                # embs.weight.data[tok_id] = embs.weight.data[target_idx]
+            # bert.set_input_embeddings(embs)
+            # bert.tie_weights()
 
-            e = bert.get_input_embeddings().weight
-            q_mask_id = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
-            doc_id = tokenizer.encode(DOC_TOKEN, add_special_tokens=False)[0]
-            assert (e[q_mask_id] == e[tokenizer.pad_token_id]).all()
-            print(f"embs[q_mask_id] = {e[q_mask_id].mean()}")
-            print(f"embs[pad_token_id] = {e[tokenizer.pad_token_id].mean()}")
-            print(f"embs[doc_id] = {e[doc_id].mean()}")
-            print(f"embs[sep_token_id] = {e[tokenizer.sep_token_id].mean()}")
+            # e = bert.get_input_embeddings().weight
+            # q_mask_id = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
+            # doc_id = tokenizer.encode(DOC_TOKEN, add_special_tokens=False)[0]
+            # assert (e[q_mask_id] == e[tokenizer.pad_token_id]).all()
+            # print(f"embs[q_mask_id] = {e[q_mask_id].mean()}")
+            # print(f"embs[pad_token_id] = {e[tokenizer.pad_token_id].mean()}")
+            # print(f"embs[doc_id] = {e[doc_id].mean()}")
+            # print(f"embs[sep_token_id] = {e[tokenizer.sep_token_id].mean()}")
 
         return bert
 
