@@ -65,12 +65,12 @@ class DatasetBuilder:
             return
         elif isinstance(self.analytics, list):
             for a in self.analytics:
-                a(dataset)
+                a(dataset, builder=self)
         elif isinstance(self.analytics, dict):
             for k, v in self.analytics.items():
-                v(dataset)
+                v(dataset, builder=self)
         elif isinstance(self.analytics, Analytic):
-            self.analytics(dataset)
+            self.analytics(dataset, builder=self)
         else:
             raise TypeError(
                 f"Analytics must be a list, dict or Analytic, " f"got {type(self.analytics)}"

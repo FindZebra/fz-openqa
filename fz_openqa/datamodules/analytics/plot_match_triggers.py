@@ -77,4 +77,4 @@ class PlotTopMatchTriggers(Analytic):
             print(get_separator())
 
         fig = self.plot_most_commons(labels, counts)
-        self.save_as_html(fig)
+        self.save_fig_as_html(fig)

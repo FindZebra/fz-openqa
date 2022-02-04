@@ -72,4 +72,4 @@ class PlotScoreDistributions(Analytic):
         """Process the results of the analytic."""
         results = self.collate_splits(results)
         fig = self.plot_split(results=results)
-        self.save_as_html(fig)
+        self.save_fig_as_html(fig)

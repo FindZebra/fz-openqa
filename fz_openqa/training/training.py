@@ -322,7 +322,7 @@ def train_with_dataset_updates(
             if trainer.state.status == TrainerStatus.INTERRUPTED:
                 log.info(
                     f"Training interrupted. "
-                    f"Epochs remaining: {trainer.fit_loop.max_epochs - max_epochs}"
+                    f"Epochs remaining: {max_epochs - trainer.current_epoch}"
                 )
                 break
 

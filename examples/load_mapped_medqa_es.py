@@ -1,16 +1,14 @@
 import logging
-import os.path
 from pathlib import Path
 
 import datasets
 import hydra
 import rich
-from hydra.utils import get_original_cwd
-from omegaconf import OmegaConf
-from rich.logging import RichHandler
+import wandb
 
 import fz_openqa
 from fz_openqa import configs
+from fz_openqa.datamodules.analytics import LogRetrievedDocuments
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
 from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
 from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
@@ -18,7 +16,6 @@ from fz_openqa.datamodules.builders import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.index import ElasticSearchIndex
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import PrioritySampler
@@ -32,7 +29,9 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 )
 def run(config):
     datasets.set_caching_enabled(True)
-    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
+    logging.getLogger("elasticsearch").setLevel(logging.ERROR)
+    datasets.logging.set_verbosity(logging.ERROR)
+    wandb.init(project="fz_openqa", group="dev-load_mapped_medqa_es")
 
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
@@ -74,6 +73,7 @@ def run(config):
             CountMatchedQuestions(output_dir="./analyses", verbose=True),
             PlotScoreDistributions(output_dir="./analyses", verbose=True),
             PlotTopMatchTriggers(output_dir="./analyses", verbose=True),
+            LogRetrievedDocuments(output_dir="./analyses", verbose=True, wandb_log=True),
         ],
     )
 
@@ -83,10 +83,10 @@ def run(config):
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=3)
+    # dm.display_samples(n_samples=3)
 
     # access dataset
-    rich.print(dm.dataset)
+    # rich.print(dm.dataset)
 
     # sample a batch
     # _ = next(iter(dm.train_dataloader()))

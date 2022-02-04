@@ -98,19 +98,11 @@ class RetrieverDistribution(Analytic):
         return output
 
     def _save_array(self, probs, name, split):
-        idx = 0
-        max_trials = 100
-        directory = self.output_dir / self.output_file_name.replace(".json", "")
-        directory.mkdir(parents=True, exist_ok=True)
-        while idx >= 0 and idx < max_trials:
-            output = directory / f"{name}-{split}-{idx}.npy"
-            if not output.exists():
-                idx = -1
-            else:
-                idx += 1
-
-        np.save(output.name, probs)
-        logging.getLogger(__name__).info(f"saved {name} to {output}")
+        sub_directory = self.output_dir / self.output_file_name.replace(".json", "")
+        path = sub_directory / f"{name}-{split}.npy"
+        path = self.indexed_output_file(path)
+        np.save(str(path), probs)
+        logging.getLogger(__name__).info(f"saved {name} to {path}")
 
     def _get_scores(self, row: Dict | Dataset, *, key: str, n_samples: int) -> np.ndarray:
         scores = row[key]

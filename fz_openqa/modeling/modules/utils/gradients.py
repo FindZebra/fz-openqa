@@ -295,6 +295,7 @@ class ReinforceGradients(Estimator):
         diagnostics["retriever/ess-ratio-std"] = log_ess.exp().std() / K
         diagnostics["retriever/w-max"] = log_w_.max().exp()
         diagnostics["retriever/w-std"] = log_w_.exp().std()
+        diagnostics["retriever/w-entropy"] = -(log_w_.exp * log_w_).sum(dim=-1).mean()
 
         # compute the reading likelihood estimate `p(A | q, A, S^{(M)})`
         log_p_A__D = reader_score_.log_softmax(dim=1)

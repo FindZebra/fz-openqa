@@ -15,6 +15,7 @@ defaults:
       - retriever_accuracy
       - sequence_lengths
       - retriever_distribution
+      - log_retrieved_documents
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
@@ -25,7 +26,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "DPR + reinforce v3 - no baseline + update every 3 epochs"
+  exp_info: "DPR + reinforce v3 - no baseline + update every 10 epochs"
 
 trainer:
   gpus: 8
@@ -61,7 +62,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 3
+    freq: 10
     reset_optimizer: false
     index_first_epoch: false
     builder_args:
@@ -89,7 +90,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 100
+  n_retrieved_documents: 1000 # todo
   n_documents:
     train: 10
     validation: 10
