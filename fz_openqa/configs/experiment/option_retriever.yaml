@@ -7,7 +7,7 @@ defaults:
   - override /model/head: colbert
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/head}
-  - override /datamodule/sampler: boost_positives
+  - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: none
   - override /datamodule/dataset_filter: none
@@ -25,7 +25,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "DPR + reinforce + iw-v2 + update every 2 epochs"
+  exp_info: "DPR + reinforce v3 - no baseline + update every 3 epochs"
 
 trainer:
   gpus: 8
@@ -39,7 +39,7 @@ trainer:
 model:
   lr: 1e-5
   weight_decay: 1e-3
-  num_warmup_steps: 2_000
+  num_warmup_steps: 1_000
   num_training_steps: 50_000
   bert:
     hidden_dropout_prob: 0.1
@@ -61,7 +61,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 2
+    freq: 3
     reset_optimizer: false
     index_first_epoch: false
     builder_args:
@@ -105,8 +105,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
-      test: true
+      validation: false
+      test: false # todo:
 
   # OpenQA builder parameters
   builder:

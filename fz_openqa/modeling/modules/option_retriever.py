@@ -121,30 +121,31 @@ class OptionRetriever(Module):
         ]
 
         # reader attention head
-        hdim = 256
-        bert_output_size = self.bert.config.hidden_size
-        self.reader_num_attention_heads = 8
-        self.reader_kv = torch.nn.Linear(bert_output_size, 2 * hdim)
-        self.reader_q = torch.nn.Linear(bert_output_size, hdim)
-        self.reader_residual = torch.nn.Linear(bert_output_size, hdim)
-        self.reader_attention_dropout = torch.nn.Dropout(
-            self.bert.config.attention_probs_dropout_prob
-        )
-        self.reader_hidden_dropout = torch.nn.Dropout(self.bert.config.hidden_dropout_prob)
-        self.reader_norm = torch.nn.LayerNorm(hdim)
-        self.reader_projection = torch.nn.Linear(hdim, 3 * hdim)
-
-        # init
-        self.reader_kv.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        self.reader_q.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        self.reader_residual.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        self.reader_projection.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        self.reader_kv.bias.data.zero_()
-        self.reader_q.bias.data.zero_()
-        self.reader_residual.bias.data.zero_()
-        self.reader_projection.bias.data.zero_()
-        self.reader_norm.bias.data.zero_()
-        self.reader_norm.weight.data.fill_(1.0)
+        # hdim = 256
+        # bert_output_size = self.bert.config.hidden_size
+        # self.reader_num_attention_heads = 8
+        # self.reader_kv = torch.nn.Linear(bert_output_size, 2 * hdim)
+        # self.reader_q = torch.nn.Linear(bert_output_size, hdim)
+        # self.reader_residual = torch.nn.Linear(bert_output_size, hdim)
+        # self.reader_attention_dropout = torch.nn.Dropout(
+        #     self.bert.config.attention_probs_dropout_prob
+        # )
+        # self.reader_hidden_dropout = torch.nn.Dropout(self.bert.config.hidden_dropout_prob)
+        # self.reader_norm = torch.nn.LayerNorm(hdim)
+        # self.reader_projection = torch.nn.Linear(hdim, 3 * hdim)
+        #
+        # # init
+        # self.reader_kv.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        # self.reader_q.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        # self.reader_residual.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
+        # self.reader_projection.weight.data.normal_(mean=0.0,
+        # std=self.bert.config.initializer_range)
+        # self.reader_kv.bias.data.zero_()
+        # self.reader_q.bias.data.zero_()
+        # self.reader_residual.bias.data.zero_()
+        # self.reader_projection.bias.data.zero_()
+        # self.reader_norm.bias.data.zero_()
+        # self.reader_norm.weight.data.fill_(1.0)
 
     def _compute_reader_scores(
         self,
@@ -432,8 +433,10 @@ class OptionRetriever(Module):
             self.estimator(
                 reader_score=reader_score,
                 retriever_score=retriever_score,
-                retrieval_score=d_batch.get("document.retrieval_score"),
                 targets=batch["answer.target"],
+                retrieval_score=d_batch.get("document.retrieval_score", None),
+                retrieval_log_prob=d_batch.get("document.retrieval_log_prob", None),
+                retrieval_log_Z=d_batch.get("document.retrieval_log_Z", None),
             )
         )
 

@@ -1,6 +1,4 @@
 import abc
-import math
-import time
 import warnings
 from dataclasses import dataclass
 from enum import Enum
@@ -143,6 +141,7 @@ class Estimator(nn.Module):
         reader_score: Tensor,
         targets: Tensor,
         retrieval_score: Optional[Tensor] = None,
+        **kwargs,
     ):
         q = self.evaluate_likelihood_terms(
             retriever_score,
@@ -197,153 +196,169 @@ class VariationalGradients(Estimator):
 
 
 class ReinforceGradients(Estimator):
-    """Compute the gradients using Reinforce with leave-one-out baseline and importance-weighting"""
+    """Compute the gradients using Reinforce with importance sampling and priority sampling."""
 
     max_baseline_samples: int = 5
     baseline_dtype = None
-    space: Space = Space.LOG
+    use_baseline: bool = False  # todo
+    space: Space = Space.EXP
 
-    def compute_loss(
+    def __call__(
         self,
-        q: Quantities,
         *,
+        retriever_score: Tensor,
+        reader_score: Tensor,
         targets: Tensor,
-        reader_score: Tensor = None,
-        retriever_score: Tensor = None,
-        retrieval_score: Tensor = None,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        if reader_score is None:
-            raise ValueError(f"reader_score must be provided for {type(self).__name__}")
+        retrieval_score: Optional[Tensor] = None,
+        retrieval_log_prob: Optional[Tensor] = None,
+        retrieval_log_Z: Optional[Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
+        r"""
+        Compute the loss and diagnostics. This methods assumes using three probabilities
+        distributions:
+            1. reader: `p_\theta(ast|A, D) =  \exp f_\theta(D,ast) / \sum_A \exp f_\theta(D,A)`
+            3. retriever: `p_\phi(D|A)` = softmax(`f_\phi(D,A)`) / \sum_D softmax(`f_\phi(D,A)`)
+            3. checkpoint: `p_\psi(D|A)` = softmax(`f_\psi(D,A)`) / \sum_D softmax(`f_\psi(D,A)`)
+            4. proposal: q(D)
 
+        Parameters
+        ----------
+        retriever_score
+            f_\phi(D): shape [bs, n_opts, n_docs]
+        reader_score
+            f_\theta(D): shape [bs, n_opts, n_docs]
+        targets
+            a_\star: shape [bs]
+        retrieval_score
+            f_\psi(D): shape [bs, n_opts, n_docs]
+        retrieval_log_prob
+            log q(D): shape [bs, n_opts, n_docs]
+        retrieval_log_Z
+            \log \sum_{D \in S} \exp f_\psi(D): shape [bs, n_opts, n_docs]
+
+        Returns
+        -------
+        Dict[str, torch.Tensor]
+            A dictionary of diagnostics including the loss.
+
+        """
+        if self.space == Space.LOG:
+            warnings.warn("ReinforceGradients has not been tested for log space")
+
+        f_phi = retriever_score
+        f_psi = retrieval_score
+        log_Z_psi = retrieval_log_Z
+        log_q = retrieval_log_prob
         diagnostics = {}
-        use_baseline = True
-        use_importance_weights = True
-        iw_expr = 2
-        if retrieval_score is None:
-            retrieval_score = retriever_score.detach()
 
-        # expand retriever and retrieval scores
-        retriever_score_ = retriever_score
-        retriever_score, retrieval_score = batch_cartesian_product(
-            [retriever_score, retrieval_score]
+        # check inputs
+        assert f_phi is not None
+        assert f_psi is not None
+        assert log_Z_psi is not None
+        assert log_q is not None
+        assert ((log_Z_psi.mean(-1) - log_Z_psi[..., 0]).abs() < 1e-3).all()
+        log_Z_psi = log_Z_psi[..., :1]
+
+        # scale the retriever scores to match the retrieval scores
+        M_psi = f_psi.max(dim=-1, keepdim=True).values
+        M_phi = f_phi.max(dim=-1, keepdim=True).values
+        f_phi = f_phi - M_phi + M_psi
+
+        with torch.no_grad():
+            # `log \zeta = f_\phi(d) - f_\psi(d)`
+            log_zeta = f_phi - f_psi
+
+            # compute log p_psi(d, q, \Dset)
+            log_p_psi = f_psi - log_Z_psi
+
+            # `log \hat{\pi}_\phi(d | q, \Dset)`
+            log_W_psi = log_p_psi - log_q
+            log_Z_phi = log_Z_psi + (log_W_psi + log_zeta).logsumexp(dim=-1, keepdim=True)
+            log_p_phi_hat = f_phi - log_Z_phi
+
+            # `log w(d)`
+            log_W = log_p_phi_hat - log_q
+
+        # compute cartesian product: `D \in \Dset^{(M)}`
+        reader_score_, f_phi_, log_W_, log_zeta_, log_W_psi_ = batch_cartesian_product(
+            [reader_score, f_phi, log_W, log_zeta, log_W_psi]
         )
+        # w = \prod_{j=1}^M W_j), for D in \Dset^{(M)}
+        log_w_ = log_W_.sum(1)
 
-        # compute log_zeta
-        log_zeta = retriever_score - retrieval_score
-        log_N = math.log(log_zeta.shape[-1])
-        log_E_zeta = log_zeta.logsumexp(dim=-1, keepdim=True) - log_N
+        # importance weights diagnostics
+        # effective sample size
+        K = log_w_.size(-1)
+        log_ess = 2 * log_w_.logsumexp(dim=-1) - (2 * log_w_).logsumexp(dim=-1)
+        diagnostics["retriever/ess"] = log_ess.exp().mean()
+        diagnostics["retriever/ess-ratio"] = log_ess.exp().mean() / K
+        diagnostics["retriever/ess-ratio-std"] = log_ess.exp().std() / K
+        diagnostics["retriever/w-max"] = log_w_.max().exp()
+        diagnostics["retriever/w-std"] = log_w_.exp().std()
 
-        # compute the importance weights
-        if use_importance_weights and self.training:
-            with torch.no_grad():
-                if iw_expr == 1:
-                    log_w = log_zeta - log_E_zeta
-                elif iw_expr == 2:
-                    log_w = retriever_score.log_softmax(dim=-1) - retrieval_score.log_softmax(
-                        dim=-1
-                    )
-                else:
-                    raise ValueError(f"Invalid iw_expr={iw_expr}")
-                log_w = log_w.sum(1)
-                w = log_w.exp()
-                diagnostics["retriever/w-max"] = w.max()
-
-                # truncate
-                # rich.print(f"> w: {w.min()} : {w.max()} ({w.mean()})")
-                # w = w.clamp(max=1e2)
-
-                # effective sample size
-                ess = w.sum(-1).pow(2) / w.pow(2).sum(-1)
-                ess = ess.mean()
-                diagnostics["retriever/ess"] = ess
-
-                # rich.print(f"> ESS: {ess}")
-        else:
-            w = torch.ones_like(
-                log_zeta[
-                    :,
-                    0,
-                ]
-            )
-
-        index = targets[:, None, None].expand(*targets.shape, 1, q.logp_a__d.shape[2])
-        logp_a_star__D = torch.gather(q.logp_a__d, dim=1, index=index).squeeze(1)
-
-        # loss for the reader: E[ \sum_D \nabla p(q_star | q, A, D)]
+        # compute the reading likelihood estimate `p(A | q, A, S^{(M)})`
+        log_p_A__D = reader_score_.log_softmax(dim=1)
+        targets_ = targets.view(-1, 1, 1).expand(targets.shape[0], 1, log_p_A__D.shape[-1])
+        log_p_ast__D = log_p_A__D.gather(1, targets_).squeeze(1)
         if self.space == Space.EXP:
-            reader_loss = -1 * (w * logp_a_star__D.exp()).sum(-1)
+            log_p_ast__S = (log_w_ + log_p_ast__D).logsumexp(-1)
         elif self.space == Space.LOG:
-            reader_loss = -1 * (w * logp_a_star__D).sum(-1)
+            log_p_ast__S = (log_w_.exp() + log_p_ast__D).sum(-1)
         else:
-            raise ValueError("space must be either 'exp' or 'log'")
+            raise ValueError(f"Unknown space: {self.space}")
 
-        # loss for the retriever: REINFORCE
-        if self.space == Space.EXP:
-            # todo: use log sum exp trick to compute log of the sum of exp
-            score = logp_a_star__D.exp().detach()
-        elif self.space == Space.LOG:
-            score = logp_a_star__D.detach()
-        else:
-            raise ValueError("space must be either 'exp' or 'log'")
-
-        if use_baseline and self.training:
-            # rich.print(f">> expanded:shaped: {q.logp_a__d.shape}")
-            baseline = self.baseline(
+        # compute loss for the retriever parameters
+        if self.use_baseline:
+            log_baseline = self.baseline(
                 reader_score,
                 targets=targets,
-                retriever_scores=retriever_score_,
+                log_W=log_W,
                 max_samples=self.max_baseline_samples,
-                dtype=self.baseline_dtype,
                 space=self.space,
             )
-            # rich.print(f"> baseline: {baseline.shape}, score:{score.shape}")
         else:
-            baseline = 0
+            log_baseline = None
+        # 1. compute the gradients using Reinforce
+        h_log_weight = log_zeta_ - (log_W_psi_ + log_zeta_).logsumexp(-1, keepdim=True)
+        h = f_phi_ - (h_log_weight.exp() * f_phi_).sum(-1, keepdim=True)
+        with torch.no_grad():
+            if self.space == Space.EXP:
+                grad_weight = (log_w_ + log_p_ast__D).exp()
+            elif self.space == Space.LOG:
+                grad_weight = log_w_.exp() + log_p_ast__D
+            else:
+                raise ValueError(f"Unknown space: {self.space}")
 
-        # compute an estimate of log_p_D_A
-        # normalizer = (log_zeta - log_E_zeta).exp().detach() * log_zeta
-        # log_p_D_A = retriever_score - normalizer
-        # log_p_D_A = log_p_D_A.sum(1)
-        log_p_D_A = q.log_p_d__a.sum(1)
+            # 2. add the baseline weight
+            if log_baseline is not None:
+                grad_weight_baseline = (log_w_ + log_baseline).exp()
+                diagnostics["retriever/baseline-l2"] = (
+                    (grad_weight_baseline - grad_weight).pow(2).mean()
+                )
+                diagnostics["retriever/grad-weight-std"] = grad_weight.std(dim=-1).mean()
+                diagnostics["retriever/grad-weight-controlled-std"] = (
+                    (grad_weight_baseline - grad_weight).std(dim=-1).mean()
+                )
+            else:
+                grad_weight_baseline = 0
+
+        grad_log_p_ast__S = ((grad_weight - grad_weight_baseline).detach() * h.sum(1)).sum(-1)
 
         # compute the final loss
-        controlled_score = (w * (score - baseline)).detach()
-        retriever_loss = -1 * (controlled_score * log_p_D_A).sum(dim=(-1))
+        loss = -1 * (log_p_ast__S + grad_log_p_ast__S).mean()
 
-        # plot_scores(score[0], controlled_score[0])
-        # time.sleep(3)
+        # reader logits log p(A | q, A, S^{(M)})
+        log_p_A__S = (log_w_.unsqueeze(1) + log_p_A__D).logsumexp(-1)
 
-        return reader_loss + retriever_loss, diagnostics
-
-    @staticmethod
-    @torch.no_grad()
-    def importance_weights(log_p_d__a: Tensor, retrieval_score: Tensor) -> Tensor:
-
-        # clip the retrieval score for stability
-        M = retrieval_score.max(dim=-1).values.unsqueeze(-1)
-        retrieval_score = retrieval_score - M
-        retrieval_score = retrieval_score.clip_(min=-1e3)
-
-        # compute the permutations of the retrieval scores for each D in D^(M)
-        retrieval_score, *_ = batch_cartesian_product([retrieval_score])
-
-        # compute log q(D|A)
-        normalizer = retrieval_score.logsumexp(dim=2, keepdim=True)
-        log_q_d__a = retrieval_score - normalizer
-
-        # product over options
-        log_q_d__a = log_q_d__a.sum(dim=1)
-        log_p_d__a = log_p_d__a.sum(dim=1)
-
-        # return w = p(D | A) / q(D | A)
-        log_w = log_p_d__a - log_q_d__a
-        w = log_w.exp()
-
-        # clip for stability
-        w = w.clip(max=10)
-
-        return w
+        return {
+            "loss": loss,
+            "reader/logp": log_p_ast__S.detach(),
+            "_reader_logits_": log_p_A__S.detach(),
+            "_reader_targets_": targets.detach(),
+            "_doc_logits_": log_p_phi_hat.detach(),
+            "_retriever_reading_logits_": (log_W * log_p_phi_hat).sum(-1).detach(),
+            **diagnostics,
+        }
 
     @staticmethod
     @torch.no_grad()
@@ -351,23 +366,25 @@ class ReinforceGradients(Estimator):
         reader_scores: Tensor,
         *,
         targets: Tensor,
-        retriever_scores: Tensor = None,
+        log_W: Tensor = None,
         dtype: Optional[torch.dtype] = None,
         max_samples: int = 10,
-        space: Space = Space.LOG,
+        space: Space = None,
         **kwargs,
     ) -> Tensor:
         """Compute the controlled score for the given targets."""
-        DEBUG = False
-        if max_samples >= reader_scores.shape[-1]:
-            retriever_scores = None
+        DEBUG = 0
+
+        if DEBUG:
+            rich.print(f">> baseline::reader_scores: {reader_scores.shape}, log_w:{log_W.shape}")
+
         if dtype is not None:
             original_dtype = reader_scores.dtype
             reader_scores = reader_scores.to(dtype)
         else:
             original_dtype = None
-        if retriever_scores is not None:
-            retriever_scores = retriever_scores.to(dtype)
+        if log_W is not None:
+            log_W = log_W.to(dtype)
 
         bs, n_opts, n_docs = reader_scores.shape
 
@@ -382,8 +399,6 @@ class ReinforceGradients(Estimator):
             .reshape(n_docs, n_docs - 1)
         )
 
-        # rich.print(f">> no_id_index: {no_id_index}")
-
         def expand_and_index(scores, index):
             """Expands the scores of shape [ns, n_opts, n_docs] to scores
             of shape [bs, n_opts, n_docs, n_docs-1]"""
@@ -394,25 +409,26 @@ class ReinforceGradients(Estimator):
 
         _index = no_id_index.view(1, 1, *no_id_index.shape).expand(bs, n_opts, *no_id_index.shape)
         reader_scores = expand_and_index(reader_scores, _index)
-        retriever_scores = expand_and_index(retriever_scores, _index)
+        log_W = expand_and_index(log_W, _index)
         if DEBUG:
             rich.print(f">> scores::gather::1 {reader_scores.shape}")
 
         # M^K permutations of the scores across dim 3: the resulting tensors are of shape
         # [bs, n_opts, n_docs^M, n_docs-1]
-        reader_scores, retriever_scores = batch_cartesian_product([reader_scores, retriever_scores])
+        reader_scores, log_W = batch_cartesian_product([reader_scores, log_W])
         if DEBUG:
             log_mem_size(reader_scores, "retriever_scores::expand::1")
-            log_mem_size(retriever_scores, "retriever_scores::expand::1")
+            log_mem_size(log_W, "log_W::expand::1")
 
         # truncate the `reader_scores` to the `top(max_samples)` according to the `retriever_scores`
-        if retriever_scores is not None:
-            _index = retriever_scores.argsort(dim=-1, descending=True)[..., :max_samples]
+        if reader_scores.shape[-1] > max_samples:
+            _index = log_W.argsort(dim=-1, descending=True)[..., :max_samples]
             reader_scores = reader_scores.gather(dim=-1, index=_index)
-            del _index, retriever_scores
+            log_W = log_W.gather(dim=-1, index=_index)
+            del _index
 
         if DEBUG:
-            log_mem_size(reader_scores, "retriever_scores::truncated::2")
+            log_mem_size(reader_scores, "reader_scores::truncated::2")
 
         def flatten_and_prod(scores: List[Tensor]):
             """permutations of the dimension -1 of K-1 scores, resulting in
@@ -433,25 +449,28 @@ class ReinforceGradients(Estimator):
             ]
             return scores
 
-        reader_scores, *_ = flatten_and_prod([reader_scores])
+        reader_scores, log_W = flatten_and_prod([reader_scores, log_W])
         if DEBUG:
             log_mem_size(reader_scores, "retriever_scores::expanded::3")
 
         if not reader_scores.is_cuda:
             # softmax not implemented for half precision on cpu
             reader_scores = reader_scores.float()
+            log_W = log_W.float()
 
         # compute the baseline 1/N \sum_j p(a_star | q, A, D_j)
         log_p_A_D = reader_scores.log_softmax(dim=1)
         _targets = targets.view(bs, 1, 1, 1).expand(bs, 1, *log_p_A_D.shape[-2:])
         log_p_a_star_D = log_p_A_D.gather(dim=1, index=_targets).squeeze(1)
 
+        # average the baseline over the documents
+        log_w = log_W.sum(dim=1)
         if space == Space.EXP:
-            N = log_p_a_star_D.shape[-1]
-            log_sum_p_a_star_D = log_p_a_star_D.logsumexp(dim=-1)
-            baseline = log_sum_p_a_star_D / N
+            log_sum_p_a_star_D = (log_w + log_p_a_star_D).logsumexp(dim=-1)
+            baseline = log_sum_p_a_star_D - log_w.logsumexp(-1)
         elif space == Space.LOG:
-            baseline = log_p_a_star_D.mean(dim=-1)
+            sum_log_p_a_star_D = (log_w.exp() + log_p_a_star_D).sum(dim=-1)
+            baseline = sum_log_p_a_star_D - log_w.logsumexp(-1)
         else:
             raise ValueError(f"Unknown space: {space}")
 
@@ -459,114 +478,6 @@ class ReinforceGradients(Estimator):
             baseline.to(original_dtype)
 
         return baseline
-
-    @staticmethod
-    @torch.no_grad()
-    def __expand_version_score_estimate(scores: Tensor, *, pids: Tensor) -> Tensor:
-
-        DEBUG = 100
-
-        # repeat the values across the dimension -2, so the resulting tensors
-        #  have shape [... n_docs, n_docs]
-        def repeat(x, n=None):
-            n = n or x.shape[-1]
-            return x.unsqueeze(-2).expand(*x.shape[:-1], n, x.shape[-1])
-
-        # repeat the documents across the dimension -1, so the resulting tensors is of
-        # shape [bs(k), n_options(j), n_docs(l), n_docs(p)]
-        _pids = repeat(pids)
-        _scores = repeat(scores)
-
-        # build the mask such that `d_l != d_p`
-        mask = pids.unsqueeze(-1) != _pids
-
-        # replace the ids of the masked documents with `-1`
-        _pids = _pids.masked_fill(~mask, -1)
-        _pids, sort_idx = _pids.sort(dim=-1)
-        _scores = _scores.gather(dim=-1, index=sort_idx)
-        mask = mask.gather(dim=-1, index=sort_idx)
-
-        # remove the as many `-1`s as possible
-        M = _pids.max() + 1
-        _pids[_pids < 0] = M
-        pad_idx = _pids.argmin(dim=-1).min()
-        _pids[_pids == M] = -1
-        _pids = _pids[..., pad_idx:]
-        _scores = _scores[..., pad_idx:]
-        mask = mask[..., pad_idx:]
-
-        # It is expected to have the same number non-masked elements per row
-        assert torch.all(mask >= 0)
-        del mask
-
-        if DEBUG > 5:
-            k = 0
-            for l_ in range(pids.shape[-1]):
-                for j in range(pids.shape[1]):
-                    rich.print(
-                        f"\t- l={l_}, d_l: {pids[k, j, l_]}: d'_lp: {_pids[k, j, l_].tolist()}"
-                    )
-
-        del _pids
-        # compute the permutations of the scores across [n_opts, n_docs(l)]
-        _scores, *_ = batch_cartesian_product([_scores])
-
-        if DEBUG > 0:
-            log_mem_size(_scores, "_scores (expand 1)")
-            # log_mem_size(mask, "mask (expand 1)")
-
-        # compute the permutations of the scores across [n_opts, n_docs(l)]
-        bs = _scores.shape[0]
-        pattern = "bs n_options n_docs n_samples -> (bs n_docs) n_options n_samples"
-        _scores = einops.rearrange(_scores, pattern)
-        # mask = einops.rearrange(mask, pattern)
-        _scores, *_ = batch_cartesian_product([_scores])
-        reorder_pattern = "(bs n_docs) n_options n_samples -> bs n_options n_docs n_samples"
-        _scores = einops.rearrange(_scores, reorder_pattern, bs=bs)
-        # mask = einops.rearrange(mask, reorder_pattern, bs=bs)
-
-        if DEBUG > 0:
-            log_mem_size(_scores, "_scores (expand 2)")
-            # log_mem_size(mask, "mask (expand 2)")
-
-        # compute the final score estimate for each document and return
-        # mask = mask.prod(dim=1)
-        rich.print(f"> scores: {_scores[0]}")
-        _scores = _scores.sum(dim=1)
-        n_els = _scores.shape[-1]
-        score_estimate = 1 / n_els * _scores.sum(dim=-1)
-
-        if torch.isnan(score_estimate).any():
-            path = "nan_score_estimate.npy"
-            np.save(path, score_estimate.cpu().numpy())
-            rich.print(f">> {score_estimate}")
-            raise ValueError(f"NaN detected, n={torch.isnan(score_estimate).long().sum()}")
-
-        if DEBUG > 5:
-            k = 0
-            scores, *_ = batch_cartesian_product([scores])
-            scores = scores.sum(1)
-            diff = scores - score_estimate
-            for l_ in range(scores.shape[-1]):
-                rich.print(
-                    f"\t- l={l_}, diff={diff[k, l_]}, score={scores[k, l_]}, "
-                    f"estimate={score_estimate[k, l_]}, n_els={n_els[k, l_]}"
-                )
-
-        if DEBUG > 50:
-            import seaborn as sns
-            import matplotlib.pyplot as plt
-
-            sns.set()
-            colors = sns.color_palette()
-            sns.distplot(scores[k].detach().cpu().numpy(), color=colors[0], label="score")
-            sns.distplot(diff[k].detach().cpu().numpy(), color=colors[1], label="controlled")
-            plt.axvline(x=scores[k].mean(), color=colors[0])
-            plt.axvline(x=diff[k].mean(), color=colors[1])
-            plt.legend()
-            plt.show()
-
-        return score_estimate
 
 
 def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):

@@ -260,6 +260,7 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
+    @torch.no_grad()
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
@@ -267,6 +268,8 @@ class PrioritySampler(Sampler):
 
         logits = batch[self.retrieval_score_key]
         logits = logits / temperature
+        logits = logits - logits.max(dim=-1, keepdim=True).values
+        batch[self.retrieval_score_key] = logits
 
         # sample
         z, log_pz = self.sample(logits, total, largest=largest)
@@ -292,16 +295,20 @@ class PrioritySampler(Sampler):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: sampled index and log probs
         """
+
         log_pz = logits.log_softmax(dim=-1)
         if largest:
             u = 0.5 * torch.ones_like(log_pz)
         else:
             u = torch.rand_like(log_pz)
-        log_u = u.clamp(min=1e-20).log()
+        log_u = u.log().clamp(min=-1e20)
         keys = log_pz - log_u
         z = keys.argsort(dim=-1, descending=True)[..., : m + 1]
-        z_tau = z[..., -1:]
-        log_tau = keys.gather(-1, index=z_tau)[..., :1]
+        if m < logits.shape[-1]:
+            z_tau = z[..., -1:]
+            log_tau = keys.gather(dim=-1, index=z_tau)[..., :1]
+        else:
+            log_tau = -float("inf") + torch.zeros_like(log_pz)
         z = z[..., :m]
         log_pz = log_pz.gather(dim=-1, index=z)
         log_pz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))

@@ -1,5 +1,5 @@
 import unittest
-from copy import deepcopy
+from copy import deepcopy, copy
 from functools import partial
 
 import numpy as np
@@ -11,48 +11,49 @@ from torch.optim import Adam
 
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, ConcatTextFields
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
+from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, \
+    ConcatTextFields, PrioritySampler
+from fz_openqa.datamodules.pipes.control.condition import In, HasPrefix
+from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
 from fz_openqa.datamodules.utils.transformations import add_spec_token
-from fz_openqa.modeling.heads import ClsHead, ColbertHead
+from fz_openqa.modeling.heads import ColbertHead, ClsHead
 from fz_openqa.modeling.modules import OptionRetriever
-from fz_openqa.modeling.modules.utils.gradients import GradExpression
-from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.modeling.modules.utils.gradients import GradExpression, InBatchGradients
+from fz_openqa.utils.pretty import get_separator
 from tests.modules.base import TestModel
 
 
 class TestOptionRetriever(TestModel):
     """Testing OptionRetriever. Tests rely on dummy data."""
-
     # Define dummy questions
-    questions = ["Where is Paris?", "What is a Banana?"]
+    # _bert_id = "nboost/pt-bert-base-uncased-msmarco"
+    questions = ["What color is shrubbery?", "What size is a banana?"]
 
     # Define documents, including one for each question [#0, #4]
     documents = [
         [
-            ["Paris is in France.",
-             "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-             "It contains algorithms that search in sets of vectors of any size, "
-             "up to ones that possibly do not fit in RAM.",
+            ["a shrubbery is purple.",
+             "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
              "It also contains supporting code for evaluation and parameter tuning.",
              "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+             "random gibberish",
+             "hello world"
              ],
             [
-                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-                "It contains algorithms that search in sets of vectors of any size, "
-                "up to ones that possibly do not fit in RAM.",
-                "Rockets are use to fly to space",
+                "Faiss is a library for efficient similarity search and clustering of dense vectors.",
+                "a shrubbery is not red.",
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+                "random gibberish",
+                "hello world"
             ],
             [
-                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-                "It contains algorithms that search in sets of vectors of any size, "
-                "up to ones that possibly do not fit in RAM.",
+                "Faiss is a library for efficient similarity search and clustering of dense vectors.",
                 "It also contains supporting code for evaluation and parameter tuning.",
-                "Bike is the vehicle of the future",
+                "a shrubbery is not blue.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+                "random gibberish",
+                "hello world"
             ],
         ],
         [
@@ -62,37 +63,40 @@ class TestOptionRetriever(TestModel):
                 "that possibly do not fit in RAM.",
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
-                "Truck can carry tons of merchandises.",
+                "a banana is not small sized",
+                "random gibberish",
+                "hello world"
             ],
             [
-                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-                "It contains algorithms that search in sets of vectors of any size, up to ones "
-                "that possibly do not fit in RAM.",
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
                 "It also contains supporting code for evaluation and parameter tuning.",
-                "A banana is a fruit",
-                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."
+                "A banana is medium sized.",
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+                "random gibberish",
+                "hello world"
             ],
             [
-                "Faiss is a library for efficient similarity search and clustering of dense vectors. "
-                "It contains algorithms that search in sets of vectors of any size, up to ones "
-                "that possibly do not fit in RAM.",
-                "Aircraft can fly across oceans.",
+                "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
+                "A banana is not large sized.",
                 "It also contains supporting code for evaluation and parameter tuning.",
-                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3)."
+                "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
+                "random gibberish",
+                "hello world"
             ]
         ]
     ]
-    match_score = torch.tensor([[[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]],
-                                [[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0]]])
+    match_score = torch.tensor([[[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0]],
+                                [[0, 0, 0, 1, 0 ,0], [0, 0, 1, 0, 0, 0], [0, 1, 0, 0, 0, 0]]])
     doc_ids = torch.arange(0, match_score.numel(), 1).view(match_score.shape)
 
     # dummy answers
-    answers = [["France", "Rocket", "Bike"], ["Truck", "Fruit", "Aircraft"]]
+    answers = [["purple", "red", "blue"],
+               ["small", "medium", "large"]]
     answer_targets = torch.tensor([0, 1])
 
     def setUp(self) -> None:
         super(TestOptionRetriever, self).setUp()
-        head = ColbertHead(bert=self.bert, output_size=32)
+        head = ClsHead(bert=self.bert, output_size=None)
         self.model = OptionRetriever(bert=self.bert,
                                      tokenizer=self.tokenizer,
                                      head=head,
@@ -201,25 +205,43 @@ class TestOptionRetriever(TestModel):
     def test_overfit(self):
         """Add noise to the weights of the model and optimize for a few steps."""
         VERBOSE = 1
-        seed_everything(1)
+        # seed_everything(1)
         if VERBOSE:
             np.set_printoptions(precision=3, suppress=True)
 
         # gather data
-        batch = self.batch
-        doc_targets = batch['document.match_score']
+        ref_batch = self.batch
+        doc_targets = ref_batch['document.match_score']
+        sampler = Nested(PrioritySampler(total=3, update=True), level=2,
+                         input_filter=HasPrefix("document."), update=True)
 
         # take a copy of the model, and add noise to the weights
         model = deepcopy(self.model)
+        model.eval()
         with torch.no_grad():
             for param in model.parameters():
-                param.add_(torch.randn(param.size()) * 0.3)
+                param.add_(torch.randn(param.size()) * 0)
+
+
+        # compute the retrieval_score using `InBatchGradients
+        with torch.no_grad():
+            _estimator = model.estimator
+            model.estimator = InBatchGradients()
+            output = model.evaluate(ref_batch)
+            model.estimator = _estimator
+            doc_logits = output['_doc_logits_'].detach()
+            # doc_logits.zero_()
+            doc_logits /= 100
+            # doc_logits = doc_logits + torch.randn_like(doc_logits)
+            ref_batch['document.retrieval_score'] = doc_logits
+            rich.print(f"retrieval_probs: {doc_logits.softmax(dim=-1).numpy()}")
 
         # optimize the model
-        model.train()
-        optimizer = Adam(model.parameters(), lr=1e-4)
-        n_steps = 200
+        # model.train()
+        optimizer = Adam(model.parameters(), lr=1e-5)
+        n_steps = 100
         for i in range(n_steps):
+            batch = sampler(deepcopy(ref_batch))
             optimizer.zero_grad()
             output = model.evaluate(batch)
             loss = output['loss'].mean()
@@ -227,16 +249,24 @@ class TestOptionRetriever(TestModel):
             optimizer.step()
 
             if VERBOSE and i % 10 == 0:
-                probs = output['_reader_logits_'].detach().exp().numpy()
+                probs = output['_reader_logits_'].exp().detach().numpy()
+                doc_probs = output['_doc_logits_'].detach()
+                # doc_dist = (doc_probs - doc_targets).pow(2)
                 rich.print(f"{i} - loss={loss:.3f},"
                            f" probs[0]={probs[0]}, "
                            f"probs[1]={probs[1]}")
-                doc_probs = output['_doc_logits_'].detach().exp()
-                # doc_dist = (doc_probs - doc_targets).pow(2)
+
+
                 if VERBOSE > 5:
                     rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
+        batch = deepcopy(ref_batch)
+        log_pz = doc_logits.zero_()
+        log_pz.log_softmax(dim=-1)
+        retrieval_log_Z = log_pz.logsumexp(dim=-1, keepdim=True).expand_as(log_pz)
+        batch[f"document.retrieval_log_prob"] = log_pz
+        batch[f"document.retrieval_log_Z"] = retrieval_log_Z
         targets = batch['answer.target']
         output = model.evaluate(batch)
         probs = output['_reader_logits_'].detach().exp()
@@ -248,7 +278,10 @@ class TestOptionRetriever(TestModel):
             rich.print(f">>> probs: {probs}")
             rich.print(f">>> probs.target: {target_probs}")
 
-            doc_score = output['_doc_logits_'].detach()
+            doc_score = output['_doc_logits_'].softmax(-1).detach()
+            print(get_separator())
             rich.print(f"doc logits: \n{doc_score.numpy()}")
+            print(get_separator())
+            rich.print(f"doc targets: \n{doc_targets.numpy()}")
 
-        self.assertTrue((target_probs > 0.5).all())
+        self.assertTrue((probs.argmax(-1) == targets).all())
