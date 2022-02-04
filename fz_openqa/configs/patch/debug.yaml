@@ -2,8 +2,8 @@
 
 defaults:
   - override /model/bert: mini
-  - override /model/head: dense
-  - override /datamodule/index_builder: ${model/head}
+  - override model/module/head: dpr
+  - override /datamodule/index_builder: ${model/model/head}
 
 
 trainer:

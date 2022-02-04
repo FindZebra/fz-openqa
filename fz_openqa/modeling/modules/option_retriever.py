@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import string
 import warnings
 from enum import Enum
@@ -9,24 +8,25 @@ from typing import Dict
 from typing import Optional
 
 import einops
-import numpy as np
 import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
+from omegaconf import DictConfig
 from torch import Tensor
 
+from ...utils import maybe_instantiate
 from ...utils.pretty import pprint_batch
-from .metrics import SafeMetricCollection
-from .metrics import SplitMetrics
-from .utils.gradients import GradExpression
-from .utils.gradients import InBatchGradients
-from .utils.gradients import ReinforceGradients
-from .utils.gradients import supervised_loss
-from .utils.gradients import VariationalGradients
+from ..gradients import Gradients
+from ..gradients import InBatchGradients
+from ..gradients import ReinforceGradients
+from ..gradients import VariationalGradients
+from ..heads.base import Head
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.modules.base import Module
+from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
+from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -74,149 +74,36 @@ class OptionRetriever(Module):
     def __init__(
         self,
         *args,
+        reader_head: Head | DictConfig,
+        retriever_head: Head | DictConfig,
         alpha: float = 0,
+        resample_k: int = None,
         max_batch_size: Optional[int] = None,
-        eval_topk: Optional[int] = 20,
-        resample_k: Optional[int] = None,
-        grad_expr: GradExpression = GradExpression.IN_BATCH,
-        head_map: None = None,
-        share_heads: bool = True,
+        gradients: Gradients | DictConfig = InBatchGradients(),
         temperature: float = 1.0,
         **kwargs,
     ):
-        assert head_map is None, "`head_map` cannot be set manually for this model."
-        if share_heads:
-            head_map = {
-                "question_reader": "reader",
-                "document_reader": "reader",
-                "question_retriever": "retriever",
-                "document_retriever": "retriever",
-            }
 
-        super().__init__(*args, head_map=head_map, **kwargs)
+        super().__init__(*args, **kwargs)
 
+        # register the heads
+        self.reader_head = maybe_instantiate(reader_head)
+        self.retriever_head = maybe_instantiate(retriever_head)
+
+        # parameters
         self.resample_k = resample_k
         self.max_batch_size = max_batch_size
-        head = next(iter(self.heads.values()))
-        self.similarity = Similarity(head.id)
         self.alpha = alpha
         self.temperature = temperature
 
         # init the estimator
-        grad_expr = GradExpression(grad_expr)
-        estimator_cls = {
-            GradExpression.IN_BATCH: InBatchGradients,
-            GradExpression.VARIATIONAL: VariationalGradients,
-            GradExpression.REINFORCE: ReinforceGradients,
-        }[grad_expr]
-        self.estimator = estimator_cls(eval_topk=eval_topk)
-
-        # init the QMASK gate parameter
-        self.qmask_gate = torch.nn.Parameter(torch.tensor(0.0))
+        self.estimator = maybe_instantiate(gradients)
 
         # punctuation masking
         self.skiplist = [
             self.tokenizer.encode(symbol, add_special_tokens=False)[0]
             for symbol in string.punctuation
         ]
-
-        # reader attention head
-        # hdim = 256
-        # bert_output_size = self.bert.config.hidden_size
-        # self.reader_num_attention_heads = 8
-        # self.reader_kv = torch.nn.Linear(bert_output_size, 2 * hdim)
-        # self.reader_q = torch.nn.Linear(bert_output_size, hdim)
-        # self.reader_residual = torch.nn.Linear(bert_output_size, hdim)
-        # self.reader_attention_dropout = torch.nn.Dropout(
-        #     self.bert.config.attention_probs_dropout_prob
-        # )
-        # self.reader_hidden_dropout = torch.nn.Dropout(self.bert.config.hidden_dropout_prob)
-        # self.reader_norm = torch.nn.LayerNorm(hdim)
-        # self.reader_projection = torch.nn.Linear(hdim, 3 * hdim)
-        #
-        # # init
-        # self.reader_kv.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        # self.reader_q.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        # self.reader_residual.weight.data.normal_(mean=0.0, std=self.bert.config.initializer_range)
-        # self.reader_projection.weight.data.normal_(mean=0.0,
-        # std=self.bert.config.initializer_range)
-        # self.reader_kv.bias.data.zero_()
-        # self.reader_q.bias.data.zero_()
-        # self.reader_residual.bias.data.zero_()
-        # self.reader_projection.bias.data.zero_()
-        # self.reader_norm.bias.data.zero_()
-        # self.reader_norm.weight.data.fill_(1.0)
-
-    def _compute_reader_scores(
-        self,
-        *,
-        hd: Tensor,
-        hq: Tensor,
-        mask: Optional[Tensor] = None,
-    ):
-        # pprint_batch({"hd": hd, "hq": hq, "mask": mask}, "Soft reader scores")
-
-        bs, n_opts, n_docs, doc_len, hdim = hd.shape
-        bs, n_opts, q_len, hdim = hq.shape
-
-        # compute the features for the attention layer
-        q = self.reader_q(hq)
-        q = einops.rearrange(
-            q, "bs opts l (heads h) -> bs opts heads l h", heads=self.reader_num_attention_heads
-        )
-        kv = self.reader_kv(hd)
-        kv = einops.rearrange(
-            kv,
-            "bs opts docs l (heads h) -> bs opts docs heads l h",
-            heads=self.reader_num_attention_heads,
-        )
-        k, v = kv.chunk(2, dim=-1)
-
-        # compute the cross-attention weights
-        weights = torch.einsum("bohux, bodhvx -> bodhuv", q, k)
-        weights = weights / math.sqrt(weights.shape[-1])
-        weights = weights.softmax(dim=-1)
-        weights = self.reader_attention_dropout(weights)
-
-        # cross-attention out
-        h_qd = torch.einsum("bodhuv, bodhvx -> bodhux", weights, v)
-        h_qd = einops.rearrange(
-            h_qd,
-            "bs opts docs heads l h -> bs opts docs l (heads h)",
-            heads=self.reader_num_attention_heads,
-        )
-
-        # apply dropout + layer norm + residual
-        h_qd = self.reader_hidden_dropout(h_qd)
-        skip = self.reader_residual(hq).unsqueeze(2)
-        h_qd = self.reader_norm(h_qd + skip)
-
-        # pprint_batch({"h_qd": h_qd}, "Soft reader scores : 2")
-
-        # final self-attention layer
-        qkv = self.reader_projection(h_qd)
-        qkv = einops.rearrange(
-            qkv,
-            "bs opts docs l (heads h) -> bs opts docs heads l h",
-            heads=self.reader_num_attention_heads,
-        )
-        q, k, v = qkv.chunk(3, dim=-1)
-        q = q[..., 0, :]  # select the CLS token of the query
-
-        # compute the self-attention weights
-        weights = torch.einsum("bodhx, bodhvx -> bodhv", q, k)
-        weights = weights / math.sqrt(weights.shape[-1])
-        if mask is not None:
-            mask_ = mask.bool()
-            mask_ = mask_.view(*mask_.shape[:2], 1, 1, mask_.shape[-1])
-            weights = weights.masked_fill(~mask_, -float("inf"))
-        weights = weights.softmax(dim=-1)
-        weights = self.reader_attention_dropout(weights)
-
-        # compute the final score of shape [bs, n_opts, n_docs]
-        score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
-
-        return score
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -241,10 +128,10 @@ class OptionRetriever(Module):
         output = {}
 
         if "document.input_ids" in batch:
-            output.update(self._forward_field(batch, "document", **kwargs))
+            output["_hd_"] = self._forward_field(batch, "document", **kwargs)
 
         if "question.input_ids" in batch:
-            output.update(self._forward_field(batch, "question", **kwargs))
+            output["_hq_"] = self._forward_field(batch, "question", **kwargs)
 
         return output
 
@@ -255,7 +142,7 @@ class OptionRetriever(Module):
         silent: bool = True,
         max_batch_size: Optional[int] = None,
         **kwargs,
-    ) -> Batch:
+    ) -> Tensor:
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
 
@@ -271,47 +158,33 @@ class OptionRetriever(Module):
             keys=[f"{field}.input_ids", f"{field}.attention_mask"],
         )
 
-        # compute question output mask
-        if field == "question":
-            # inputs_ids = flat_batch["question.input_ids"]
-            mask = torch.ones_like(flat_batch["question.attention_mask"].float())
-            mask[mask == self._pad_token_id] = 0
-            # qmask_id = self.spec_tokens[QUERY_MASK]
-            # mask = torch.where(inputs_ids == qmask_id, self.qmask_gate, mask)
-        elif field == "document":
-            inputs_ids = flat_batch["document.input_ids"]
-            mask = torch.ones_like(flat_batch["document.attention_mask"].float())
-            mask[mask == self._pad_token_id] = 0
-            for w in self.skiplist:
-                mask[inputs_ids == w] = 0
-        else:
-            mask = None
+        # compute question output mask : todo
+        # if field == "question":
+        #     # inputs_ids = flat_batch["question.input_ids"]
+        #     mask = torch.ones_like(flat_batch["question.attention_mask"].float())
+        #     mask[mask == self._pad_token_id] = 0
+        #     # qmask_id = self.spec_tokens[QUERY_MASK]
+        #     # mask = torch.where(inputs_ids == qmask_id, self.qmask_gate, mask)
+        # elif field == "document":
+        #     inputs_ids = flat_batch["document.input_ids"]
+        #     mask = torch.ones_like(flat_batch["document.attention_mask"].float())
+        #     mask[mask == self._pad_token_id] = 0
+        #     for w in self.skiplist:
+        #         mask[inputs_ids == w] = 0
+        # else:
+        #     mask = None
 
         # process the document with the backbone
-        h_heads = self._backbone(
+        h = self._backbone(
             flat_batch,
             prefix=f"{field}",
-            heads=[f"{field}_reader", f"{field}_retriever"],
             max_batch_size=max_batch_size,
-            mask=mask,
             **kwargs,
         )
-        if "last_hidden_state" in h_heads.keys():
-            h_heads[f"{field}_last_hidden_state"] = h_heads.pop("last_hidden_state")
-        pprint_batch(h_heads, f"h_heads {field}", silent=silent)
 
         # reshape and return
-        output = {}
-        for k, v in h_heads.items():
-            _, *tag = k.split("_")  # reader / retriever
-            tag = "_".join(tag)
-            v = v.view(*original_shape[:-1], *v.shape[1:])
-            name = {"document": "hd", "question": "hq"}[field]
-            output[f"_{name}_{tag}_"] = v
-
-        pprint_batch(output, f"output {field}", silent=silent)
-
-        return output
+        h = h.view(*original_shape[:-1], *h.shape[1:])
+        return h
 
     def _step(self, batch: Batch, silent=True, **kwargs: Any) -> Batch:
         """
@@ -324,7 +197,6 @@ class OptionRetriever(Module):
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
         output = {}
         step_output = {}
-        is_supervised_loss_computed = False
         # `max_batch_size` is used to limit the number of samples in the batch, it is
         # only used during eval, except when resampling..
         max_batch_size_eval = -1 if self.training else self.max_batch_size
@@ -362,17 +234,9 @@ class OptionRetriever(Module):
 
             # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
-                retriever_score = self._compute_score(
-                    hd=d_out["_hd_retriever_"], hq=output["_hq_retriever_"]
+                retriever_score = self.retriever_head(
+                    hd=d_out["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
                 )
-
-                # log the retriever accuracy
-                if "document.match_score" in d_batch.keys():
-                    supervised_loss_out = supervised_loss(
-                        retriever_score, d_batch["document.match_score"]
-                    )
-                    is_supervised_loss_computed = True
-                    step_output.update(supervised_loss_out)
 
                 # sample k documents
                 original_retrieval_score = d_batch.get("document.retrieval_score", None)
@@ -402,22 +266,11 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        keys = [
-            "_hq_reader_",
-            "_hd_reader_",
-            "_hq_retriever_",
-            "_hd_retriever_",
-        ]
-        hq_reader, hd_reader, hq_retriever, hd_retriever = (output[k] for k in keys)
-        # compute the score for each pair `f([q_j; a_j], d_jk)`
-        # reader_score = self._compute_reader_scores(hd=output["_hd_last_hidden_state_"],
-        #                                            hq=output["_hq_last_hidden_state_"],
-        #                                            mask=q_batch["question.attention_mask"])
-        reader_score = self._compute_score(
-            hd=hd_reader, hq=hq_reader, mask=q_batch["question.attention_mask"]
+        reader_score = self.reader_head(
+            hd=output["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
         )
-        retriever_score = self._compute_score(
-            hd=hd_retriever, hq=hq_retriever, mask=q_batch["question.attention_mask"]
+        retriever_score = self.retriever_head(
+            hd=output["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
         )
 
         # retriever diagnostics
@@ -439,20 +292,6 @@ class OptionRetriever(Module):
                 retrieval_log_Z=d_batch.get("document.retrieval_log_Z", None),
             )
         )
-
-        # auxiliary loss
-        if self.alpha > 0 or not is_supervised_loss_computed:
-            if "document.match_score" in d_batch.keys():
-                supervised_loss_out = supervised_loss(
-                    retriever_score, d_batch["document.match_score"]
-                )
-                supervised_loss_ = supervised_loss_out.get("retriever/loss", 0)
-                if not is_supervised_loss_computed:
-                    step_output.update(supervised_loss_out)
-                if self.alpha > 0:
-                    warnings.warn(f"Using alpha={self.alpha}")
-                    step_output["loss"] += self.alpha * supervised_loss_
-        step_output["retriever/alpha"] = self.alpha
 
         return step_output
 
@@ -550,44 +389,6 @@ class OptionRetriever(Module):
             return x
         else:
             return x
-
-    def _compute_score(
-        self,
-        *,
-        hd: Tensor,
-        hq: Tensor,
-        doc_ids: Optional[Tensor] = None,
-        across_batch: bool = False,
-        mask: Optional[Tensor] = None,
-    ) -> Tensor:
-        """compute the score for each option and document $f([q;a], d)$ : [bs, n_options, n_docs]"""
-        if not across_batch:
-            if self.similarity == Similarity.DENSE:
-                return torch.einsum("boh, bodh -> bod", hq, hd)
-            elif self.similarity == Similarity.COLBERT:
-                scores = torch.einsum("bouh, bodvh -> boduv", hq, hd)
-                max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
-
-            else:
-                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
-        else:
-            if doc_ids is None:
-                raise ValueError("doc_ids is required for non-element-wise computation")
-
-            # get the unique list of documents vectors
-            hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
-            doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
-            udoc_ids, uids = torch.unique(doc_ids, return_inverse=True)
-            hd = hd[uids]
-            if self.similarity == Similarity.DENSE:
-                return torch.einsum("boh, mh -> bom", hq, hd)
-            elif self.similarity == Similarity.COLBERT:
-                scores = torch.einsum("bouh, mvh -> bomuv", hq, hd)
-                max_scores, _ = scores.max(-1)
-                return max_scores.sum(-1)
-            else:
-                raise ValueError(f"Unknown similarity: {self.similarity}, Similarity={Similarity}")
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """

@@ -1,0 +1,2 @@
+bert_config: ${model.bert.config}
+output_size: ???

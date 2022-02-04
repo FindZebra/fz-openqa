@@ -1,4 +1,3 @@
 defaults:
   - base
-  - head: dense
   - override module: reader_multiple_choice

@@ -56,7 +56,7 @@ runner:
         model.lr: 0.00001
         model.weight_decay: 0.001
         model.bert.pretrained_model_name_or_path: dmis-lab/biobert-base-cased-v1.1
-        model.bert.hidden_dropout_prob: 0
+        model.bert.config.hidden_dropout_prob: 0
         model.bert.attention_probs_dropout_prob: 0.3
         seed: 14
         datamodule.train_sampler.n_neg: 0

@@ -36,8 +36,9 @@ model:
   weight_decay: 1e-4
   dropout: 0
   bert:
-    hidden_dropout_prob: 0
-    attention_probs_dropout_prob: 0.3
+    config:
+      hidden_dropout_prob: 0
+      attention_probs_dropout_prob: 0.3
 
 datamodule:
   train_batch_size: 8

@@ -1,65 +1,50 @@
 from typing import Optional
 
-import einops
 import torch.nn.functional as F
-from torch import nn
+from torch import einsum
 from torch import Tensor
-from transformers import BertPreTrainedModel
 
-from fz_openqa.modeling.heads.base import Head
+from fz_openqa.modeling.heads.dpr import DprHead
 
 
-class ColbertHead(Head):
-    id: str = "colbert"
+class ColbertHead(DprHead):
+    """Score question and document representations."""
 
-    def __init__(
+    def __init__(self, *, use_mask: bool = True, **kwargs):
+        super().__init__(**kwargs)
+        self.use_mask = use_mask
+
+    def score(
         self,
         *,
-        bert: BertPreTrainedModel,
-        output_size: Optional[int],
-        kernel_size: Optional[int] = None,
-        downscaling: int = 1,
-        normalize: bool = False,
-        use_mask: bool = True,
-        **kwargs
-    ):
-        super(ColbertHead, self).__init__(bert=bert, output_size=output_size, **kwargs)
-
-        self.normalize = normalize
-        self.use_mask = use_mask
-        if output_size is None and kernel_size is None and downscaling == 1:
-            self.head = None
-        elif kernel_size is None:
-            assert downscaling == 1
-            self.head = nn.Linear(bert.config.hidden_size, output_size, bias=self.bias)
-        else:
-            self.head = nn.Conv1d(
-                bert.config.hidden_size,
-                output_size,
-                kernel_size=(kernel_size,),
-                stride=(downscaling,),
-                padding=(kernel_size // 2,),
-                bias=self.bias,
-            )
-
-    def forward(
-        self, last_hidden_state: Tensor, *, mask: Optional[Tensor] = None, **kwargs
+        hq: Tensor,
+        hd: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        mask: Optional[Tensor] = None
     ) -> Tensor:
-        context_repr = last_hidden_state
+        if not self.across_batch:
+            scores = einsum("bouh, bodvh -> boduv", hq, hd)
+            max_scores, _ = scores.max(-1)
+            return max_scores.sum(-1)
+        else:
+            hd = self._flatten_documents(hd, doc_ids)
+            scores = einsum("bouh, mvh -> bomuv", hq, hd)
+            max_scores, _ = scores.max(-1)
+            return max_scores.sum(-1)
 
-        if self.head is not None:
-            if isinstance(self.head, nn.Conv1d):
-                context_repr = einops.rearrange(context_repr, "... l h -> ... h l")
-                context_repr = self.head(context_repr)
-                context_repr = einops.rearrange(context_repr, "... h l -> ... l h")
-            else:
-                context_repr = self.head(context_repr)
+    def preprocess(
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+    ) -> Tensor:
+
+        if self.output_size is not None:
+            head = {"document": self.d_head, "question": self.q_head}[head]
+            last_hidden_state = head(last_hidden_state)
 
         if self.normalize:
-            context_repr = F.normalize(context_repr, p=2, dim=-1)
+            last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
+            # cls_repr /= float(cls_repr.shape[-1])**0.5
 
-        if mask is not None and self.use_mask:
-            mask = mask[:, : context_repr.shape[1]].unsqueeze(-1)
-            context_repr = context_repr * mask
+        if self.use_mask and mask is not None:
+            last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
 
-        return context_repr
+        return last_hidden_state

@@ -1,6 +1,0 @@
-defaults:
-  - base
-
-_target_: fz_openqa.modeling.heads.ClsHead
-output_size: 512
-_id: dense

@@ -3,6 +3,7 @@ defaults:
 
 _target_: fz_openqa.modeling.heads.ColbertHead
 use_mask: true
-output_size: 32 # todo: make this smaller
-downscaling: null
+output_size: 32
+bias: true
+normalize: true
 _id: colbert

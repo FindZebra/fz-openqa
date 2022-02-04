@@ -1,14 +1,9 @@
 import collections
-import json
-import re
 import warnings
 from abc import ABC
 from abc import abstractmethod
-from copy import deepcopy
 from typing import Any
 from typing import Dict
-from typing import Iterable
-from typing import Iterator
 from typing import List
 from typing import Optional
 from typing import Union
@@ -17,6 +12,7 @@ import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
+from hydra._internal.instantiate._instantiate2 import _resolve_target
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
@@ -24,10 +20,8 @@ from torchmetrics.classification import Accuracy
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.heads import ClsHead
-from fz_openqa.modeling.heads.base import Head
-from fz_openqa.modeling.modules.metrics import SafeMetricCollection
-from fz_openqa.modeling.modules.metrics import SplitMetrics
+from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
+from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
@@ -35,59 +29,10 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
-from fz_openqa.utils.pretty import pprint_batch
-
-
-def init_default_heads():
-    return DictConfig(
-        {
-            "default": {
-                "_target_": ClsHead,
-                "input_size": None,
-                "output_size": 64,
-            }
-        }
-    )
 
 
 def is_feature_name(x):
     return str(x).startswith("_") and str(x).endswith("_")
-
-
-class HeadGroup(nn.ModuleDict):
-    """A class representing a dictionary of heads.
-    Heads parameters can be shared via the argument `mapping`."""
-
-    def __init__(self, head: Head, *, keys: List[str], mapping: Optional[Dict[str, str]] = None):
-        if mapping is None:
-            mapping = {k: k for k in keys}
-        super().__init__({k: deepcopy(head) for k in set(mapping.values())})
-        self._head_mapping = mapping
-
-    def __getitem__(self, key) -> Head:
-        key = self._head_mapping[key]
-        return super().__getitem__(key)  # type: ignore
-
-    def values(self) -> Iterable[Head]:
-        return (self.__getitem__(k) for k in self.keys())
-
-    def keys(self) -> Iterable[str]:
-        return self._head_mapping.keys()
-
-    def __len__(self) -> int:
-        return len(list(self.keys()))
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.keys())
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._modules
-
-    def __repr__(self):
-        u = super().__repr__()
-        u = u[:-1]
-        u += f"\n  mapping={json.dumps(self._head_mapping, indent=4)}\n)"
-        return u
 
 
 class Module(nn.Module, ABC):
@@ -136,8 +81,6 @@ class Module(nn.Module, ABC):
         *,
         bert: Union[DictConfig, BertPreTrainedModel],
         tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
-        head: Union[DictConfig, Head] = None,
-        head_map: Optional[Dict[str, str]] = None,
         prefix: str = "",
         **kwargs,
     ):
@@ -145,26 +88,15 @@ class Module(nn.Module, ABC):
         super().__init__()
         self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
         self.bert: BertPreTrainedModel = self._instantiate_bert(bert=bert, tokenizer=self.tokenizer)
-
-        # initialize the heads
-        if head is not None:
-            head = maybe_instantiate(head, bert=self.bert)
-            self.heads = HeadGroup(head, keys=self._required_heads, mapping=head_map)
         self._init_metrics(prefix=prefix)
 
     def _backbone(
         self,
         batch: Batch,
         prefix: Optional[str] = None,
-        heads: Optional[List[str]] = None,
-        head: Optional[str] = None,
         max_batch_size: Optional[int] = None,
-        mask: Optional[Tensor] = None,
         **kwargs,
     ) -> Union[Tensor, Dict[str, Tensor]]:
-
-        if head is not None:
-            heads = [head]
 
         # select the keys with prefix
         if prefix is not None:
@@ -180,10 +112,9 @@ class Module(nn.Module, ABC):
         # get input data
         inputs_ids = batch["input_ids"][:, : self.max_length]
         attention_mask = batch["attention_mask"][:, : self.max_length]
-        heads = heads or list(self.heads.keys())
 
         # process data by chunk
-        output = {}
+        output = None
         bs, seq_len, *_ = inputs_ids.shape
         if max_batch_size is None:
             chunk_size = bs
@@ -191,45 +122,26 @@ class Module(nn.Module, ABC):
             chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
 
         for i in range(0, bs, chunk_size):
-            if mask is None:
-                mask_ = None
-            else:
-                mask_ = mask[i : i + chunk_size]
             chunk = self._process_tokens(
                 inputs_ids[i : i + chunk_size],
                 attention_mask[i : i + chunk_size],
-                heads=heads,
-                mask=mask_,
                 **kwargs,
             )
-            for key in chunk.keys():
-                if key not in output.keys():
-                    output[key] = chunk[key]
-                else:
-                    output[key] = torch.cat([output[key], chunk[key]], dim=0)
+            if output is None:
+                output = chunk
+            else:
+                output = torch.cat([output, chunk], dim=0)
 
-        if head is not None:
-            return output[head]
-        else:
-            return output
+        return output
 
     def _process_tokens(
         self,
         input_ids: Tensor,
         attention_mask: Tensor,
-        heads: List[str],
-        mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> Dict[str, Tensor]:
-        # BERT forward pass
+    ) -> Tensor:
         bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        last_hidden_state = bert_output.last_hidden_state
-
-        # process the last hidden state with the heads
-        output = {"last_hidden_state": last_hidden_state}
-        for k in heads:
-            output[k] = self.heads[k](last_hidden_state, mask=mask)
-        return output
+        return bert_output.last_hidden_state
 
     def _instantiate_bert(
         self,
@@ -243,7 +155,18 @@ class Module(nn.Module, ABC):
         self._vocabulary_size = len(tokenizer.get_vocab())
         self._pad_token_id = tokenizer.pad_token_id
 
-        bert: BertPreTrainedModel = maybe_instantiate(bert, **kwargs)
+        # instantiate the bert model using `bert.config`
+        if isinstance(bert, (dict, DictConfig)) and "config" in bert.keys():
+            bert_config = bert.pop("config", {})
+            if len(bert_config) > 0:
+                for key in ["_target_", "pretrained_model_name_or_path"]:
+                    bert_config.pop(key, None)
+                bert_config = maybe_instantiate(bert_config)
+            msg = "BERT parameter overrides must be specified in the config, not in the model."
+            assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
+        else:
+            bert_config = {}
+        bert: BertPreTrainedModel = maybe_instantiate(bert, **bert_config)
 
         # extend BERT embeddings for the added special tokens
         if bert.get_input_embeddings().weight.shape[0] != len(tokenizer):

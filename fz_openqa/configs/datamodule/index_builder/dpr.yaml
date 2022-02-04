@@ -20,4 +20,4 @@ model_output_keys: [_hq_, _hd_]
 persist_cache: false
 cache_dir: ${sys.cache_dir}
 progress_bar: true
-_id: dense
+_id: dpr

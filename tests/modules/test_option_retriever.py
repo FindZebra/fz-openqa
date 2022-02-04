@@ -18,7 +18,8 @@ from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.modeling.heads import ColbertHead, ClsHead
 from fz_openqa.modeling.modules import OptionRetriever
-from fz_openqa.modeling.modules.utils.gradients import GradExpression, InBatchGradients
+from fz_openqa.modeling.gradients.in_batch import InBatchGradients
+from fz_openqa.modeling.gradients.base import GradExpression
 from fz_openqa.utils.pretty import get_separator
 from tests.modules.base import TestModel
 

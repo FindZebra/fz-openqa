@@ -1,4 +1,3 @@
 defaults:
   - base
-  - head: colbert
   - override module: option_retriever

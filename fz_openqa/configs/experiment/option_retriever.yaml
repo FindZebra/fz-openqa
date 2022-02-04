@@ -4,9 +4,10 @@ defaults:
   - base
   - override /model: option_retriever
   - override /model/bert: pubmed
-  - override /model/head: colbert
+  - override /model/module/retriever_head: colbert
+  - override /model/module/reader_head: cross_attention
   - override /datamodule/builder: concat_openqa
-  - override /datamodule/index_builder: ${model/head}
+  - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: none
@@ -43,21 +44,13 @@ model:
   num_warmup_steps: 1_000
   num_training_steps: 50_000
   bert:
-    hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1
+    config:
+      hidden_dropout_prob: 0.1
+      attention_probs_dropout_prob: 0.1
   module:
     resample_k: null
     alpha: 0
     max_batch_size: 200
-    eval_topk: 30
-    grad_expr: reinforce
-    share_heads: false
-  head:
-    downscaling: 1
-    kernel_size: null
-    bias: true
-    use_mask: true
-    output_size: 64
 
 datamodule:
   # how often to map the dataset
@@ -97,8 +90,8 @@ datamodule:
     test: 10
 
   # tag documents as positive or negative
-#  relevance_classifier:
-#    interpretable: false
+  #  relevance_classifier:
+  #    interpretable: false
 
   # document sampler
   sampler:
@@ -125,7 +118,7 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 1.
+    es_temperature: 10.
     model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000
