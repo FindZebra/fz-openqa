@@ -56,7 +56,6 @@ class LogRetrievedDocuments(Analytic):
                 total_repr += get_separator("=")
                 row = {k: v[i] for k, v in batch.items()}
                 repr = builder.format_row(row)
-                repr = str(repr.encode("ascii", "ignore"))
                 total_repr += repr
 
             # log to console

@@ -5,7 +5,7 @@ debug: false
 
 baseline_dtype: null
 use_baseline: false
-w_max: 1e3
+w_max: null
 space: exp
 max_baseline_samples: 5
 

@@ -52,3 +52,8 @@ class Head(nn.Module, ABC):
             Scores of shape [bs, n_opts, n_docs]
         """
         raise NotImplementedError
+
+    def preprocess(
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+    ) -> Tensor:
+        return last_hidden_state

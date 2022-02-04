@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import string
-import warnings
 from enum import Enum
 from typing import Any
 from typing import Dict
 from typing import Optional
 
-import einops
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -19,8 +16,6 @@ from ...utils import maybe_instantiate
 from ...utils.pretty import pprint_batch
 from ..gradients import Gradients
 from ..gradients import InBatchGradients
-from ..gradients import ReinforceGradients
-from ..gradients import VariationalGradients
 from ..heads.base import Head
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
@@ -124,14 +119,38 @@ class OptionRetriever(Module):
         )
         return SplitMetrics(metrics)
 
-    def _forward(self, batch: Batch, **kwargs) -> Batch:
+    def mask(self, batch: Batch, field: str) -> Tensor:
+        """prepare the head mask for the given field."""
+        if field == "question":
+            mask = torch.ones_like(batch["question.attention_mask"].float())
+            mask[mask == self._pad_token_id] = 0
+        elif field == "document":
+            inputs_ids = batch["document.input_ids"]
+            mask = torch.ones_like(batch["document.attention_mask"].float())
+            mask[mask == self._pad_token_id] = 0
+            for w in self.skiplist:
+                mask[inputs_ids == w] = 0
+        else:
+            ValueError(f"Unknown field {field}")
+
+        return mask
+
+    def _forward(self, batch: Batch, predict: bool = True, **kwargs) -> Batch:
         output = {}
 
         if "document.input_ids" in batch:
-            output["_hd_"] = self._forward_field(batch, "document", **kwargs)
+            h = self._forward_field(batch, "document", **kwargs)
+            if predict:
+                mask = self.mask(batch, "document")
+                h = self.retriever_head.preprocess(h, "document", mask=mask)
+            output["_hd_"] = h
 
         if "question.input_ids" in batch:
-            output["_hq_"] = self._forward_field(batch, "question", **kwargs)
+            h = self._forward_field(batch, "question", **kwargs)
+            if predict:
+                mask = self.mask(batch, "question")
+                h = self.retriever_head.preprocess(h, "question", mask=mask)
+            output["_hq_"] = h
 
         return output
 
@@ -158,22 +177,6 @@ class OptionRetriever(Module):
             keys=[f"{field}.input_ids", f"{field}.attention_mask"],
         )
 
-        # compute question output mask : todo
-        # if field == "question":
-        #     # inputs_ids = flat_batch["question.input_ids"]
-        #     mask = torch.ones_like(flat_batch["question.attention_mask"].float())
-        #     mask[mask == self._pad_token_id] = 0
-        #     # qmask_id = self.spec_tokens[QUERY_MASK]
-        #     # mask = torch.where(inputs_ids == qmask_id, self.qmask_gate, mask)
-        # elif field == "document":
-        #     inputs_ids = flat_batch["document.input_ids"]
-        #     mask = torch.ones_like(flat_batch["document.attention_mask"].float())
-        #     mask[mask == self._pad_token_id] = 0
-        #     for w in self.skiplist:
-        #         mask[inputs_ids == w] = 0
-        # else:
-        #     mask = None
-
         # process the document with the backbone
         h = self._backbone(
             flat_batch,
@@ -192,7 +195,7 @@ class OptionRetriever(Module):
         """
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
-
+        kwargs["predict"] = False
         d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
         output = {}
@@ -234,8 +237,12 @@ class OptionRetriever(Module):
 
             # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
+                # todo: resample using priority sampling
                 retriever_score = self.retriever_head(
-                    hd=d_out["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
+                    hd=d_out["_hd_"],
+                    hq=output["_hq_"],
+                    q_mask=self.mask(batch, "question"),
+                    d_mask=self.mask(batch, "document"),
                 )
 
                 # sample k documents
@@ -267,10 +274,16 @@ class OptionRetriever(Module):
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
         reader_score = self.reader_head(
-            hd=output["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
+            hd=output["_hd_"],
+            hq=output["_hq_"],
+            q_mask=self.mask(batch, "question"),
+            d_mask=self.mask(batch, "document"),
         )
         retriever_score = self.retriever_head(
-            hd=output["_hd_"], hq=output["_hq_"], q_mask=q_batch["question.attention_mask"]
+            hd=output["_hd_"],
+            hq=output["_hq_"],
+            q_mask=self.mask(batch, "question"),
+            d_mask=self.mask(batch, "document"),
         )
 
         # retriever diagnostics

@@ -6,5 +6,5 @@ defaults:
   - gradients: reinforce
 
 resample_k: null
-max_tokens: null
+max_batch_size: null
 _id: option_retriever

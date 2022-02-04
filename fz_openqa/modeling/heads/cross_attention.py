@@ -16,7 +16,7 @@ class CrossAttentionHead(Head):
         num_attention_heads: int = 4,
         attention_dropout: float = 0.1,
         hidden_dropout: float = 0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(input_size=input_size, output_size=output_size, **kwargs)
         self.num_attention_heads = num_attention_heads
@@ -29,7 +29,7 @@ class CrossAttentionHead(Head):
         self.projection = torch.nn.Linear(output_size, 3 * output_size)
 
     def forward(
-        self, *, hd: Tensor, hq: Tensor, qmask: Optional[Tensor] = None, **kwargs
+        self, *, hd: Tensor, hq: Tensor, q_mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
 
         # compute the features for the attention layer
@@ -79,8 +79,8 @@ class CrossAttentionHead(Head):
         # compute the self-attention weights
         weights = torch.einsum("bodhx, bodhvx -> bodhv", q, k)
         weights = weights / math.sqrt(weights.shape[-1])
-        if qmask is not None:
-            mask_ = qmask.bool()
+        if q_mask is not None:
+            mask_ = q_mask.bool()
             mask_ = mask_.view(*mask_.shape[:2], 1, 1, mask_.shape[-1])
             weights = weights.masked_fill(~mask_, -float("inf"))
         weights = weights.softmax(dim=-1)
@@ -89,3 +89,8 @@ class CrossAttentionHead(Head):
         # compute the final score of shape [bs, n_opts, n_docs]
         score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
         return score
+
+    def preprocess(
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+    ) -> Tensor:
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocess")

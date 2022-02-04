@@ -119,7 +119,7 @@ datamodule:
   # Index parameters
   index_builder:
     es_temperature: 10.
-    model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
+    model_output_keys: [ _hq_, _hd_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000
     p: 100

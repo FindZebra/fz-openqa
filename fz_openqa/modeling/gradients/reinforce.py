@@ -23,7 +23,7 @@ class ReinforceGradients(Gradients):
         *args,
         baseline_dtype: Optional[torch.dtype] = None,
         use_baseline: bool = False,
-        w_max: Optional[float] = 1e3,
+        w_max: Optional[float] = None,
         space: Space = Space.EXP,
         max_baseline_samples: int = 5,
         **kwargs,
@@ -32,7 +32,7 @@ class ReinforceGradients(Gradients):
         self.space = Space(space)
         self.baseline_dtype = baseline_dtype
         self.use_baseline = use_baseline
-        self.log_w_max = math.log(w_max)
+        self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
 
     def __call__(
