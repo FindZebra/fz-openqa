@@ -454,3 +454,17 @@ class OptionRetriever(Module):
             **self.retriever_metrics.compute(split),
             # **self.total_logp_metrics.compute(split),
         }
+
+    def step_end(
+        self,
+        output: Batch,
+        split: Optional[Split],
+        update_metrics: bool = True,
+        filter_features: bool = True,
+    ) -> Any:
+        if not split == Split.TRAIN:
+            filter_features = False
+
+        return super().step_end(
+            output, split, filter_features=filter_features, update_metrics=update_metrics
+        )

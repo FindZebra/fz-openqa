@@ -4,7 +4,7 @@ eval_topk: null
 debug: false
 
 baseline_dtype: null
-use_baseline: false
+use_baseline: true
 w_max: null
 space: exp
 max_baseline_samples: 5

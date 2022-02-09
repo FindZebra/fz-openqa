@@ -134,7 +134,7 @@ class Model(LightningModule):
             on_step = str(split) == (Split.TRAIN)
             self.log_data(output, prefix=str(split), on_step=on_step, on_epoch=not on_step)
 
-        return output["loss"]
+        return output
 
     def _epoch_end(self, outputs: List[Any], *, split: Split, log_data=True) -> Batch:
         """

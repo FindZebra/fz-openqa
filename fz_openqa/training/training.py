@@ -294,13 +294,21 @@ def train_with_dataset_updates(
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
     max_epochs = trainer.max_epochs
     trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
+    dataset_iter = 0
+    trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
     while trainer.current_epoch < max_epochs:
 
         # update the dataset
         try:
             if index_first_epoch or trainer.current_epoch > 0:
+                dataset_iter += 1
                 update_dataset(
-                    datamodule, model=model, trainer=trainer, keep_in_memory=True, **kwargs
+                    datamodule,
+                    model=model,
+                    trainer=trainer,
+                    keep_in_memory=True,
+                    dataset_iter=dataset_iter,
+                    **kwargs,
                 )
         except Exception:
             log.exception("Dataset update interrupted.")
@@ -364,10 +372,16 @@ def update_dataset(
     model: pl.LightningModule,
     trainer: Trainer,
     keep_in_memory=True,
+    dataset_iter: int = 0,
     **kwargs,
 ):
     log.info("Updating dataset...")
     start_time = time.time()
     datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
     # datamodule.display_samples(n_samples=1)
-    log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
+    elapsed_time = time.time() - start_time
+    log.info(f"Dataset updated in {elapsed_time:.2f}s")
+    trainer.logger.log_metrics(
+        {"dataset_update/step": dataset_iter, "dataset_update/time": elapsed_time},
+        step=trainer.global_step,
+    )

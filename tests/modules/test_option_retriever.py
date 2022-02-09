@@ -16,10 +16,10 @@ from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, App
 from fz_openqa.datamodules.pipes.control.condition import In, HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
 from fz_openqa.datamodules.utils.transformations import add_spec_token
-from fz_openqa.modeling.heads import ColbertHead, ClsHead
+from fz_openqa.modeling.heads import DprHead
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.modeling.gradients.in_batch import InBatchGradients
-from fz_openqa.modeling.gradients.base import GradExpression
+from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.utils.pretty import get_separator
 from tests.modules.base import TestModel
 
@@ -38,7 +38,7 @@ class TestOptionRetriever(TestModel):
              "It also contains supporting code for evaluation and parameter tuning.",
              "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
              "random gibberish",
-             "hello world"
+             "random gibberish",
              ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors.",
@@ -46,7 +46,7 @@ class TestOptionRetriever(TestModel):
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
-                "hello world"
+                "random gibberish",
             ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors.",
@@ -54,7 +54,7 @@ class TestOptionRetriever(TestModel):
                 "a shrubbery is not blue.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
-                "hello world"
+                "random gibberish",
             ],
         ],
         [
@@ -66,7 +66,7 @@ class TestOptionRetriever(TestModel):
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "a banana is not small sized",
                 "random gibberish",
-                "hello world"
+                "random gibberish",
             ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
@@ -74,7 +74,7 @@ class TestOptionRetriever(TestModel):
                 "A banana is medium sized.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
-                "hello world"
+                "random gibberish",
             ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
@@ -82,7 +82,7 @@ class TestOptionRetriever(TestModel):
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
-                "hello world"
+                "random gibberish",
             ]
         ]
     ]
@@ -97,11 +97,13 @@ class TestOptionRetriever(TestModel):
 
     def setUp(self) -> None:
         super(TestOptionRetriever, self).setUp()
-        head = ClsHead(bert=self.bert, output_size=None)
+        head = DprHead(bert_config=self.bert.config,
+                       output_size=None)
         self.model = OptionRetriever(bert=self.bert,
                                      tokenizer=self.tokenizer,
-                                     head=head,
-                                     grad_expr=GradExpression("reinforce"))
+                                     reader_head=head,
+                                     retriever_head=deepcopy(head),
+                                     gradients=ReinforceGradients(use_baseline=True))
         self.model.eval()
 
     def get_preprocessing_pipe(self):

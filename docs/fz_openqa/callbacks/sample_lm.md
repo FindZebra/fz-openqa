@@ -3,19 +3,19 @@
 > Auto-generated documentation for [fz_openqa.callbacks.sample_lm](blob/master/fz_openqa/callbacks/sample_lm.py) module.
 
 - [Fz-openqa](../../README.md#fz-openqa-index) / [Modules](../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../index.md#fz-openqa) / [Callbacks](index.md#callbacks) / Sample Lm
-    - [SampleLanguageModel](#samplelanguagemodel)
-        - [SampleLanguageModel().display](#samplelanguagemodeldisplay)
-        - [SampleLanguageModel().on_epoch_start](#samplelanguagemodelon_epoch_start)
+    - [LogPredictions](#samplelanguagemodel)
+        - [LogPredictions().display](#samplelanguagemodeldisplay)
+        - [LogPredictions().on_epoch_start](#samplelanguagemodelon_epoch_start)
 
-## SampleLanguageModel
+## LogPredictions
 
 [[find in source code]](blob/master/fz_openqa/callbacks/sample_lm.py#L9)
 
 ```python
-class SampleLanguageModel(Callback):
+class LogPredictions(Callback):
 ```
 
-### SampleLanguageModel().display
+### LogPredictions().display
 
 [[find in source code]](blob/master/fz_openqa/callbacks/sample_lm.py#L16)
 
@@ -23,7 +23,7 @@ class SampleLanguageModel(Callback):
 def display(input_ids, tokenizer):
 ```
 
-### SampleLanguageModel().on_epoch_start
+### LogPredictions().on_epoch_start
 
 [[find in source code]](blob/master/fz_openqa/callbacks/sample_lm.py#L10)
 

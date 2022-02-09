@@ -5,10 +5,11 @@ defaults:
   - override /model: option_retriever
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
-  - override /model/module/reader_head: cross_attention
+  - override /model/module/reader_head: colbert
+  - override /model/module/gradients: in_batch # todo!!!!
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: priority
+  - override /datamodule/sampler: priority # TODO!!!!!
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: none
   - override /datamodule/dataset_filter: none
@@ -21,13 +22,14 @@ defaults:
   - override /callbacks:
       - checkpoint
       - lr_monitor
+      - log_predictions
 
 base:
-  seed: null
+  seed: 633830320 # todo!!!!!
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "DPR + reinforce v3 - no baseline + update every 10 epochs"
+  exp_info: "Colbert + in batch + priority + update every 10 epochs"
 
 trainer:
   gpus: 8
@@ -51,6 +53,12 @@ model:
     resample_k: null
     alpha: 0
     max_batch_size: 200
+    retriever_head:
+      use_mask: false
+    reader_head:
+      use_mask: false
+    gradients:
+      use_baseline: false # todo
 
 datamodule:
   # how often to map the dataset
@@ -99,8 +107,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: false
-      test: false # todo:
+      validation: true
+      test: true # todo:
 
   # OpenQA builder parameters
   builder:
@@ -118,7 +126,7 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 10.
+    es_temperature: 1.
     model_output_keys: [ _hq_, _hd_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000

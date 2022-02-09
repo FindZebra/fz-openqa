@@ -36,7 +36,7 @@ class RetrieverDistribution(Analytic):
     output_file_name = "retrieval_distribution.json"
     n_samples: int = 1000
     batch_size: int = 1000
-    percentiles: List[int] = [95]
+    percentiles: List[int] = [10, 50, 90]
     _allow_wandb: bool = True
 
     def process_dataset_split(
@@ -84,15 +84,18 @@ class RetrieverDistribution(Analytic):
         ).all(), f"probabilities don't sum to one: {pmf[..., -1]}"
 
         # prepare the output and the percentiles for the rank of `p(d|q) == x`
-        output = {"entropy": f"{entropy.mean():.3f}", "n_samples": f"{len(scores)}"}
+        min_max_scores = np.min(scores, axis=-1), np.max(scores, axis=-1)
+        output = {
+            "entropy": f"{entropy.mean():.3f}",
+            "n_samples": f"{len(scores)}",
+            "min-max-scores": f"{np.mean(min_max_scores):.3f}",
+        }
         for p in self.percentiles:
             p = p / 100.0
             arg_pmf = np.argmin(np.abs(pmf - p), axis=-1)
             arg_pmf = arg_pmf.astype(np.float32)
             output[f"rank_pmf={p:.2f}"] = {
                 "p50": f"{np.percentile(arg_pmf, 50):.1f}",
-                "p95": f"{np.percentile(arg_pmf, 95):.1f}",
-                "p99": f"{np.percentile(arg_pmf, 95):.1f}",
             }
 
         return output

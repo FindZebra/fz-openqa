@@ -22,7 +22,7 @@ class ReinforceGradients(Gradients):
         self,
         *args,
         baseline_dtype: Optional[torch.dtype] = None,
-        use_baseline: bool = False,
+        use_baseline: bool = True,
         w_max: Optional[float] = None,
         space: Space = Space.EXP,
         max_baseline_samples: int = 5,
