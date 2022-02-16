@@ -51,6 +51,7 @@ from .span_dropout import SpanDropout
 from .text_filtering import SciSpaCyFilter
 from .text_filtering import StopWordsFilter
 from .text_filtering import TextFilter
+from .text_formatter import MedQaTextFormatter
 from .text_formatter import TextFormatter
 from .tokenizer import TokenizerPipe
 from .torch import Forward

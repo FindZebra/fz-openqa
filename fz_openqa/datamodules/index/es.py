@@ -11,6 +11,7 @@ import rich
 from datasets import Dataset
 from omegaconf import OmegaConf
 from rich.status import Status
+from tqdm import tqdm
 
 from ..utils.dataset import keep_only_columns
 from .base import Index
@@ -57,7 +58,7 @@ class ElasticSearchIndex(Index):
             prep_map_kwargs = DEFAULT_MAP_KWARGS
 
         # set indexing parameters
-        self.index_key = f"{self.index_field}.{self.index_output_key}"  # ie. "document.row_idx"
+        self.index_key = f"{self.index_field}.{self.index_output_key}"
         self.prep_map_kwargs = prep_map_kwargs
         self.engine = ElasticSearchEngine(analyze=analyze_es_tokens)
         self.es_body = es_body
@@ -109,19 +110,19 @@ class ElasticSearchIndex(Index):
 
         # build the index
         if is_new_index:
-            with Status("ingesting ES index.."):
-                # todo: to it by batch and add progress bar. This is currently loading
-                #  ALL text into memory
-                try:
+            batch_size = 1_000
+            try:
+                for i in tqdm(range(0, len(dataset), batch_size), desc="Ingesting ES index"):
+                    batch = dataset[i : i + batch_size]
                     _ = self.engine.es_bulk(
                         index_name=self.index_name,
-                        document_idx=dataset[self.index_key],
-                        document_txt=dataset[self.index_text_key],
+                        document_idx=batch[self.index_key],
+                        document_txt=batch[self.index_text_key],
                     )
-                except Exception as ex:
-                    # clean up the index if something went wrong
-                    self.engine.es_remove_index(self.index_name)
-                    raise ex
+            except Exception as ex:
+                # clean up the index if something went wrong
+                self.engine.es_remove_index(self.index_name)
+                raise ex
 
         self.is_indexed = True
 

@@ -40,7 +40,6 @@ class TextFormatter(Pipe):
 
         if self.aggressive_cleaning:
             # quick and dirty fix (trying to solve issue #80), doesn't fix it
-            # todo: do this in a more principled and efficient way
             text = text.replace(r'"', "")
             text = re.compile(r"\\(.)").sub(r"\1", text)
             text = text.strip().replace(r"\n", " ").replace("\n", " ")
@@ -95,3 +94,13 @@ class TextFormatter(Pipe):
             for key in text_key
             if key in batch.keys()
         }
+
+
+class MedQaTextFormatter(TextFormatter):
+    def __init__(self, text_key: Optional[Union[str, List[str]]] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.text_key = text_key
+
+    def clean(self, text: str) -> str:
+        text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
+        return text

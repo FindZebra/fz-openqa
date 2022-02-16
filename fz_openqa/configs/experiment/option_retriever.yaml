@@ -6,7 +6,7 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: in_batch # todo!!!!
+  - override /model/module/gradients: reinforce # todo!!!!
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority # TODO!!!!!
@@ -29,7 +29,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "Colbert + in batch + priority + update every 10 epochs"
+  exp_info: "Colbert + in batch + priority + update every 10 epochs + added gate parameters"
 
 trainer:
   gpus: 8
@@ -41,15 +41,18 @@ trainer:
   val_check_interval: 0.5
 
 model:
-  lr: 1e-5
+  bert_lr: 1e-5
+  lr: 1e-4
+  ema_decay: null
   weight_decay: 1e-3
   num_warmup_steps: 1_000
-  num_training_steps: 50_000
+  num_training_steps: 10_000
   bert:
     config:
       hidden_dropout_prob: 0.1
       attention_probs_dropout_prob: 0.1
   module:
+    use_gate: true # todo
     resample_k: null
     alpha: 0
     max_batch_size: 200
@@ -59,12 +62,13 @@ model:
       use_mask: false
     gradients:
       use_baseline: false # todo
+      expr: C
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10
-    reset_optimizer: false
+    freq: 10 # todo !!!
+    reset_optimizer: true # TODO !!
     index_first_epoch: false
     builder_args:
       relevance_classifier: null
@@ -74,6 +78,7 @@ datamodule:
   eval_batch_size: 32
   num_workers: 8
   pin_memory: true
+  drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
 
   # dataset builder
   use_subset: false
@@ -91,11 +96,8 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 1000 # todo
-  n_documents:
-    train: 10
-    validation: 10
-    test: 10
+  n_retrieved_documents: 1_000 # todo> next exp
+  n_documents: 10
 
   # tag documents as positive or negative
   #  relevance_classifier:
@@ -107,8 +109,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
-      test: true # todo:
+      validation: false # todo
+      test: false # todo
 
   # OpenQA builder parameters
   builder:
@@ -117,7 +119,7 @@ datamodule:
     dataset_builder:
       dset_name: medqa-us
       query_expansion: null
-      n_query_tokens: 1
+      n_query_tokens: 10 # todo!!!
       max_length: 512
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
@@ -126,7 +128,7 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 1.
+    es_temperature: 1. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000
