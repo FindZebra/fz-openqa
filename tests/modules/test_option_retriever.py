@@ -1,13 +1,12 @@
 import unittest
-from copy import deepcopy, copy
+from copy import deepcopy
 from functools import partial
 
 import numpy as np
 import rich
 import torch
-from pytorch_lightning import seed_everything
 from torch import Tensor
-from torch.optim import Adam
+from transformers import AdamW
 
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
@@ -16,10 +15,10 @@ from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, App
 from fz_openqa.datamodules.pipes.control.condition import In, HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
 from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.modeling.gradients import ReinforceGradients
+from fz_openqa.modeling.gradients.in_batch import InBatchGradients
 from fz_openqa.modeling.heads import DprHead
 from fz_openqa.modeling.modules import OptionRetriever
-from fz_openqa.modeling.gradients.in_batch import InBatchGradients
-from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.utils.pretty import get_separator
 from tests.modules.base import TestModel
 
@@ -42,7 +41,7 @@ class TestOptionRetriever(TestModel):
              ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors.",
-                "a shrubbery is not red.",
+                "fire is red.",
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
@@ -51,7 +50,7 @@ class TestOptionRetriever(TestModel):
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors.",
                 "It also contains supporting code for evaluation and parameter tuning.",
-                "a shrubbery is not blue.",
+                "the sea is blue.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
                 "random gibberish",
@@ -64,21 +63,21 @@ class TestOptionRetriever(TestModel):
                 "that possibly do not fit in RAM.",
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
-                "a banana is not small sized",
+                "a cherry is small",
                 "random gibberish",
                 "random gibberish",
             ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
                 "It also contains supporting code for evaluation and parameter tuning.",
-                "A banana is medium sized.",
+                "A banana is medium.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
                 "random gibberish",
             ],
             [
                 "Faiss is a library for efficient similarity search and clustering of dense vectors. ",
-                "A banana is not large sized.",
+                "A watermelon is large.",
                 "It also contains supporting code for evaluation and parameter tuning.",
                 "Faiss is written in C++ with complete wrappers for Python (versions 2 and 3).",
                 "random gibberish",
@@ -87,7 +86,7 @@ class TestOptionRetriever(TestModel):
         ]
     ]
     match_score = torch.tensor([[[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0]],
-                                [[0, 0, 0, 1, 0 ,0], [0, 0, 1, 0, 0, 0], [0, 1, 0, 0, 0, 0]]])
+                                [[0, 0, 0, 1, 0, 0], [0, 0, 1, 0, 0, 0], [0, 1, 0, 0, 0, 0]]])
     doc_ids = torch.arange(0, match_score.numel(), 1).view(match_score.shape)
 
     # dummy answers
@@ -223,8 +222,7 @@ class TestOptionRetriever(TestModel):
         model.eval()
         with torch.no_grad():
             for param in model.parameters():
-                param.add_(torch.randn(param.size()) * 0)
-
+                param.add_(torch.randn(param.size()) * 0.1)
 
         # compute the retrieval_score using `InBatchGradients
         with torch.no_grad():
@@ -232,16 +230,16 @@ class TestOptionRetriever(TestModel):
             model.estimator = InBatchGradients()
             output = model.evaluate(ref_batch)
             model.estimator = _estimator
-            doc_logits = output['_doc_logits_'].detach()
-            # doc_logits.zero_()
-            doc_logits /= 100
+            doc_logits = output['_doc_logits_'].clone()
+            doc_logits.zero_()
+            # doc_logits /= 10
             # doc_logits = doc_logits + torch.randn_like(doc_logits)
             ref_batch['document.retrieval_score'] = doc_logits
-            rich.print(f"retrieval_probs: {doc_logits.softmax(dim=-1).numpy()}")
+            self.evaluate(model, ref_batch, doc_targets, doc_logits, VERBOSE)
 
         # optimize the model
         # model.train()
-        optimizer = Adam(model.parameters(), lr=1e-5)
+        optimizer = AdamW(model.parameters(), lr=1e-5)
         n_steps = 100
         for i in range(n_steps):
             batch = sampler(deepcopy(ref_batch))
@@ -259,17 +257,15 @@ class TestOptionRetriever(TestModel):
                            f" probs[0]={probs[0]}, "
                            f"probs[1]={probs[1]}")
 
-
                 if VERBOSE > 5:
                     rich.print(f"-- doc_probs: \n{doc_probs.numpy()}")
 
         # check that the model puts high probs on the correct answer
+        self.evaluate(model, ref_batch, doc_targets, doc_logits, VERBOSE, test=True)
+
+    def evaluate(self, model, ref_batch, doc_targets, doc_logits, VERBOSE, test=False):
         batch = deepcopy(ref_batch)
-        log_pz = doc_logits.zero_()
-        log_pz.log_softmax(dim=-1)
-        retrieval_log_Z = log_pz.logsumexp(dim=-1, keepdim=True).expand_as(log_pz)
-        batch[f"document.retrieval_log_prob"] = log_pz
-        batch[f"document.retrieval_log_Z"] = retrieval_log_Z
+        batch[f"document.retrieval_log_weight"] = torch.zeros_like(doc_logits)
         targets = batch['answer.target']
         output = model.evaluate(batch)
         probs = output['_reader_logits_'].detach().exp()
@@ -287,4 +283,5 @@ class TestOptionRetriever(TestModel):
             print(get_separator())
             rich.print(f"doc targets: \n{doc_targets.numpy()}")
 
-        self.assertTrue((probs.argmax(-1) == targets).all())
+        if test:
+            self.assertTrue((probs.argmax(-1) == targets).all())

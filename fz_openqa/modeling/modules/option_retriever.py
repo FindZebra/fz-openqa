@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import string
+from copy import deepcopy
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -76,6 +77,7 @@ class OptionRetriever(Module):
         max_batch_size: Optional[int] = None,
         gradients: Gradients | DictConfig = InBatchGradients(),
         temperature: float = 1.0,
+        use_gate: bool = False,
         **kwargs,
     ):
 
@@ -84,6 +86,14 @@ class OptionRetriever(Module):
         # register the heads
         self.reader_head = maybe_instantiate(reader_head)
         self.retriever_head = maybe_instantiate(retriever_head)
+
+        # register gates
+        if use_gate:
+            gate = torch.nn.Parameter(torch.zeros((1,)))
+        else:
+            gate = 1
+        self.reader_gate = deepcopy(gate)
+        self.retriever_gate = deepcopy(gate)
 
         # parameters
         self.resample_k = resample_k
@@ -238,7 +248,7 @@ class OptionRetriever(Module):
             # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
                 # todo: resample using priority sampling
-                retriever_score = self.retriever_head(
+                retriever_score = self.retriever_gate * self.retriever_head(
                     hd=d_out["_hd_"],
                     hq=output["_hq_"],
                     q_mask=self.mask(batch, "question"),
@@ -273,13 +283,13 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        reader_score = self.reader_head(
+        reader_score = self.reader_gate * self.reader_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
         )
-        retriever_score = self.retriever_head(
+        retriever_score = self.retriever_gate * self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
@@ -301,8 +311,7 @@ class OptionRetriever(Module):
                 retriever_score=retriever_score,
                 targets=batch["answer.target"],
                 retrieval_score=d_batch.get("document.retrieval_score", None),
-                retrieval_log_prob=d_batch.get("document.retrieval_log_prob", None),
-                retrieval_log_Z=d_batch.get("document.retrieval_log_Z", None),
+                retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
             )
         )
 
@@ -462,7 +471,7 @@ class OptionRetriever(Module):
         update_metrics: bool = True,
         filter_features: bool = True,
     ) -> Any:
-        if not split == Split.TRAIN:
+        if split is not None and not split == Split.TRAIN:
             filter_features = False
 
         return super().step_end(

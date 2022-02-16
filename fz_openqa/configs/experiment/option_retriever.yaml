@@ -61,6 +61,7 @@ model:
     reader_head:
       use_mask: false
     gradients:
+      gamma: 0.3
       use_baseline: false # todo
       expr: C
 
@@ -78,7 +79,7 @@ datamodule:
   eval_batch_size: 32
   num_workers: 8
   pin_memory: true
-  drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
+  # drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
 
   # dataset builder
   use_subset: false

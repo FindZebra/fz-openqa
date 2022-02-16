@@ -289,6 +289,7 @@ def train_with_dataset_updates(
     update_freq: int,
     reset_optimizer: bool = False,
     index_first_epoch: bool = False,
+    test_every_update: bool = True,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -310,6 +311,9 @@ def train_with_dataset_updates(
                     dataset_iter=dataset_iter,
                     **kwargs,
                 )
+                if test_every_update:
+                    log.info(f"Starting testing (update={dataset_iter})..")
+                    trainer.test(dataloaders=datamodule.test_dataloader())
         except Exception:
             log.exception("Dataset update interrupted.")
             break

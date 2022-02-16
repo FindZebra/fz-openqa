@@ -268,40 +268,51 @@ class PrioritySampler(Sampler):
 
         logits = batch[self.retrieval_score_key]
         logits = logits / temperature
-        logits = logits - logits.max(dim=-1, keepdim=True).values
-        batch[self.retrieval_score_key] = logits
+        # logits = logits - logits.max(dim=-1, keepdim=True).values
+        # batch[self.retrieval_score_key] = logits
 
         # sample
-        z, log_pz = self.sample(logits, total, largest=largest)
-        retrieval_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
+        z, log_w = self.sample(logits, total, largest=largest)
+        # retrieval_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
 
         # re-index and return
         output = {k: reindex(v, z) for k, v in batch.items()}
-        output[f"{self.field}.retrieval_log_prob"] = log_pz
-        output[f"{self.field}.retrieval_log_Z"] = retrieval_log_Z
+        output[f"{self.field}.retrieval_log_weight"] = log_w
 
         return output
 
     @staticmethod
     def sample(
-        logits: torch.Tensor, m: int, largest: bool = False
+        logits: torch.Tensor, m: int, largest: bool = False, mode: str = "uniform"
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample `log p(z)` using priority sampling with subset of size `m`
 
         Args:
             logits (torch.Tensor): un-normalized logits of the distribution
             m (int): size of the subset to sample
+            mode (str): sampling mode, one of `uniform`, `exponential`
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: sampled index and log probs
         """
 
+        assert mode in {"uniform", "exponential"}
         log_pz = logits.log_softmax(dim=-1)
-        if largest:
-            u = 0.5 * torch.ones_like(log_pz)
+        if mode == "uniform":
+            if largest:
+                u = 0.5 * torch.ones_like(log_pz)
+            else:
+                u = torch.rand_like(log_pz).clamp(min=1e-12)
+        elif mode == "exponential":
+            if largest:
+                u = torch.ones_like(log_pz)
+            else:
+                u = torch.empty_like(log_pz)
+                u.exponential_()
         else:
-            u = torch.rand_like(log_pz)
-        log_u = u.log().clamp(min=-1e20)
+            raise ValueError(f"Unknown mode {mode}")
+
+        log_u = u.log()
         keys = log_pz - log_u
         z = keys.argsort(dim=-1, descending=True)[..., : m + 1]
         if m < logits.shape[-1]:
@@ -311,5 +322,11 @@ class PrioritySampler(Sampler):
             log_tau = -float("inf") + torch.zeros_like(log_pz)
         z = z[..., :m]
         log_pz = log_pz.gather(dim=-1, index=z)
-        log_pz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
-        return z, log_pz
+        if mode == "uniform":
+            log_qz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
+        elif mode == "exponential":
+            log_qz = log_pz - log_tau
+            log_qz = (log_qz).exp().mul(-1).exp().mul(-1).log1p()
+        else:
+            raise ValueError(f"Unknown mode {mode}")
+        return z, log_pz - log_qz
