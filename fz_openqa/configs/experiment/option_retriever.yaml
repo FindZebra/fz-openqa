@@ -4,27 +4,32 @@ defaults:
   - base
   - override /model: option_retriever
   - override /model/bert: pubmed
-  - override /model/head: colbert
+  - override /model/module/retriever_head: colbert
+  - override /model/module/reader_head: colbert
+  - override /model/module/gradients: reinforce # todo!!!!
   - override /datamodule/builder: concat_openqa
-  - override /datamodule/index_builder: ${model/head}
-  - override /datamodule/sampler: boost_positives
-  - override /datamodule/transform: option_dropout # todo: run [:F]
+  - override /datamodule/index_builder: ${model/module/retriever_head}
+  - override /datamodule/sampler: priority # TODO!!!!!
+  - override /datamodule/transform: none
+  - override /datamodule/relevance_classifier: none
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
       - sequence_lengths
       - retriever_distribution
+      - log_retrieved_documents
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - lr_monitor
+      - log_predictions
 
 base:
-  seed: 2789492787  # todo: remove [run:A]
+  seed: 633830320 # todo!!!!!
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "Experimenting with OptionDropout + DPR: this runs uses `update_freq=5` (prev. value=15)."
+  exp_info: "Colbert + in batch + priority + update every 10 epochs + added gate parameters"
 
 trainer:
   gpus: 8
@@ -36,42 +41,45 @@ trainer:
   val_check_interval: 0.5
 
 model:
-  lr: 1e-5
+  bert_lr: 1e-5
+  lr: 1e-4
+  ema_decay: null
   weight_decay: 1e-3
   num_warmup_steps: 1_000
-  num_training_steps: 50_000
+  num_training_steps: 10_000
   bert:
-    hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1 # todo: updated [run:B] reverted: [run:C]
+    config:
+      hidden_dropout_prob: 0.1
+      attention_probs_dropout_prob: 0.1
   module:
+    use_gate: true # todo
     resample_k: null
     alpha: 0
-    max_batch_size: 200 # todo: try increasing this
-    eval_topk: 30
-    grad_expr: in_batch
-    share_heads: false # todo: update
-  head:
-    downscaling: 1 # todo: changed from 2
-    kernel_size: null # todo: changed from 9
-    bias: true # todo: update
-    use_mask: false # todo: update
-    output_size: 32 # todo: update
+    max_batch_size: 200
+    retriever_head:
+      use_mask: false
+    reader_head:
+      use_mask: false
+    gradients:
+      gamma: 0.3
+      use_baseline: false # todo
+      expr: C
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 5 # todo: run [:G]
-    reset_optimizer: false # todo: test `false`
+    freq: 10 # todo !!!
+    reset_optimizer: true # TODO !!
     index_first_epoch: false
     builder_args:
       relevance_classifier: null
-      # batch_size: 1000  # todo: remove [run:A]
 
   # dataloader
-  train_batch_size: 16 # todo: run [:F]
-  eval_batch_size: 64
-  num_workers: 16
+  train_batch_size: 8
+  eval_batch_size: 32
+  num_workers: 8
   pin_memory: true
+  # drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
 
   # dataset builder
   use_subset: false
@@ -89,15 +97,12 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 1_000
-  n_documents:
-    train: 10
-    validation: 10
-    test: 10
+  n_retrieved_documents: 1_000 # todo> next exp
+  n_documents: 10
 
   # tag documents as positive or negative
-  relevance_classifier:
-    interpretable: false
+  #  relevance_classifier:
+  #    interpretable: false
 
   # document sampler
   sampler:
@@ -105,8 +110,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
-      test: true
+      validation: false # todo
+      test: false # todo
 
   # OpenQA builder parameters
   builder:
@@ -114,22 +119,24 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us
-      question_length: null # todo: experiment with this
-      n_query_tokens: 10
+      query_expansion: null
+      n_query_tokens: 10 # todo!!!
+      max_length: 512
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
-      passage_stride: 100 # todo: updated [:D] - reverted
+      passage_stride: 100
 
   # Index parameters
   index_builder:
-    model_output_keys: [ _hq_retriever_, _hd_retriever_ ]
+    es_temperature: 1. # todo !!!
+    model_output_keys: [ _hq_, _hd_ ]
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000
     p: 100
-    dtype: float32  # todo: updated [run:B]
+    dtype: float32
     max_chunksize: null
-    maxsim_chunksize: 4_000 # todo: updated [run:B]
+    maxsim_chunksize: 4_000
     persist_cache: false
     faiss_args:
       factory: IVF100,PQ16x8

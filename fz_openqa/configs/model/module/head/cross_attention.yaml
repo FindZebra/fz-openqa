@@ -1,0 +1,7 @@
+defaults:
+  - base
+
+_target_: fz_openqa.modeling.heads.CrossAttentionHead
+output_size: 256
+num_attention_heads: 4
+_id: cross-attention

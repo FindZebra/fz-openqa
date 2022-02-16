@@ -6,7 +6,6 @@ import threading
 import time
 import warnings
 from functools import partial
-from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -25,6 +24,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.trainer.states import TrainerStatus
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
@@ -63,7 +63,8 @@ def train(config: DictConfig) -> Optional[float]:
         override_config=DictConfig({"sys": config.sys}),
         ref_config=config,
     )
-    override_config(config, checkpoint_manager.config, config.get("config_overrides", []))
+    if checkpoint_manager is not None:
+        override_config(config, checkpoint_manager.config, config.get("config_overrides", []))
 
     # log paths
     log.info(f"work_dir={config.sys.work_dir}")
@@ -288,19 +289,31 @@ def train_with_dataset_updates(
     update_freq: int,
     reset_optimizer: bool = False,
     index_first_epoch: bool = False,
+    test_every_update: bool = True,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
     max_epochs = trainer.max_epochs
     trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
+    dataset_iter = 0
+    trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
     while trainer.current_epoch < max_epochs:
 
         # update the dataset
         try:
             if index_first_epoch or trainer.current_epoch > 0:
+                dataset_iter += 1
                 update_dataset(
-                    datamodule, model=model, trainer=trainer, keep_in_memory=True, **kwargs
+                    datamodule,
+                    model=model,
+                    trainer=trainer,
+                    keep_in_memory=True,
+                    dataset_iter=dataset_iter,
+                    **kwargs,
                 )
+                if test_every_update:
+                    log.info(f"Starting testing (update={dataset_iter})..")
+                    trainer.test(dataloaders=datamodule.test_dataloader())
         except Exception:
             log.exception("Dataset update interrupted.")
             break
@@ -312,14 +325,16 @@ def train_with_dataset_updates(
                 train_dataloader=datamodule.train_dataloader(),
                 val_dataloaders=datamodule.val_dataloader(),
             )
-
             log.info(f"Epoch {trainer.current_epoch} completed.")
-            if trainer.current_epoch >= max_epochs:
+
+            # increment the epoch counter by one, seems to be missing in the original code
+            trainer.fit_loop.current_epoch += 1
+            if trainer.current_epoch > max_epochs:
                 break
-            elif trainer.current_epoch < trainer.fit_loop.max_epochs - 1:
+            if trainer.state.status == TrainerStatus.INTERRUPTED:
                 log.info(
                     f"Training interrupted. "
-                    f"Epochs remaining: {trainer.fit_loop.max_epochs - trainer.current_epoch}"
+                    f"Epochs remaining: {max_epochs - trainer.current_epoch}"
                 )
                 break
 
@@ -361,10 +376,16 @@ def update_dataset(
     model: pl.LightningModule,
     trainer: Trainer,
     keep_in_memory=True,
+    dataset_iter: int = 0,
     **kwargs,
 ):
     log.info("Updating dataset...")
     start_time = time.time()
     datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
     # datamodule.display_samples(n_samples=1)
-    log.info(f"Dataset updated in {time.time() - start_time:.2f}s")
+    elapsed_time = time.time() - start_time
+    log.info(f"Dataset updated in {elapsed_time:.2f}s")
+    trainer.logger.log_metrics(
+        {"dataset_update/step": dataset_iter, "dataset_update/time": elapsed_time},
+        step=trainer.global_step,
+    )

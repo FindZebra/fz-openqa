@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Dict
 from typing import List
+from typing import Optional
 
 from datasets import Dataset
+from datasets import Split
 
 from .base import Analytic
 
@@ -14,7 +16,9 @@ class CountMatchedQuestions(Analytic):
     requires_columns: List[str] = ["document.match_score"]
     output_file_name: str = "count_matched_questions.json"
 
-    def process_dataset_split(self, dset: Dataset) -> Dict:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """
         Report on a specific split of the dataset.
         """

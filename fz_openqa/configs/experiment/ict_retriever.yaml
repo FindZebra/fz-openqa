@@ -3,7 +3,7 @@
 defaults:
   - base
   - override /model: retriever
-  - override /model/head: dense # todo colbert
+  - override model/module/head: dpr # todo colbert
   - override /model/bert: pubmed # todo: pubmed
   - override /callbacks:
       - checkpoint
@@ -32,8 +32,9 @@ model:
   weight_decay: 1e-3
   num_warmup_steps: 1000
   bert:
-    hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.3
+    config:
+      hidden_dropout_prob: 0.1
+      attention_probs_dropout_prob: 0.3
 
 datamodule:
 
@@ -66,7 +67,7 @@ datamodule:
     writer_batch_size: 1000
 
     # ICT parameters
-    question_length: 350
+    query_expansion: 350
     min_distance: 1
     poisson_lambda: 3
     n_neighbours: 1

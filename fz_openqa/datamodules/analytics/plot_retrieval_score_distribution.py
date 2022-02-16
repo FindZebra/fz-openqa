@@ -4,9 +4,11 @@ import itertools
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import plotly.graph_objects as go
 from datasets import Dataset
+from datasets import Split
 
 from .base import Analytic
 
@@ -17,7 +19,9 @@ class PlotScoreDistributions(Analytic):
     requires_columns = ["document.retrieval_score", "document.match_score"]
     output_file_name = "score_distribution_plot.html"
 
-    def process_dataset_split(self, dset: Dataset) -> List:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """
         Report a specific split of the dataset.
         """
@@ -68,4 +72,4 @@ class PlotScoreDistributions(Analytic):
         """Process the results of the analytic."""
         results = self.collate_splits(results)
         fig = self.plot_split(results=results)
-        self.save_as_html(fig)
+        self.save_fig_as_html(fig)

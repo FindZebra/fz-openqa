@@ -1,0 +1,7 @@
+_target_: fz_openqa.datamodules.pipes.PrioritySampler
+
+total: ${datamodule.n_documents}
+retrieval_score_key: retrieval_score
+field: document
+largest: false
+temperature: 1.0

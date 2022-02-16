@@ -1,9 +1,10 @@
 _target_: fz_openqa.modeling.modules.OptionRetriever
 
-grad_expr: in_batch
-alpha: 0
+defaults:
+  - reader_head: colbert
+  - retriever_head: colbert
+  - gradients: reinforce
+
 resample_k: null
-max_tokens: null
-eval_topk: 30
-share_heads: true
+max_batch_size: null
 _id: option_retriever

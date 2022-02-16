@@ -4,10 +4,12 @@ from typing import Any
 from typing import Dict
 from typing import Iterator
 from typing import List
+from typing import Optional
 
 import numpy as np
 import torch
 from datasets import Dataset
+from datasets import Split
 from torch import Tensor
 
 from ..utils.dataset import keep_only_columns
@@ -31,7 +33,9 @@ class SequenceLengths(Analytic):
     output_file_name = "sequence_lengths.json"
     batch_size = 1000
 
-    def process_dataset_split(self, dset: Dataset) -> Dict | List:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """
         Report on a specific split of the dataset.
         """

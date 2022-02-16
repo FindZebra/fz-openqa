@@ -6,7 +6,6 @@ from typing import Union
 from transformers import PreTrainedTokenizerFast
 
 from ...tokenizers.static import QUERY_MASK
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from .control.condition import HasPrefix
 from .control.condition import In
@@ -71,7 +70,7 @@ class QueryExpansionPipe(Pipe):
         self,
         *,
         prefix: Optional[str] = "question.",
-        question_length: int = 512,
+        question_length: int = 32,
         tokenizer: PreTrainedTokenizerFast,
         **kwargs,
     ):
@@ -81,7 +80,7 @@ class QueryExpansionPipe(Pipe):
             input_filter = None
         super(QueryExpansionPipe, self).__init__(**kwargs, input_filter=input_filter)
         self.prefix = prefix if prefix is not None else ""
-        self.max_length: int = question_length
+        self.question_length: int = question_length
         self.sep_token_id: int = tokenizer.sep_token_id
         self.q_mask_token_id: int = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
 
@@ -96,6 +95,9 @@ class QueryExpansionPipe(Pipe):
         self, input_ids: List[int], attention_mask: List[int]
     ) -> Tuple[List[int], List[int]]:
         """insert the q_mask_token_id after the `sep_token` if available, else at the end"""
+        if len(input_ids) >= self.question_length:
+            return input_ids, attention_mask
+
         end_of_seq_idx = None
         if self.sep_token_id is not None:
             end_of_seq_idx = QueryExpansionPipe._last_idx(input_ids, self.sep_token_id)
@@ -107,9 +109,11 @@ class QueryExpansionPipe(Pipe):
 
         # update the input_ids and the attention_mask, QMASK tokens are not masked out.
         input_ids = input_ids[:end_of_seq_idx] + [self.q_mask_token_id] * (
-            self.max_length - end_of_seq_idx
+            self.question_length - end_of_seq_idx
         )
-        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (self.max_length - end_of_seq_idx)
+        attention_mask = attention_mask[:end_of_seq_idx] + [1] * (
+            self.question_length - end_of_seq_idx
+        )
         return input_ids, attention_mask
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:

@@ -2,19 +2,23 @@ import abc
 import warnings
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+from typing import Dict
 from typing import Optional
+from typing import Tuple
 
 import torch
+from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 
-from .utils import batch_cartesian_product
+from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.utils.pretty import pprint_batch
 
 
-class GradExpression(Enum):
-    VARIATIONAL = "variational"
-    IN_BATCH = "in_batch"
+class Space(Enum):
+    EXP = "exp"
+    LOG = "log"
 
 
 @dataclass
@@ -22,7 +26,6 @@ class Quantities:
     """A small helper class to store the different terms involved in evaluating
     the likelihood."""
 
-    score: Tensor
     logp_a__d: Tensor
     log_p_d__a: Tensor
     log_p_d__a_no_perm: Tensor
@@ -31,8 +34,9 @@ class Quantities:
     logp_a_star__d: Tensor
 
 
-class Estimator:
-    def __init__(self, eval_topk: Optional[int] = None, debug: bool = False):
+class Gradients(nn.Module):
+    def __init__(self, eval_topk: Optional[int] = None, debug: bool = False, **kwargs):
+        super().__init__()
         self.eval_topk = eval_topk
         self.debug = debug
 
@@ -86,7 +90,6 @@ class Estimator:
         logp_a = (logp_a__d + log_p_d__a.sum(dim=1, keepdim=True)).logsumexp(dim=2)
         logp_a_star = torch.gather(logp_a, dim=1, index=targets).squeeze(1)
         return Quantities(
-            score=reader_score,
             logp_a__d=logp_a__d,
             log_p_d__a=log_p_d__a,
             log_p_d__a_no_perm=log_p_d__a_no_perm,
@@ -101,73 +104,35 @@ class Estimator:
         retriever_score: Tensor,
         reader_score: Tensor,
         targets: Tensor,
+        retrieval_score: Optional[Tensor] = None,
+        **kwargs,
     ):
         q = self.evaluate_likelihood_terms(
-            retriever_score, reader_score, targets, eval_topk=self.eval_topk, debug=self.debug
+            retriever_score,
+            reader_score,
+            targets,
+            eval_topk=self.eval_topk,
+            debug=self.debug,
         )
-        loss = self.compute_loss(q, targets=targets)
+        loss, diagnostics = self.compute_loss(
+            q,
+            targets=targets,
+            reader_score=reader_score,
+            retriever_score=retriever_score,
+            retrieval_score=retrieval_score,
+        )
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),
             "_reader_logits_": q.logp_a.detach(),
             "_reader_targets_": targets.detach(),
             "_doc_logits_": q.log_p_d__a_no_perm.detach(),
+            "_retriever_reading_logits_": q.log_p_d__a_no_perm.sum(-1).detach(),
+            **diagnostics,
         }
 
     @abc.abstractmethod
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
+    def compute_loss(
+        self, q: Quantities, *, targets: Tensor, **kwargs
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         ...
-
-
-class InBatchGradients(Estimator):
-    """Compute the gradients of the option retriever assuming the current
-    batch to be the whole dataset."""
-
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
-        return -1 * (q.logp_a_star).mean(-1)
-
-
-class VariationalGradients(Estimator):
-    """Compute the gradients using a Variational Lower Bound."""
-
-    def compute_loss(self, q: Quantities, *, targets: Tensor, **kwargs) -> torch.Tensor:
-        lb_logp_a = (q.logp_a__d + q.log_p_d__a.sum(dim=1, keepdim=True)).sum(dim=2)
-        lb_logp_a_star = torch.gather(lb_logp_a, dim=1, index=targets).squeeze(1)
-        return -1 * (lb_logp_a_star).mean(-1)
-
-
-def supervised_loss(partial_score: Tensor, match_score: Tensor, **kwargs):
-    """
-    Compute the supervised retrieval loss
-    # todo: check loss, can we keep it without using the mask
-    # todo: figure out how to compute the targets and logits for the metrics
-    """
-
-    pos_docs = match_score > 0
-    loss_mask = pos_docs.sum(-1) > 0
-    logits = partial_score[loss_mask]
-    pos_docs = pos_docs[loss_mask].float()
-
-    if logits.numel() > 0:
-        n_total = len(pos_docs)
-        n_pos = pos_docs.sum()
-        loss = -(pos_docs * F.log_softmax(logits, dim=-1) / pos_docs.sum(dim=-1, keepdims=True))
-        loss = loss.sum(-1)
-
-    else:
-        n_total = n_pos = 0
-        loss = torch.tensor(0.0, dtype=partial_score.dtype, device=partial_score.device)
-
-    # compute logits and targets for the metrics
-    match_score = match_score[loss_mask]
-    ids = torch.argsort(match_score, dim=-1, descending=True)
-    targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
-    logits = logits.gather(index=ids, dim=-1)
-
-    return {
-        "retriever/loss": loss,
-        "_retriever_logits_": logits,
-        "_retriever_targets_": targets,
-        "retriever/n_options": n_total,
-        "retriever/n_positive": n_pos,
-    }

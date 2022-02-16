@@ -5,10 +5,12 @@ import itertools
 from collections import Counter
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import plotly.express as px
 import rich
 from datasets import Dataset
+from datasets import Split
 
 from .base import Analytic
 from fz_openqa.utils.pretty import get_separator
@@ -24,7 +26,9 @@ class PlotTopMatchTriggers(Analytic):
         super(PlotTopMatchTriggers, self).__init__(*args, **kwargs)
         self.topn = topn
 
-    def process_dataset_split(self, dset: Dataset) -> Counter:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Counter:
         """
         Report a specific split of the dataset.
         """
@@ -73,4 +77,4 @@ class PlotTopMatchTriggers(Analytic):
             print(get_separator())
 
         fig = self.plot_most_commons(labels, counts)
-        self.save_as_html(fig)
+        self.save_fig_as_html(fig)

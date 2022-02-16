@@ -2,7 +2,7 @@
 
 defaults:
   - override /model/bert: roberta-base #deberta-v3-base
-  - override /model/head: dense
+  - override model/module/head: dpr
   - override /datamodule/index_builder: static
   - override /datamodule/relevance_classifier: none
   - override /datamodule/sampler: none
@@ -20,8 +20,9 @@ model:
     max_batch_size: 1000
     output_size: 128
   bert:
-    hidden_dropout_prob: 0.1
-    attention_probs_dropout_prob: 0.1
+    config:
+      hidden_dropout_prob: 0.1
+      attention_probs_dropout_prob: 0.1
 
 
 # override the builder parameters to use the quality builder
@@ -43,7 +44,7 @@ datamodule:
     # update the builer parameters to use the quality builder
     dataset_builder:
       dset_name: quality
-      question_length: 120
+      query_expansion: 32
       n_query_tokens: 1
     corpus_builder:
       _target_: fz_openqa.datamodules.builders.QuALITYCorpusBuilder

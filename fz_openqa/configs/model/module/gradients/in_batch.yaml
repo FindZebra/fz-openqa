@@ -1,0 +1,5 @@
+_target_: fz_openqa.modeling.gradients.InBatchGradients
+
+eval_topk: null
+debug: false
+_id: "in-batch"

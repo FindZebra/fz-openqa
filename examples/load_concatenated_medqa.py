@@ -35,7 +35,7 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
-        question_length=config.get("question_length", None),
+        query_expansion=config.get("query_expansion", None),
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
     )
@@ -48,7 +48,9 @@ def run(config: DictConfig) -> None:
     rich.print(dm.dataset)
 
     # sample a batch
-    # _ = next(iter(dm.train_dataloader()))
+    batch = next(iter(dm.train_dataloader()))
+    rich.print(batch["question.input_ids"][0])
+    rich.print(batch["question.attention_mask"][0])
 
 
 if __name__ == "__main__":

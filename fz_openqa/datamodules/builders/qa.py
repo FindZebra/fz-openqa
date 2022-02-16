@@ -24,9 +24,7 @@ from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
-from fz_openqa.datamodules.pipes import FilterKeys
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
@@ -34,7 +32,6 @@ from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
@@ -91,13 +88,13 @@ class QaBuilder(HfDatasetBuilder):
         *args,
         min_answer_length: Optional[int] = None,
         n_query_tokens: int = 1,
-        question_length: Optional[int] = None,
+        query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
         self.min_answer_length = min_answer_length
-        self.question_length = question_length
+        self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
 
         # set the dataset attributes
@@ -180,9 +177,9 @@ class QaBuilder(HfDatasetBuilder):
     def get_question_tokenizer_pipe(self):
         """create a Pipe to tokenize the questions."""
 
-        if self.question_length is not None:
+        if self.query_expansion is not None:
             query_expansion_pipe = QueryExpansionPipe(
-                question_length=self.question_length, tokenizer=self.tokenizer, update=True
+                question_length=self.query_expansion, tokenizer=self.tokenizer, update=True
             )
         else:
             query_expansion_pipe = None
@@ -342,10 +339,10 @@ class ConcatQaBuilder(QaBuilder):
 
     def get_qa_tokenizer_pipe(self):
 
-        if self.question_length is not None:
+        if self.query_expansion is not None:
             query_expansion_pipe = Nested(
                 QueryExpansionPipe(
-                    question_length=self.question_length, tokenizer=self.tokenizer, update=True
+                    question_length=self.query_expansion, tokenizer=self.tokenizer, update=True
                 ),
                 level=1,
             )

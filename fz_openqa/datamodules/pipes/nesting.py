@@ -201,6 +201,12 @@ class NestedLevel1(Pipe):
         egs = (self.get_eg(batch, idx=i) for i in range(batch_size))
         egs = [self.pipe(eg, **kwargs) for eg in egs]
 
+        # update `keys` with keys that were added by the pipe
+        for key in egs[0].keys():
+            if key not in keys:
+                keys.append(key)
+                types[key] = type(egs[0][key])
+
         # check shape consistency before re-concatenating
         batch_sizes = [infer_batch_size(eg) for eg in egs]
         bs = batch_sizes[0]

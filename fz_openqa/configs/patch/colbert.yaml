@@ -1,14 +1,14 @@
 # @package _global_
 
 defaults:
-  - override /model/head: colbert # todo colbert
+  - override model/module/head: colbert # todo colbert
   - override /datamodule/index_builder: colbert # todo colbert
 
 
 # OpenQA builder parameters
 builder:
   dataset_builder:
-    question_length: 350
+    query_expansion: 350
 
 # Index parameters
 index_builder:

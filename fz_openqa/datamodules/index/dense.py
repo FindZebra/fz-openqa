@@ -615,7 +615,7 @@ class FaissIndex(Index):
 
     def __del__(self):
         self.free_memory()
-        if self._master and self.persist_cache is False:
+        if self._master and hasattr(self, "persist_cache") and self.persist_cache is False:
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def free_memory(self):

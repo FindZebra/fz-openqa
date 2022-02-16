@@ -10,7 +10,7 @@ from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
 
-def reindex(x: Any, index: Union[np.ndarray, List[int]]) -> Any:
+def reindex(x: Any, index: Union[np.ndarray, Tensor, List[int]]) -> Any:
     if isinstance(x, (Tensor, np.ndarray)):
         return x[index]
     elif isinstance(x, (list, tuple)):

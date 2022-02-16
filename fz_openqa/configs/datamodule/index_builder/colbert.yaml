@@ -1,5 +1,5 @@
 defaults:
-  - dense
+  - dpr
 
 _target_: fz_openqa.datamodules.index.ColbertOrEsIndexBuilder
 

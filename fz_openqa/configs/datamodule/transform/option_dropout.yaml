@@ -8,5 +8,6 @@ keys:
   - document.attention_mask
   - document.retrieval_score
   - document.retrieval_rank
+  - document.match_score
   - document.row_idx
 update: true

@@ -1,0 +1,6 @@
+log_retrieved_documents:
+  _target_: fz_openqa.datamodules.analytics.LogRetrievedDocuments
+
+  verbose: false
+  output_dir: ${getcwd:}/analytics/
+  wandb_log: true

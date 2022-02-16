@@ -50,8 +50,20 @@ class MapWithFingerprint:
         if isinstance(dataset, Dataset):
             dataset = DatasetDict({"__all__": dataset})
 
+        # override the `num_proc`
+        kwargs = self.map_kwargs.copy()
+        if self.pipe.max_num_proc is not None:
+            pipe_max_proc = self.pipe.max_num_proc
+            kwargs["num_proc"] = min(kwargs.get("num_proc", 1), 1)
+            if pipe_max_proc is not None:
+                kwargs["num_proc"] = min(kwargs["num_proc"], pipe_max_proc)
+
+        # adjust the batch size to be at least `num_proc
+        kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])
+
         # check if the pipe is safe for multi-processing
-        self._check_pickling(self.pipe)
+        if kwargs["num_proc"] > 1:
+            self._check_pickling(self.pipe)
 
         # check if the fingerprint from the previous run is identical to the current one
         if not self.map_kwargs.get("keep_in_memory", False):
@@ -62,14 +74,6 @@ class MapWithFingerprint:
 
         # process dataset
         for key, dset in dataset.items():
-            # override the `num_proc`
-            kwargs = self.map_kwargs.copy()
-            if self.pipe.max_num_proc is not None:
-                kwargs["num_proc"] = max(1, min(kwargs.get("num_proc", 1), self.pipe.max_num_proc))
-
-            # adjust the batch size to be at least `num_proc
-            kwargs["batch_size"] = max(kwargs["num_proc"], kwargs["batch_size"])
-
             # fingerprint
             fingerprint = fingerprints.get(key, None)
             logger.debug(f"split={key}: new_fingerprint={fingerprint}")

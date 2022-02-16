@@ -1,49 +1,34 @@
 [tool.poetry]
 name = "fz-openqa"
 version = "0.0.1"
-description = "Medical Open Domain Quetion Answering"
+description = "Medical Open Domain Question Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
-torch = "^1.10"
-rich = "^10.2.2"
-wandb = "^0.10.30"
-pytorch-lightning = { version = "=1.5.5", allow-prereleases = true }
-torchmetrics = { version = "^0.5", allow-prereleases = true }
-transformers = "^4.6.0"
-tokenizers = "^0.10.2"
-datasets = "=1.17.0"
-hydra-core = { version = "^1.1", allow-prereleases = false }
-hydra-colorlog = { version = "^1.0.1", allow-prereleases = false }
-faiss-cpu = { version = "=1.6.5", allow-prereleases = false }
-gdown = "^3.13.0"
-elasticsearch = "^7.13.2"
-ray = { extras = ["default", "tune"], version = "^1.7.0", allow-prereleases = false }
-hyperopt = "^0.2.5"
-spacy = { version = "^3.0", allow-prereleases = true }
-scispacy = { version = "^0.4.0", allow-prereleases = true }
-en_core_sci_sm = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_sm-0.4.0.tar.gz" }
-en_core_sci_lg = { url = "https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz" }
-pre-commit = "^2.15.0"
-nltk = "^3.6.5"
-coverage = "^6.0.2"
-wikipedia = "^1.4.0"
-google-api-python-client = "^2.31.0"
-dill = { git = "https://github.com/emfdavid/dill.git" }
-parameterized = "^0.8.1"
-hypothesis = "^6.24.2"
-jsondiff = "^1.3.0"
-plotly = "^5.4.0"
-einops = "^0.3.2"
+torch = "^1.10.2"
+datasets = "^1.18.3"
+transformers = "^4.16.2"
+hydra-core = "^1.1.1"
+pytorch-lightning = "^1.5.10"
+torchmetrics = "^0.7.2"
+elasticsearch = "~7"
+faiss-cpu = "1.6.5"
+wandb = "^0.12.10"
+rich = "^11.2.0"
+dill = "^0.3.4"
+einops = "^0.4.0"
+jsondiff = "^1.3.1"
 singledispatchmethod = "^1.0"
-
-
-[tool.poetry.scripts]
-fzqa = "fz_openqa.cli:main"
+spacy = "^3.2.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+parameterized = "^0.8.1"
+hypothesis = "^6.36.2"
+
+[tool.poetry.scripts]
+fzqa = "fz_openqa.cli:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

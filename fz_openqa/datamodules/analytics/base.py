@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Union
 
 import plotly.graph_objects as go
@@ -14,6 +15,7 @@ import rich
 import wandb
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import Split
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -21,7 +23,7 @@ from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.pretty import get_separator
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__.replace(".base", ""))
 
 
 class Analytic:
@@ -44,7 +46,36 @@ class Analytic:
         self.wandb_log = wandb_log
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
-        self.output_file_path = self.output_dir / self.output_file_name
+        self._output_file_path = self.output_dir / self.output_file_name
+
+    def indexed_output_file(self, path: Union[str, Path]) -> Path:
+        """
+        Prefix the path with an index [0, 1, ....] to avoid overwriting previous results.
+        Parameters
+        ----------
+        path
+            The original path.
+        Returns
+        -------
+        Path
+            The indexed path.
+        """
+        path = Path(path)
+        path.parent.mkdir(exist_ok=True, parents=True)
+        idx = 0
+        max_trials = 1000
+        while idx >= 0 and idx < max_trials:
+            out_path = path.parent / f"{idx}_{path.name}"
+            if not out_path.exists():
+                idx = -1
+            else:
+                idx += 1
+
+        return out_path
+
+    @property
+    def output_file_path(self) -> Path:
+        return self.indexed_output_file(self._output_file_path)
 
     def __call__(self, dataset: HfDataset | OpenQaDataset, **kwargs) -> None:
         """
@@ -79,10 +110,11 @@ class Analytic:
 
             if isinstance(dataset, DatasetDict):
                 results = {
-                    split: self.process_dataset_split(dset) for split, dset in dataset.items()
+                    split: self.process_dataset_split(dset, split=split)
+                    for split, dset in dataset.items()
                 }
             elif isinstance(dataset, Dataset):
-                results = {"all": self.process_dataset_split(dataset)}
+                results = {"all": self.process_dataset_split(dataset, split="all")}
             else:
                 raise TypeError(f"Unsupported type {type(dataset)}")
 
@@ -91,7 +123,9 @@ class Analytic:
             logger.exception(f"Error while processing {type(self).__name__}")
 
     @abc.abstractmethod
-    def process_dataset_split(self, dset: Dataset) -> Dict | List:
+    def process_dataset_split(
+        self, dset: Dataset, *, split: Optional[str | Split] = None
+    ) -> Dict | List:
         """Process and report on a specific split of the dataset."""
         raise NotImplementedError
 
@@ -110,15 +144,15 @@ class Analytic:
         """
         Save results as json file.
         """
-        logging.info(f"Saving analytics to {self.output_file_path.absolute()}")
+        logger.info(f"Saving analytics to {self.output_file_path.absolute()}")
         with open(self.output_file_path, "w") as f:
             json.dump(results, f, indent=2)
 
-    def save_as_html(self, fig: go.Figure) -> None:
+    def save_fig_as_html(self, fig: go.Figure) -> None:
         """
         Save plot as html file
         """
-        logging.info(f"Saving analytics to {self.output_file_path.absolute()}")
+        logger.info(f"Saving analytics to {self.output_file_path.absolute()}")
         fig.write_html(self.output_file_path, include_plotlyjs=True)
 
     def pprint_json_results(self, results: List | Dict):

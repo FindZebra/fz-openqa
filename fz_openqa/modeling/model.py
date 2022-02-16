@@ -17,6 +17,7 @@ from transformers import BertPreTrainedModel
 from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.modeling.ema import EMA
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
@@ -67,11 +68,12 @@ class Model(LightningModule):
         tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
         bert: Union[BertPreTrainedModel, DictConfig],
         module: Union[DictConfig, Module],
-        head: Union[DictConfig, Module] = None,
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
         num_warmup_steps: int = 1000,
+        bert_lr: float = 1e-5,
         lr: float = 0.001,
+        ema_decay: Optional[float] = None,
         weight_decay: float = 0.01,
         **kwargs,
     ):
@@ -81,6 +83,7 @@ class Model(LightningModule):
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
         self.save_hyperparameters()
+        assert self.hparams["bert_lr"] == bert_lr
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
         assert self.hparams["monitor_metric"] == monitor_metric
@@ -94,10 +97,17 @@ class Model(LightningModule):
         self.module: Optional[Module] = maybe_instantiate(
             module,
             bert=bert,
-            head=head,
             tokenizer=tokenizer,
             _recursive_=False,
         )
+
+        # exponential moving average
+        # todo: implement using SWA:
+        #  https://github.com/PyTorchLightning/pytorch-lightning/issues/8100
+        if ema_decay is not None:
+            self.ema = EMA(ema_decay, self)
+        else:
+            self.ema = None
 
     def forward(self, batch: Batch, **kwargs) -> Batch:
         return self.module.forward(batch, **kwargs)
@@ -136,7 +146,7 @@ class Model(LightningModule):
             on_step = str(split) == (Split.TRAIN)
             self.log_data(output, prefix=str(split), on_step=on_step, on_epoch=not on_step)
 
-        return output["loss"]
+        return output
 
     def _epoch_end(self, outputs: List[Any], *, split: Split, log_data=True) -> Batch:
         """
@@ -178,21 +188,62 @@ class Model(LightningModule):
         """
         Configure the optimizer and the learning rate scheduler.
         """
+
+        # optimizer and scheduler
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
                 "params": only_trainable(
-                    [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)]
+                    [
+                        p
+                        for n, p in self.named_parameters()
+                        if not any(nd in n for nd in no_decay) and "bert." in n
+                    ]
                 ),
                 "weight_decay": self.hparams.weight_decay,
+                "lr": self.hparams.bert_lr,
             },
             {
                 "params": only_trainable(
-                    [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
+                    [
+                        p
+                        for n, p in self.named_parameters()
+                        if any(nd in n for nd in no_decay) and "bert." in n
+                    ]
                 ),
                 "weight_decay": 0.0,
+                "lr": self.hparams.bert_lr,
+            },
+            {
+                "params": only_trainable(
+                    [
+                        p
+                        for n, p in self.named_parameters()
+                        if not any(nd in n for nd in no_decay) and "bert." not in n
+                    ]
+                ),
+                "weight_decay": self.hparams.weight_decay,
+                "lr": self.hparams.lr,
+            },
+            {
+                "params": only_trainable(
+                    [
+                        p
+                        for n, p in self.named_parameters()
+                        if any(nd in n for nd in no_decay) and "bert." not in n
+                    ]
+                ),
+                "weight_decay": 0.0,
+                "lr": self.hparams.lr,
             },
         ]
+
+        for group in optimizer_grouped_parameters:
+            rich.print(
+                f"> param group: lr={group['lr']}, "
+                f"weight_decay={group['weight_decay']}, "
+                f"n_params={len(group['params'])}"
+            )
 
         # define the optimizer using the above groups
         optimizer = AdamW(
@@ -246,6 +297,11 @@ class Model(LightningModule):
 
         output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
         return output
+
+    def on_before_zero_grad(self, *args, **kwargs):
+        # https://forums.pytorchlightning.ai/t/adopting-exponential-moving-average-ema-for-pl-pipeline/488
+        if self.ema is not None:
+            self.ema(self)
 
     def training_step_end(self, batch: Batch, **kwargs) -> Batch:
         return self._step_end(batch, split=Split.TRAIN)

@@ -4,13 +4,13 @@ model/bert:
     # - bio_bert.yaml
     - pubmed.yaml
 
-model/head:
+model/model/head:
   _target_: ray.tune.choice
   categories:
     - cls.yaml
     - colbert.yaml
 
-model.bert.hidden_dropout_prob:
+model.bert.config.hidden_dropout_prob:
   _target_: ray.tune.choice
   categories:
     - 0
