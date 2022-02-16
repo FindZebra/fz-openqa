@@ -1,0 +1,24 @@
+# @package _global_
+
+defaults:
+  - sys: local
+    # enable color logging
+  - override hydra/hydra_logging: colorlog
+  - override hydra/job_logging: colorlog
+
+
+version: 7
+lr: 1e-4
+seed: null
+wandb: false
+device: cpu
+num_epochs: 10
+batch_size: 64
+n_samples: 10
+max_baseline_samples: 3
+hidden_size: 64
+share_backbone: false
+estimator: in_batch
+use_baseline: false
+noise_level: 0.9
+labels: [1, 7, 5, 9]
