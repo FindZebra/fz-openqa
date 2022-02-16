@@ -50,8 +50,8 @@ class LogPredictions(Callback):
         batch_idx: int,
         dataloader_idx: int,
     ) -> None:
-        preds = outputs["_reader_logits_"].argmax(dim=-1)
-        targets = batch["answer.target"]
+        preds = outputs["_reader_logits_"].argmax(dim=-1).cpu().detach()
+        targets = batch["answer.target"].cpu().detach()
         mask = preds == targets
 
         batch_keys = [
@@ -84,14 +84,15 @@ class LogPredictions(Callback):
                     qids, tokenizer=self.tokenizer, style="green" if i == target else "cyan"
                 )
                 repr += get_separator("-")
-                repr += f"(p={probs[i]:.2f}) {u}\n"
+                repr += f"(i={i}, p={probs[i]:.2f}) {u}\n"
+            for i, qids in enumerate(row["question.input_ids"]):
                 doc_probs = row["_doc_logits_"][i].softmax(-1)
                 js = doc_probs.argsort(-1, descending=True)
                 for j in js[:2]:
                     dids = row["document.input_ids"][i][j]
                     u = pretty_decode(dids, tokenizer=self.tokenizer)
                     repr += get_separator(".")
-                    repr += f"(p={doc_probs[j]:.2f}, s={scores[i, j]:.2f}) {u}\n"
+                    repr += f"(i={i}, j={j}, p={doc_probs[j]:.2f}, s={scores[i, j]:.2f}) {u}\n"
 
         console.print(repr)
         html = console.export_html()
