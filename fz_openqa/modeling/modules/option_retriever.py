@@ -110,6 +110,8 @@ class OptionRetriever(Module):
             for symbol in string.punctuation
         ]
 
+        self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
+
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
@@ -152,14 +154,14 @@ class OptionRetriever(Module):
             h = self._forward_field(batch, "document", **kwargs)
             if predict:
                 mask = self.mask(batch, "document")
-                h = self.retriever_head.preprocess(h, "document", mask=mask)
+                h = self.retriever_head.preprocess(h, "document", mask=mask, batch=batch)
             output["_hd_"] = h
 
         if "question.input_ids" in batch:
             h = self._forward_field(batch, "question", **kwargs)
             if predict:
                 mask = self.mask(batch, "question")
-                h = self.retriever_head.preprocess(h, "question", mask=mask)
+                h = self.retriever_head.preprocess(h, "question", mask=mask, batch=batch)
             output["_hq_"] = h
 
         return output
@@ -253,6 +255,8 @@ class OptionRetriever(Module):
                     hq=output["_hq_"],
                     q_mask=self.mask(batch, "question"),
                     d_mask=self.mask(batch, "document"),
+                    batch={**d_batch, **q_batch},
+                    **kwargs,
                 )
 
                 # sample k documents
@@ -288,12 +292,16 @@ class OptionRetriever(Module):
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
+            batch={**d_batch, **q_batch},
+            **kwargs,
         )
         retriever_score = self.retriever_gate * self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
+            batch={**d_batch, **q_batch},
+            **kwargs,
         )
 
         # retriever diagnostics
@@ -312,6 +320,7 @@ class OptionRetriever(Module):
                 targets=batch["answer.target"],
                 retrieval_score=d_batch.get("document.retrieval_score", None),
                 retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
+                **kwargs,
             )
         )
 

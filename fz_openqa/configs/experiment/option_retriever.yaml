@@ -42,7 +42,7 @@ trainer:
 
 model:
   bert_lr: 1e-5
-  lr: 1e-5
+  lr: 1e-4
   ema_decay: null
   weight_decay: 1e-3
   num_warmup_steps: 1_000
@@ -57,13 +57,24 @@ model:
     alpha: 0
     max_batch_size: 200
     retriever_head:
-      use_mask: false
+      use_mask: false # todo
+      use_answer_mask: false
     reader_head:
       use_mask: false
     gradients:
-      gamma: 0.3
       use_baseline: false # todo
       expr: C
+  parameters:
+    gamma:
+      initial_value: 0.01
+      final_value: 1
+      num_steps: 10_000
+      mode: cosine
+    question_mask:
+      initial_value: 0
+      final_value: 1
+      num_steps: 10_000
+      mode: cosine
 
 datamodule:
   # how often to map the dataset

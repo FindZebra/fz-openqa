@@ -6,4 +6,6 @@ use_mask: true
 output_size: 32
 bias: true
 normalize: true
+use_answer_mask: false
+tokenizer: ${datamodule.tokenizer}
 _id: colbert

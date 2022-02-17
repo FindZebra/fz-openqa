@@ -91,6 +91,6 @@ class CrossAttentionHead(Head):
         return score
 
     def preprocess(
-        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocess")
