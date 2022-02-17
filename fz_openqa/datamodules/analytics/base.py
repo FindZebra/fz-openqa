@@ -10,7 +10,10 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except ImportError:
+    go = None
 import rich
 import wandb
 from datasets import Dataset

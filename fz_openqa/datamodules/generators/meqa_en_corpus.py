@@ -54,7 +54,20 @@ class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+
+        # todo
+        downloaded_file = "/scratch/valv/data/medqa_en_corpus/"
+        if not Path(downloaded_file).is_dir():
+            downloaded_file = "/home/pvk447/code/fz-openqa/data/medqa_en_corpus/"
+        if not Path(downloaded_file).is_dir():
+            downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        if not Path(downloaded_file).is_dir():
+            downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        if not Path(downloaded_file).is_dir():
+            raise Exception(
+                f"Could not download the dataset Content of `downloaded_file`:"
+                f"{open(downloaded_file, 'r').read()}"
+            )
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,

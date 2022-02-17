@@ -7,7 +7,11 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import plotly.express as px
+try:
+    import plotly.express as px
+except ImportError:
+    px = None
+
 import rich
 from datasets import Dataset
 from datasets import Split

@@ -6,7 +6,11 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except ImportError:
+    go = None
+
 from datasets import Dataset
 from datasets import Split
 
