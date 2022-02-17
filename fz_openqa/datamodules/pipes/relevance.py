@@ -14,9 +14,21 @@ from typing import Tuple
 
 import numpy as np
 import spacy
-from scispacy.abbreviation import AbbreviationDetector  # type: ignore
-from scispacy.linking import EntityLinker  # type: ignore
-from scispacy.linking_utils import Entity
+
+try:
+    import scispacy
+except ImportError:
+    scispacy = None
+
+if scispacy is not None:
+    from scispacy.linking import EntityLinker  # type: ignore
+    from scispacy.linking_utils import Entity
+else:
+    from spacy.pipeline import EntityLinker  # type: ignore
+
+    Entity = None
+
+
 from spacy import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span

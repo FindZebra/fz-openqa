@@ -6,6 +6,7 @@ import datasets
 import hydra
 import rich
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import fz_openqa
 from fz_openqa import configs
@@ -20,6 +21,9 @@ from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 logger = logging.getLogger(__name__)
+
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
 @hydra.main(

@@ -42,7 +42,7 @@ trainer:
 
 model:
   bert_lr: 1e-5
-  lr: 1e-4
+  lr: 1e-5
   ema_decay: null
   weight_decay: 1e-3
   num_warmup_steps: 1_000
@@ -77,7 +77,7 @@ datamodule:
   # dataloader
   train_batch_size: 8
   eval_batch_size: 32
-  num_workers: 8
+  num_workers: 12
   pin_memory: true
   # drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
 
@@ -141,10 +141,10 @@ datamodule:
     faiss_args:
       factory: IVF100,PQ16x8
       metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
-      nprobe: 16
+      nprobe: 12
     loader_kwargs:
       batch_size: 4_000
-      num_workers: 16
+      num_workers: 12
       pin_memory: true
 
 
