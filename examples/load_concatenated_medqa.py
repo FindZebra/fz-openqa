@@ -36,6 +36,7 @@ def run(config: DictConfig) -> None:
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         query_expansion=config.get("query_expansion", None),
+        n_query_tokens=config.get("n_query_tokens", 1),
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
     )

@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 from typing import Dict
 from typing import List
@@ -11,6 +12,7 @@ from datasets import arrow_dataset
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.json_struct import flatten_json_struct
@@ -18,6 +20,36 @@ from fz_openqa.utils.shape import infer_batch_shape
 from fz_openqa.utils.shape import infer_shape
 
 logger = logging.getLogger(__name__)
+
+
+def replace_subsequent(text, pattern, display_pattern):
+    def fmt_pttrn(display_pattern, count):
+        return f" {count}x({display_pattern})"
+
+    matches = list(re.finditer(pattern, text))
+    if len(matches) < 2:
+        return text
+
+    start = None
+    end = None
+    count = 0
+    for m in matches:
+        if start is None:
+            start = m.start()
+            end = m.end()
+            count += 1
+        elif m.start() == end:
+            end = m.end()
+            count += 1
+        else:
+            break
+
+    if count > 1:
+        text = text[:start] + fmt_pttrn(display_pattern, count) + text[end:]
+
+    if text.count(pattern) > 1:
+        text = replace_subsequent(text, pattern, display_pattern)
+    return text
 
 
 def pretty_decode(
@@ -47,8 +79,12 @@ def pretty_decode(
 
     # decode
     txt = tokenizer.decode(tokens, **kwargs)
-    txt = txt.replace("[PAD]", "")
-    txt = txt.replace(QUERY_MASK, "")
+    for y in tokenizer.special_tokens_map_extended.values():
+        if not isinstance(y, list):
+            y = [y]
+        for yy in y:
+            txt = replace_subsequent(txt, fr" \{yy}", yy)
+
     txt = f"{style_in}`{txt.strip()}"
 
     if not only_text:
