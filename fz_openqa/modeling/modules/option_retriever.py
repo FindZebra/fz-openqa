@@ -110,6 +110,8 @@ class OptionRetriever(Module):
             for symbol in string.punctuation
         ]
 
+        self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
+
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
