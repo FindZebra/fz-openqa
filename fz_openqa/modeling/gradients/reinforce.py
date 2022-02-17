@@ -83,6 +83,8 @@ class ReinforceGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
+        gamma = kwargs.get("gamma", self.gamma)
+
         if self.space == Space.LOG:
             warnings.warn("ReinforceGradients has not been tested for log space")
 
@@ -149,7 +151,7 @@ class ReinforceGradients(Gradients):
             log_b = None
 
         if self.expr == "A":
-            h = log_p_ast_d + self.gamma * log_p_D__A
+            h = log_p_ast_d + gamma * log_p_D__A
             weight = (log_W_ + log_p_ast_d + log_p_ast.unsqueeze(-1)).exp()
             if log_b is not None:
                 weight -= (log_W_ + log_b + log_p_ast.unsqueeze(-1)).exp()
@@ -163,7 +165,7 @@ class ReinforceGradients(Gradients):
                 retriever_loss = (weight.detach() * log_p_d__a.sum(1)).sum(-1)
             else:
                 retriever_loss = 0
-            loss = -(reader_loss + self.gamma * retriever_loss)
+            loss = -(reader_loss + gamma * retriever_loss)
         elif self.expr == "C":
             if log_b is None:
                 log_b = 0
@@ -171,7 +173,7 @@ class ReinforceGradients(Gradients):
             retriever_weight = log_W_.exp() * (log_p_ast_d - log_b)
             reader_loss = (reader_weight.detach() * log_p_ast_d).sum(-1)
             retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
-            loss = -(reader_loss + self.gamma * retriever_loss)
+            loss = -(reader_loss + gamma * retriever_loss)
         else:
             raise ValueError(f"expr must be either A, B or C, got {self.expr}")
 

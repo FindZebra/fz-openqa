@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from typing import Dict
 from typing import Optional
 
 import rich
@@ -29,6 +30,7 @@ class Head(nn.Module, ABC):
         doc_ids: Optional[Tensor] = None,
         q_mask: Optional[Tensor] = None,
         d_mask: Optional[Tensor] = None,
+        batch: Dict[str, Tensor] = None,
         **kwargs
     ) -> Tensor:
         """
@@ -46,6 +48,8 @@ class Head(nn.Module, ABC):
             Mask for the question representations
         d_mask
             Mask for the document representations
+        batch
+            Batch of data
         Returns
         -------
         Tensor

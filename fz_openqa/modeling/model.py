@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections
+from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
@@ -19,6 +20,7 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.ema import EMA
 from fz_openqa.modeling.modules.base import Module
+from fz_openqa.modeling.parameters import Parameters
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
@@ -75,6 +77,7 @@ class Model(LightningModule):
         lr: float = 0.001,
         ema_decay: Optional[float] = None,
         weight_decay: float = 0.01,
+        parameters: Optional[Parameters | Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__()
@@ -82,7 +85,7 @@ class Model(LightningModule):
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["bert", "tokenizer", "module", "parameters"])
         assert self.hparams["bert_lr"] == bert_lr
         assert self.hparams["lr"] == lr
         assert self.hparams["weight_decay"] == weight_decay
@@ -109,11 +112,28 @@ class Model(LightningModule):
         else:
             self.ema = None
 
+        # parameters
+        if parameters is None:
+            self._params = None
+        elif isinstance(parameters, (dict, DictConfig)):
+            if "_target_" in parameters.keys():
+                self._params = maybe_instantiate(parameters)
+            else:
+                self._params = Parameters(**parameters)
+        else:
+            self._params = parameters
+
+    @property
+    def params(self) -> Dict[str, float]:
+        if self._params is None:
+            return {}
+        return self._params()
+
     def forward(self, batch: Batch, **kwargs) -> Batch:
-        return self.module.forward(batch, **kwargs)
+        return self.module.forward(batch, **kwargs, **self.params)
 
     def predict(self, batch: Batch, **kwargs) -> Batch:
-        return self.module.predict(batch, **kwargs)
+        return self.module.predict(batch, **kwargs, **self.params)
 
     def _step(
         self,
@@ -128,7 +148,7 @@ class Model(LightningModule):
         Perform the model forward pass and compute the loss or pre loss terms.
         !! This step is performed separately on each device. !!
         """
-        return self.module.step(batch, **kwargs)
+        return self.module.step(batch, **kwargs, **self.params)
 
     def _step_end(self, pre_output: Batch, *, split: Split, log_data=True) -> Tensor | Batch:
         """
@@ -141,6 +161,9 @@ class Model(LightningModule):
         output = self.module.step_end(pre_output, split)
 
         if log_data:
+            if self._params is not None:
+                output = copy(output)
+                output.update({f"parameters/{k}": v for k, v in self.params.items()})
             # potentially log the loss and
             # other metrics that are computed on each step
             on_step = str(split) == (Split.TRAIN)
@@ -302,6 +325,9 @@ class Model(LightningModule):
         # https://forums.pytorchlightning.ai/t/adopting-exponential-moving-average-ema-for-pl-pipeline/488
         if self.ema is not None:
             self.ema(self)
+
+        if self._params is not None:
+            self._params.step()
 
     def training_step_end(self, batch: Batch, **kwargs) -> Batch:
         return self._step_end(batch, split=Split.TRAIN)

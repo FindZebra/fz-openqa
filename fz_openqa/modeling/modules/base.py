@@ -140,7 +140,10 @@ class Module(nn.Module, ABC):
         attention_mask: Tensor,
         **kwargs,
     ) -> Tensor:
-        bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        bert_output = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
         return bert_output.last_hidden_state
 
     def _instantiate_bert(
@@ -162,7 +165,10 @@ class Module(nn.Module, ABC):
                 for key in ["_target_", "pretrained_model_name_or_path"]:
                     bert_config.pop(key, None)
                 bert_config = maybe_instantiate(bert_config)
-            msg = "BERT parameter overrides must be specified in the config, not in the model."
+            msg = (
+                "BERT parameter overrides must be specified in `BertConfig`, "
+                "not in the model config"
+            )
             assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
         else:
             bert_config = {}

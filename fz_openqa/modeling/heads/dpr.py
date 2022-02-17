@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Dict
 from typing import Optional
 
 import einops
@@ -45,15 +46,16 @@ class DprHead(Head):
         doc_ids: Optional[Tensor] = None,
         q_mask: Optional[Tensor] = None,
         d_mask: Optional[Tensor] = None,
+        batch: Dict[str, Tensor] = None,
         **kwargs
     ) -> Tensor:
 
         # preprocess
-        hd = self.preprocess(hd, "document", mask=d_mask)
-        hq = self.preprocess(hq, "question", mask=q_mask)
+        hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, **kwargs)
+        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
 
         # compute the score
-        return self.score(hq=hq, hd=hd, doc_ids=doc_ids)
+        return self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
 
     def score(
         self,
@@ -61,7 +63,8 @@ class DprHead(Head):
         hq: Tensor,
         hd: Tensor,
         doc_ids: Optional[Tensor] = None,
-        mask: Optional[Tensor] = None
+        mask: Optional[Tensor] = None,
+        **kwargs
     ) -> Tensor:
         if not self.across_batch:
             return einsum("boh, bodh -> bod", hq, hd)
@@ -70,7 +73,7 @@ class DprHead(Head):
             return einsum("boh, mh -> bom", hq, hd)
 
     def preprocess(
-        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         cls_repr = last_hidden_state[..., 0, :]  # CLS token
 

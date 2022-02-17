@@ -34,10 +34,10 @@ def flatten_first_dims(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
 
 def gen_preceding_mask(input_ids: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Mask all tokens before the target token."""
-    mask = torch.zeros_like(input_ids)
     idx = torch.arange(input_ids.shape[-1], device=input_ids.device)
-    idx = idx.view(*(1 for _ in range(mask.dim() - 1)), idx.shape[-1])
-    idx = idx.expand_as(mask)
+    idx = idx.view(*(1 for _ in range(input_ids.dim() - 1)), idx.shape[-1])
+    idx = idx.expand_as(input_ids)
     sep_pos = (input_ids == target).long().argmax(dim=-1).unsqueeze(-1)
+    mask = torch.zeros_like(input_ids, dtype=torch.bool)
     mask[idx < sep_pos] = 1
     return mask
