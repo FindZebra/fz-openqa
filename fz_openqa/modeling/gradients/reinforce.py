@@ -37,6 +37,13 @@ class ReinforceGradients(Gradients):
         self.expr = expr
         self.gamma = gamma
 
+        rich.print(
+            f"{self.__class__.__name__}: "
+            f"use_baseline={self.use_baseline}, "
+            f"expr={self.expr}, "
+            f"gamma={self.gamma}"
+        )
+
     def __call__(
         self,
         *,
