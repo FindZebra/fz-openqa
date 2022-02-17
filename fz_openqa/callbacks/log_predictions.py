@@ -1,23 +1,16 @@
 import logging
-import shutil
-from io import StringIO
 from typing import Any
 from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
-import rich
 import spacy
 import wandb
+from pip._internal import main as pipmain
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.types import STEP_OUTPUT
-from rich.console import Console
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
-from fz_openqa.utils.pretty import pretty_decode
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +25,22 @@ SPACY_MODELS = {
     "en_core_sci_lg": "https://s3-us-west-2.amazonaws.com/"
     "ai2-s2-scispacy/releases/v0.4.0/en_core_sci_lg-0.4.0.tar.gz",
 }
+
+
+def maybe_download_spacy_model(model_name: str) -> spacy.Language:
+    spacy_model_url = SPACY_MODELS.get(model_name, model_name)
+    try:
+        spacy_model = spacy.load(model_name)
+    except OSError:
+        if spacy_model_url.startswith("http"):
+            pipmain(["install", spacy_model_url])
+        else:
+            from spacy.cli import download
+
+            download(spacy_model_url)
+        spacy_model = spacy.load(model_name)
+
+    return spacy_model
 
 
 class LogPredictions(Callback):
@@ -51,14 +60,7 @@ class LogPredictions(Callback):
         self.n_samples = n_samples
         self.data = []
         if spacy_model is not None:
-            spacy_model_url = SPACY_MODELS.get(spacy_model, spacy_model)
-            try:
-                self.spacy_model = spacy.load(spacy_model)
-            except OSError:
-                from spacy.cli import download
-
-                download(spacy_model_url)
-                self.spacy_model = spacy.load(spacy_model)
+            self.spacy_model = maybe_download_spacy_model(spacy_model)
         else:
             self.spacy_model = None
 
