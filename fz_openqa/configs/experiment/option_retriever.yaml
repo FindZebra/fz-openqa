@@ -29,7 +29,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "Colbert + in batch + priority + update every 10 epochs + added gate parameters"
+  exp_info: "Colbert + Bayesian head"
 
 trainer:
   gpus: 8
@@ -57,29 +57,25 @@ model:
     alpha: 0
     max_batch_size: 200
     retriever_head:
+      output_size: 64
       use_mask: false # todo
       use_answer_mask: false
+      bayesian: true
     reader_head:
+      output_size: 64
       use_mask: false
+      bayesian: false
     gradients:
       use_baseline: false # todo
-      expr: C
+      expr: B
   parameters:
-    gamma:
-      initial_value: 0.01
-      final_value: 1
-      num_steps: 10_000
-      mode: cosine
-    question_mask:
-      initial_value: 0
-      final_value: 1
-      num_steps: 10_000
-      mode: cosine
+    gamma: 1
+    question_mask: 1
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10 # todo !!!
+    freq: 15 # todo !!!
     reset_optimizer: true # TODO !!
     index_first_epoch: false
     builder_args:

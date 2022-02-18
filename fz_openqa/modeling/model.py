@@ -213,7 +213,7 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
-        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
         optimizer_grouped_parameters = [
             {
                 "params": only_trainable(

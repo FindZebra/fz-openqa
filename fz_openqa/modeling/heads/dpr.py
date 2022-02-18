@@ -1,8 +1,10 @@
+import math
 from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
 import einops
+import torch
 import torch.nn.functional as F
 from torch import einsum
 from torch import nn
@@ -10,6 +12,7 @@ from torch import Tensor
 from torch import unique
 
 from fz_openqa.modeling.heads.base import Head
+from fz_openqa.modeling.layers import BayesianLinear
 
 
 class DprHead(Head):
@@ -22,19 +25,22 @@ class DprHead(Head):
         normalize: bool = False,
         bias: bool = True,
         share_parameters: bool = False,
+        bayesian: bool = False,
         **kwargs
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
 
+        Layer = nn.Linear if not bayesian else BayesianLinear
+
         self.normalize = normalize
         if self.output_size is not None:
-            self.q_head = nn.Linear(self.input_size, self.output_size, bias=self.bias)
+            self.q_head = Layer(self.input_size, self.output_size, bias=self.bias)
             if share_parameters:
                 self.d_head = self.q_head
             else:
-                self.d_head = deepcopy(self.q_head)
+                self.d_head = Layer(self.input_size, self.output_size, bias=self.bias)
         else:
             self.q_head = self.d_head = None
 
