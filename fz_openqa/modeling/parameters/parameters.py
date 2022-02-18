@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from numbers import Number
 from typing import Dict
 
 from omegaconf import DictConfig
@@ -27,7 +28,7 @@ class Parameters:
         elif isinstance(v, (dict, DictConfig)):
             assert "mode" in v.keys(), "`mode` must be specified to init a `Schedule`."
             schedule = AutoSchedule(**v)
-        elif isinstance(v, float):
+        elif isinstance(v, Number):
             schedule = StaticSchedule(v)
         else:
             raise ValueError(f"Unrecognized parameter type: {type(v)}")
