@@ -25,19 +25,20 @@ defaults:
       - log_predictions
 
 base:
-  seed: 633830320 # todo!!!!!
+  seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
   exp_info: "Colbert + Bayesian head"
+  batch_size: 32
 
 trainer:
-  gpus: 8
+  gpus: 4
   strategy: dp
   min_epochs: 1
   max_epochs: 1_000
   gradient_clip_val: 0.5
-  accumulate_grad_batches: 4
+  accumulate_grad_batches: ${int_div:${base.batch_size},${trainer.gpus}}
   val_check_interval: 0.5
 
 model:
@@ -82,8 +83,8 @@ datamodule:
       relevance_classifier: null
 
   # dataloader
-  train_batch_size: 8
-  eval_batch_size: 32
+  train_batch_size: ${trainer.gpus}
+  eval_batch_size: ${int_mul:${trainer.gpus},4}
   num_workers: 12
   pin_memory: true
   # drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!

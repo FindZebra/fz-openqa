@@ -2,7 +2,6 @@ import os
 
 import hydra
 import numpy as np
-import rich
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
@@ -14,6 +13,8 @@ from fz_openqa.utils.config import resolve_config_paths
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("int_mul", lambda x, y: int(x * y))
+OmegaConf.register_new_resolver("int_div", lambda x, y: int(x / y))
 
 
 def run_experiment_with_config(config: DictConfig):
