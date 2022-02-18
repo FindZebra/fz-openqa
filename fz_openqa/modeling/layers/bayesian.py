@@ -1,8 +1,10 @@
 import math
 
+import rich
 import torch
 from torch import nn
 from torch.distributions import MultivariateNormal
+from torch.distributions import Normal
 
 
 def flat_to_triangular(flat_params, with_diagonal=False):
@@ -41,11 +43,11 @@ def make_cholesky(logvar, cov):
     return (1 - m) * cov + torch.diag(std)
 
 
-class BayesianParameterized(nn.Module):
+class MultivariateParameterization(nn.Module):
     """Parametrize `n_parameters` using a Multivariate Gaussian distribution."""
 
     def __init__(self, n_parameters: int, scale_init: float = 1e-3):
-        super(BayesianParameterized, self).__init__()
+        super(MultivariateParameterization, self).__init__()
         self.n_parameters = n_parameters
         # location parameter
         self.loc = nn.Parameter(torch.zeros((n_parameters)))
@@ -54,7 +56,7 @@ class BayesianParameterized(nn.Module):
         self.logvar = nn.Parameter((scale_init * torch.ones((n_parameters))).log())
 
         # off-diagonal covariance
-        self.cov = nn.Parameter(
+        self.flat_cov = nn.Parameter(
             torch.zeros((n_parameters * (n_parameters - 1) // 2)).normal_() * 0.0
         )
 
@@ -76,17 +78,43 @@ class BayesianParameterized(nn.Module):
 
     @property
     def choleski(self) -> torch.Tensor:
-        cov = flat_to_triangular(self.cov)
+        cov = flat_to_triangular(self.flat_cov)
         L = make_cholesky(self.logvar, cov)
         return L
 
 
+class DiagonalParameterization(nn.Module):
+    """Parametrize `n_parameters` using a Multivariate Gaussian distribution."""
+
+    def __init__(self, n_parameters: int, scale_init: float = 1e-3):
+        super(DiagonalParameterization, self).__init__()
+        self.n_parameters = n_parameters
+        # location parameter
+        self.loc = nn.Parameter(torch.zeros((n_parameters)))
+
+        # diagonal covariance
+        self.logvar = nn.Parameter((scale_init * torch.ones((n_parameters))).log())
+
+    @property
+    def dist(self) -> Normal:
+        return Normal(self.loc, self.logvar.exp())
+
+
 class BayesianLinear(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, gain=1.0):
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        bias=True,
+        gain_init=1.0,
+        base_dist: str = "diagonal",
+        share_sampled_params: bool = True,
+    ):
         super(BayesianLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.use_bias = bias
+        self.share_sampled_params = share_sampled_params
 
         # total number of parameters
         n_parameters = in_features * out_features
@@ -94,10 +122,15 @@ class BayesianLinear(nn.Module):
             n_parameters += out_features
 
         # compute scale for init (Xavier)
-        scale_init = gain * math.sqrt(2.0 / float(self.in_features + self.out_features))
+        scale_init = gain_init * math.sqrt(2.0 / float(self.in_features + self.out_features))
 
         # register parameters
-        self.BayesianLinear = BayesianParameterized(n_parameters, scale_init)
+        if base_dist == "multivariate":
+            self.BayesianLinear = MultivariateParameterization(n_parameters, scale_init)
+        elif base_dist == "diagonal":
+            self.BayesianLinear = DiagonalParameterization(n_parameters, scale_init)
+        else:
+            raise ValueError(f"Unknown base distribution {base_dist}")
 
     def forward(self, x):
         *bs, hdim = x.shape
@@ -105,6 +138,9 @@ class BayesianLinear(nn.Module):
             raise ValueError(
                 f"Expected input size {self.in_features}, got {hdim} " f"(input: {x.shape})"
             )
+
+        if self.share_sampled_params:
+            bs = [bs[0]]
 
         # sample the weights of the linear transformation
         W = self.BayesianLinear.dist.rsample(sample_shape=bs)
@@ -118,5 +154,15 @@ class BayesianLinear(nn.Module):
         W = W.view(*bs, self.in_features, self.out_features)
 
         # compute output
-        y = torch.einsum("...h, ...hk -> ...k", x, W)
-        return y + b
+        if self.share_sampled_params:
+            y = torch.einsum("b...h, bhk -> b...k", x, W)
+            if isinstance(b, torch.Tensor):
+                b = b.view(*bs, *(1 for _ in range(x.dim() - len(bs) - 1)), b.shape[-1])
+                y = y + b
+
+            rich.print(f"x.shape: {y.shape}")
+            return y
+
+        else:
+            y = torch.einsum("...h, ...hk -> ...k", x, W)
+            return y + b
