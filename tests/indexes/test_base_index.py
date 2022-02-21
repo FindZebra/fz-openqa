@@ -4,6 +4,7 @@ from unittest import TestCase
 
 import datasets
 import numpy as np
+import rich
 import torch
 from datasets import Dataset
 from transformers import AutoTokenizer
@@ -11,6 +12,7 @@ from transformers import AutoTokenizer
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env, silent_huggingface
 
 
@@ -84,7 +86,7 @@ class TestIndex(TestCase, ABC):
 
     def _init_index(self) -> Index:
         """Init the index."""
-        return self.cls(dataset=self.corpus, k=self.k)
+        return self.cls(dataset=self.corpus)
 
     def _test_dill_inspect(self):
         """Check if the Index can be pickled."""
@@ -97,11 +99,6 @@ class TestIndex(TestCase, ABC):
                 self.assertTrue(v, f"Attribute {k} could not be pickled.")
         else:
             raise ValueError(f"dill_inspect() returned unexpected type {type(dill_status)}.")
-
-    def _test_is_indexed(self):
-        """Check that `is_index` attribute."""
-        index = self._init_index()
-        self.assertTrue(index.is_indexed)
 
     def _test_search(self):
         """

@@ -12,7 +12,7 @@ import rich
 import torch
 from tqdm.rich import tqdm
 
-from fz_openqa.datamodules.index.dense import display_file_size
+from fz_openqa.utils.io import display_file_size
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 from fz_openqa.utils.tensor_arrow import TensorArrowWriter
 from fz_openqa.utils.tensor_arrow import TORCH_DTYPES

@@ -1,24 +1,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import T
 from typing import Tuple
 from typing import Union
 
-import faiss
-import numpy as np
-import rich
 import torch
 from torch import Tensor
 
+from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import ctx
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import DeviceQueue
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.utils.maxsim.datastruct import FaissInput
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimInput
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
@@ -50,7 +45,7 @@ class MaxSim(torch.nn.Module):
     def __init__(
         self,
         *,
-        token_index: faiss.Index | PathLike,
+        token_index: IndexHandler | PathLike,
         vectors: TensorArrowTable | Tensor,
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],
@@ -79,7 +74,7 @@ class MaxSim(torch.nn.Module):
         # Initialize Input and Output queues
         self.ranking_input_queues: List[ctx.Queue] = []
         self.ranking_output_queues: List[ctx.Queue] = []
-        for device in ranking_devices:
+        for _ in ranking_devices:
             q = ctx.Queue(maxsize=max_queue_size)
             self.ranking_input_queues.append(q)
             q = ctx.Queue(maxsize=max_queue_size)
@@ -89,10 +84,12 @@ class MaxSim(torch.nn.Module):
         self.receivers = [iter(q.get, WorkerSignal.EXIT) for q in self.ranking_output_queues]
 
         # initialize the MaxSim workers
-        self.maxsim_workers = self._init_maxsim_rankers(vectors, ranking_devices, max_chunksize)
+        self.maxsim_workers = self._init_maxsim_rankers(
+            vectors, self.ranking_devices, max_chunksize
+        )
 
         # initialize the MaxSimReducer
-        self.maxsim_reducer = MaxSimReducer(device=ranking_devices[-1])
+        self.maxsim_reducer = MaxSimReducer(device=self.ranking_devices[-1])
 
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 

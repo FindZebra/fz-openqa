@@ -11,7 +11,7 @@
 [[find in source code]](blob/master/fz_openqa/datamodules/index/colbert.py#L39)
 
 ```python
-class ColbertIndex(FaissIndex):
+class ColbertIndex(DenseIndex):
     def __init__(dataset: Dataset, **kwargs):
 ```
 

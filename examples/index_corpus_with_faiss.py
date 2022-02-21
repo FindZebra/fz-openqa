@@ -30,7 +30,7 @@ import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.index import ElasticSearchIndex, FaissIndex, Index
+from fz_openqa.datamodules.index import ElasticSearchIndex, DenseIndex, Index
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.inference.checkpoint import CheckpointLoader
@@ -125,7 +125,7 @@ def run(config: DictConfig) -> None:
     rich.print(corpus)
 
     # init the index
-    IndexCls = ColbertIndex if use_colbert else FaissIndex
+    IndexCls = ColbertIndex if use_colbert else DenseIndex
     if config.get("use_es", False):
         IndexCls = ElasticSearchIndex
     logger.info(f"Initialize index <{IndexCls.__name__}>")

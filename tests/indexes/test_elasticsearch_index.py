@@ -12,8 +12,5 @@ class TestElasticSearchIndex(TestIndex):
     def test_dill_inspect(self):
         self._test_dill_inspect()
 
-    def test_is_index(self):
-        self._test_is_indexed()
-
     def test_search(self):
         self._test_search()

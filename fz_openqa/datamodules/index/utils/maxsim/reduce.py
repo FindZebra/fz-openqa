@@ -16,6 +16,8 @@ class MaxSimReducer(object):
     def __init__(self, device: None | int | torch.device = None):
         if device is None:
             device = torch.device("cpu")
+        if isinstance(device, int):
+            device = torch.device("cuda", device)
         self.device = device
 
     def __call__(self, data: List[MaxSimOutput], k: int) -> MaxSimOutput:

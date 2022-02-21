@@ -3,7 +3,7 @@ from copy import copy
 
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
-from fz_openqa.datamodules.index.dense import FaissIndex
+from fz_openqa.datamodules.index.dense import DenseIndex
 from fz_openqa.datamodules.index.es import ElasticSearchIndex
 from fz_openqa.datamodules.index.static import StaticIndex
 
@@ -23,7 +23,7 @@ class IndexBuilder:
 
 
 class FaissIndexBuilder(IndexBuilder):
-    cls = FaissIndex
+    cls = DenseIndex
 
 
 class ColbertIndexBuilder(IndexBuilder):
@@ -39,7 +39,7 @@ class StaticIndexBuilder(IndexBuilder):
 
 
 class FaissOrEsIndexBuilder(IndexBuilder):
-    cls = FaissIndex
+    cls = DenseIndex
     alt_cls = ElasticSearchIndex
 
     def __call__(self, **kwargs) -> Index:

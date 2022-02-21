@@ -17,5 +17,4 @@ model:
 datamodule:
   # index
   index_builder:
-    faiss_args:
-      factory: Flat
+    index_factory: Flat

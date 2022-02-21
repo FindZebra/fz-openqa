@@ -63,7 +63,7 @@ model:
     gamma: 1
     question_mask: 1
   module:
-    zero_weight: 1e-3
+    zero_weight: 0
     resample_k: null
     alpha: 0
     max_batch_size: 200
@@ -81,7 +81,7 @@ model:
       learn_temperature: true
       temperature: 1e3
     zero_head:
-      output_size: 512
+      output_size: null
       use_mask: false
       bayesian: false
       learn_temperature: true
@@ -158,16 +158,13 @@ datamodule:
     es_temperature: 1. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
     keep_maxsim_on_cpu: false
-    faiss_train_size: 1_000_000
     p: 100
     dtype: float16
     max_chunksize: null
     maxsim_chunksize: 4_000
     persist_cache: false
-    faiss_args:
-      factory: IVF100,PQ16x8
-      metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
-      nprobe: 12
+    index_factory: IVF100,PQ16x8
+    nprobe: 12
     loader_kwargs:
       batch_size: ${int_mul:${base.n_devices},500}
       num_workers: 12

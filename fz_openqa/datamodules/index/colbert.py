@@ -10,7 +10,7 @@ import torch
 from datasets import Split
 from torch import Tensor
 
-from fz_openqa.datamodules.index.dense import FaissIndex
+from fz_openqa.datamodules.index.dense import DenseIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.io import log_mem_size
@@ -26,7 +26,7 @@ from fz_openqa.utils.tensor_arrow import TensorArrowTable
 log = logging.getLogger(__name__)
 
 
-class ColbertIndex(FaissIndex):
+class ColbertIndex(DenseIndex):
     """
     Implementation of the Colbert index. This implementation supports multi-GPU.
     Half of the GPUs are allocated to faiss, and the other half to the MaxSim operator.
@@ -47,7 +47,7 @@ class ColbertIndex(FaissIndex):
     _max_add_per_gpu = 1 << 25
     _max_num_proc: int = 1
 
-    no_fingerprint: List[str] = FaissIndex.no_fingerprint + [
+    no_fingerprint: List[str] = DenseIndex.no_fingerprint + [
         "_max_sim",
         "_vectors" "_emb2pid",
         "in_memory",
@@ -69,12 +69,6 @@ class ColbertIndex(FaissIndex):
         self.p = p
         self.keep_maxsim_on_cpu = keep_maxsim_on_cpu
         self.maxsim_chunksize = maxsim_chunksize
-
-    def _preprocess_query(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
-    ) -> Batch:
-        """Preprocess the batch before query"""
-        return self.predict_queries(batch, idx=idx, split=split, format=OutputFormat.TORCH)
 
     def _call_batch(
         self,
@@ -128,7 +122,7 @@ class ColbertIndex(FaissIndex):
     def _init_maxsim(self):
         faiss_devices, maxsim_devices = self._allocate_gpus(faiss.get_num_gpus())
         self._max_sim = MaxSim(
-            token_index=self.index_file,
+            token_index=self.index_path,
             vectors=self.vectors_table,
             emb2pid=self.emb2pid,
             ranking_devices=maxsim_devices,
@@ -138,14 +132,12 @@ class ColbertIndex(FaissIndex):
         self._max_sim.cuda()
 
     def free_memory(self):
-        if hasattr(self, "_index") and self._index is not None:
-            del self._index
-            self._index = None
+        super(ColbertIndex, self).free_memory()
         if hasattr(self, "_max_sim") and self._max_sim is not None:
             del self._max_sim
             self._max_sim = None
 
-    def _build_ends(self):
+    def _train_ends(self):
         self.free_memory()
 
     def __del__(self):

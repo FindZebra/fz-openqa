@@ -3,21 +3,21 @@
 > Auto-generated documentation for [fz_openqa.datamodules.index.dense](blob/master/fz_openqa/datamodules/index/dense.py) module.
 
 - [Fz-openqa](../../../README.md#fz-openqa-index) / [Modules](../../../MODULES.md#fz-openqa-modules) / [Fz Openqa](../../index.md#fz-openqa) / [Datamodules](../index.md#datamodules) / [Index](index.md#index) / Dense
-    - [FaissIndex](#faissindex)
+    - [DenseIndex](#faissindex)
 - [todo: handle temporary cache_dir form here (persist=False)](#todo-handle-temporary-cache_dir-form-here-persistfalse)
-        - [FaissIndex().build](#faissindexbuild)
-        - [FaissIndex().cache_query_dataset](#faissindexcache_query_dataset)
-        - [FaissIndex().get_rename_output_names_pipe](#faissindexget_rename_output_names_pipe)
-        - [FaissIndex().is_indexed](#faissindexis_indexed)
-        - [FaissIndex().search](#faissindexsearch)
+        - [DenseIndex().build](#faissindexbuild)
+        - [DenseIndex().cache_query_dataset](#faissindexcache_query_dataset)
+        - [DenseIndex().get_rename_output_names_pipe](#faissindexget_rename_output_names_pipe)
+        - [DenseIndex().is_indexed](#faissindexis_indexed)
+        - [DenseIndex().search](#faissindexsearch)
     - [iter_batches_with_indexes](#iter_batches_with_indexes)
 
-## FaissIndex
+## DenseIndex
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L65)
 
 ```python
-class FaissIndex(Index):
+class DenseIndex(Index):
     def __init__(
         dataset: Dataset,
         model: pl.LightningModule,
@@ -60,7 +60,7 @@ index_name
 
 - [Index](base.md#index)
 
-### FaissIndex().build
+### DenseIndex().build
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L191)
 
@@ -89,7 +89,7 @@ Returns
 -------
 None
 
-### FaissIndex().cache_query_dataset
+### DenseIndex().cache_query_dataset
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L409)
 
@@ -101,7 +101,7 @@ def cache_query_dataset(
 ):
 ```
 
-### FaissIndex().get_rename_output_names_pipe
+### DenseIndex().get_rename_output_names_pipe
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L466)
 
@@ -111,7 +111,7 @@ def get_rename_output_names_pipe(inputs: List[str], output: str) -> Pipe:
 
 Format the output of the model
 
-### FaissIndex().is_indexed
+### DenseIndex().is_indexed
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L187)
 
@@ -120,7 +120,7 @@ Format the output of the model
 def is_indexed():
 ```
 
-### FaissIndex().search
+### DenseIndex().search
 
 [[find in source code]](blob/master/fz_openqa/datamodules/index/dense.py#L333)
 
@@ -137,7 +137,7 @@ def search(
 
 Search the index using a batch of queries. For a single query, the batch is processed
 using the model and the predict pipe.
-For a whole query dataset, you might consider calling [FaissIndex().cache_query_dataset](#faissindexcache_query_dataset) first. In that
+For a whole query dataset, you might consider calling [DenseIndex().cache_query_dataset](#faissindexcache_query_dataset) first. In that
 case you must provide the `idx` and `split` arguments (see Warnings).
 This is however handled automatically when calling `search` with a `Dataset` as query.
 
