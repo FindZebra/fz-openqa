@@ -26,6 +26,8 @@ class DprHead(Head):
         bias: bool = True,
         share_parameters: bool = False,
         bayesian: bool = False,
+        learn_temperature: bool = False,
+        temperature: float = 1.0,
         **kwargs
     ):
         super(DprHead, self).__init__(**kwargs)
@@ -43,6 +45,16 @@ class DprHead(Head):
                 self.d_head = Layer(self.input_size, self.output_size, bias=self.bias)
         else:
             self.q_head = self.d_head = None
+
+        # temperate
+        log_temperature = torch.tensor(math.log(temperature), dtype=torch.float)
+        if learn_temperature:
+            self.log_temperature = nn.Parameter(log_temperature)
+        else:
+            self.register_buffer("log_temperature", log_temperature)
+
+    def temperature(self):
+        return self.log_temperature.exp()
 
     def forward(
         self,
@@ -90,6 +102,9 @@ class DprHead(Head):
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
             # cls_repr /= float(cls_repr.shape[-1])**0.5
+
+        if head == "question":
+            cls_repr = cls_repr / self.temperature()
 
         return cls_repr
 

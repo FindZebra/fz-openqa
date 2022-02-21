@@ -6,7 +6,7 @@
 #SBATCH --time=1-00:00:00
 
 # variables
-NAME="colbert-bayes-reinforce-v4.2.c-es-f15-k10-m100-diku-7"
+NAME="colbert-bayes-reinforce-v4.2.c-es-f15-k10-P1000-diku-RETRIEVED-TLEARN-7"
 setup_with_model=false
 
 # display basic info
@@ -19,7 +19,7 @@ echo "====== starting experiment ========="
 # startup elastic search
 if [ "$setup_with_model" = false ]
 then
-    ./elasticsearch.sh &
+    elasticsearch --quiet &
 fi
 
 # run the model
@@ -28,6 +28,5 @@ poetry run python run.py +experiment=option_retriever +environ=diku \
   datamodule.n_documents=10 \
   logger.wandb.name=${NAME} \
   model.ema_decay=null \
-  model.module.use_gate=false \
   datamodule.dataset_update.freq=15 \
   trainer.gpus=4

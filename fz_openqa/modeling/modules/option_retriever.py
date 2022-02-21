@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import string
-from copy import deepcopy
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -76,8 +75,6 @@ class OptionRetriever(Module):
         resample_k: int = None,
         max_batch_size: Optional[int] = None,
         gradients: Gradients | DictConfig = InBatchGradients(),
-        temperature: float = 1.0,
-        use_gate: bool = False,
         **kwargs,
     ):
 
@@ -87,19 +84,10 @@ class OptionRetriever(Module):
         self.reader_head = maybe_instantiate(reader_head)
         self.retriever_head = maybe_instantiate(retriever_head)
 
-        # register gates
-        if use_gate:
-            gate = torch.nn.Parameter(torch.zeros((1,)))
-        else:
-            gate = 1
-        self.reader_gate = deepcopy(gate)
-        self.retriever_gate = deepcopy(gate)
-
         # parameters
         self.resample_k = resample_k
         self.max_batch_size = max_batch_size
         self.alpha = alpha
-        self.temperature = temperature
 
         # init the estimator
         self.estimator = maybe_instantiate(gradients)
@@ -211,7 +199,10 @@ class OptionRetriever(Module):
         d_batch = {k: v for k, v in batch.items() if k.startswith("document.")}
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
         output = {}
-        step_output = {}
+        step_output = {
+            "reader/temperature": self.reader_head.temperature().detach(),
+            "retriever/temperature": self.retriever_head.temperature().detach(),
+        }
         # `max_batch_size` is used to limit the number of samples in the batch, it is
         # only used during eval, except when resampling..
         max_batch_size_eval = -1 if self.training else self.max_batch_size
@@ -250,7 +241,7 @@ class OptionRetriever(Module):
             # compute the score `log p(d |q, a)`and sample `k` documents without replacement
             with torch.no_grad():
                 # todo: resample using priority sampling
-                retriever_score = self.retriever_gate * self.retriever_head(
+                retriever_score = self.retriever_head(
                     hd=d_out["_hd_"],
                     hq=output["_hq_"],
                     q_mask=self.mask(batch, "question"),
@@ -262,9 +253,7 @@ class OptionRetriever(Module):
                 # sample k documents
                 original_retrieval_score = d_batch.get("document.retrieval_score", None)
                 retriever_score = self._mask_scores(retriever_score, original_retrieval_score)
-                soft_samples = F.gumbel_softmax(
-                    retriever_score / self.temperature, hard=False, dim=-1
-                )
+                soft_samples = F.gumbel_softmax(retriever_score, hard=False, dim=-1)
                 sample_ids = soft_samples.topk(self.resample_k, dim=-1)[1]
 
                 # re-sample the documents
@@ -287,7 +276,7 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        reader_score = self.reader_gate * self.reader_head(
+        reader_score = self.reader_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
@@ -295,7 +284,7 @@ class OptionRetriever(Module):
             batch={**d_batch, **q_batch},
             **kwargs,
         )
-        retriever_score = self.retriever_gate * self.retriever_head(
+        retriever_score = self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),

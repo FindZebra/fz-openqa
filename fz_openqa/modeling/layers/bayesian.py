@@ -160,7 +160,6 @@ class BayesianLinear(nn.Module):
                 b = b.view(*bs, *(1 for _ in range(x.dim() - len(bs) - 1)), b.shape[-1])
                 y = y + b
 
-            rich.print(f"x.shape: {y.shape}")
             return y
 
         else:
