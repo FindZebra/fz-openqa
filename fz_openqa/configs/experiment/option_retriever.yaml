@@ -25,69 +25,76 @@ defaults:
       - log_predictions
 
 base:
-  seed: 633830320 # todo!!!!!
+  seed: 4272019677 # TODO: remove
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "Colbert + in batch + priority + update every 10 epochs + added gate parameters"
+  exp_info: "Colbert + Bayesian head"
+  batch_size: 32
+  device_batch_size: 1
+  n_devices: ${int_max:1,${trainer.gpus}}
+  step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
 
 trainer:
-  gpus: 8
+  gpus: ${n_gpus:}
   strategy: dp
   min_epochs: 1
   max_epochs: 1_000
-  gradient_clip_val: 0.5
-  accumulate_grad_batches: 4
+  gradient_clip_val: 2.0 # as in the Colbert repo
+  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
   val_check_interval: 0.5
+  precision: 16
 
 model:
-  bert_lr: 1e-5
-  lr: 1e-4
   ema_decay: null
-  weight_decay: 1e-3
-  num_warmup_steps: 1_000
+  num_warmup_steps: 100 # Colbert uses no warmup
   num_training_steps: 10_000
   bert:
     config:
       hidden_dropout_prob: 0.1
       attention_probs_dropout_prob: 0.1
+  optimizer: adamw
+  use_parameter_groups: false
+  optimizer_params:
+    lr: 1e-5
+    eps: 1e-8 # as in the Colbert repo
   module:
-    use_gate: true # todo
+    # use_gate: true # todo
     resample_k: null
     alpha: 0
     max_batch_size: 200
     retriever_head:
+      output_size: 64
       use_mask: false # todo
       use_answer_mask: false
+      bayesian: true # todo
+      learn_temperature: true
+      temperature: 1e3
     reader_head:
+      output_size: 64
       use_mask: false
+      bayesian: false
+      learn_temperature: true
+      temperature: 1e3
     gradients:
       use_baseline: false # todo
-      expr: C
+      expr: B
   parameters:
-    gamma:
-      initial_value: 0.01
-      final_value: 1
-      num_steps: 10_000
-      mode: cosine
-    question_mask:
-      initial_value: 0
-      final_value: 1
-      num_steps: 10_000
-      mode: cosine
+    gamma: 1
+    question_mask: 1
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10 # todo !!!
+    freq: 15 # todo !!!
     reset_optimizer: true # TODO !!
     index_first_epoch: false
     builder_args:
       relevance_classifier: null
 
   # dataloader
-  train_batch_size: 8
-  eval_batch_size: 32
+  train_batch_size: ${base.step_batch_size}
+  eval_batch_size: ${int_mul:${datamodule.train_batch_size},4}
   num_workers: 12
   pin_memory: true
   # drop_last: true # TODO: problem with test set!!!!!!!!!!!!!!
@@ -154,7 +161,7 @@ datamodule:
       metric_type: 0 # == faiss.METRIC_INNER_PRODUCT
       nprobe: 12
     loader_kwargs:
-      batch_size: 4_000
+      batch_size: ${int_mul:${base.n_devices},500}
       num_workers: 12
       pin_memory: true
 

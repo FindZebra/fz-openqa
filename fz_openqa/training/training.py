@@ -127,6 +127,11 @@ def train(config: DictConfig) -> Optional[float]:
         pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
         datamodule.display_samples(n_samples=1)
 
+    # potentially kill elastic search
+    if config.get("kill_es", False):
+        log.info("Killing elasticsearch.")
+        os.system("pkill -f elasticsearch")
+
     # Log config to all lightning loggers
     log.info("Logging hyperparameters.")
     train_utils.log_hyperparameters(

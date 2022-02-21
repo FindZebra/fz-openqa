@@ -2,7 +2,7 @@ import os
 
 import hydra
 import numpy as np
-import rich
+import torch
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
@@ -12,8 +12,35 @@ from fz_openqa.utils import train_utils
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
 
+
+def int_div(a, *b):
+    y = a
+    for x in b:
+        y = y // x
+    return y
+
+
+def int_mul(a, *b):
+    y = int(a)
+    for x in b:
+        y *= int(x)
+    return y
+
+
+def int_max(a, *b):
+    y = int(a)
+    for x in b:
+        y = max(x, y)
+    return y
+
+
+N_GPUS = torch.cuda.device_count()
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("int_mul", int_mul)
+OmegaConf.register_new_resolver("int_div", int_div)
+OmegaConf.register_new_resolver("int_max", int_max)
+OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
 
 
 def run_experiment_with_config(config: DictConfig):

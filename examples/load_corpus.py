@@ -8,14 +8,17 @@ import rich
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
-import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
 from fz_openqa.datamodules.builders.corpus import FzCorpusBuilder
 from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
 from fz_openqa.datamodules.builders.corpus import MedWikipediaCorpusBuilder
 from fz_openqa.datamodules.builders.corpus import QuALITYCorpusBuilder
-from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
+
+try:
+    from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
+except ImportError:
+    WikixMedQaCorpusBuilder = None
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer

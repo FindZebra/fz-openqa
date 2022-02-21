@@ -1,9 +1,10 @@
 import abc
 import math
+from numbers import Number
 
 
 class Schedule(object):
-    def __init__(self, *, num_warmup_steps: int = 0, num_steps: int):
+    def __init__(self, *, num_warmup_steps: int = 0, num_steps: int = None):
         self.num_warmup_steps = num_warmup_steps
         self.num_steps = num_steps
         self._step = 0
@@ -42,14 +43,14 @@ class CosineSchedule(LinearSchedule):
 
 
 class StaticSchedule(Schedule):
-    def __init__(self, value: float, **kwargs):
+    def __init__(self, value: Number, **kwargs):
         super().__init__(**kwargs)
         self.value = value
 
     def step(self):
         pass
 
-    def __getitem__(self, item):
+    def __call__(self):
         return self.value
 
 
