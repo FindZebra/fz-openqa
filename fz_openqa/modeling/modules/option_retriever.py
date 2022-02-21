@@ -58,19 +58,13 @@ class OptionRetriever(Module):
         "validation/reader/Accuracy",
     ]
 
-    # require heads
-    _required_heads = [
-        "question_reader",
-        "document_reader",
-        "question_retriever",
-        "document_retriever",
-    ]
-
     def __init__(
         self,
         *args,
         reader_head: Head | DictConfig,
         retriever_head: Head | DictConfig,
+        zero_head: Head | DictConfig,
+        zero_weight: float = 0,
         alpha: float = 0,
         resample_k: int = None,
         max_batch_size: Optional[int] = None,
@@ -83,6 +77,10 @@ class OptionRetriever(Module):
         # register the heads
         self.reader_head = maybe_instantiate(reader_head)
         self.retriever_head = maybe_instantiate(retriever_head)
+
+        # register Zero head
+        self.zero_head = maybe_instantiate(zero_head)
+        self.zero_weight = zero_weight
 
         # parameters
         self.resample_k = resample_k
@@ -102,10 +100,12 @@ class OptionRetriever(Module):
         # init weight using BERT own initialization
         self.bert._init_weights(self.reader_head)
         self.bert._init_weights(self.retriever_head)
+        self.bert._init_weights(self.zero_head)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
+        self.zero_metrics = self._get_base_metrics(prefix=f"{prefix}zero/")
         self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
 
         self.retriever_metrics = self._get_base_metrics(
@@ -295,6 +295,14 @@ class OptionRetriever(Module):
             batch={**d_batch, **q_batch},
             **kwargs,
         )
+        zero_score = self.zero_head(
+            hd=output["_hd_"],
+            hq=output["_hq_"],
+            q_mask=self.mask(batch, "question"),
+            d_mask=self.mask(batch, "document"),
+            batch={**d_batch, **q_batch},
+            **kwargs,
+        )
 
         # retriever diagnostics
         self._retriever_diagnostics(
@@ -316,7 +324,22 @@ class OptionRetriever(Module):
             )
         )
 
+        # add the partial loss corresponding to the zero head and add diagnostics
+        step_output.update(
+            self._zero_diagnostics(zero_score, targets=batch["answer.target"], output=step_output)
+        )
+
         return step_output
+
+    def _zero_diagnostics(
+        self, zero_score, *, targets: torch.Tensor, output: Dict[str, torch.Tensor]
+    ):
+        data = {}
+        loss = F.cross_entropy(zero_score, targets)
+        data["loss"] = output.get("loss", 0) + self.zero_weight * loss
+        data["zero/loss"] = loss
+        data["_zero_logits_"] = zero_score.detach()
+        return data
 
     @staticmethod
     @torch.no_grad()
@@ -431,8 +454,10 @@ class OptionRetriever(Module):
         """update the metrics of the given split."""
         reader_logits = output.get("_reader_logits_", None)
         reader_targets = output.get("_reader_targets_", None)
+        zero_logits = output.get("_zero_logits_", None)
         retriever_reading_logits = output.get("_retriever_reading_logits_", None)
         self.reader_metrics.update(split, reader_logits, reader_targets)
+        self.zero_metrics.update(split, zero_logits, reader_targets)
         self.retriever_reading_metrics.update(split, retriever_reading_logits, reader_targets)
 
         retrieval_logits, retrieval_targets = (
@@ -450,6 +475,7 @@ class OptionRetriever(Module):
         reset all the metrics.
         """
         self.reader_metrics.reset(split)
+        self.zero_metrics.reset(split)
         self.retriever_reading_metrics.reset(split)
         self.retriever_metrics.reset(split)
 
@@ -460,6 +486,7 @@ class OptionRetriever(Module):
         """
         return {
             **self.reader_metrics.compute(split),
+            **self.zero_metrics.compute(split),
             **self.retriever_reading_metrics.compute(split),
             **self.retriever_metrics.compute(split),
             # **self.total_logp_metrics.compute(split),

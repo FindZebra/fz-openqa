@@ -6,6 +6,7 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
+  - override /model/module/zero_head: zero
   - override /model/module/gradients: reinforce # todo!!!!
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
@@ -58,14 +59,17 @@ model:
   optimizer_params:
     lr: 1e-5
     eps: 1e-8 # as in the Colbert repo
+  parameters:
+    gamma: 1
+    question_mask: 1
   module:
-    # use_gate: true # todo
+    zero_weight: 1e-3
     resample_k: null
     alpha: 0
     max_batch_size: 200
     retriever_head:
       output_size: 64
-      use_mask: false # todo
+      use_mask: false
       use_answer_mask: false
       bayesian: true # todo
       learn_temperature: true
@@ -76,12 +80,16 @@ model:
       bayesian: false
       learn_temperature: true
       temperature: 1e3
+    zero_head:
+      output_size: 512
+      use_mask: false
+      bayesian: false
+      learn_temperature: true
+      temperature: 10. # this is a DPR-like head, not a Colbert one
     gradients:
       use_baseline: false # todo
       expr: B
-  parameters:
-    gamma: 1
-    question_mask: 1
+
 
 datamodule:
   # how often to map the dataset
@@ -152,7 +160,7 @@ datamodule:
     keep_maxsim_on_cpu: false
     faiss_train_size: 1_000_000
     p: 100
-    dtype: float32
+    dtype: float16
     max_chunksize: null
     maxsim_chunksize: 4_000
     persist_cache: false
