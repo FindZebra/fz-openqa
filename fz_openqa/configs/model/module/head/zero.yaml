@@ -1,0 +1,8 @@
+defaults:
+  - base
+
+_target_: fz_openqa.modeling.heads.ZeroHead
+output_size: 512
+bias: true
+normalize: false
+_id: zero
