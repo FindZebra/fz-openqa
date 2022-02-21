@@ -6,7 +6,7 @@
 #SBATCH --time=1-00:00:00
 
 # variables
-NAME="colbert-bayes-reinforce-v4.2.c-es-f15-k10-P1000-diku-RETRIEVED-TLEARN-7"
+NAME="colbert-bayes-reinforce-v4.2.b-es-f15-k10-P1000-DIKU-8"
 setup_with_model=false
 
 # display basic info
@@ -24,9 +24,7 @@ fi
 
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
+  +device_batch_size=2 \
   +setup_with_model=${setup_with_model} \
-  datamodule.n_documents=10 \
-  logger.wandb.name=${NAME} \
-  model.ema_decay=null \
-  datamodule.dataset_update.freq=15 \
-  trainer.gpus=4
+  +kill_es=true \
+  logger.wandb.name=${NAME}
