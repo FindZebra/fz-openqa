@@ -11,7 +11,9 @@ from typing import Union
 import rich
 from datasets import Split
 from omegaconf import DictConfig
+from pytorch_lamb import Lamb
 from pytorch_lightning import LightningModule
+from torch import optim
 from torch import Tensor
 from transformers import AdamW
 from transformers import BertPreTrainedModel
@@ -73,22 +75,24 @@ class Model(LightningModule):
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
         num_warmup_steps: int = 1000,
-        bert_lr: float = 1e-5,
-        lr: float = 0.001,
+        optimizer_params: Dict[str, Any] = None,
+        use_parameter_groups: bool = False,
         ema_decay: Optional[float] = None,
-        weight_decay: float = 0.01,
         parameters: Optional[Parameters | Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__()
 
+        if optimizer_params is None:
+            optimizer_params = {"lr": 1e-3}
+
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
         self.save_hyperparameters(ignore=["bert", "tokenizer", "module", "parameters"])
-        assert self.hparams["bert_lr"] == bert_lr
-        assert self.hparams["lr"] == lr
-        assert self.hparams["weight_decay"] == weight_decay
+        assert self.hparams["num_warmup_steps"] == num_warmup_steps
+        assert self.hparams["optimizer_params"] == optimizer_params
+        assert self.hparams["use_parameter_groups"] == use_parameter_groups
         assert self.hparams["monitor_metric"] == monitor_metric
         assert self.hparams["num_training_steps"] == num_training_steps
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
@@ -213,6 +217,82 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
+        if self.hparams.use_parameter_groups:
+            optimizer_grouped_parameters = self._get_parameter_groups()
+
+            for group in optimizer_grouped_parameters:
+                rich.print(
+                    f"> param group: lr={group.get('lr', None)}, "
+                    f"weight_decay={group.get('weight_decay', None)}, "
+                    f"n_params={len(group['params'])}"
+                )
+        else:
+            optimizer_grouped_parameters = only_trainable(self.parameters())
+
+        # choose the optimizer class
+        OptimizerCls = {
+            "adam": optim.Adam,
+            "adamw": optim.AdamW,
+            "adamax": optim.Adamax,
+            "sgd": optim.SGD,
+            "rmsprop": optim.RMSprop,
+            "adagrad": optim.Adagrad,
+            "adadelta": optim.Adadelta,
+            "lamb": Lamb,
+        }[self.hparams.optimizer]
+
+        # define the optimizer using the above groups
+        optimizer = OptimizerCls(
+            optimizer_grouped_parameters,
+            **self.hparams.optimizer_params,
+        )
+
+        # defile the learning rate scheduler
+        lr_scheduler = WarmupLinearSchedule(
+            optimizer,
+            num_training_steps=self.hparams.num_training_steps,
+            num_warmup_steps=self.hparams.num_warmup_steps,
+        )
+
+        # if a state is available, set it
+        if self.opt_states is not None:
+            opt_state = self.opt_states.pop("optimizer", None)
+            scheduler_state = self.opt_states.pop("lr_scheduler", None)
+            if opt_state is not None:
+                rich.print(">> setting optimizer state!")
+                optimizer.load_state_dict(opt_state)
+            if scheduler_state is not None:
+                rich.print(">> setting scheduler state!")
+                lr_scheduler.load_state_dict(scheduler_state)
+            self.opt_states = None
+
+        lr_scheduler_config = {
+            # REQUIRED: The scheduler instance
+            "scheduler": lr_scheduler,
+            # The unit of the scheduler's step size, could also be 'step'.
+            # 'epoch' updates the scheduler on epoch end whereas 'step'
+            # updates it after a optimizer update.
+            "interval": "step",
+            # How many epochs/steps should pass between calls to
+            # `scheduler.step()`. 1 corresponds to updating the learning
+            # rate after every epoch/step.
+            "frequency": 1,
+            # Metric to to monitor for schedulers like `ReduceLROnPlateau`
+            "monitor": self.hparams.monitor_metric,
+            # If set to `True`, will enforce that the value specified 'monitor'
+            # is available when the scheduler is updated, thus stopping
+            # training if not found. If set to `False`, it will only produce a warning
+            "strict": True,
+            # If using the `LearningRateMonitor` callback to monitor the
+            # learning rate progress, this keyword can be used to specify
+            # a custom logged name
+            "name": None,
+        }
+
+        output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
+        return output
+
+    def _get_parameter_groups(self):
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
         optimizer_grouped_parameters = [
             {
@@ -260,66 +340,7 @@ class Model(LightningModule):
                 "lr": self.hparams.lr,
             },
         ]
-
-        for group in optimizer_grouped_parameters:
-            rich.print(
-                f"> param group: lr={group['lr']}, "
-                f"weight_decay={group['weight_decay']}, "
-                f"n_params={len(group['params'])}"
-            )
-
-        # define the optimizer using the above groups
-        optimizer = AdamW(
-            optimizer_grouped_parameters,
-            lr=self.hparams.lr,
-            weight_decay=self.hparams.weight_decay,
-            correct_bias=False,
-        )
-
-        # defile the learning rate scheduler
-        lr_scheduler = WarmupLinearSchedule(
-            optimizer,
-            num_training_steps=self.hparams.num_training_steps,
-            num_warmup_steps=self.hparams.num_warmup_steps,
-        )
-
-        # if a state is available, set it
-        if self.opt_states is not None:
-            opt_state = self.opt_states.pop("optimizer", None)
-            scheduler_state = self.opt_states.pop("lr_scheduler", None)
-            if opt_state is not None:
-                rich.print(">> setting optimizer state!")
-                optimizer.load_state_dict(opt_state)
-            if scheduler_state is not None:
-                rich.print(">> setting scheduler state!")
-                lr_scheduler.load_state_dict(scheduler_state)
-            self.opt_states = None
-
-        lr_scheduler_config = {
-            # REQUIRED: The scheduler instance
-            "scheduler": lr_scheduler,
-            # The unit of the scheduler's step size, could also be 'step'.
-            # 'epoch' updates the scheduler on epoch end whereas 'step'
-            # updates it after a optimizer update.
-            "interval": "step",
-            # How many epochs/steps should pass between calls to
-            # `scheduler.step()`. 1 corresponds to updating the learning
-            # rate after every epoch/step.
-            "frequency": 1,
-            # Metric to to monitor for schedulers like `ReduceLROnPlateau`
-            "monitor": self.hparams.monitor_metric,
-            # If set to `True`, will enforce that the value specified 'monitor'
-            # is available when the scheduler is updated, thus stopping
-            # training if not found. If set to `False`, it will only produce a warning
-            "strict": True,
-            # If using the `LearningRateMonitor` callback to monitor the
-            # learning rate progress, this keyword can be used to specify
-            # a custom logged name
-            "name": None,
-        }
-
-        output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
-        return output
+        return optimizer_grouped_parameters
 
     def on_before_zero_grad(self, *args, **kwargs):
         # https://forums.pytorchlightning.ai/t/adopting-exponential-moving-average-ema-for-pl-pipeline/488

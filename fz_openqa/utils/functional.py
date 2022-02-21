@@ -35,7 +35,7 @@ def infer_device(model):
 
 
 def only_trainable(parameters: Iterable[torch.nn.Parameter]):
-    return [p for p in parameters if p.requires_grad]
+    return (p for p in parameters if p.requires_grad)
 
 
 def batch_reduce(x, op=torch.sum):
