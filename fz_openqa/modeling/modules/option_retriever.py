@@ -97,8 +97,11 @@ class OptionRetriever(Module):
             self.tokenizer.encode(symbol, add_special_tokens=False)[0]
             for symbol in string.punctuation
         ]
-
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
+
+        # init weight using BERT own initialization
+        self.bert._init_weights(self.reader_head)
+        self.bert._init_weights(self.retriever_head)
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
