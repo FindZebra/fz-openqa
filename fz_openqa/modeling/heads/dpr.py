@@ -28,6 +28,7 @@ class DprHead(Head):
         bayesian: bool = False,
         learn_temperature: bool = False,
         temperature: float = 1.0,
+        temperature_sensitivity: float = 10.0,
         **kwargs
     ):
         super(DprHead, self).__init__(**kwargs)
@@ -47,14 +48,17 @@ class DprHead(Head):
             self.q_head = self.d_head = None
 
         # temperate
-        log_temperature = torch.tensor(math.log(temperature), dtype=torch.float)
+        log_temperature = torch.tensor(
+            math.log(temperature) / temperature_sensitivity, dtype=torch.float
+        )
+        self.temperature_sensitivity = temperature_sensitivity
         if learn_temperature:
             self.log_temperature = nn.Parameter(log_temperature)
         else:
             self.register_buffer("log_temperature", log_temperature)
 
     def temperature(self):
-        return self.log_temperature.exp()
+        return self.log_temperature.mul(self.temperature_sensitivity).exp()
 
     def forward(
         self,

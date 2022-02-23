@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections
 from copy import copy
 from typing import Any
 from typing import Dict
@@ -15,7 +14,6 @@ from pytorch_lamb import Lamb
 from pytorch_lightning import LightningModule
 from torch import optim
 from torch import Tensor
-from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
 from transformers import PreTrainedTokenizerFast
@@ -27,7 +25,6 @@ from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class Model(LightningModule):
@@ -75,6 +72,7 @@ class Model(LightningModule):
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
         num_warmup_steps: int = 1000,
+        use_lr_schedule: bool = True,
         optimizer_params: Dict[str, Any] = None,
         use_parameter_groups: bool = False,
         ema_decay: Optional[float] = None,
@@ -92,6 +90,7 @@ class Model(LightningModule):
         self.save_hyperparameters(ignore=["bert", "tokenizer", "module", "parameters"])
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
         assert self.hparams["optimizer_params"] == optimizer_params
+        assert self.hparams["use_lr_schedule"] == use_lr_schedule
         assert self.hparams["use_parameter_groups"] == use_parameter_groups
         assert self.hparams["monitor_metric"] == monitor_metric
         assert self.hparams["num_training_steps"] == num_training_steps
@@ -248,11 +247,14 @@ class Model(LightningModule):
         )
 
         # defile the learning rate scheduler
-        lr_scheduler = WarmupLinearSchedule(
-            optimizer,
-            num_training_steps=self.hparams.num_training_steps,
-            num_warmup_steps=self.hparams.num_warmup_steps,
-        )
+        if self.hparams.use_lr_schedule:
+            lr_scheduler = WarmupLinearSchedule(
+                optimizer,
+                num_training_steps=self.hparams.num_training_steps,
+                num_warmup_steps=self.hparams.num_warmup_steps,
+            )
+        else:
+            lr_scheduler = None
 
         # if a state is available, set it
         if self.opt_states is not None:
@@ -261,83 +263,88 @@ class Model(LightningModule):
             if opt_state is not None:
                 rich.print(">> setting optimizer state!")
                 optimizer.load_state_dict(opt_state)
-            if scheduler_state is not None:
+            if scheduler_state is not None and lr_scheduler is not None:
                 rich.print(">> setting scheduler state!")
                 lr_scheduler.load_state_dict(scheduler_state)
             self.opt_states = None
 
-        lr_scheduler_config = {
-            # REQUIRED: The scheduler instance
-            "scheduler": lr_scheduler,
-            # The unit of the scheduler's step size, could also be 'step'.
-            # 'epoch' updates the scheduler on epoch end whereas 'step'
-            # updates it after a optimizer update.
-            "interval": "step",
-            # How many epochs/steps should pass between calls to
-            # `scheduler.step()`. 1 corresponds to updating the learning
-            # rate after every epoch/step.
-            "frequency": 1,
-            # Metric to to monitor for schedulers like `ReduceLROnPlateau`
-            "monitor": self.hparams.monitor_metric,
-            # If set to `True`, will enforce that the value specified 'monitor'
-            # is available when the scheduler is updated, thus stopping
-            # training if not found. If set to `False`, it will only produce a warning
-            "strict": True,
-            # If using the `LearningRateMonitor` callback to monitor the
-            # learning rate progress, this keyword can be used to specify
-            # a custom logged name
-            "name": None,
-        }
+        output = {"optimizer": optimizer}
 
-        output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
+        if self.hparams.use_lr_schedule:
+            lr_scheduler_config = {
+                # REQUIRED: The scheduler instance
+                "scheduler": lr_scheduler,
+                # The unit of the scheduler's step size, could also be 'step'.
+                # 'epoch' updates the scheduler on epoch end whereas 'step'
+                # updates it after a optimizer update.
+                "interval": "step",
+                # How many epochs/steps should pass between calls to
+                # `scheduler.step()`. 1 corresponds to updating the learning
+                # rate after every epoch/step.
+                "frequency": 1,
+                # Metric to to monitor for schedulers like `ReduceLROnPlateau`
+                "monitor": self.hparams.monitor_metric,
+                # If set to `True`, will enforce that the value specified 'monitor'
+                # is available when the scheduler is updated, thus stopping
+                # training if not found. If set to `False`, it will only produce a warning
+                "strict": True,
+                # If using the `LearningRateMonitor` callback to monitor the
+                # learning rate progress, this keyword can be used to specify
+                # a custom logged name
+                "name": None,
+            }
+
+            output["lr_scheduler"] = lr_scheduler_config
         return output
 
     def _get_parameter_groups(self):
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
         optimizer_grouped_parameters = [
             {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay) and "bert." in n
-                    ]
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if not any(nd in n for nd in no_decay) and "bert." in n
+                        ]
+                    )
                 ),
-                "weight_decay": self.hparams.weight_decay,
-                "lr": self.hparams.bert_lr,
             },
             {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay) and "bert." in n
-                    ]
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if any(nd in n for nd in no_decay) and "bert." in n
+                        ]
+                    )
                 ),
                 "weight_decay": 0.0,
-                "lr": self.hparams.bert_lr,
             },
             {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay) and "bert." not in n
-                    ]
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if not any(nd in n for nd in no_decay) and "bert." not in n
+                        ]
+                    )
                 ),
-                "weight_decay": self.hparams.weight_decay,
-                "lr": self.hparams.lr,
             },
             {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay) and "bert." not in n
-                    ]
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if any(nd in n for nd in no_decay) and "bert." not in n
+                        ]
+                    )
                 ),
                 "weight_decay": 0.0,
-                "lr": self.hparams.lr,
             },
         ]
         return optimizer_grouped_parameters

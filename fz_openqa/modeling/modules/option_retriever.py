@@ -79,8 +79,11 @@ class OptionRetriever(Module):
         self.retriever_head = maybe_instantiate(retriever_head)
 
         # register Zero head
-        self.zero_head = maybe_instantiate(zero_head)
         self.zero_weight = zero_weight
+        if self.zero_weight > 0:
+            self.zero_head = maybe_instantiate(zero_head)
+        else:
+            self.zero_head = None
 
         # parameters
         self.resample_k = resample_k
@@ -295,14 +298,15 @@ class OptionRetriever(Module):
             batch={**d_batch, **q_batch},
             **kwargs,
         )
-        zero_score = self.zero_head(
-            hd=output["_hd_"],
-            hq=output["_hq_"],
-            q_mask=self.mask(batch, "question"),
-            d_mask=self.mask(batch, "document"),
-            batch={**d_batch, **q_batch},
-            **kwargs,
-        )
+        if self.zero_head is not None:
+            zero_score = self.zero_head(
+                hd=output["_hd_"],
+                hq=output["_hq_"],
+                q_mask=self.mask(batch, "question"),
+                d_mask=self.mask(batch, "document"),
+                batch={**d_batch, **q_batch},
+                **kwargs,
+            )
 
         # retriever diagnostics
         self._retriever_diagnostics(
@@ -325,9 +329,12 @@ class OptionRetriever(Module):
         )
 
         # add the partial loss corresponding to the zero head and add diagnostics
-        step_output.update(
-            self._zero_diagnostics(zero_score, targets=batch["answer.target"], output=step_output)
-        )
+        if self.zero_head is not None:
+            step_output.update(
+                self._zero_diagnostics(
+                    zero_score, targets=batch["answer.target"], output=step_output
+                )
+            )
 
         return step_output
 
@@ -457,8 +464,9 @@ class OptionRetriever(Module):
         zero_logits = output.get("_zero_logits_", None)
         retriever_reading_logits = output.get("_retriever_reading_logits_", None)
         self.reader_metrics.update(split, reader_logits, reader_targets)
-        self.zero_metrics.update(split, zero_logits, reader_targets)
         self.retriever_reading_metrics.update(split, retriever_reading_logits, reader_targets)
+        if zero_logits is not None:
+            self.zero_metrics.update(split, zero_logits, reader_targets)
 
         retrieval_logits, retrieval_targets = (
             output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")

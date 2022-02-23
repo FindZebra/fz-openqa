@@ -13,6 +13,8 @@ class TestDenseIndex(TestIndex):
     """Test the faiss index without using the Trainer to process data with the model"""
     cls: Index.__class__ = DenseIndex
     _model_head = "flat"
+    index_handler= "flat"
+    index_factory = "Flat"
 
     def setUp(self) -> None:
         super().setUp()
@@ -33,13 +35,16 @@ class TestDenseIndex(TestIndex):
                          corpus: Dataset,
                          model=None,
                          collate=None,
+                         handler=None,
+                         index_factory=None,
                          **kwargs) -> Index:
         return index_cls(dataset=corpus,
                          model=model,
                          batch_size=2,
                          model_output_keys=['_hq_', '_hd_'],
                          collate_pipe=collate,
-                         index_factory="Flat",
+                         index_factory=index_factory,
+                         handler=handler,
                          dtype="float32",
                          persist_cache=False,
                          # colbert p value
@@ -51,7 +56,10 @@ class TestDenseIndex(TestIndex):
                                                corpus=self.corpus,
                                                model=self.model,
                                                collate=self.corpus_collate,
-                                               cache_dir=self.cache_dir)
+                                               cache_dir=self.cache_dir,
+                                               handler=self.index_handler,
+                                               index_factory=self.index_factory)
+
 
     def test_dill_inspect(self):
         self._test_dill_inspect()

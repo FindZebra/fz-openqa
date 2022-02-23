@@ -8,6 +8,7 @@ from torch import tensor
 from transformers import AutoModel
 
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class ZeroShot(pl.LightningModule):
@@ -32,7 +33,7 @@ class ZeroShot(pl.LightningModule):
         output = {}
         key_map = {"document": "_hd_", "question": "_hq_"}
         for prefix in ["document", "question"]:
-            if any(prefix in k for k in batch.keys()):
+            if any(str(k).startswith(prefix) for k in batch.keys()):
                 input_ids = batch[f"{prefix}.input_ids"]
                 attention_mask = batch[f"{prefix}.attention_mask"]
                 shape = input_ids.shape

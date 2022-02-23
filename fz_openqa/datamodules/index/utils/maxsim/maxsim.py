@@ -7,6 +7,7 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
+import rich
 import torch
 from torch import Tensor
 
@@ -54,6 +55,11 @@ class MaxSim(torch.nn.Module):
         max_queue_size: int = 5,
     ):
         super(MaxSim, self).__init__()
+        logger.info(
+            f"Setting MaxSim with "
+            f"{len(ranking_devices)} ranking devices "
+            f"and {len(faiss_devices)} faiss devices."
+        )
         # init the token_index
         self.token_index = TokenIndex(token_index, faiss_devices)
 
@@ -111,8 +117,18 @@ class MaxSim(torch.nn.Module):
             maxsim_workers.append(worker)
 
         # test the consistency of the partition
-        assert len(vectors) == sum(len(w.max_sim.vectors) for w in maxsim_workers)
-        assert (vectors[-1].data == maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all()
+        if len(vectors) != sum(len(w.max_sim.vectors) for w in maxsim_workers):
+            raise ValueError(
+                f"The partition is not consistent with the vectors. "
+                f"len(vectors)={len(vectors)}, "
+                f"workers={[len(w.max_sim.vectors) for w in maxsim_workers]}, "
+                f"sum={sum(len(w.max_sim.vectors) for w in maxsim_workers)}"
+            )
+        if (vectors[-1].data != maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all():
+            raise ValueError(
+                "The partition is not consistent with the vectors. "
+                "The last vector does not match the last vector of the last worker."
+            )
 
         # start the workers
         for w in maxsim_workers:
@@ -168,9 +184,12 @@ class MaxSim(torch.nn.Module):
     def _collect_worker_outputs(self):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
 
-    def _process_batch(self, q_vectors: Tensor, *, p: int, k: int) -> MaxSimOutput:
+    def _process_batch(
+        self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
+    ) -> MaxSimOutput:
         # process q_vectors using the token-level faiss index
-        token_ids = self.token_index(q_vectors, p)
+        token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
+
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
 
         # send the token_ids to each device
@@ -188,12 +207,18 @@ class MaxSim(torch.nn.Module):
 
     @torch.no_grad()
     def __call__(
-        self, q_vectors: Tensor | WorkerSignal, *, k: int = None, p: int = None, **kwargs
+        self,
+        q_vectors: Tensor | WorkerSignal,
+        *,
+        k: int = None,
+        p: int = None,
+        doc_ids: Optional[List[int]] = None,
+        **kwargs,
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
             assert p is not None and k is not None, "p and k must be specified"
-            return self._process_batch(q_vectors, p=p, k=k)
+            return self._process_batch(q_vectors, p=p, k=k, doc_ids=doc_ids)
 
         elif isinstance(q_vectors, WorkerSignal):
             # send the signal through the pipeline

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import List
 from typing import Optional
 from typing import Tuple
 
@@ -10,6 +11,7 @@ class FaissInput:
     q_vectors: Tensor
     p: int
     idx: int = None
+    doc_ids: Optional[List[int]] = None
 
 
 @dataclass

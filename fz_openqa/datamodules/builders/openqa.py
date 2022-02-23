@@ -263,7 +263,7 @@ class OpenQaBuilder(DatasetBuilder):
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
             # todo: try this
-            # index.model.cpu()
+            index.model.cpu()
 
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(

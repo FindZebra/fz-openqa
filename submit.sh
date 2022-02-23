@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=fz-openqa
 #SBATCH --output=./slurm/%j.out
-#SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
+#SBATCH --ntasks=1 --cpus-per-task=16 --mem=128G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
 #SBATCH --time=1-00:00:00
 
 # variables
-NAME="colbert-bayes-reinforce-v4.2.b-es-f15-k10-P1000-DIKU-8"
+NAME="DIKU-in-batch-v4.4.A-es-f15-k10-P1000-8.1.5"
 setup_with_model=false
 
 # display basic info

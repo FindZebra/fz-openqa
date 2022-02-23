@@ -33,7 +33,7 @@ class IndexHandler(Component):
 
     @classmethod
     def load_from_path(cls, path: PathLike):
-        config_path = path / "config.json"
+        config_path = Path(path) / "config.json"
         with open(config_path, "r") as f:
             config = json.load(f)
             instance = instantiate(config)
@@ -41,13 +41,13 @@ class IndexHandler(Component):
 
         return instance
 
-    def build(self, vectors: torch.Tensor | TensorArrowTable):
+    def build(self, vectors: torch.Tensor | TensorArrowTable, **build_kwargs):
         if self.exists():
             logger.info(f"Loading index from {self.path}")
             self.load()
         else:
             logger.info(f"Creating index at {self.path}")
-            self._build(vectors, **copy(self.config))
+            self._build(vectors, **copy(self.config), **build_kwargs)
             assert self.exists(), f"Index {type(self).__name__} was not created."
             self.save()
 

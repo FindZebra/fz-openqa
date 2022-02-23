@@ -5,9 +5,6 @@ defaults:
 
 _target_: fz_openqa.datamodules.index.ElasticSearchIndexBuilder
 
-# key to index
-required_keys: text
-
 # text cleaning
 filter_mode: null
 

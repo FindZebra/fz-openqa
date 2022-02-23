@@ -12,6 +12,7 @@ from typing import Union
 
 import faiss.contrib.torch_utils  # type: ignore
 import pytorch_lightning as pl
+import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -20,8 +21,10 @@ from pytorch_lightning import Trainer
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from fz_openqa.datamodules.index.handlers.multi_faiss import MultiFaissHandler
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
@@ -60,7 +63,7 @@ class DenseIndex(Index):
         The name of the index. Must be unique for each configuration.
     """
 
-    default_key = ["input_ids", "attention_mask"]
+    default_key = ["input_ids", "attention_mask", "document_idx"]
     _index: Optional[IndexHandler] = None
     model: Callable = None
     _vectors_table: Optional[TensorArrowTable] = None
@@ -76,6 +79,7 @@ class DenseIndex(Index):
         "progress_bar",
         "predict_docs",
         "predict_queries",
+        "keep_faiss_on_cpu",
     ]
 
     _pickle_exclude_list: List[str] = [
@@ -93,6 +97,8 @@ class DenseIndex(Index):
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
         dtype: str = "float32",
+        handler: str = "flat",
+        index_factory: str = "Flat",
         in_memory: bool = True,
         model_output_keys: List[str],
         loader_kwargs: Optional[Dict] = None,
@@ -100,6 +106,7 @@ class DenseIndex(Index):
         persist_cache: bool = False,
         cache_dir: Optional[str] = None,
         progress_bar: bool = False,
+        keep_faiss_on_cpu: bool = False,
         **kwargs,
     ):
         """
@@ -110,12 +117,12 @@ class DenseIndex(Index):
         trainer
             The trainer to use for indexing and querying, e.g. a `pl.Trainer`.
             Indexing and querying can also be done without a trainer.
-        faiss_args
-            Additional arguments to pass to the Faiss index.
-        faiss_train_size
-            Number of data points to train the index on.
         dtype:
             The dtype of the vectors.
+        index_factory
+            string used to initialized the faiss index
+        hanlder:
+            string used to initialize the faiss index handler: `flat` or `multi`
         in_memory:
             Whether to store the index in memory or load using pyarrow (only for Colbert)
         model_output_keys
@@ -134,8 +141,11 @@ class DenseIndex(Index):
         # model and params
         self.model = model
         self.dtype = dtype
+        self.index_factory = index_factory
+        self.handler = handler
         self.in_memory = in_memory
         self.trainer = trainer
+        self.keep_faiss_on_cpu = keep_faiss_on_cpu
 
         # column names
         self.model_output_keys = model_output_keys
@@ -161,7 +171,7 @@ class DenseIndex(Index):
             self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
         )
 
-    def build(self, dataset: Dataset, index_factory: str = "Flat", nprobe: int = 8, **kwargs):
+    def build(self, dataset: Dataset, nprobe: int = 8, **kwargs):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
 
@@ -177,7 +187,13 @@ class DenseIndex(Index):
 
         """
         self._set_index_name(dataset=dataset)
-        self._index = FaissHandler(path=self.index_path, index_factory=index_factory, nprobe=nprobe)
+        Handler = {"flat": FaissHandler, "multi": MultiFaissHandler}[self.handler]
+        self._index = Handler(
+            path=self.index_path,
+            index_factory=self.index_factory,
+            nprobe=nprobe,
+            keep_on_cpu=self.keep_faiss_on_cpu,
+        )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
 
     def _cache_vectors_and_build(self, dataset: Dataset, **kwargs):
@@ -222,12 +238,34 @@ class DenseIndex(Index):
         # read the vectors from the cache as a pyarrow table and build the idnex
         vectors = self._read_vectors_table()
         vectors = vectors[:]
-        vectors = vectors.view(-1, vectors.shape[-1]).contiguous()
-        self._index.build(vectors=vectors)
+        if vectors.dim() == 2:
+            stride = None
+        elif vectors.dim() == 3:
+            stride = vectors.shape[1]
+            vectors = vectors.view(-1, vectors.shape[-1]).contiguous()
+        else:
+            stride = None
+            raise ValueError(f"Invalid vectors shape: {vectors.shape}, expected 2 or 3 dimensions.")
+
+        # retrieve document ids
+        if isinstance(self._index, MultiFaissHandler):
+            doc_ids = dataset["document.idx"]
+            doc_ids = self._expand(doc_ids, stride)
+        else:
+            doc_ids = None
+
+        # build the index
+        self._index.build(vectors=vectors, doc_ids=doc_ids)  # todo: load doc ids from here directly
 
         # end building the index
         logger.info(f"Built index of size={len(self._index)}, type={type(self._index)}")
         self._train_ends()
+
+    def _expand(self, flat_values: List, stride: int):
+        if stride is not None:
+            flat_values = [stride * [idx] for idx in flat_values]
+            flat_values = [item for sublist in flat_values for item in sublist]
+        return flat_values
 
     def _train_ends(self):
         """move the index back to CPU if it was moved to GPU"""
@@ -279,7 +317,7 @@ class DenseIndex(Index):
 
         # search faiss
         vector = self._get_vector_from_batch(query)
-        score, indices = self.index(vector, k=k)
+        score, indices = self.index(vector, k=k, doc_ids=query.get("question.document_idx", None))
         return SearchResult(score=score, index=indices, dataset_size=self.dataset_size, k=k)
 
     def _preprocess_query(
