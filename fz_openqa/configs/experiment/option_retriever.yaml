@@ -7,7 +7,7 @@ defaults:
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
   - override /model/module/zero_head: zero
-  - override /model/module/gradients: in_batch # reinforce # todo!!!!
+  - override /model/module/gradients: reinforce # todo!!!!
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority # TODO!!!!!
@@ -60,7 +60,7 @@ model:
   use_lr_schedule: true
   optimizer_params:
     lr: 1e-5
-    betas: [0.9, 0.999]
+    betas: [ 0.9, 0.999 ]
     eps: 1e-6
     weight_decay: 1e-3
     # eps: 1e-8 # as in the Colbert repo
@@ -77,16 +77,14 @@ model:
       use_mask: false
       use_answer_mask: false
       bayesian: false # todo
-      learn_temperature: true
-      temperature: 1e2
-      temperature_sensitivity: 10
+      learn_gate: true
+      gate: 0
     reader_head:
       output_size: 32
       use_mask: false
       bayesian: false
-      learn_temperature: true
-      temperature: 1e2
-      temperature_sensitivity: 10
+      learn_gate: true
+      gate: 0
     zero_head:
       output_size: null
       use_mask: false

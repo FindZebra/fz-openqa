@@ -1,5 +1,3 @@
-import math
-from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
@@ -26,9 +24,8 @@ class DprHead(Head):
         bias: bool = True,
         share_parameters: bool = False,
         bayesian: bool = False,
-        learn_temperature: bool = False,
-        temperature: float = 1.0,
-        temperature_sensitivity: float = 10.0,
+        learn_gate: bool = False,
+        gate: float = 1.0,
         **kwargs
     ):
         super(DprHead, self).__init__(**kwargs)
@@ -48,17 +45,18 @@ class DprHead(Head):
             self.q_head = self.d_head = None
 
         # temperate
-        log_temperature = torch.tensor(
-            math.log(temperature) / temperature_sensitivity, dtype=torch.float
-        )
-        self.temperature_sensitivity = temperature_sensitivity
-        if learn_temperature:
-            self.log_temperature = nn.Parameter(log_temperature)
+        gate_value = torch.tensor(gate, dtype=torch.float)
+        if learn_gate:
+            self._gate = nn.Parameter(gate_value)
         else:
-            self.register_buffer("log_temperature", log_temperature)
+            self.register_buffer("_gate", gate_value)
 
-    def temperature(self):
-        return self.log_temperature.mul(self.temperature_sensitivity).exp()
+    @property
+    def gate(self):
+        return self._gate
+
+    def temperature(self) -> None:
+        return self.gate.pow(-1)
 
     def forward(
         self,
@@ -108,7 +106,7 @@ class DprHead(Head):
             # cls_repr /= float(cls_repr.shape[-1])**0.5
 
         if head == "question":
-            cls_repr = cls_repr / self.temperature()
+            cls_repr = cls_repr * self.gate
 
         return cls_repr
 
