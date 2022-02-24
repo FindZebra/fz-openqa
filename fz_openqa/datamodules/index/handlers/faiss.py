@@ -54,6 +54,7 @@ class FaissHandler(IndexHandler):
         index_factory: str = "Flat",
         nprobe: int = 8,
         keep_on_cpu: bool = False,
+        train_on_cpu: bool = False,
         **kwargs,
     ):
         """build the index from the vectors."""
@@ -66,7 +67,15 @@ class FaissHandler(IndexHandler):
         self.dimension = vectors.shape[-1]
         self.index_factory = index_factory
         self.keep_on_cpu = keep_on_cpu
-        rich.print(f">> index: keep_on_cpu={self.keep_on_cpu}")
+        self.train_on_cpu = train_on_cpu
+        rich.print(
+            f">> {type(self).__name__}: "
+            f"keep_on_cpu={self.keep_on_cpu}, "
+            f"train_on_cpu={self.train_on_cpu},"
+            f"index_factory={self.index_factory},"
+            f"nprobe={nprobe}, "
+            f"vectors: {vectors.shape}"
+        )
 
         # init the index
         if index_factory == "torch":
@@ -80,7 +89,8 @@ class FaissHandler(IndexHandler):
         self._index.nprobe = nprobe
 
         # move the index to GPU
-        self.cuda()
+        if not self.train_on_cpu:
+            self.cuda()
 
         # add vectors to the index
         # todo: avoid casting to float32

@@ -64,6 +64,7 @@ class MaxSim(torch.nn.Module):
         self.token_index = TokenIndex(token_index, faiss_devices)
 
         # Store `emb2pid`
+        self._validate_emb2pid(emb2pid, vectors)
         self.register_buffer("emb2pid", emb2pid)
 
         # setup the Rankers
@@ -76,6 +77,10 @@ class MaxSim(torch.nn.Module):
         partition = torch.linspace(0, emb2pid.max() + 1, len(ranking_devices) + 1, dtype=torch.long)
         partition = torch.cat([partition[:-1, None], partition[1:, None]], dim=1)
         self.register_buffer("partition", partition)
+
+        rich.print(f"=== parition | vectors: {[len(vectors), *vectors[0].shape]} ===")
+        rich.print(partition)
+        rich.print("=================")
 
         # Initialize Input and Output queues
         self.ranking_input_queues: List[ctx.Queue] = []
@@ -97,11 +102,27 @@ class MaxSim(torch.nn.Module):
         # initialize the MaxSimReducer
         self.maxsim_reducer = MaxSimReducer(device=self.ranking_devices[-1])
 
+    @staticmethod
+    def _validate_emb2pid(emb2pid, vectors):
+        if set(range(len(vectors))) != set(emb2pid.unique().tolist()):
+            raise ValueError(
+                f"All positions in `vector` must be in `emb2pid`."
+                f"{set(range(len(vectors)))} != {set(emb2pid.unique().tolist())}"
+            )
+
+        if emb2pid.min() != 0:
+            raise ValueError(f"`emb2pid` must start at 0. Found {emb2pid.min()}")
+
+        if emb2pid.max() != len(vectors) - 1:
+            raise ValueError(f"`emb2pid` must end at {len(vectors)-1}. Found {emb2pid.max()}")
+
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
         maxsim_workers: List[MaxSimWorker] = []
         for idx, idevice in enumerate(self.ranking_devices):
             part = self.partition[idx]
+
+            rich.print(f">> n_vecs = {len(vectors)}, part = {part}")
 
             # initialize the `MaxSimRanker` given the partition
             worker = self._init_maxsim_worker(
@@ -116,13 +137,20 @@ class MaxSim(torch.nn.Module):
             )
             maxsim_workers.append(worker)
 
+        rich.print(
+            f">> n_vecs = {len(vectors)}, "
+            f"total_partitions={sum(len(vectors[part[0]:part[1]]) for part in self.partition)}"
+        )
+        rich.print(self.partition)
+
         # test the consistency of the partition
-        if len(vectors) != sum(len(w.max_sim.vectors) for w in maxsim_workers):
+        n_vecs_workers = sum(len(w.max_sim.vectors) for w in maxsim_workers)
+        if len(vectors) != n_vecs_workers:
             raise ValueError(
                 f"The partition is not consistent with the vectors. "
                 f"len(vectors)={len(vectors)}, "
                 f"workers={[len(w.max_sim.vectors) for w in maxsim_workers]}, "
-                f"sum={sum(len(w.max_sim.vectors) for w in maxsim_workers)}"
+                f"sum={n_vecs_workers}"
             )
         if (vectors[-1].data != maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all():
             raise ValueError(

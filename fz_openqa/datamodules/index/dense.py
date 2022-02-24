@@ -80,6 +80,7 @@ class DenseIndex(Index):
         "predict_docs",
         "predict_queries",
         "keep_faiss_on_cpu",
+        "train_faiss_on_cpu",
     ]
 
     _pickle_exclude_list: List[str] = [
@@ -107,6 +108,7 @@ class DenseIndex(Index):
         cache_dir: Optional[str] = None,
         progress_bar: bool = False,
         keep_faiss_on_cpu: bool = False,
+        train_faiss_on_cpu: bool = False,
         **kwargs,
     ):
         """
@@ -146,6 +148,7 @@ class DenseIndex(Index):
         self.in_memory = in_memory
         self.trainer = trainer
         self.keep_faiss_on_cpu = keep_faiss_on_cpu
+        self.train_faiss_on_cpu = train_faiss_on_cpu
 
         # column names
         self.model_output_keys = model_output_keys
@@ -193,6 +196,7 @@ class DenseIndex(Index):
             index_factory=self.index_factory,
             nprobe=nprobe,
             keep_on_cpu=self.keep_faiss_on_cpu,
+            train_on_cpu=self.train_faiss_on_cpu,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
 
@@ -360,7 +364,8 @@ class DenseIndex(Index):
             shutil.rmtree(self.cache_dir, ignore_errors=True)
 
     def free_memory(self):
-        return self._index.free_memory()
+        if self._index is not None:
+            return self._index.free_memory()
 
     def cpu(self):
         self._index.cpu()

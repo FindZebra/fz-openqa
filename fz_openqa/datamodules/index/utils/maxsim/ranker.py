@@ -40,7 +40,12 @@ class MaxSimRanker(nn.Module):
             boundaries = torch.tensor([boundaries[0], boundaries[1]], dtype=torch.long)
         assert boundaries.shape == (2,)
         self.register_buffer("boundaries", boundaries)
-        assert len(self.vectors) == boundaries[1] - boundaries[0]
+        if len(self.vectors) != boundaries[1] - boundaries[0]:
+            raise ValueError(
+                f"boundaries do not match vectors: {boundaries}. "
+                f"Vector length: {len(self.vectors)}, "
+                f"does not chunk size: {boundaries[1] - boundaries[0]}"
+            )
 
     @property
     def device(self) -> torch.device:
