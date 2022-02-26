@@ -5,7 +5,10 @@ from typing import Any
 from typing import Dict
 from typing import List
 
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except Exception:
+    go = None
 from datasets import Dataset
 
 from .base import Analytic

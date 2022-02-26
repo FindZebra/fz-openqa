@@ -9,7 +9,10 @@ from typing import Dict
 from typing import List
 from typing import Union
 
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except Exception:
+    go = None
 import rich
 import wandb
 from datasets import Dataset

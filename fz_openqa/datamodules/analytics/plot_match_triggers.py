@@ -6,7 +6,10 @@ from collections import Counter
 from typing import Dict
 from typing import List
 
-import plotly.express as px
+try:
+    import plotly.express as px
+except Exception:
+    px = None
 import rich
 from datasets import Dataset
 

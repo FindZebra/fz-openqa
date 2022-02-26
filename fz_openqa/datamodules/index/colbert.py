@@ -8,11 +8,9 @@ from typing import Optional
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
 import pyarrow as pa
-import rich
 import torch
 from datasets import Split
 from faiss import IndexReplicas
-from torch import nn
 from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import FaissIndex
@@ -23,8 +21,6 @@ from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-# required to allow searching faiss with tensors
 
 log = logging.getLogger(__name__)
 
