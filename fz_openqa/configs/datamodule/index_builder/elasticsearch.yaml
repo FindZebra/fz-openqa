@@ -1,7 +1,8 @@
 defaults:
   - base
   - text_filter: null
-  - /datamodule/text_formatter/aggressive@text_formatter
+  - text_formatter: null
+  # - /datamodule/text_formatter/aggressive@text_formatter
 
 _target_: fz_openqa.datamodules.index.ElasticSearchIndexBuilder
 
