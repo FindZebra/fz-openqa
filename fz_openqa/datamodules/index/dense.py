@@ -12,7 +12,6 @@ from typing import Union
 
 import faiss.contrib.torch_utils  # type: ignore
 import pytorch_lightning as pl
-import rich
 import torch
 from datasets import Dataset
 from datasets import DatasetDict
@@ -21,7 +20,6 @@ from pytorch_lightning import Trainer
 
 from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
 from fz_openqa.datamodules.index.handlers.multi_faiss import MultiFaissHandler
@@ -97,7 +95,7 @@ class DenseIndex(Index):
         *,
         model: pl.LightningModule,
         trainer: Optional[Trainer] = None,
-        dtype: str = "float32",
+        dtype: str | int = "float32",
         handler: str = "flat",
         index_factory: str = "Flat",
         in_memory: bool = True,
@@ -142,6 +140,8 @@ class DenseIndex(Index):
         """
         # model and params
         self.model = model
+        if dtype == 16 or dtype == 32:
+            dtype = f"float{dtype}"
         self.dtype = dtype
         self.index_factory = index_factory
         self.handler = handler

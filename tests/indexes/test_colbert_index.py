@@ -7,3 +7,4 @@ class TestColbertIndex(TestDenseIndex):
     """Test the faiss colbert index without using the Trainer to process data with the model"""
     cls: Index.__class__ = ColbertIndex
     _model_head = "contextual"
+    index_handler = "flat"

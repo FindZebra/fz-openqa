@@ -71,7 +71,7 @@ class MaxSimReducer(object):
         return maxsim_pids, maxsim_scores
 
     @staticmethod
-    def _pad_to_length(values: Tensor, k: int, fill_value=torch.nan):
+    def _pad_to_length(values: Tensor, k: int, fill_value=torch.tensor(float("nan"))):
         if values.shape[1] < k:
             return F.pad(values, (0, k - values.shape[1]), value=fill_value)
         else:

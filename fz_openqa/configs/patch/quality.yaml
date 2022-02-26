@@ -31,10 +31,11 @@ datamodule:
       max_chunksize: null
       maxsim_chunksize: 4_000
       persist_cache: false
-      index_factory: torch
+      index_factory: Flat
       handler: multi
       nprobe: 1
-      keep_faiss_on_cpu: true
+      keep_faiss_on_cpu: false
+      train_faiss_on_cpu: true
 
 
 logger:
