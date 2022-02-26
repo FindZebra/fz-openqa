@@ -88,6 +88,7 @@ class QaBuilder(HfDatasetBuilder):
         *args,
         min_answer_length: Optional[int] = None,
         n_query_tokens: int = 1,
+        n_answer_tokens: int = 1,
         query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
         **kwargs,
@@ -96,6 +97,7 @@ class QaBuilder(HfDatasetBuilder):
         self.min_answer_length = min_answer_length
         self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
+        self.n_answer_tokens = n_answer_tokens
 
         # set the dataset attributes
         self.dset_script_path_or_id = QA_DATASETS[dset_name][0]
@@ -170,7 +172,7 @@ class QaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
             shape=[-1, self.n_options],
         )
 
@@ -310,7 +312,7 @@ class ConcatQaBuilder(QaBuilder):
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
-            q_start_tokens.extend([QUERY_TOKEN])
+            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 
         if len(q_start_tokens) > 0:
             add_spec_tokens_pipe = Apply(
@@ -357,7 +359,7 @@ class ConcatQaBuilder(QaBuilder):
                 max_length=self.max_length,
                 add_encoding_tokens=self.add_encoding_tokens,
                 add_special_tokens=self.add_special_tokens,
-                spec_tokens=self.n_query_tokens * [ANS_TOKEN],
+                spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
                 shape=[-1, self.n_options],
             ),
             query_expansion_pipe,

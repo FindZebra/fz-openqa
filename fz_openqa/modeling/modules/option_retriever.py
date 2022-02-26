@@ -6,6 +6,7 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -13,6 +14,7 @@ from omegaconf import DictConfig
 from torch import Tensor
 
 from ...utils import maybe_instantiate
+from ...utils.fingerprint import get_fingerprint
 from ...utils.pretty import pprint_batch
 from ..gradients import Gradients
 from ..gradients import InBatchGradients
@@ -63,8 +65,6 @@ class OptionRetriever(Module):
         *args,
         reader_head: Head | DictConfig,
         retriever_head: Head | DictConfig,
-        zero_head: Head | DictConfig,
-        zero_weight: float = 0,
         alpha: float = 0,
         resample_k: int = None,
         max_batch_size: Optional[int] = None,
@@ -77,13 +77,6 @@ class OptionRetriever(Module):
         # register the heads
         self.reader_head = maybe_instantiate(reader_head)
         self.retriever_head = maybe_instantiate(retriever_head)
-
-        # register Zero head
-        self.zero_weight = zero_weight
-        if self.zero_weight > 0:
-            self.zero_head = maybe_instantiate(zero_head)
-        else:
-            self.zero_head = None
 
         # parameters
         self.resample_k = resample_k
@@ -101,14 +94,16 @@ class OptionRetriever(Module):
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
 
         # init weight using BERT own initialization
-        self.bert._init_weights(self.reader_head)
-        self.bert._init_weights(self.retriever_head)
-        self.bert._init_weights(self.zero_head)
+        # self.bert._init_weights(self.reader_head)
+        # self.bert._init_weights(self.retriever_head)
+
+        rich.print(f"> bert: {get_fingerprint(self.bert)}")
+        rich.print(f"> reader: {get_fingerprint(self.reader_head)}")
+        rich.print(f"> retriever: {get_fingerprint(self.retriever_head)}")
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
-        self.zero_metrics = self._get_base_metrics(prefix=f"{prefix}zero/")
         self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
 
         self.retriever_metrics = self._get_base_metrics(
@@ -298,15 +293,6 @@ class OptionRetriever(Module):
             batch={**d_batch, **q_batch},
             **kwargs,
         )
-        if self.zero_head is not None:
-            zero_score = self.zero_head(
-                hd=output["_hd_"],
-                hq=output["_hq_"],
-                q_mask=self.mask(batch, "question"),
-                d_mask=self.mask(batch, "document"),
-                batch={**d_batch, **q_batch},
-                **kwargs,
-            )
 
         # retriever diagnostics
         self._retriever_diagnostics(
@@ -328,25 +314,7 @@ class OptionRetriever(Module):
             )
         )
 
-        # add the partial loss corresponding to the zero head and add diagnostics
-        if self.zero_head is not None:
-            step_output.update(
-                self._zero_diagnostics(
-                    zero_score, targets=batch["answer.target"], output=step_output
-                )
-            )
-
         return step_output
-
-    def _zero_diagnostics(
-        self, zero_score, *, targets: torch.Tensor, output: Dict[str, torch.Tensor]
-    ):
-        data = {}
-        loss = F.cross_entropy(zero_score, targets)
-        data["loss"] = output.get("loss", 0) + self.zero_weight * loss
-        data["zero/loss"] = loss
-        data["_zero_logits_"] = zero_score.detach()
-        return data
 
     @staticmethod
     @torch.no_grad()
@@ -363,7 +331,7 @@ class OptionRetriever(Module):
         NB: `retriever_probs` corresponds to the probs of the trained model whereas
         `retrieval_*` correspond to the probs of the model used for indexing.
         """
-
+        retriever_score = retriever_score.clone().detach()
         retriever_log_probs = retriever_score.log_softmax(dim=-1)
         retriever_probs = retriever_log_probs.exp()
 
@@ -461,12 +429,9 @@ class OptionRetriever(Module):
         """update the metrics of the given split."""
         reader_logits = output.get("_reader_logits_", None)
         reader_targets = output.get("_reader_targets_", None)
-        zero_logits = output.get("_zero_logits_", None)
         retriever_reading_logits = output.get("_retriever_reading_logits_", None)
         self.reader_metrics.update(split, reader_logits, reader_targets)
         self.retriever_reading_metrics.update(split, retriever_reading_logits, reader_targets)
-        if zero_logits is not None:
-            self.zero_metrics.update(split, zero_logits, reader_targets)
 
         retrieval_logits, retrieval_targets = (
             output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
@@ -483,7 +448,6 @@ class OptionRetriever(Module):
         reset all the metrics.
         """
         self.reader_metrics.reset(split)
-        self.zero_metrics.reset(split)
         self.retriever_reading_metrics.reset(split)
         self.retriever_metrics.reset(split)
 
@@ -494,7 +458,6 @@ class OptionRetriever(Module):
         """
         return {
             **self.reader_metrics.compute(split),
-            **self.zero_metrics.compute(split),
             **self.retriever_reading_metrics.compute(split),
             **self.retriever_metrics.compute(split),
             # **self.total_logp_metrics.compute(split),

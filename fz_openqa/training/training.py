@@ -325,6 +325,11 @@ def train_with_dataset_updates(
 
         # fit the model for `update_freq` epochs
         try:
+            log.info(
+                f"Starting training for "
+                f"{trainer.fit_loop.max_epochs - trainer.current_epoch} epochs"
+                f" (update={dataset_iter}).."
+            )
             trainer.fit(
                 model=model,
                 train_dataloader=datamodule.train_dataloader(),
