@@ -294,10 +294,11 @@ class OptionRetriever(Module):
         """
 
         # average losses
-        for k in ["loss", "reader/logp"]:
-            y = output.get(k, None)
-            if y is not None:
-                output[k] = y.mean()
+        for k, v in output.items():
+            if not str(k).startswith("_") and not str(k).endswith("_"):
+                if isinstance(v, torch.Tensor):
+                    v = v.float().mean()
+                output[k] = v
 
         return output
 
