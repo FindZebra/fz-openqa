@@ -22,7 +22,8 @@ _DESCRIPTION = "A class to load the english MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1KrEZuUaHHZa1WfA3AO-uLWZdaRe9Sdmf/view?usp=sharing"
+# _URL = "https://drive.google.com/file/d/1KrEZuUaHHZa1WfA3AO-uLWZdaRe9Sdmf/view?usp=sharing"
+_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/medqa-corpus-en.zip"
 
 
 class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
@@ -48,9 +49,12 @@ class MedQaEnCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     @staticmethod
     def _get_drive_url(url):
-        base_url = "https://drive.google.com/uc?id="
-        split_url = url.split("/")
-        return base_url + split_url[5]
+        if "drive.google.com" in url:
+            base_url = "https://drive.google.com/uc?id="
+            split_url = url.split("/")
+            return base_url + split_url[5]
+        else:
+            return url
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""

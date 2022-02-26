@@ -219,10 +219,13 @@ class OptionRetriever(Module):
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
-        # log retriever entropy
-        retriever_logits = retriever_score.log_softmax(dim=-1)
-        retriever_entropy = -(retriever_logits.exp() * retriever_logits).sum(dim=(1, 2)).mean()
-        step_output["retriever/entropy"] = retriever_entropy.detach()
+        # retriever diagnostics
+        self._retriever_diagnostics(
+            retriever_score,
+            d_batch.get("document.retrieval_score", None),
+            d_batch.get("document.retrieval_rank", None),
+            output=step_output,
+        )
 
         # compute the gradients
         step_output.update(
@@ -330,3 +333,65 @@ class OptionRetriever(Module):
             **self.retriever_metrics.compute(split),
             **self.total_logp_metrics.compute(split),
         }
+
+    @staticmethod
+    @torch.no_grad()
+    def _retriever_diagnostics(
+        retriever_score: Tensor,
+        retrieval_scores: Optional[Tensor],
+        retrieval_rank: Optional[Tensor],
+        *,
+        output,
+    ):
+        """
+        Compute diagnostics for the rank of the retrieved documents.
+
+        NB: `retriever_probs` corresponds to the probs of the trained model whereas
+        `retrieval_*` correspond to the probs of the model used for indexing.
+        """
+        retriever_score = retriever_score.clone().detach()
+        retriever_log_probs = retriever_score.log_softmax(dim=-1)
+        retriever_probs = retriever_log_probs.exp()
+
+        # arg_i(cdf=p)
+        sorted_probs = retriever_probs.sort(dim=-1, descending=True).values
+        cdf = sorted_probs.cumsum(dim=-1)
+        for p in [0.5, 0.9]:
+            arg_cdf_90 = 1 + (cdf - p).abs().argmin(dim=-1)
+            output[f"retriever/arg_cdf_{int(100 * p)}"] = arg_cdf_90.float().mean()
+
+        # entropy `H(p(D | q, A))`
+        retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
+        output["retriever/entropy"] = retriever_entropy.mean()
+
+        if retrieval_scores is not None:
+            #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
+            M = retrieval_scores.max(dim=-1, keepdim=True).values
+            retrieval_scores = retrieval_scores - M
+            retrieval_scores = retrieval_scores.clip(min=-1e6)
+            retrieval_log_probs = retrieval_scores.log_softmax(dim=-1)
+
+            # `KL( p(D|q, A) || r(D|q, A) )`
+            kl_div = retriever_probs * (retriever_log_probs - retrieval_log_probs)
+            kl_div = kl_div.sum(dim=(1, 2))
+            output["retriever/kl_div"] = kl_div.mean()
+
+        # retrieval rank info
+        if retrieval_rank is not None:
+            # retrieval rank weighted by the probability of the retrieved document
+            weighted_rank = retriever_probs * retrieval_rank
+            output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
+
+            # rank of the most likely document
+            top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
+            top_rank = retrieval_rank.gather(dim=-1, index=top_idx)
+            output["retriever/top_rank"] = top_rank.float().mean()
+
+            # min-max of the retrieval rank
+            output["retriever/n_samples"] = retrieval_rank.size(-1)
+            output["retriever/max_sampled_rank"] = (
+                (retrieval_rank.max(dim=-1).values).float().mean()
+            )
+            output["retriever/min_sampled_rank"] = (
+                (retrieval_rank.min(dim=-1).values).float().mean()
+            )
