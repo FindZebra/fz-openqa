@@ -4,7 +4,6 @@ from typing import List
 from typing import Optional
 
 import pyarrow as pa
-import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index
@@ -115,7 +114,8 @@ class FetchDocuments(Pipe):
             )
 
         # collate and return
-        return self.collate_pipe(rows)
+        output = self.collate_pipe(rows)
+        return output
 
     def _fetch_rows(self, indexes: List[int], max_chunk_size: int = 100) -> Batch:
         """
@@ -130,6 +130,7 @@ class FetchDocuments(Pipe):
         # fetch documents
         for i in range(0, len(indexes), max_chunk_size):
             index_i = indexes[i : i + max_chunk_size]
+            # this line crashes in multiprocessing with `datasets===1.18.3`
             table = self.corpus_dataset.select(index_i, keep_in_memory=True)
             batch: Batch = table[None:None]
             if isinstance(batch, pa.Table):

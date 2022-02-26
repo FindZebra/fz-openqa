@@ -7,6 +7,7 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import dill
 import jsondiff
 import rich
 from datasets import Dataset
@@ -87,7 +88,7 @@ class MapWithFingerprint:
             # process each split
             start_time = time()
             dataset[key] = dset.map(
-                partial(pipe, split=key),
+                partial(pipe, split=str(key)),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,
@@ -144,7 +145,7 @@ class MapWithFingerprint:
     def _check_pickling(self, pipe: Pipe):
         """check that the pipe can be pickled, which is necessary for multiprocessing"""
         try:
-            if not pipe.dill_inspect(reduce=True):
+            if not dill.pickles(pipe):
                 rich.print(pipe.dill_inspect())
                 raise TypeError(
                     "Couldn't pickle pipe. Code would fail if `num_proc`>1. "

@@ -4,7 +4,6 @@ from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import ExtractGoldAnswer
 from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
@@ -46,7 +45,7 @@ class FetchAndClassifyDocuments(Sequential):
         kwargs
             Additional keyword arguments to pass to the Sequential constructor
         """
-
+        self.classifier = classifier
         super().__init__(
             ApplyAsFlatten(
                 FetchDocuments(

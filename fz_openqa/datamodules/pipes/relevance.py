@@ -1,5 +1,4 @@
 import re
-import warnings
 from dataclasses import dataclass
 from functools import partial
 from itertools import zip_longest
@@ -14,30 +13,18 @@ from typing import Tuple
 
 import numpy as np
 import spacy
-
-try:
-    import scispacy
-except ImportError:
-    scispacy = None
-
-if scispacy is not None:
-    from scispacy.linking import EntityLinker  # type: ignore
-    from scispacy.linking_utils import Entity
-else:
-    from spacy.pipeline import EntityLinker  # type: ignore
-
-    Entity = None
-
-
+from scispacy.linking import EntityLinker  # type: ignore
+from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span
 
-from ...utils.functional import infer_batch_size
-from .base import Pipe
+from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.pretty import pprint_batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
@@ -169,7 +156,7 @@ class RelevanceClassifier(Pipe):
 
         # reshape as [batch_size, n_documents] and cast as Tensor
         output[self.output_key] = list(results)
-
+        pprint_batch(output, f"{type(self).__name__} output")
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:
