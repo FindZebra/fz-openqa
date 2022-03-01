@@ -54,7 +54,7 @@ class ZeroShot(pl.LightningModule):
                 else:
                     raise NotImplementedError
 
-                vec = torch.nn.functional.normalize(vec, dim=-1)
+                vec = torch.nn.functional.standardize(vec, dim=-1)
 
                 output_key = key_map[prefix]
                 output[output_key] = vec.view(*shape[:-1], *vec.shape[1:])

@@ -27,6 +27,7 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
@@ -172,10 +173,21 @@ class Module(nn.Module, ABC):
             assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
         else:
             bert_config = {}
+
+        rich.print("> Initializing BERT model with:")
+        rich.print(bert)
+        rich.print(bert_config)
         bert: BertPreTrainedModel = maybe_instantiate(bert, **bert_config)
+        rich.print(f">> BERT fingerprint={get_fingerprint(bert)}")
 
         # extend BERT embeddings for the added special tokens
         if bert.get_input_embeddings().weight.shape[0] != len(tokenizer):
+            rich.print(
+                f">> resizing BERT: "
+                f"{bert.get_input_embeddings().weight.shape[0]}"
+                f" -> "
+                f"{len(tokenizer)}"
+            )
             bert.resize_token_embeddings(len(tokenizer))
 
             emb_map = {

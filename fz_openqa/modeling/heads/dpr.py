@@ -2,6 +2,7 @@ from typing import Dict
 from typing import Optional
 
 import einops
+import rich
 import torch
 import torch.nn.functional as F
 from torch import einsum
@@ -24,13 +25,15 @@ class DprHead(Head):
         bias: bool = True,
         share_parameters: bool = False,
         bayesian: bool = False,
-        learn_gate: bool = False,
-        gate: float = 1.0,
-        **kwargs
+        learn_scale: bool = False,
+        scale: float = 1.0,
+        **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
+        self.scaled: bool = False
+        self.scale_init = scale
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -44,19 +47,38 @@ class DprHead(Head):
         else:
             self.q_head = self.d_head = None
 
-        # temperate
-        gate_value = torch.tensor(gate, dtype=torch.float)
-        if learn_gate:
-            self._gate = nn.Parameter(gate_value)
+        scale_value = torch.tensor(1.0, dtype=torch.float)
+        offset_value = torch.tensor(0.0, dtype=torch.float)
+        if learn_scale:
+            self._scale = nn.Parameter(scale_value)
+            self._offset = nn.Parameter(offset_value)
         else:
-            self.register_buffer("_gate", gate_value)
+            self.register_buffer("_scale", scale_value)
+            self.register_buffer("_offset", offset_value)
 
     @property
-    def gate(self):
-        return self._gate
+    def scale(self):
+        return self._scale
+
+    @property
+    def offset(self):
+        return self._offset
 
     def temperature(self) -> None:
-        return self.gate.pow(-1)
+        return self.scale.pow(-1)
+
+    def set_scale(self, hq: Tensor):
+        self._scale.data = self.scale_init * hq.std().detach().pow(-1)
+        self._offset.data = -hq.mean().detach() * self._scale.data
+        self.scaled = True
+
+        o = self.standardize(hq)
+        rich.print(
+            f"> standardized | o.mean={o.mean():.3f}, "
+            f"o.std={o.std():.3f}, "
+            f"scale={self._scale.data:.3f}, "
+            f"offset={self._offset.data:.3f}"
+        )
 
     def forward(
         self,
@@ -67,12 +89,13 @@ class DprHead(Head):
         q_mask: Optional[Tensor] = None,
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tensor:
 
         # preprocess
         hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, **kwargs)
         hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
+        hq = self.standardize(hq)
 
         # compute the score
         return self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
@@ -84,7 +107,7 @@ class DprHead(Head):
         hd: Tensor,
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tensor:
         if not self.across_batch:
             return einsum("boh, bodh -> bod", hq, hd)
@@ -103,12 +126,12 @@ class DprHead(Head):
 
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
-            # cls_repr /= float(cls_repr.shape[-1])**0.5
-
-        if head == "question":
-            cls_repr = cls_repr * self.gate
 
         return cls_repr
+
+    def standardize(self, hq: Tensor) -> Tensor:
+        hq = hq * self.scale + self.offset
+        return hq
 
     @staticmethod
     def _flatten_documents(hd: Tensor, doc_ids=None) -> Tensor:

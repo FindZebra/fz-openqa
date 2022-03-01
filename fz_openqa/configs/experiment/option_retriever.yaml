@@ -23,6 +23,7 @@ defaults:
       - checkpoint
       - lr_monitor
       - log_predictions
+      - progress_bar
 
 base:
   seed: 4272019677 # TODO: remove
@@ -43,8 +44,8 @@ trainer:
   gradient_clip_val: 0.5
   accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
   val_check_interval: 0.5
-  precision: 16
-  track_grad_norm: 2
+  precision: 32
+  # track_grad_norm: 2
 
 model:
   ema_decay: null
@@ -73,14 +74,14 @@ model:
       use_mask: false
       use_answer_mask: false
       bayesian: false # todo
-      learn_gate: false
-      gate: 1
+      learn_scale: false
+      scale: 1
     reader_head:
       output_size: 32
       use_mask: false
       bayesian: false
-      learn_gate: false
-      gate: 1
+      learn_scale: false
+      scale: 1
     gradients:
       use_baseline: false # todo
       expr: A

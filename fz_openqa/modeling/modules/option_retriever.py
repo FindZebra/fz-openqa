@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import Tensor
+from wandb.util import np
 
 from ...utils import maybe_instantiate
 from ...utils.fingerprint import get_fingerprint
@@ -30,6 +31,27 @@ from fz_openqa.utils.datastruct import Batch
 class Similarity(Enum):
     DENSE = "dense"
     COLBERT = "colbert"
+
+
+def hash_bert(bert):
+    bert_params = {k: get_fingerprint(v) for k, v in bert.named_parameters() if "encoder." in k}
+    bert_fingerprint = get_fingerprint(bert_params)
+    is_training = bert.training
+    bert.eval()
+    state = np.random.RandomState(0)
+    x = state.randint(0, bert.config.vocab_size - 1, size=(3, 512))
+    x = torch.from_numpy(x)
+    h = bert(x).last_hidden_state
+    input_fingerprint = get_fingerprint(x)
+    output_fingerprint = get_fingerprint(h)
+    if is_training:
+        bert.train()
+
+    return {
+        "bert_fingerprint": bert_fingerprint,
+        "input_fingerprint": input_fingerprint,
+        "output_fingerprint": output_fingerprint,
+    }
 
 
 class OptionRetriever(Module):
@@ -97,9 +119,12 @@ class OptionRetriever(Module):
         # self.bert._init_weights(self.reader_head)
         # self.bert._init_weights(self.retriever_head)
 
-        rich.print(f"> bert: {get_fingerprint(self.bert)}")
-        rich.print(f"> reader: {get_fingerprint(self.reader_head)}")
-        rich.print(f"> retriever: {get_fingerprint(self.retriever_head)}")
+        rich.print(f"> reader={get_fingerprint(self.reader_head)}")
+        rich.print(f"> retriever={get_fingerprint(self.retriever_head)}")
+
+        # check bert
+        for k, hs in hash_bert(self.bert).items():
+            rich.print(f"> {k}={hs}")
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -415,6 +440,18 @@ class OptionRetriever(Module):
         """
         Gather losses and logits from all devices and return
         """
+
+        # todo: set scale
+        # retriever_score = output["_doc_logits_"]
+        # reader_score = output["_reader_logits_"]
+        #
+        # if not self.retriever_head.scaled:
+        #     self.retriever_head.set_scale(retriever_score)
+        # if not self.reader_head.scaled:
+        #     self.reader_head.set_scale(reader_score)
+
+        # rich.print(f">> reader: {reader_score.mean()} ({reader_score.std()})")
+        # rich.print(f">> retriever: {retriever_score.mean()} ({retriever_score.std()})")
 
         # average losses
         for k, v in output.items():

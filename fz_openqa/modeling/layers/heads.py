@@ -21,5 +21,5 @@ class cls_head(nn.Module):
         cls_ = last_hidden_state[:, 0]  # CLS token
         h = self.linear(cls_)
         if self.normalize:
-            h = torch.nn.functional.normalize(h, p=2, dim=-1)
+            h = torch.nn.functional.standardize(h, p=2, dim=-1)
         return h
