@@ -10,6 +10,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import pytorch_lightning.utilities
 import rich
 import torch
 import torch.nn.functional as F
@@ -26,6 +27,7 @@ from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.metrics import SplitMetrics
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
@@ -167,7 +169,10 @@ class Module(nn.Module, ABC):
         last_hidden_state = bert_output.last_hidden_state
 
         # process the last hidden state with the heads
-        return {k: self.heads[k](last_hidden_state) for k in heads}
+        return {
+            **{k: self.heads[k](last_hidden_state) for k in heads},
+            **{"last_hidden_state": last_hidden_state},
+        }
 
     def _instantiate_bert(
         self,
@@ -181,11 +186,21 @@ class Module(nn.Module, ABC):
         self._vocabulary_size = len(tokenizer.get_vocab())
         self._pad_token_id = tokenizer.pad_token_id
 
+        rich.print("> Initializing BERT model with:")
+        rich.print(bert)
+        rich.print(kwargs)
         bert: BertPreTrainedModel = maybe_instantiate(bert, **kwargs)
+        rich.print(f">> BERT fingerprint: {get_fingerprint(bert)}")
 
         # extend BERT embeddings for the added special tokens
         # TODO: CRITICAL: check this does not affect the model
         #  this might explain the drop of performances
+        rich.print(
+            f">> resizing BERT: "
+            f"{bert.get_input_embeddings().weight.shape[0]}"
+            f" -> "
+            f"{len(tokenizer)}"
+        )
         bert.resize_token_embeddings(len(tokenizer))
         return bert
 

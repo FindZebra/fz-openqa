@@ -178,18 +178,33 @@ class Model(LightningModule):
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": only_trainable(
-                    [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)]
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if not any(nd in n for nd in no_decay)
+                        ]
+                    )
                 ),
                 "weight_decay": self.hparams.weight_decay,
             },
             {
-                "params": only_trainable(
-                    [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
+                "params": list(
+                    only_trainable(
+                        [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
+                    )
                 ),
                 "weight_decay": 0.0,
             },
         ]
+
+        for group in optimizer_grouped_parameters:
+            rich.print(
+                f"> Optimizer group: "
+                f"n_params={len(group['params'])}, "
+                f"weight_decay={group['weight_decay']}"
+            )
 
         # define the optimizer using the above groups
         optimizer = AdamW(
