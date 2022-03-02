@@ -83,4 +83,7 @@ class ColbertHead(DprHead):
             )
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
 
+        if head == "question":
+            last_hidden_state = self.scale(last_hidden_state)
+
         return last_hidden_state

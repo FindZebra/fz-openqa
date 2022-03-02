@@ -6,7 +6,7 @@
 #SBATCH --time=1-00:00:00
 
 # variables
-NAME="DIKU-in-batch-v4.4.A-es-f15-k10-P1000-8.2.1-gate"
+NAME="DIKU-xmatch-inbatch-v4.4.A-es-f15-k10-P1000-9.0"
 setup_with_model=false
 
 # display basic info
@@ -25,7 +25,8 @@ fi
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
   model/module/gradients=in_batch \
-  +device_batch_size=2 \
+  base.device_batch_size=2 \
+  trainer.precision=16 \
   +setup_with_model=${setup_with_model} \
   +kill_es=true \
   logger.wandb.name=${NAME}

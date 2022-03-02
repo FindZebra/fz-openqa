@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
@@ -32,8 +33,8 @@ class DprHead(Head):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
-        self.scaled: bool = False
         self.scale_init = scale
+        self.register_buffer("scaled", torch.tensor(0))
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -43,7 +44,9 @@ class DprHead(Head):
             if share_parameters:
                 self.d_head = self.q_head
             else:
-                self.d_head = Layer(self.input_size, self.output_size, bias=self.bias)
+                # NB: using deepcopy instead of initializing a new head is critical
+                # to ensure stable training. Do not re-init the heads!
+                self.d_head = deepcopy(self.q_head)
         else:
             self.q_head = self.d_head = None
 
@@ -57,7 +60,7 @@ class DprHead(Head):
             self.register_buffer("_offset", offset_value)
 
     @property
-    def scale(self):
+    def scale_value(self):
         return self._scale
 
     @property
@@ -65,20 +68,27 @@ class DprHead(Head):
         return self._offset
 
     def temperature(self) -> None:
-        return self.scale.pow(-1)
+        return self.scale_value.pow(-1)
 
-    def set_scale(self, hq: Tensor):
-        self._scale.data = self.scale_init * hq.std().detach().pow(-1)
-        self._offset.data = -hq.mean().detach() * self._scale.data
-        self.scaled = True
+    def set_scale(self, scores: Tensor):
+        self._scale.data = self.scale_init * scores.std().detach().pow(-1)
+        self._offset.data = -scores.mean().detach() * self._scale.data
+        self.scaled.data += 1
 
-        o = self.standardize(hq)
+        scores = self.scale(scores)
         rich.print(
-            f"> standardized | o.mean={o.mean():.3f}, "
-            f"o.std={o.std():.3f}, "
+            f"> standardized | out.mean={scores.mean():.3f}, "
+            f"out.std={scores.std():.3f}, "
             f"scale={self._scale.data:.3f}, "
-            f"offset={self._offset.data:.3f}"
+            f"offset={self._offset.data:.3f}, "
+            f"scaled={self.scaled}"
         )
+
+        return scores
+
+    def scale(self, hq: Tensor) -> Tensor:
+        hq = hq * self.scale_value
+        return hq
 
     def forward(
         self,
@@ -95,10 +105,15 @@ class DprHead(Head):
         # preprocess
         hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, **kwargs)
         hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
-        hq = self.standardize(hq)
 
         # compute the score
-        return self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+        score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+
+        if self.scaled < 1:
+            rich.print(f">> SCALING: {self.scaled} : {self.scale_init}")
+            score = self.set_scale(score)
+
+        return score + self.offset
 
     def score(
         self,
@@ -127,11 +142,10 @@ class DprHead(Head):
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
 
-        return cls_repr
+        if head == "question":
+            cls_repr = self.scale(cls_repr)
 
-    def standardize(self, hq: Tensor) -> Tensor:
-        hq = hq * self.scale + self.offset
-        return hq
+        return cls_repr
 
     @staticmethod
     def _flatten_documents(hd: Tensor, doc_ids=None) -> Tensor:

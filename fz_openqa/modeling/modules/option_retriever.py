@@ -12,46 +12,25 @@ import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import Tensor
-from wandb.util import np
 
-from ...utils import maybe_instantiate
-from ...utils.fingerprint import get_fingerprint
-from ...utils.pretty import pprint_batch
-from ..gradients import Gradients
-from ..gradients import InBatchGradients
-from ..heads.base import Head
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
+from fz_openqa.modeling.gradients import Gradients
+from fz_openqa.modeling.gradients import InBatchGradients
+from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
+from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import fingerprint_bert
+from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class Similarity(Enum):
     DENSE = "dense"
     COLBERT = "colbert"
-
-
-def hash_bert(bert):
-    bert_params = {k: get_fingerprint(v) for k, v in bert.named_parameters() if "encoder." in k}
-    bert_fingerprint = get_fingerprint(bert_params)
-    is_training = bert.training
-    bert.eval()
-    state = np.random.RandomState(0)
-    x = state.randint(0, bert.config.vocab_size - 1, size=(3, 512))
-    x = torch.from_numpy(x)
-    h = bert(x).last_hidden_state
-    input_fingerprint = get_fingerprint(x)
-    output_fingerprint = get_fingerprint(h)
-    if is_training:
-        bert.train()
-
-    return {
-        "bert_fingerprint": bert_fingerprint,
-        "input_fingerprint": input_fingerprint,
-        "output_fingerprint": output_fingerprint,
-    }
 
 
 class OptionRetriever(Module):
@@ -115,16 +94,12 @@ class OptionRetriever(Module):
         ]
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
 
-        # init weight using BERT own initialization
-        # self.bert._init_weights(self.reader_head)
-        # self.bert._init_weights(self.retriever_head)
+        # check bert fingerprint
+        for k, hs in fingerprint_bert(self.bert).items():
+            rich.print(f"> {k}={hs}")
 
         rich.print(f"> reader={get_fingerprint(self.reader_head)}")
         rich.print(f"> retriever={get_fingerprint(self.retriever_head)}")
-
-        # check bert
-        for k, hs in hash_bert(self.bert).items():
-            rich.print(f"> {k}={hs}")
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
@@ -219,6 +194,7 @@ class OptionRetriever(Module):
         """
         Compute the forward pass for the question and the documents.
         """
+
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
         kwargs["predict"] = False
@@ -319,6 +295,10 @@ class OptionRetriever(Module):
             **kwargs,
         )
 
+        # log documents ids
+        step_output["retriever/max-doc-id"] = batch["document.row_idx"].max()
+        step_output["retriever/min-doc-id"] = batch["document.row_idx"].min()
+
         # retriever diagnostics
         self._retriever_diagnostics(
             retriever_score,
@@ -357,6 +337,9 @@ class OptionRetriever(Module):
         `retrieval_*` correspond to the probs of the model used for indexing.
         """
         retriever_score = retriever_score.clone().detach()
+        output["retriever/score-std"] = retriever_score.std()
+        output["retriever/score-min-max"] = retriever_score.max() - retriever_score.min()
+
         retriever_log_probs = retriever_score.log_softmax(dim=-1)
         retriever_probs = retriever_log_probs.exp()
 
@@ -440,19 +423,6 @@ class OptionRetriever(Module):
         """
         Gather losses and logits from all devices and return
         """
-
-        # todo: set scale
-        # retriever_score = output["_doc_logits_"]
-        # reader_score = output["_reader_logits_"]
-        #
-        # if not self.retriever_head.scaled:
-        #     self.retriever_head.set_scale(retriever_score)
-        # if not self.reader_head.scaled:
-        #     self.reader_head.set_scale(reader_score)
-
-        # rich.print(f">> reader: {reader_score.mean()} ({reader_score.std()})")
-        # rich.print(f">> retriever: {retriever_score.mean()} ({retriever_score.std()})")
-
         # average losses
         for k, v in output.items():
             if not str(k).startswith("_") and not str(k).endswith("_"):

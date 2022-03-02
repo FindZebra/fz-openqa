@@ -75,13 +75,13 @@ model:
       use_answer_mask: false
       bayesian: false # todo
       learn_scale: false
-      scale: 1
+      scale: 1.
     reader_head:
       output_size: 32
       use_mask: false
       bayesian: false
       learn_scale: false
-      scale: 1
+      scale: 1.
     gradients:
       use_baseline: false # todo
       expr: A
