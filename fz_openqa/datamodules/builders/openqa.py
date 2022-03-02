@@ -262,7 +262,7 @@ class OpenQaBuilder(DatasetBuilder):
             )
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
-            # todo: try this
+            # move the model back to CPU to save GPU memory
             index.model.cpu()
 
         # Search the document and tag them with `document.match_score`

@@ -62,7 +62,6 @@ class MultiFaissHandler(IndexHandler):
             if len(ids) == 0:
                 raise ValueError(f"No vectors found for doc_id: {doc_id}")
 
-            rich.print(f">> vectors: {vectors[ids].shape}, kwargs={kwargs}")
             index.build(vectors[ids])
             self.indexes[doc_id] = index
             self.id_lookup[doc_id] = torch.tensor(ids)

@@ -160,6 +160,7 @@ def train(config: DictConfig) -> Optional[float]:
             model=model,
             trainer=trainer,
             update_freq=dataset_update_freq,
+            test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
             index_first_epoch=dataset_update.get("index_first_epoch", False),
             **dataset_update.get("builder_args", {}),

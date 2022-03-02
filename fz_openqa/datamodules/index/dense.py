@@ -63,7 +63,7 @@ class DenseIndex(Index):
 
     default_key = ["input_ids", "attention_mask", "document_idx"]
     _index: Optional[IndexHandler] = None
-    model: Callable = None
+    model: Callable | torch.nn.Module = None
     _vectors_table: Optional[TensorArrowTable] = None
     _master: bool = True
     _max_num_proc: int = 1

@@ -308,6 +308,10 @@ class ConcatQaBuilder(QaBuilder):
         return dataset
 
     def get_concat_qa_pipe(self):
+        # register features that also need to be expanded to match the concatenated shape
+        additional_question_features = ["question.document_idx"]
+
+        # register the tokens that prefix the question
         q_start_tokens = []
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
@@ -322,6 +326,7 @@ class ConcatQaBuilder(QaBuilder):
         else:
             add_spec_tokens_pipe = None
 
+        # return the final pipe
         return Sequential(
             self.text_formatter.copy(text_key=["question.text", "answer.text"], update=True),
             add_spec_tokens_pipe,
@@ -329,14 +334,15 @@ class ConcatQaBuilder(QaBuilder):
                 axis=1,
                 n=self.n_options,
                 update=True,
-                input_filter=In(["question.text"]),
+                input_filter=In(["question.text", *additional_question_features]),
             ),
             ApplyAsFlatten(
                 ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
                 level=1,
                 input_filter=In(["question.text", "answer.text"]),
+                update=True,
             ),
-            input_filter=In(["question.text", "answer.text"]),
+            input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 
     def get_qa_tokenizer_pipe(self):

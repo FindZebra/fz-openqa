@@ -74,13 +74,13 @@ model:
       use_mask: false
       use_answer_mask: false
       bayesian: false # todo
-      learn_scale: false
+      learn_scale: true
       scale: 1.
     reader_head:
       output_size: 32
       use_mask: false
       bayesian: false
-      learn_scale: false
+      learn_scale: true
       scale: 1.
     gradients:
       use_baseline: false # todo
@@ -92,12 +92,13 @@ datamodule:
   dataset_update:
     freq: 15 # todo !!!
     reset_optimizer: true # TODO !!
+    test_every_update: true
     builder_args:
       relevance_classifier: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
-  eval_batch_size: ${int_mul:${datamodule.train_batch_size},4}
+  eval_batch_size: ${int_mul:${datamodule.train_batch_size},8}
   num_workers: 12
   pin_memory: true
 
@@ -152,7 +153,6 @@ datamodule:
   index_builder:
     es_temperature: 1. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
-    keep_faiss_on_cpu: false
     p: 100
     dtype: ${trainer.precision}
     max_chunksize: null
@@ -160,6 +160,8 @@ datamodule:
     persist_cache: false
     index_factory: IVF100,PQ16x8
     handler: flat
+    keep_faiss_on_cpu: false
+    train_faiss_on_cpu: false
     nprobe: 12
     loader_kwargs:
       batch_size: ${int_mul:${base.n_devices},500,${base.device_batch_size}}
