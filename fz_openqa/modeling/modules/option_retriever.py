@@ -1,5 +1,6 @@
 import warnings
 from enum import Enum
+from pathlib import Path
 from typing import Any
 from typing import Optional
 
@@ -246,6 +247,10 @@ class OptionRetriever(Module):
         reader_score = self._compute_score(hd=hd_reader, hq=hq_reader)
         retriever_score = self._compute_score(hd=hd_retriever, hq=hq_retriever)
 
+        if self.training is False:
+            rich.print(f"> retriever_score: {retriever_score.mean():.2e} ({retriever_score.std():.2e})")
+
+
         # retriever diagnostics
         self._retriever_diagnostics(
             retriever_score,
@@ -262,6 +267,10 @@ class OptionRetriever(Module):
                 targets=batch["answer.target"],
             )
         )
+
+        # log documents ids
+        step_output["retriever/max-doc-id"] = batch["document.row_idx"].max()
+        step_output["retriever/min-doc-id"] = batch["document.row_idx"].min()
 
         # auxiliary loss
         if self.alpha > 0 or not is_supervised_loss_computed:
@@ -378,6 +387,8 @@ class OptionRetriever(Module):
         `retrieval_*` correspond to the probs of the model used for indexing.
         """
         retriever_score = retriever_score.clone().detach()
+        output["retriever/score-std"] = retriever_score.std()
+
         retriever_log_probs = retriever_score.log_softmax(dim=-1)
         retriever_probs = retriever_log_probs.exp()
 

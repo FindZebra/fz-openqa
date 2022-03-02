@@ -68,6 +68,7 @@ datamodule:
 
   # dataset builder
   use_subset: false
+  corpus_subset: false
   num_proc: 4
   output_columns:
     - answer.target
@@ -97,7 +98,7 @@ datamodule:
     dataset_builder:
       n_query_tokens: 10
     corpus_builder:
-      use_subset: false
+      use_subset: ${datamodule.corpus_subset}
 
   # Index parameters
   index_builder:

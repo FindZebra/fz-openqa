@@ -6,6 +6,7 @@ from typing import Optional
 from typing import Union
 
 import rich
+import torch
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
