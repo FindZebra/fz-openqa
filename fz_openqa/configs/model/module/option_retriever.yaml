@@ -3,7 +3,6 @@ _target_: fz_openqa.modeling.modules.OptionRetriever
 defaults:
   - reader_head: colbert
   - retriever_head: colbert
-  - zero_head: zero
   - gradients: reinforce
 
 resample_k: null

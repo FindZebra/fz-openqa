@@ -111,7 +111,7 @@ class LogPredictions(Callback):
 
         html = "<h1>Model predictions</h1>\n"
         for k, row in enumerate(self.data):
-            html += '<div tag="Question" style="font-size:11px">\n'
+            html += '<div tag="Question" style="font-size:12px">\n'
             html += f"<h2>Q #{k}</h2>\n"
             probs = row["_reader_logits_"].softmax(-1)
             scores = row["document.retrieval_score"]

@@ -16,6 +16,8 @@ class MaxSimReducer(object):
     def __init__(self, device: None | int | torch.device = None):
         if device is None:
             device = torch.device("cpu")
+        if isinstance(device, int):
+            device = torch.device("cuda", device)
         self.device = device
 
     def __call__(self, data: List[MaxSimOutput], k: int) -> MaxSimOutput:
@@ -69,7 +71,7 @@ class MaxSimReducer(object):
         return maxsim_pids, maxsim_scores
 
     @staticmethod
-    def _pad_to_length(values: Tensor, k: int, fill_value=torch.nan):
+    def _pad_to_length(values: Tensor, k: int, fill_value=torch.tensor(float("nan"))):
         if values.shape[1] < k:
             return F.pad(values, (0, k - values.shape[1]), value=fill_value)
         else:

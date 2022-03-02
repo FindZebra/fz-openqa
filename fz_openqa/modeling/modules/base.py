@@ -27,6 +27,7 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
@@ -172,6 +173,7 @@ class Module(nn.Module, ABC):
             assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
         else:
             bert_config = {}
+
         bert: BertPreTrainedModel = maybe_instantiate(bert, **bert_config)
 
         # extend BERT embeddings for the added special tokens

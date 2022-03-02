@@ -50,6 +50,7 @@ class ToyOptionRetriever(nn.Module):
         hidden: int = 128,
         output_size: int = 16,
         max_chunksize: int = None,
+        temperature: float = 10.0,
         share_backbone: bool = False,
     ):
         super().__init__()
@@ -65,8 +66,8 @@ class ToyOptionRetriever(nn.Module):
             )
             self.reader_head = deepcopy(self.retriever_head)
 
-        self.reader_gate = nn.Parameter(torch.zeros((1,)))
-        self.retriever_gate = nn.Parameter(torch.zeros((1,)))
+        self.reader_log_temperature = nn.Parameter(torch.tensor(temperature).log())
+        self.retriever_log_temperature = nn.Parameter(torch.tensor(temperature).log())
 
     @property
     def device(self):
@@ -104,6 +105,12 @@ class ToyOptionRetriever(nn.Module):
         reader_score = torch.einsum("bh,bmdh -> bmd", hq["reader"], hd["reader"])
 
         return {
-            "retriever_score": self.retriever_gate * retriever_score,
-            "reader_score": self.reader_gate * reader_score,
+            "retriever_score": retriever_score / self.retriever_temperature(),
+            "reader_score": reader_score / self.reader_temperature(),
         }
+
+    def reader_temperature(self):
+        return self.reader_log_temperature.exp()
+
+    def retriever_temperature(self):
+        return self.retriever_log_temperature.exp()

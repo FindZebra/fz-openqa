@@ -143,6 +143,9 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
 
+    # eval on init
+    trainer.validate(model=model, dataloaders=datamodule.val_dataloader())
+
     # Training...
     patch_signal_connector(trainer)
     dataset_update = config.datamodule.get("dataset_update", None)
@@ -157,6 +160,7 @@ def train(config: DictConfig) -> Optional[float]:
             model=model,
             trainer=trainer,
             update_freq=dataset_update_freq,
+            test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
             index_first_epoch=dataset_update.get("index_first_epoch", False),
             **dataset_update.get("builder_args", {}),
@@ -325,6 +329,11 @@ def train_with_dataset_updates(
 
         # fit the model for `update_freq` epochs
         try:
+            log.info(
+                f"Starting training for "
+                f"{trainer.fit_loop.max_epochs - trainer.current_epoch} epochs"
+                f" (update={dataset_iter}).."
+            )
             trainer.fit(
                 model=model,
                 train_dataloader=datamodule.train_dataloader(),

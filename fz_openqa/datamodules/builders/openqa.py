@@ -20,7 +20,7 @@ from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions
-from fz_openqa.datamodules.index import FaissIndex
+from fz_openqa.datamodules.index import DenseIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
@@ -243,7 +243,7 @@ class OpenQaBuilder(DatasetBuilder):
         # for nested datasets, the dataset is flatten, so the index
         # in the flatten dataset corresponds to the flattened index
         # in the call of SearchCorpus.
-        if isinstance(index, FaissIndex):
+        if isinstance(index, DenseIndex):
             collate_fn = CollateField(
                 "question",
                 tokenizer=self.tokenizer,
@@ -262,8 +262,8 @@ class OpenQaBuilder(DatasetBuilder):
             )
             index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
 
-            # todo: try this
-            # index.model.cpu()
+            # move the model back to CPU to save GPU memory
+            index.model.cpu()
 
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(

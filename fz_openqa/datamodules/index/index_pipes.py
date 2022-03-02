@@ -4,7 +4,6 @@ from typing import List
 from typing import Optional
 
 import pyarrow as pa
-import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index
@@ -12,6 +11,8 @@ from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Partial
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
@@ -32,6 +33,7 @@ class SearchCorpus(ApplyAsFlatten):
         self.index = index
         input_filter = In(index.input_keys(IndexMode.QUERY))
         pipe = Partial(index, k=k)
+        # pipe = Sequential(PrintBatch("SearchCorpus"), pipe)
         super().__init__(pipe, level=level, input_filter=input_filter, flatten_idx=True)
 
 
@@ -115,7 +117,8 @@ class FetchDocuments(Pipe):
             )
 
         # collate and return
-        return self.collate_pipe(rows)
+        output = self.collate_pipe(rows)
+        return output
 
     def _fetch_rows(self, indexes: List[int], max_chunk_size: int = 100) -> Batch:
         """
@@ -130,6 +133,7 @@ class FetchDocuments(Pipe):
         # fetch documents
         for i in range(0, len(indexes), max_chunk_size):
             index_i = indexes[i : i + max_chunk_size]
+            # this line crashes in multiprocessing with `datasets===1.18.3`
             table = self.corpus_dataset.select(index_i, keep_in_memory=True)
             batch: Batch = table[None:None]
             if isinstance(batch, pa.Table):

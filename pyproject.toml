@@ -5,9 +5,9 @@ description = "Medical Open Domain Question Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
-torch = "^1.10.2"
-datasets = "^1.18.3"
+python = ">=3.9,<3.11"
+torch = ">=1.10"
+datasets = "1.17.0"
 transformers = "^4.16.2"
 hydra-core = "^1.1.1"
 pytorch-lightning = "^1.5.10"
@@ -27,7 +27,6 @@ sklearn = "^0.0"
 hydra-colorlog = "^1.1.0"
 pytorch-lamb = "^1.0.0"
 
-
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
 parameterized = "^0.8.1"
@@ -37,7 +36,7 @@ hypothesis = "^6.36.2"
 fzqa = "fz_openqa.cli:main"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core @ git+https://github.com/python-poetry/poetry-core.git@master"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]

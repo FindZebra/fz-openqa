@@ -1,6 +1,6 @@
 defaults:
   - builder: openqa
-  - text_formatter: medqa_formatter
+  - text_formatter: simple_lowercase # todo: don't lowercase
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - relevance_classifier: exact_match

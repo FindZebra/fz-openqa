@@ -69,7 +69,8 @@ class ColbertHead(DprHead):
             last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
 
         if self.use_mask and mask is not None:
-            last_hidden_state = last_hidden_state * mask.unssqueeze(-1)
+            last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
+            last_hidden_state = last_hidden_state / mask.sum(1, keepdim=True)
 
         if self.use_answer_mask and head == "question" and question_mask < 1:
             # mask the tokens up to the first SEP token (use to separate answers from questions)
@@ -83,6 +84,6 @@ class ColbertHead(DprHead):
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
 
         if head == "question":
-            last_hidden_state = last_hidden_state / self.temperature()
+            last_hidden_state = self.scale(last_hidden_state)
 
         return last_hidden_state
