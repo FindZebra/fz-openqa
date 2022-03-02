@@ -7,7 +7,6 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
-import rich
 import torch
 from torch import Tensor
 
@@ -78,10 +77,6 @@ class MaxSim(torch.nn.Module):
         partition = torch.cat([partition[:-1, None], partition[1:, None]], dim=1)
         self.register_buffer("partition", partition)
 
-        rich.print(f"=== parition | vectors: {[len(vectors), *vectors[0].shape]} ===")
-        rich.print(partition)
-        rich.print("=================")
-
         # Initialize Input and Output queues
         self.ranking_input_queues: List[ctx.Queue] = []
         self.ranking_output_queues: List[ctx.Queue] = []
@@ -114,15 +109,13 @@ class MaxSim(torch.nn.Module):
             raise ValueError(f"`emb2pid` must start at 0. Found {emb2pid.min()}")
 
         if emb2pid.max() != len(vectors) - 1:
-            raise ValueError(f"`emb2pid` must end at {len(vectors)-1}. Found {emb2pid.max()}")
+            raise ValueError(f"`emb2pid` must end at {len(vectors) - 1}. Found {emb2pid.max()}")
 
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
         maxsim_workers: List[MaxSimWorker] = []
         for idx, idevice in enumerate(self.ranking_devices):
             part = self.partition[idx]
-
-            rich.print(f">> n_vecs = {len(vectors)}, part = {part}")
 
             # initialize the `MaxSimRanker` given the partition
             worker = self._init_maxsim_worker(
@@ -136,12 +129,6 @@ class MaxSim(torch.nn.Module):
                 daemon=True,
             )
             maxsim_workers.append(worker)
-
-        rich.print(
-            f">> n_vecs = {len(vectors)}, "
-            f"total_partitions={sum(len(vectors[part[0]:part[1]]) for part in self.partition)}"
-        )
-        rich.print(self.partition)
 
         # test the consistency of the partition
         n_vecs_workers = sum(len(w.max_sim.vectors) for w in maxsim_workers)

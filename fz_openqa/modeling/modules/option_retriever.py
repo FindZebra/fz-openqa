@@ -204,6 +204,8 @@ class OptionRetriever(Module):
         step_output = {
             "reader/temperature": self.reader_head.temperature().detach(),
             "retriever/temperature": self.retriever_head.temperature().detach(),
+            "reader/offset": self.reader_head.offset.detach(),
+            "retriever/offset": self.retriever_head.offset.detach(),
         }
         # `max_batch_size` is used to limit the number of samples in the batch, it is
         # only used during eval, except when resampling..

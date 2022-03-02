@@ -90,7 +90,6 @@ class MaxSimRanker(nn.Module):
 
         # recover pid offset, and return
         pids[pids >= 0] += self.boundaries[0]
-        # rich.print(f">> ranker.pids: {pids.shape}, scores:{scores.shape}")
         return scores, pids
 
     @staticmethod

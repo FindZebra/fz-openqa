@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import logging
 from pathlib import Path
 from typing import List
 from typing import Optional
@@ -15,6 +16,8 @@ from torch import nn
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
+
+logger = logging.getLogger(__name__)
 
 
 class TorchIndex(nn.Module):
@@ -68,11 +71,11 @@ class FaissHandler(IndexHandler):
         self.index_factory = index_factory
         self.keep_on_cpu = keep_on_cpu
         self.train_on_cpu = train_on_cpu
-        rich.print(
-            f">> {type(self).__name__}: "
+        logger.info(
+            f"Setup {type(self).__name__} with "
             f"keep_on_cpu={self.keep_on_cpu}, "
-            f"train_on_cpu={self.train_on_cpu},"
-            f"index_factory={self.index_factory},"
+            f"train_on_cpu={self.train_on_cpu}, "
+            f"index_factory={self.index_factory}, "
             f"nprobe={nprobe}, "
             f"vectors: {vectors.shape}"
         )

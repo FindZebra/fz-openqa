@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
-import rich
 import torch
-from datasets import Split
 from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import DenseIndex
@@ -19,7 +18,6 @@ from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 # required to allow searching faiss with tensors
@@ -125,7 +123,7 @@ class ColbertIndex(DenseIndex):
         return self._format_output(search_results, output_format=output_format)
 
     def _init_maxsim(self):
-        faiss_devices, maxsim_devices = self._allocate_gpus(faiss.get_num_gpus())
+        faiss_devices, maxsim_devices = self._allocate_gpus()
         self._max_sim = MaxSim(
             token_index=self.index_path,
             vectors=self.vectors_table,
@@ -169,24 +167,24 @@ class ColbertIndex(DenseIndex):
             self._emb2pid = build_emb2pid_from_vectors(self.vectors_table)
         return self._emb2pid
 
-    def _allocate_gpus(self, n_gpus):
+    def _allocate_gpus(self):
         """Allocate GPUs to the faiss index and to max_sim"""
+        n_gpus = torch.cuda.device_count()
         gpus = list(range(n_gpus))
+        log.info(f"Found: {n_gpus} GPUs: {gpus}")
         if self.keep_faiss_on_cpu:
             faiss_gpus = []
             maxsim_gpus = gpus
         elif n_gpus > 1:
-            if not self.keep_faiss_on_cpu:
-                n_maxsim = min(-(-n_gpus // 2), n_gpus - 1)
-                faiss_gpus = gpus[n_maxsim:]
-                maxsim_gpus = gpus[:n_maxsim]
-            else:
-                faiss_gpus = []
-                maxsim_gpus = gpus
+            n_maxsim = min(-(-int(math.floor(n_gpus * 0.75))), n_gpus - 1)
+            faiss_gpus = gpus[n_maxsim:]
+            maxsim_gpus = gpus[:n_maxsim]
         elif n_gpus == 1:
             faiss_gpus = gpus
             maxsim_gpus = gpus
         else:
             faiss_gpus = []
             maxsim_gpus = []
+
+        log.info(f"Device allocation : faiss={faiss_gpus} maxsim={maxsim_gpus}")
         return faiss_gpus, maxsim_gpus
