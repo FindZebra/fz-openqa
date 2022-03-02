@@ -247,19 +247,28 @@ def run(config: DictConfig) -> None:
     rich.print(f"> BERT fingerprint={get_fingerprint(bert_params)}")
 
     # instantiate the tokenizer + data
-    tokenizer = hydra.utils.instantiate(config.datamodule.tokenizer)
-    data = TestData(tokenizer, batch_size=2)
+    # tokenizer = hydra.utils.instantiate(config.datamodule.tokenizer)
+    # data = TestData(tokenizer, batch_size=2)
+    # batch = data.batch
+
+    paths = [
+        "/scratch/valv/fz-openqa/runs/2022-03-01/14-37-56/batch=0.pt",
+        "/scratch/valv/fz-openqa/runs/2022-03-01/14-37-56/batch=1.pt",
+        "/scratch/valv/fz-openqa/runs/2022-03-01/14-37-56/batch=2.pt",
+        "/scratch/valv/fz-openqa/runs/2022-03-01/14-37-56/batch=3.pt",
+    ]
+    batch = torch.load(paths[0], map_location=torch.device("cpu"))
 
     # test model forward
-    pprint_batch(data.batch, "input")
-    output = model(data.batch)
+    pprint_batch(batch, "input")
+    output = model(batch)
     pprint_batch(output, "output")
     for k, v in output.items():
         v = v.float()
         rich.print(f"> {k}: {v.shape}: {v.mean():.2e} ({v.std():.2e})")
 
     # test model evaluation
-    step_output = model.training_step(data.batch, batch_idx=0)
+    step_output = model.training_step(batch, batch_idx=0)
     output = model.training_step_end(step_output, batch_idx=0)
     pprint_batch(output, "eval:output")
     for k, v in output.items():

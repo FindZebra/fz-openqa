@@ -156,7 +156,6 @@ class RelevanceClassifier(Pipe):
 
         # reshape as [batch_size, n_documents] and cast as Tensor
         output[self.output_key] = list(results)
-        pprint_batch(output, f"{type(self).__name__} output")
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:

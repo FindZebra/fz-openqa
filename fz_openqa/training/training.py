@@ -143,6 +143,9 @@ def train(config: DictConfig) -> Optional[float]:
         logger=logger,
     )
 
+    # eval on init
+    trainer.validate(model=model, dataloaders=datamodule.val_dataloader())
+
     # Training...
     patch_signal_connector(trainer)
     dataset_update = config.datamodule.get("dataset_update", None)
