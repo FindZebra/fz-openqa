@@ -24,6 +24,7 @@ from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
+from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Gate
@@ -110,8 +111,8 @@ class CorpusBuilder(HfDatasetBuilder):
             )
             self.passage_length = self.passage_stride = None
 
-        if append_document_title:
-            raise NotImplementedError
+        # if append_document_title:
+        #     raise NotImplementedError
         self.append_document_title = append_document_title
 
     @staticmethod
@@ -168,7 +169,12 @@ class CorpusBuilder(HfDatasetBuilder):
             # yield sentences from each document
             Gate(self.to_sentences, self.get_generate_sentences_pipe(), update=True),
             # tokenize, only add special tokens if sentence mode is on
-            self.get_tokenizer_pipe(),
+            PrintBatch(),
+            Parallel(
+                self.get_text_tokenizer_pipe(),
+                Gate(self.append_document_title, self.get_title_tokenizer_pipe()),
+            ),
+            PrintBatch(),
             # if not sentence mode, generate equal length-passages and add the special
             # tokens to each passage,
             Gate(
@@ -176,8 +182,10 @@ class CorpusBuilder(HfDatasetBuilder):
                 self.get_generate_passages_pipe(),
                 update=True,
             ),
+            PrintBatch(),
             # cleanup remaining special tokens in the text
-            CleanupSpecialTokens("text", self.tokenizer, update=True),
+            CleanupSpecialTokens("document.text", self.tokenizer, update=True),
+            PrintBatch(),
         )
 
         # process the whole dataset (tokenization + passage generation)
@@ -186,12 +194,9 @@ class CorpusBuilder(HfDatasetBuilder):
             batched=True,
             batch_size=10,
             num_proc=self.num_proc,
+            remove_columns=["idx", "text", "title"],
             desc="Tokenizing documents and extracting overlapping passages",
         )
-
-        # append the prefix "document."
-        for attr in dataset.column_names:
-            dataset = dataset.rename_column(attr, f"document.{attr}")
 
         # add index column
         dataset = dataset.map(
@@ -216,28 +221,54 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["idx", "cui", "title", "question_idx"],
+            global_keys=["document.idx", "document.title", "document.question_idx"],
             verbose=self.verbose,
         )
 
-    def get_tokenizer_pipe(self):
+    def get_text_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
         add_special_tokens = self.to_sentences and self.add_special_tokens
-        return FormatAndTokenize(
-            prefix=None,
-            key="text",
-            text_formatter=None,
-            tokenizer=self.tokenizer,
-            max_length=self.max_length,
-            add_special_tokens=add_special_tokens,
-            add_encoding_tokens=add_encoding_tokens,
-            return_offsets_mapping=True,
-            spec_tokens=DOC_TOKEN,
-            shape=None,
-            update=True,
-            input_filter=In(["text"]),
+        return Sequential(
+            FormatAndTokenize(
+                prefix=None,
+                key="text",
+                text_formatter=None,
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                add_special_tokens=add_special_tokens,
+                add_encoding_tokens=add_encoding_tokens,
+                return_offsets_mapping=True,
+                spec_tokens=DOC_TOKEN,
+                shape=None,
+                update=True,
+                input_filter=In(["text"]),
+            ),
+            AddPrefix("document."),
+        )
+
+    def get_title_tokenizer_pipe(self):
+        """Build a pipe to tokenize raw documents, special and encoding tokens
+        are added only in `to_sentence` mode."""
+        # add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
+        # add_special_tokens = self.to_sentences and self.add_special_tokens
+        return Sequential(
+            FormatAndTokenize(
+                prefix=None,
+                key="title",
+                text_formatter=None,
+                tokenizer=self.tokenizer,
+                max_length=self.max_length,
+                add_special_tokens=False,
+                add_encoding_tokens=False,
+                return_offsets_mapping=True,
+                spec_tokens=None,
+                shape=None,
+                update=True,
+                input_filter=In(["title"]),
+            ),
+            AddPrefix("title."),
         )
 
     def get_prefix_tokens(self):
