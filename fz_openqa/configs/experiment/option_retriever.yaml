@@ -100,6 +100,7 @@ datamodule:
     test_every_update: true
     builder_args:
       relevance_classifier: null
+      score_transform: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}

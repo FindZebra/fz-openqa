@@ -7,6 +7,7 @@ _target_: fz_openqa.datamodules.builders.OpenQaBuilder
 index_builder: ${datamodule.index_builder}
 transform: ${datamodule.transform}
 relevance_classifier: ${datamodule.relevance_classifier}
+score_transform: ${datamodule.score_transform}
 dataset_filter: ${datamodule.dataset_filter}
 sampler: ${datamodule.sampler}
 n_retrieved_documents: ${datamodule.n_retrieved_documents}

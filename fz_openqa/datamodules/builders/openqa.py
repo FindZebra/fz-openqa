@@ -32,10 +32,15 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes import ScoreTransform
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
+from fz_openqa.datamodules.pipes.nesting import ApplyAsFlatten
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -43,6 +48,7 @@ from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
+
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +79,7 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: Optional[RelevanceClassifier],
+        score_transform: Optional[ScoreTransform],
         sampler: Optional[Sampler],
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,
@@ -111,6 +118,7 @@ class OpenQaBuilder(DatasetBuilder):
         self.sampler = sampler
         self.map_args = {
             "relevance_classifier": relevance_classifier,
+            "score_transform": score_transform,
             "n_retrieved_documents": n_retrieved_documents,
             "dataset_filter": dataset_filter,
             "sort_documents": sort_documents,
@@ -227,6 +235,7 @@ class OpenQaBuilder(DatasetBuilder):
         num_proc: int,
         batch_size: int,
         relevance_classifier: Optional[RelevanceClassifier],
+        score_transform: Optional[ScoreTransform],
         dataset_filter: Optional[DatasetFilter],
         sort_documents: bool,
         **map_kwargs,
@@ -297,6 +306,16 @@ class OpenQaBuilder(DatasetBuilder):
                     if relevance_classifier is not None
                     else None,
                 ),
+                (
+                    "Transform scores",
+                    ApplyAsFlatten(
+                        score_transform,
+                        level=self.document_nesting_level,
+                        input_filter=In(["document.retrieval_score", "document.match_score"]),
+                    ),
+                )
+                if score_transform is not None and relevance_classifier is not None
+                else None,
                 (
                     "Sort documents",
                     SortDocuments(level=self.document_nesting_level) if sort_documents else None,

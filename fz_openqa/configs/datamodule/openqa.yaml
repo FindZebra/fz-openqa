@@ -4,6 +4,7 @@ defaults:
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - relevance_classifier: exact_match
+  - score_transform: multiply_by_relevance
   - dataset_filter: none
   - sampler: random
   - transform: none
