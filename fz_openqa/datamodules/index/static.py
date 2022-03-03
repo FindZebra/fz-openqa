@@ -9,7 +9,6 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-import rich
 from datasets import Dataset
 
 from ..utils.dataset import keep_only_columns

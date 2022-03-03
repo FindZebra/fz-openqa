@@ -11,8 +11,6 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
-import rich
-
 
 def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Union[List, Dict]:
     """

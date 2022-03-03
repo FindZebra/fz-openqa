@@ -9,7 +9,6 @@ from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
-import rich
 import torch
 from tqdm import tqdm
 

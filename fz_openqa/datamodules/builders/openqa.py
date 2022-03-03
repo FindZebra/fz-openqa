@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from copy import copy
 from enum import Enum
 from functools import partial
@@ -13,6 +12,7 @@ from typing import Optional
 import pytorch_lightning as pl
 from datasets import Dataset
 from datasets import DatasetDict
+from loguru import logger
 from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
@@ -32,11 +32,9 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import ScoreTransform
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
@@ -48,9 +46,6 @@ from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
-
-
-logger = logging.getLogger(__name__)
 
 
 class SelectMode(Enum):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABCMeta
 from copy import deepcopy
 from typing import Any
@@ -11,11 +10,10 @@ from typing import Union
 
 import dill
 import rich
+from loguru import logger
 
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.json_struct import apply_to_json_struct
-
-logger = logging.getLogger(__name__)
 
 
 def leaf_to_json_struct(v: Any, **kwargs) -> Dict | List:

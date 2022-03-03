@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import logging
 import math
 from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
 import torch
+from loguru import logger as log
 from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import DenseIndex
@@ -20,9 +20,8 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
-# required to allow searching faiss with tensors
 
-log = logging.getLogger(__name__)
+# required to allow searching faiss with tensors
 
 
 class ColbertIndex(DenseIndex):

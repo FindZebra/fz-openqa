@@ -1,4 +1,3 @@
-import logging
 from functools import partial
 from typing import Dict
 from typing import List
@@ -10,6 +9,7 @@ import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
-from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
@@ -25,8 +24,6 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
-
-logger = logging.getLogger(__name__)
 
 
 class DataModule(LightningDataModule):

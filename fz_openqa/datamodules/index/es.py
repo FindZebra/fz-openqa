@@ -7,10 +7,8 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from datasets import Dataset
 from omegaconf import OmegaConf
-from rich.status import Status
 from tqdm import tqdm
 
 from ..utils.dataset import keep_only_columns

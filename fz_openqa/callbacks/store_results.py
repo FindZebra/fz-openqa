@@ -1,4 +1,3 @@
-import logging
 import uuid
 from pathlib import Path
 from typing import Iterable
@@ -9,14 +8,13 @@ from typing import Union
 import pyarrow as pa
 import pytorch_lightning as pl
 import torch
+from loguru import logger
 from pytorch_lightning import Callback
 
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 from fz_openqa.utils.tensor_arrow import TensorArrowWriter
-
-logger = logging.getLogger(__name__)
 
 IDX_COL = "__idx__"
 

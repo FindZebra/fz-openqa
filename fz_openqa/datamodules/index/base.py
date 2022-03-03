@@ -6,8 +6,6 @@ from enum import Enum
 from typing import List
 from typing import Optional
 
-import numpy as np
-import rich
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.search_result import SearchResult
@@ -17,7 +15,6 @@ from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class IndexMode(Enum):

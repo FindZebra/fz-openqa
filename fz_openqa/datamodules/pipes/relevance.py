@@ -24,7 +24,6 @@ from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import pprint_batch
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 

@@ -1,14 +1,12 @@
-import logging
 from typing import Dict
 from typing import List
 from typing import Union
 
+from loguru import logger
 from pytorch_lightning import LightningModule
 from pytorch_lightning import Trainer
 from ray import tune
 from ray.tune.integration.pytorch_lightning import TuneCallback
-
-logger = logging.getLogger(__name__)
 
 
 class TuneReportCallback(TuneCallback):

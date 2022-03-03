@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import functools
-import logging
 import os.path
 import shutil
 import tempfile
@@ -47,7 +45,7 @@ from fz_openqa.utils.functional import cast_to_torch
 from fz_openqa.utils.tensor_arrow import get_dtype
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 DEFAULT_LOADER_KWARGS = {"batch_size": 10, "num_workers": 2, "pin_memory": True}
 CACHE_FILE = Union[Path, str]

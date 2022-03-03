@@ -1,4 +1,3 @@
-import logging
 import os
 import re
 from functools import partial
@@ -8,11 +7,11 @@ from typing import List
 from typing import Optional
 
 import dill  # type: ignore
-import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
+from loguru import logger
 
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
@@ -25,14 +24,10 @@ from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import PrintText
-from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
@@ -40,8 +35,6 @@ from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 TXT_PATTERN = r"^.*\.txt$"
 

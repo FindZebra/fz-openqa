@@ -1,7 +1,6 @@
 from typing import Dict
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from torch import einsum

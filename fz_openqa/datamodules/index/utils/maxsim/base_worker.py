@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-import logging
 from enum import Enum
 from typing import Any
 from typing import List
 from typing import Optional
 
 import torch
+from loguru import logger
 from torch import Tensor
-
-logger = logging.getLogger(__name__)
 
 ctx = torch.multiprocessing.get_context("spawn")
 import multiprocessing.queues as mpq

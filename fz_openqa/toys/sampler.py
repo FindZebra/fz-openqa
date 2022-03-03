@@ -1,7 +1,6 @@
 from collections import defaultdict
 from typing import Dict
 
-import rich
 import torch
 
 from fz_openqa.datamodules.pipes import PrioritySampler

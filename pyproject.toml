@@ -26,6 +26,7 @@ gdown = "^4.2.1"
 sklearn = "^0.0"
 hydra-colorlog = "^1.1.0"
 pytorch-lamb = "^1.0.0"
+loguru = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

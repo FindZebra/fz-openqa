@@ -1,2 +1,2 @@
 _target_: fz_openqa.datamodules.pipes.StopWordsFilter
-text_key: [document.text, question.text]
+text_key: [ document.text, question.text ]

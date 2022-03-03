@@ -8,6 +8,6 @@ n_positives: 1
 
 # whether to sample or to use topk documents
 largest:
-    train: false
-    validation: true
-    test: true
+  train: false
+  validation: true
+  test: true

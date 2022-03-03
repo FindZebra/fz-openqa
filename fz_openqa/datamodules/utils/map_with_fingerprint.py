@@ -1,5 +1,4 @@
 import json
-import logging
 from functools import partial
 from pathlib import Path
 from time import time
@@ -12,17 +11,13 @@ import jsondiff
 import rich
 from datasets import Dataset
 from datasets import DatasetDict
+from loguru import logger
 
-from fz_openqa.datamodules.index import DenseIndex
-from fz_openqa.datamodules.index.index_pipes import SearchCorpus
-from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
-
-logger = logging.getLogger(__name__)
 
 
 class MapWithFingerprint:

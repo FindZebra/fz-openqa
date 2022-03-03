@@ -5,7 +5,6 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-import rich
 import torch
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import logging
 from typing import Optional
 from typing import Tuple
 
-import rich
 import torch
+from loguru import logger
 from torch import LongTensor
 from torch import nn
 from torch import Tensor
@@ -14,8 +13,6 @@ from torch.nn import functional as F
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.datamodules.index.utils.io import read_vectors_from_table
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class MaxSimRanker(nn.Module):

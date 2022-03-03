@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import logging
 from pathlib import Path
 from typing import List
 from typing import Optional
@@ -9,15 +8,13 @@ from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
-import rich
 import torch
 from faiss import IndexReplicas
+from loguru import logger
 from torch import nn
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class TorchIndex(nn.Module):

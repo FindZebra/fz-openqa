@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from enum import Enum
 from functools import partial
 from numbers import Number
@@ -32,8 +31,6 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 
 class SelectMode(Enum):

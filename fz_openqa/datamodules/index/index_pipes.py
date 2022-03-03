@@ -11,8 +11,6 @@ from fz_openqa.datamodules.index.base import IndexMode
 from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Partial
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In

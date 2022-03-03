@@ -3,11 +3,9 @@ from abc import abstractmethod
 from typing import Dict
 from typing import Optional
 
-import rich
 from torch import nn
 from torch import Tensor
 from transformers import BertConfig
-from transformers import BertPreTrainedModel
 
 
 class Head(nn.Module, ABC):

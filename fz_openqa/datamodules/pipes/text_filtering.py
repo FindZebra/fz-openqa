@@ -3,7 +3,6 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
 import spacy
 from spacy.tokens import Doc
 

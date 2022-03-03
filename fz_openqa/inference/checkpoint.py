@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from typing import Optional
 from typing import Union
@@ -6,14 +5,13 @@ from typing import Union
 import datasets
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
+from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
-
-logger = logging.getLogger(__name__)
 
 
 def get_drive_url(url):

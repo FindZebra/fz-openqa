@@ -2,7 +2,6 @@ from enum import Enum
 from typing import Any
 from typing import Optional
 
-import einops
 import rich
 from datasets import Split
 from torch import Tensor
@@ -83,10 +82,10 @@ class MedQaReader(Module):
         rich.print(f"[magenta] padded tokens: {qd_batch['input_ids'].shape}")
         for i in range(min(len(qd_batch["input_ids"]), 16)):
             print(100 * "=")
-            rich.print(f"- batch el #{i+1}")
+            rich.print(f"- batch el #{i + 1}")
             tokens = qd_batch["input_ids"][i]
             for j in range(2):
-                rich.print(f"- option #{j+1}")
+                rich.print(f"- option #{j + 1}")
                 print(100 * "-")
                 # rich.print(f"[red] {tokens[j].tolist()}")
                 decoded = self.tokenizer.decode(tokens[j].tolist())
