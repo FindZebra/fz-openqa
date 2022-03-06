@@ -1,6 +1,6 @@
 defaults:
   - builder: inverse_cloze_task
-  - text_formatter: simple_lowercase
+  - text_formatter: medqa_formatter
   - tokenizer: pretrained
   - transform: none
 

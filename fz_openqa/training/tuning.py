@@ -9,7 +9,6 @@ from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from ray import tune
 
 from fz_openqa.training.experiment import run_experiment_with_config
 from fz_openqa.utils import train_utils

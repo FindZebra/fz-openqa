@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import List
 from typing import Optional
 from typing import T
@@ -8,6 +7,7 @@ from typing import Tuple
 from typing import Union
 
 import torch
+from loguru import logger
 from torch import Tensor
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
@@ -22,8 +22,6 @@ from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class MaxSim(torch.nn.Module):

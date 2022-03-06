@@ -6,12 +6,13 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: in_batch # todo!!!!
+  - override /model/module/gradients: in_batch
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: boost_positives # TODO!!!!!
+  - override /datamodule/sampler: random
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
+  - override /datamodule/score_transform: multiply_by_relevance
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
@@ -35,6 +36,7 @@ base:
   device_batch_size: 1
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
+  sharing_strategy: file_system
 
 trainer:
   gpus: ${n_gpus:}
@@ -51,6 +53,7 @@ model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
   num_training_steps: 10_000
+  hidden_size: 32
   bert:
     config:
       hidden_dropout_prob: 0.1
@@ -70,18 +73,22 @@ model:
     alpha: 0
     max_batch_size: 200
     retriever_head:
-      output_size: 32
+      output_size: ${model.hidden_size}
       use_mask: false
       use_answer_mask: false
       bayesian: false # todo
-      learn_scale: true
+      learn_scale: false
       scale: 1.
+      share_parameters: true
+      bias: false
     reader_head:
-      output_size: 32
+      output_size: ${model.hidden_size}
       use_mask: false
       bayesian: false
-      learn_scale: true
+      learn_scale: false
       scale: 1.
+      share_parameters: true
+      bias: false
     gradients:
       use_baseline: false # todo
       expr: A
@@ -92,13 +99,14 @@ datamodule:
   dataset_update:
     freq: 15 # todo !!!
     reset_optimizer: true # TODO !!
-    test_every_update: true
+    test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
+      score_transform: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
-  eval_batch_size: ${int_mul:${datamodule.train_batch_size},8}
+  eval_batch_size: ${int_mul:${datamodule.train_batch_size},2}
   num_workers: 12
   pin_memory: true
 
@@ -125,6 +133,15 @@ datamodule:
   #  relevance_classifier:
   #    interpretable: false
 
+
+  # transform the score based on the relevance classifier
+  score_transform:
+    factor: 1.0
+    normalize: false
+    exponentiate: false
+    max_score: 1.0
+    temperature: 1.0
+
   # document sampler
   sampler:
     total: ${datamodule.n_documents}
@@ -143,7 +160,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 10 # todo!!!
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 512
+      max_length: 350 # todo!!!
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200

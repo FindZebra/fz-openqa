@@ -86,7 +86,7 @@ class Model(LightningModule):
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters(ignore=["bert", "tokenizer", "module", "parameters"])
+        self.save_hyperparameters()
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
         assert self.hparams["optimizer_params"] == optimizer_params
         assert self.hparams["monitor_metric"] == monitor_metric

@@ -6,8 +6,12 @@ defaults:
 
 setup_with_model: true
 
-#trainer:
-#  val_check_interval: 1.0
+trainer:
+  val_check_interval: 1.0
+
+
+model:
+  hidden_size: 128
 
 # override the builder parameters to use the quality builder
 datamodule:

@@ -55,7 +55,9 @@ def train(config: DictConfig) -> Optional[float]:
     logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     # avoid "too many open files" error
-    torch.multiprocessing.set_sharing_strategy("file_system")
+    sharing_strategy = config.get("base.sharing_strategy", "file_system")
+    log.info(f"Using {sharing_strategy} sharing strategy")
+    torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
     # load checkpoint manager
     checkpoint_manager = load_checkpoint(
@@ -322,7 +324,7 @@ def train_with_dataset_updates(
                 )
                 if test_every_update:
                     log.info(f"Starting testing (update={dataset_iter})..")
-                    trainer.test(dataloaders=datamodule.test_dataloader())
+                    trainer.test(model=model, dataloaders=datamodule.test_dataloader())
         except Exception:
             log.exception("Dataset update interrupted.")
             break

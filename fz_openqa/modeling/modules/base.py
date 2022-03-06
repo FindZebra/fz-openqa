@@ -8,11 +8,9 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
-from hydra._internal.instantiate._instantiate2 import _resolve_target
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
@@ -27,7 +25,6 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 

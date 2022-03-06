@@ -1,7 +1,8 @@
-import logging
 from functools import partial
 from typing import Any
 from typing import Dict
+
+from loguru import logger
 
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.generators import fz_queries
@@ -11,8 +12,6 @@ from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 
 class FzQueriesBuilder(QaBuilder):
@@ -78,8 +77,13 @@ class FzQueriesBuilder(QaBuilder):
         # get the raw text questions, extract and collate
         return CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions")
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,

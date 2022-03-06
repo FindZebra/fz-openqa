@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -16,6 +15,7 @@ import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from loguru import logger
 from pytorch_lightning import Trainer
 
 from fz_openqa.datamodules.index.base import camel_to_snake
@@ -33,8 +33,6 @@ from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class DenseIndex(Index):

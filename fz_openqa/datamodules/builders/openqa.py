@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from copy import copy
 from enum import Enum
 from functools import partial
@@ -13,6 +12,7 @@ from typing import Optional
 import pytorch_lightning as pl
 from datasets import Dataset
 from datasets import DatasetDict
+from loguru import logger
 from omegaconf import DictConfig
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
@@ -34,8 +34,11 @@ from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.pipes import ScoreTransform
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
+from fz_openqa.datamodules.pipes.nesting import ApplyAsFlatten
 from fz_openqa.datamodules.pipes.nesting import Nested
 from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -43,8 +46,6 @@ from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
-
-logger = logging.getLogger(__name__)
 
 
 class SelectMode(Enum):
@@ -73,6 +74,7 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: Optional[RelevanceClassifier],
+        score_transform: Optional[ScoreTransform],
         sampler: Optional[Sampler],
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,
@@ -111,6 +113,7 @@ class OpenQaBuilder(DatasetBuilder):
         self.sampler = sampler
         self.map_args = {
             "relevance_classifier": relevance_classifier,
+            "score_transform": score_transform,
             "n_retrieved_documents": n_retrieved_documents,
             "dataset_filter": dataset_filter,
             "sort_documents": sort_documents,
@@ -227,6 +230,7 @@ class OpenQaBuilder(DatasetBuilder):
         num_proc: int,
         batch_size: int,
         relevance_classifier: Optional[RelevanceClassifier],
+        score_transform: Optional[ScoreTransform],
         dataset_filter: Optional[DatasetFilter],
         sort_documents: bool,
         **map_kwargs,
@@ -295,6 +299,17 @@ class OpenQaBuilder(DatasetBuilder):
                         extract_gold=self.document_nesting_level < 2,
                     )
                     if relevance_classifier is not None
+                    else None,
+                ),
+                (
+                    "Transform scores",
+                    ApplyAsFlatten(
+                        score_transform,
+                        level=self.document_nesting_level - 1,
+                        input_filter=In(["document.retrieval_score", "document.match_score"]),
+                        update=True,
+                    )
+                    if score_transform is not None and relevance_classifier is not None
                     else None,
                 ),
                 (
@@ -411,15 +426,20 @@ class OpenQaBuilder(DatasetBuilder):
         input_filter = HasPrefix(f"{sampler.field}")
         return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Pretty format a dataset row"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Pretty format a dataset row
+
+        Parameters
+        ----------
+        **kwargs
+        """
 
         args = {"dataset_builder": self.dataset_builder, "tokenizer": self.tokenizer}
         if self.dataset_builder.nesting_level == 0:
-            return format_row_flat_questions(row, **args)
+            return format_row_flat_questions(row, **args, **kwargs)
         elif self.dataset_builder.nesting_level == 1:
             return format_row_nested_questions(
-                row, document_nesting_level=self.document_nesting_level, **args
+                row, document_nesting_level=self.document_nesting_level, **args, **kwargs
             )
         else:
             raise ValueError(f"Unsupported nesting level: {self.dataset_builder.nesting_level}")

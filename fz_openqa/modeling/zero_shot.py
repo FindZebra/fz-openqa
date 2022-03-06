@@ -8,7 +8,6 @@ from torch import tensor
 from transformers import AutoModel
 
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class ZeroShot(pl.LightningModule):

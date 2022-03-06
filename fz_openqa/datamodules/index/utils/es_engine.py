@@ -1,15 +1,12 @@
-import logging
 from typing import Dict
 from typing import List
 from typing import Optional
 
-import elasticsearch
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.client.indices import IndicesClient
 from elasticsearch.exceptions import RequestError
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def ping_es() -> bool:

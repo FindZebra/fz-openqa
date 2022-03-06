@@ -31,7 +31,6 @@ class CrossAttentionHead(Head):
     def forward(
         self, *, hd: Tensor, hq: Tensor, q_mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
-
         # compute the features for the attention layer
         q = self.q(hq)
         q = einops.rearrange(

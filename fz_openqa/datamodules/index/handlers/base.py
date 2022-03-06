@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 import json
-import logging
 from copy import copy
 from pathlib import Path
 from typing import Any
@@ -13,12 +12,11 @@ from typing import Tuple
 
 import torch
 from hydra.utils import instantiate
+from loguru import logger
 
 from fz_openqa.datamodules.component import Component
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class IndexHandler(Component):

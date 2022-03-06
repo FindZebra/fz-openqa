@@ -5,7 +5,6 @@ from typing import Dict
 from typing import List
 from typing import Union
 
-import rich
 import torch
 from transformers import PreTrainedTokenizerFast
 

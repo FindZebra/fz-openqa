@@ -1,4 +1,3 @@
-import logging
 from functools import partial
 from typing import Any
 from typing import Dict
@@ -9,6 +8,7 @@ import rich
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets.arrow_dataset import concatenate_datasets
+from loguru import logger
 
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
@@ -33,8 +33,6 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
@@ -220,8 +218,13 @@ class QaBuilder(HfDatasetBuilder):
             ),
         )
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,
@@ -397,8 +400,13 @@ class ConcatQaBuilder(QaBuilder):
             ),
         )
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,

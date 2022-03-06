@@ -1,4 +1,3 @@
-import logging
 from collections import defaultdict
 from itertools import zip_longest
 from typing import Any
@@ -7,6 +6,7 @@ from typing import Optional
 from typing import Tuple
 
 import datasets
+from loguru import logger
 
 from fz_openqa.datamodules.index.index_pipes import FetchDocuments
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
@@ -14,8 +14,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
-
-logger = logging.getLogger(__name__)
 
 
 class ComputeCuiRank(Pipe):
