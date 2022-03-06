@@ -180,7 +180,7 @@ class DataModule(LightningDataModule):
         return f"{self.__class__.__name__}(\nbuilder={self.builder}\n)"
 
     @rank_zero_only
-    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False):
+    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False, **kwargs):
         """Sample a batch and pretty print it."""
         train_batch = next(iter(self.train_dataloader()))
 
@@ -197,11 +197,11 @@ class DataModule(LightningDataModule):
         try:
             for i in range(min(n_samples, infer_batch_size(train_batch))):
                 print(get_separator())
-                self.display_one_sample({k: v[i] for k, v in train_batch.items()})
+                self.display_one_sample({k: v[i] for k, v in train_batch.items()}, **kwargs)
         except Exception as e:
             logger.exception(e)
         print(get_separator("="))
 
-    def display_one_sample(self, example: Dict[str, torch.Tensor]):
+    def display_one_sample(self, example: Dict[str, torch.Tensor], **kwargs):
         """Decode and print one example from the batch"""
-        rich.print(self.builder.format_row(example))
+        rich.print(self.builder.format_row(example, **kwargs))

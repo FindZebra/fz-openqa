@@ -66,7 +66,11 @@ def run(config: DictConfig) -> None:
 
     for i in range(3):
         # todo: replace DOC tokens
-        rich.print(ict_builder.format_row({k: v[i] for k, v in batch.items()}))
+        rich.print(
+            ict_builder.format_row(
+                {k: v[i] for k, v in batch.items()},
+            )
+        )
 
 
 if __name__ == "__main__":

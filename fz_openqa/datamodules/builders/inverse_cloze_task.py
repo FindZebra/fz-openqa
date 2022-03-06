@@ -269,8 +269,13 @@ class InverseClozeTaskBuilder(DatasetBuilder):
 
         return Sequential(collate, self.transform)
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Pretty format a dataset row"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Pretty format a dataset row
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,

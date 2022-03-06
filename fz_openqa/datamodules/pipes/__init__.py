@@ -39,6 +39,7 @@ from .pprint import PrintText
 from .predict import Predict
 from .relevance import ExactMatch
 from .relevance import MetaMapMatch
+from .relevance import PartialMatch
 from .relevance import RelevanceClassifier
 from .relevance import ScispaCyMatch
 from .sampler import PrioritySampler

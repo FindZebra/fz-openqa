@@ -83,6 +83,11 @@ class DatasetBuilder:
     def get_collate_pipe(self) -> Pipe:
         raise NotImplementedError
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """format a row from the dataset"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """format a row from the dataset
+
+        Parameters
+        ----------
+        **kwargs
+        """
         raise NotImplementedError

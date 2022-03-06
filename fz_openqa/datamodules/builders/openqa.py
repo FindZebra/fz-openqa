@@ -305,12 +305,13 @@ class OpenQaBuilder(DatasetBuilder):
                     "Transform scores",
                     ApplyAsFlatten(
                         score_transform,
-                        level=self.document_nesting_level,
+                        level=self.document_nesting_level - 1,
                         input_filter=In(["document.retrieval_score", "document.match_score"]),
-                    ),
-                )
-                if score_transform is not None and relevance_classifier is not None
-                else None,
+                        update=True,
+                    )
+                    if score_transform is not None and relevance_classifier is not None
+                    else None,
+                ),
                 (
                     "Sort documents",
                     SortDocuments(level=self.document_nesting_level) if sort_documents else None,
@@ -425,15 +426,20 @@ class OpenQaBuilder(DatasetBuilder):
         input_filter = HasPrefix(f"{sampler.field}")
         return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Pretty format a dataset row"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Pretty format a dataset row
+
+        Parameters
+        ----------
+        **kwargs
+        """
 
         args = {"dataset_builder": self.dataset_builder, "tokenizer": self.tokenizer}
         if self.dataset_builder.nesting_level == 0:
-            return format_row_flat_questions(row, **args)
+            return format_row_flat_questions(row, **args, **kwargs)
         elif self.dataset_builder.nesting_level == 1:
             return format_row_nested_questions(
-                row, document_nesting_level=self.document_nesting_level, **args
+                row, document_nesting_level=self.document_nesting_level, **args, **kwargs
             )
         else:
             raise ValueError(f"Unsupported nesting level: {self.dataset_builder.nesting_level}")

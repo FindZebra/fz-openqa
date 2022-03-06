@@ -250,7 +250,7 @@ class TestOptionRetriever(TestModel):
             optimizer.step()
 
             if VERBOSE and i % 10 == 0:
-                probs = output['_reader_logits_'].exp().detach().numpy()
+                probs = output['_reader_logits_'].exponentiate().detach().numpy()
                 doc_probs = output['_doc_logits_'].detach()
                 # doc_dist = (doc_probs - doc_targets).pow(2)
                 rich.print(f"{i} - loss={loss:.3f},"
@@ -268,7 +268,7 @@ class TestOptionRetriever(TestModel):
         batch[f"document.retrieval_log_weight"] = torch.zeros_like(doc_logits)
         targets = batch['answer.target']
         output = model.evaluate(batch)
-        probs = output['_reader_logits_'].detach().exp()
+        probs = output['_reader_logits_'].detach().exponentiate()
         target_probs = probs.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1).numpy()
         probs = probs.numpy()
         targets = targets.numpy()

@@ -9,9 +9,10 @@ defaults:
   - override /model/module/gradients: in_batch
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: boost_positives # TODO!!!!!
+  - override /datamodule/sampler: random
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
+  - override /datamodule/score_transform: multiply_by_relevance
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
@@ -35,6 +36,7 @@ base:
   device_batch_size: 1
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
+  sharing_strategy: file_system
 
 trainer:
   gpus: ${n_gpus:}
@@ -97,14 +99,14 @@ datamodule:
   dataset_update:
     freq: 15 # todo !!!
     reset_optimizer: true # TODO !!
-    test_every_update: true
+    test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
       score_transform: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
-  eval_batch_size: ${int_mul:${datamodule.train_batch_size},8}
+  eval_batch_size: ${int_mul:${datamodule.train_batch_size},2}
   num_workers: 12
   pin_memory: true
 
@@ -131,6 +133,15 @@ datamodule:
   #  relevance_classifier:
   #    interpretable: false
 
+
+  # transform the score based on the relevance classifier
+  score_transform:
+    factor: 1.0
+    normalize: false
+    exponentiate: false
+    max_score: 1.0
+    temperature: 1.0
+
   # document sampler
   sampler:
     total: ${datamodule.n_documents}
@@ -149,7 +160,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 10 # todo!!!
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 512
+      max_length: 350 # todo!!!
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200

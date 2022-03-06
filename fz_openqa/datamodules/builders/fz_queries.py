@@ -77,8 +77,13 @@ class FzQueriesBuilder(QaBuilder):
         # get the raw text questions, extract and collate
         return CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions")
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,

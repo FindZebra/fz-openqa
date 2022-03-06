@@ -204,8 +204,13 @@ class HfDatasetBuilder(DatasetBuilder):
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """format a row from the dataset"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """format a row from the dataset
+
+        Parameters
+        ----------
+        **kwargs
+        """
         return pretty_decode(
             row["input_ids"],
             tokenizer=self.tokenizer,

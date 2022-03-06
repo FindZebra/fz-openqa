@@ -267,8 +267,13 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return Parallel(raw_collate_pipe, simple_attr_pipe, document_pipe)
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one example from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one example from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {"skip_special_tokens": False}
         return pretty_decode(
             row["document.input_ids"],
