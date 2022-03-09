@@ -37,6 +37,8 @@ base:
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
   sharing_strategy: file_system
+  git_hash: ${git_hash:}
+  git_hash_short: ${git_hash_short:}
 
 trainer:
   gpus: ${n_gpus:}
