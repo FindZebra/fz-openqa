@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from typing import Dict
 from typing import Optional
@@ -39,6 +41,8 @@ class DprHead(Head):
         Layer = nn.Linear if not bayesian else BayesianLinear
 
         self.normalize = normalize
+
+        self.share_parameters = share_parameters
         if self.output_size is not None:
             self.q_head = Layer(self.input_size, self.output_size, bias=self.bias)
             if share_parameters:
@@ -62,6 +66,15 @@ class DprHead(Head):
     @property
     def scale_value(self):
         return self._scale
+
+    def entropy(self) -> Tensor | float:
+        if isinstance(self.q_head, BayesianLinear):
+            entropy = self.q_head.entropy()
+            if not self.share_parameters:
+                entropy = entropy + self.d_head.entropy()
+            return entropy
+
+        return 0.0
 
     @property
     def offset(self):

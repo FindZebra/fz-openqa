@@ -70,6 +70,7 @@ model:
   parameters:
     gamma: 1
     question_mask: 1
+    alpha: 0
   module:
     resample_k: null
     alpha: 0
@@ -78,7 +79,7 @@ model:
       output_size: ${model.hidden_size}
       use_mask: false
       use_answer_mask: false
-      bayesian: false # todo
+      bayesian: true
       learn_scale: false
       scale: 1.
       share_parameters: true
@@ -86,7 +87,7 @@ model:
     reader_head:
       output_size: ${model.hidden_size}
       use_mask: false
-      bayesian: false
+      bayesian: true
       learn_scale: false
       scale: 1.
       share_parameters: true
@@ -172,8 +173,8 @@ datamodule:
   index_builder:
     es_temperature: 1. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
-    p: 100
-    dtype: ${trainer.precision}
+    p: 30
+    dtype: float16
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
     persist_cache: false

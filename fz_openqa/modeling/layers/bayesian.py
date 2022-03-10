@@ -131,6 +131,9 @@ class BayesianLinear(nn.Module):
         else:
             raise ValueError(f"Unknown base distribution {base_dist}")
 
+    def entropy(self) -> torch.Tensor:
+        return self.BayesianLinear.dist.entropy().sum()
+
     def forward(self, x):
         *bs, hdim = x.shape
         if hdim != self.in_features:
