@@ -330,7 +330,7 @@ class OptionRetriever(Module):
         alpha = kwargs.get("alpha", 0)
 
         if alpha != 0:
-            step_output["loss"] = step_output["loss"] - alpha * (reader_head_kl + retriever_head_kl)
+            step_output["loss"] = step_output["loss"] + alpha * (reader_head_kl + retriever_head_kl)
 
         return step_output
 
