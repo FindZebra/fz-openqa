@@ -322,15 +322,15 @@ class OptionRetriever(Module):
         )
 
         # auxiliary heads loss
-        reader_head_H = self.reader_head.entropy()
-        retriever_head_H = self.retriever_head.entropy()
+        reader_head_kl = self.reader_head.kl()
+        retriever_head_kl = self.retriever_head.kl()
         step_output.update(
-            {"reader/head_entropy": reader_head_H, "retriever/head_entropy": retriever_head_H}
+            {"reader/head_kl": reader_head_kl, "retriever/head_kl": retriever_head_kl}
         )
         alpha = kwargs.get("alpha", 0)
 
         if alpha != 0:
-            step_output["loss"] = step_output["loss"] - alpha * (reader_head_H + retriever_head_H)
+            step_output["loss"] = step_output["loss"] - alpha * (reader_head_kl + retriever_head_kl)
 
         return step_output
 

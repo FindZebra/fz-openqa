@@ -2,6 +2,7 @@ import math
 
 import torch
 from torch import nn
+from torch.distributions import kl_divergence
 from torch.distributions import MultivariateNormal
 from torch.distributions import Normal
 
@@ -98,6 +99,10 @@ class DiagonalParameterization(nn.Module):
     def dist(self) -> Normal:
         return Normal(self.loc, self.logvar.exp())
 
+    @property
+    def unit(self) -> Normal:
+        return Normal(torch.zeros_like(self.loc), torch.ones_like(self.logvar))
+
 
 class BayesianLinear(nn.Module):
     def __init__(
@@ -133,6 +138,11 @@ class BayesianLinear(nn.Module):
 
     def entropy(self) -> torch.Tensor:
         return self.BayesianLinear.dist.entropy().sum()
+
+    def kl(self) -> torch.Tensor:
+        q = self.BayesianLinear.dist
+        p = self.BayesianLinear.unit
+        return kl_divergence(q, p).sum()
 
     def forward(self, x):
         *bs, hdim = x.shape

@@ -76,6 +76,15 @@ class DprHead(Head):
 
         return 0.0
 
+    def kl(self) -> Tensor | float:
+        if isinstance(self.q_head, BayesianLinear):
+            kl = self.q_head.kl()
+            if not self.share_parameters:
+                kl = kl + self.d_head.kl()
+            return kl
+
+        return 0.0
+
     @property
     def offset(self):
         return self._offset
