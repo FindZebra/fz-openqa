@@ -110,7 +110,7 @@ class BayesianLinear(nn.Module):
         in_features,
         out_features,
         bias=True,
-        gain_init=1.0,
+        gain_init=1e-1,
         base_dist: str = "diagonal",
         share_sampled_params: bool = True,
     ):
