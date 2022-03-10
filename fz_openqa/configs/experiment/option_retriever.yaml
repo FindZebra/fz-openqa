@@ -162,7 +162,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 10 # todo!!!
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 350 # todo!!!
+      max_length: 512 # todo!!!
     corpus_builder:
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
