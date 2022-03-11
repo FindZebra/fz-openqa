@@ -97,13 +97,17 @@ class DiagonalParameterization(nn.Module):
         # diagonal covariance
         self.logvar = nn.Parameter((scale_init * torch.ones((n_parameters))).log())
 
+        # initial values
+        self.register_buffer("_loc_init", self.loc.data.clone())
+        self.register_buffer("_logvar_init", self.logvar.data.clone())
+
     @property
     def dist(self) -> Normal:
         return Normal(self.loc, self.logvar.exp())
 
     @property
     def unit(self) -> Normal:
-        return Normal(torch.zeros_like(self.loc), torch.ones_like(self.logvar))
+        return Normal(self._loc_init, self._logvar_init.exp())
 
 
 class BayesianLinear(nn.Module):
@@ -142,12 +146,12 @@ class BayesianLinear(nn.Module):
             raise ValueError(f"Unknown base distribution {base_dist}")
 
     def entropy(self) -> torch.Tensor:
-        return self.BayesianLinear.dist.entropy().sum()
+        return self.BayesianLinear.dist.entropy().mean()
 
     def kl(self) -> torch.Tensor:
         q = self.BayesianLinear.dist
         p = self.BayesianLinear.unit
-        return kl_divergence(q, p).sum()
+        return kl_divergence(q, p).mean()
 
     def sample_weights(self, x: torch.Tensor) -> torch.Tensor:
         """Sample weights from the distribution."""
