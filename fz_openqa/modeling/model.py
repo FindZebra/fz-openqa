@@ -213,7 +213,7 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
-        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
         weight_decay = self.hparams.optimizer_params.pop("weight_decay", 0.0)
         optimizer_grouped_parameters = [
             {
