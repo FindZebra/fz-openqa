@@ -30,13 +30,15 @@ class DprHead(Head):
         bayesian: bool = False,
         learn_scale: bool = False,
         scale: float = 1.0,
+        auto_scale: bool = False,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
         self.scale_init = scale
-        self.register_buffer("scaled", torch.tensor(0))
+        self.register_buffer("is_scaled", torch.tensor(0))
+        self.auto_scale = auto_scale
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -95,7 +97,7 @@ class DprHead(Head):
     def set_scale(self, scores: Tensor):
         self._scale.data = self.scale_init * scores.std().detach().pow(-1)
         self._offset.data = -scores.mean().detach() * self._scale.data
-        self.scaled.data += 1
+        self.is_scaled.data += 1
 
         scores = self.scale(scores)
         rich.print(
@@ -103,7 +105,7 @@ class DprHead(Head):
             f"out.std={scores.std():.3f}, "
             f"scale={self._scale.data:.3f}, "
             f"offset={self._offset.data:.3f}, "
-            f"scaled={self.scaled}"
+            f"scaled={self.is_scaled}"
         )
 
         return scores
@@ -124,15 +126,25 @@ class DprHead(Head):
         **kwargs,
     ) -> Tensor:
 
+        # sample weights todo: only `if self.training`
+        if isinstance(self.q_head, BayesianLinear):
+            q_weights = self.q_head.sample_weights(hq)
+            if not self.share_parameters:
+                d_weights = self.d_head.sample_weights(hd)
+            else:
+                d_weights = q_weights
+        else:
+            q_weights = None
+            d_weights = None
+
         # preprocess
-        hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, **kwargs)
-        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
+        hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, weights=d_weights, **kwargs)
+        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
 
         # compute the score
         score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
 
-        if self.scaled < 1:
-            rich.print(f">> SCALING: {self.scaled} : {self.scale_init}")
+        if self.auto_scale and self.is_scaled < 1:
             score = self.set_scale(score)
 
         return score + self.offset
@@ -153,13 +165,19 @@ class DprHead(Head):
             return einsum("boh, mh -> bom", hq, hd)
 
     def preprocess(
-        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
+        self,
+        last_hidden_state: Tensor,
+        head: str,
+        mask: Optional[Tensor] = None,
+        weights: Optional[Tensor] = None,
+        **kwargs,
     ) -> Tensor:
+        head_kwargs = {"weights": weights} if weights is not None else {}
         cls_repr = last_hidden_state[..., 0, :]  # CLS token
 
         if self.output_size is not None:
             head = {"document": self.d_head, "question": self.q_head}[head]
-            cls_repr = head(cls_repr)
+            cls_repr = head(cls_repr, **head_kwargs)
 
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)

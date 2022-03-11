@@ -1,5 +1,7 @@
 import math
+from typing import Optional
 
+import rich
 import torch
 from torch import nn
 from torch.distributions import kl_divergence
@@ -107,12 +109,12 @@ class DiagonalParameterization(nn.Module):
 class BayesianLinear(nn.Module):
     def __init__(
         self,
-        in_features,
-        out_features,
+        in_features: int,
+        out_features: int,
         bias=True,
-        gain_init=1e-1,
+        gain_init: Optional[float] = None,
         base_dist: str = "diagonal",
-        share_sampled_params: bool = True,
+        share_sampled_params: bool = False,
     ):
         super(BayesianLinear, self).__init__()
         self.in_features = in_features
@@ -126,7 +128,10 @@ class BayesianLinear(nn.Module):
             n_parameters += out_features
 
         # compute scale for init (Xavier)
-        scale_init = gain_init * math.sqrt(2.0 / float(self.in_features + self.out_features))
+        if gain_init is None:
+            scale_init = nn.Linear(in_features, out_features).weight.std()
+        else:
+            scale_init = gain_init * math.sqrt(2.0 / float(self.in_features + self.out_features))
 
         # register parameters
         if base_dist == "multivariate":
@@ -144,36 +149,42 @@ class BayesianLinear(nn.Module):
         p = self.BayesianLinear.unit
         return kl_divergence(q, p).sum()
 
-    def forward(self, x):
-        *bs, hdim = x.shape
+    def sample_weights(self, x: torch.Tensor) -> torch.Tensor:
+        """Sample weights from the distribution."""
+        bs, *dims, hdim = x.shape
         if hdim != self.in_features:
             raise ValueError(
                 f"Expected input size {self.in_features}, got {hdim} " f"(input: {x.shape})"
             )
-
         if self.share_sampled_params:
-            bs = [bs[0]]
+            return self.BayesianLinear.dist.rsample()
+        else:
+            return self.BayesianLinear.dist.rsample(sample_shape=(bs,))
 
-        # sample the weights of the linear transformation
-        W = self.BayesianLinear.dist.rsample(sample_shape=bs)
+    def forward(self, x: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
+
+        if weights is None:
+            # when no weights are provided, take the mean of the distribution
+            weights = self.BayesianLinear.loc
         if self.use_bias:
-            b = W[..., : self.out_features]
-            W = W[..., self.out_features :]
+            b = weights[..., : self.out_features]
+            W = weights[..., self.out_features :]
         else:
             b = 0
+            W = weights
 
         # reshape weights
-        W = W.view(*bs, self.in_features, self.out_features)
+        W = W.view(*W.shape[:-1], self.in_features, self.out_features)
 
-        # compute output
+        # matrix multiplication
         if self.share_sampled_params:
-            y = torch.einsum("b...h, bhk -> b...k", x, W)
-            if isinstance(b, torch.Tensor):
-                b = b.view(*bs, *(1 for _ in range(x.dim() - len(bs) - 1)), b.shape[-1])
-                y = y + b
-
-            return y
-
+            y = torch.einsum("...h, hk -> ...k", x, W)
         else:
-            y = torch.einsum("...h, ...hk -> ...k", x, W)
-            return y + b
+            y = torch.einsum("b...h, bhk -> b...k", x, W)
+
+        # add the bias if any
+        if isinstance(b, torch.Tensor):
+            b = b.view(*b.shape[:-1], *(1 for _ in range(x.dim() - b.dim())), b.shape[-1])
+            y = y + b
+
+        return y
