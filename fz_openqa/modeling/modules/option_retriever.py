@@ -321,6 +321,22 @@ class OptionRetriever(Module):
             )
         )
 
+        # auxiliary heads loss
+        reader_head_kl = self.reader_head.kl()
+        retriever_head_kl = self.retriever_head.kl()
+        step_output.update(
+            {
+                "reader/head_kl": reader_head_kl,
+                "reader/head_entropy": self.reader_head.entropy(),
+                "retriever/head_kl": retriever_head_kl,
+                "retriever/head_entropy": self.retriever_head.entropy(),
+            }
+        )
+        alpha = kwargs.get("alpha", 0)
+
+        if alpha != 0:
+            step_output["loss"] = step_output["loss"] + alpha * (reader_head_kl + retriever_head_kl)
+
         return step_output
 
     @staticmethod
@@ -425,6 +441,15 @@ class OptionRetriever(Module):
         """
         Gather losses and logits from all devices and return
         """
+
+        # scaling the heads in `step_end` (here) allows using samples across all devices
+        reader_score = output["_reader_logits_"]
+        retriever_score = output["_doc_logits_"]
+        if not self.reader_head.is_scaled:
+            self.reader_head.set_scale(reader_score)
+        if not self.retriever_head.is_scaled:
+            self.retriever_head.set_scale(retriever_score)
+
         # average losses
         for k, v in output.items():
             if not str(k).startswith("_") and not str(k).endswith("_"):

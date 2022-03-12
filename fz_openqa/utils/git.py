@@ -1,28 +1,22 @@
 import subprocess
+from typing import List
 
 
-def get_git_revision_hash() -> str:
+def git_check_output(args: List[str]) -> str:
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+        output = subprocess.check_output(args, stderr=subprocess.DEVNULL)
+        return output.decode("ascii").strip()
     except Exception:
         return "unknown"
 
 
-def get_git_revision_short_hash() -> str:
-    try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("ascii").strip()
-        )
-    except Exception:
-        return "unknown"
+def git_revision_hash() -> str:
+    return git_check_output(["git", "rev-parse", "HEAD"])
 
 
-def get_git_branch_name() -> str:
-    try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-            .decode("ascii")
-            .strip()
-        )
-    except Exception:
-        return "unknown"
+def git_revision_short_hash() -> str:
+    return git_check_output(["git", "rev-parse", "--short", "HEAD"])
+
+
+def git_branch_name() -> str:
+    return git_check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
