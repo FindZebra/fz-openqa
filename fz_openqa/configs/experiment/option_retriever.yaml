@@ -9,7 +9,7 @@ defaults:
   - override /model/module/gradients: reinforce
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: random
+  - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: multiply_by_relevance
