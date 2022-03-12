@@ -79,7 +79,7 @@ model:
       output_size: ${model.hidden_size}
       use_mask: false
       use_answer_mask: false
-      bayesian: true
+      bayesian: false
       learn_scale: false
       scale: 1.
       share_parameters: true
@@ -87,7 +87,7 @@ model:
     reader_head:
       output_size: ${model.hidden_size}
       use_mask: false
-      bayesian: true
+      bayesian: false
       learn_scale: false
       scale: 1.
       share_parameters: true
