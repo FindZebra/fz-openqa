@@ -6,7 +6,7 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: in_batch
+  - override /model/module/gradients: reinforce
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: random
