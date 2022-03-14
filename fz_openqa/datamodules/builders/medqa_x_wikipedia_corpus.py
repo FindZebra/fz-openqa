@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import re
+import unicodedata
 from copy import copy
 from pathlib import Path
 from typing import Callable
@@ -23,6 +25,7 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ class ExtractPageContent(Pipe):
         self,
         wikipedia_dataset: Dataset,
         wikipedia_index: Dict[str, int],
-        title_key: str = "wiki.page",
+        title_key: str = "wiki.query",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -61,11 +64,14 @@ class ExtractPageContent(Pipe):
 
         # add the retrieved article to the output, when available
         wiki_texts = wiki_rows["text"]
-        output = [None] * len(indices)
-        for i, txt in zip(original_indexes, wiki_texts):
-            output[i] = txt
+        wiki_titles = wiki_rows["title"]
+        text_output = [None] * len(indices)
+        title_output = [None] * len(indices)
+        for i, title, text in zip(original_indexes, wiki_titles, wiki_texts):
+            title_output[i] = title
+            text_output[i] = text
 
-        return {"wiki.text": output}
+        return {"wiki.text": text_output, "wiki.title": title_output}
 
 
 class FlattenWikiPages(Pipe):
@@ -75,7 +81,7 @@ class FlattenWikiPages(Pipe):
     to the flatten structured B: {'question.idx: [1,1,1,2,2,2], 'wiki.pages':[a,b,c,x,y,z]}"""
 
     def __init__(
-        self, wiki_page_key: str = "wiki.pages", index_key: str = "question.idx", **kwargs
+        self, wiki_page_key: str = "wiki.query", index_key: str = "question.idx", **kwargs
     ):
         super().__init__(**kwargs)
         self.wiki_page_key = wiki_page_key
@@ -139,7 +145,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         num_proc: int = 4,
         batch_size: int = 10,
         cache_dir: str = Path(os.getcwd()) / "cache",
-        file_name: Optional[Union[str, Path]] = None,
+        directory_name: Optional[Union[str, Path]] = None,
         upload_to_drive: bool = False,
         **kwargs,
     ):
@@ -148,8 +154,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         self.dataset_builder = dataset_builder
         # Pipe to query potential Wikipedia pages (e.g. Wikipedia API, SpikeX)
         self.query_articles = query_articles
-        # Index applied to catch already queried Wikipedia pages
-        self.title_index = {}
 
         self.map_kwargs = {"batched": True, "batch_size": batch_size, "num_proc": num_proc}
 
@@ -162,8 +166,8 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         # Directory path to output Wikipedia corpus
         self.cache_dir = Path(cache_dir)
-        if file_name is not None:
-            self.output_file = self.cache_dir / file_name
+        if directory_name is not None:
+            self.output_dir = self.cache_dir / directory_name
 
         # Set up GoogleDrive Service
         if upload_to_drive:
@@ -177,40 +181,72 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         # process the whole dataset (extract wikipedia pages)
         dataset = self.extract_page_titles(dataset=dataset)
-
+        rich.print(f"[red] {dataset.column_names}")
         # build Wikipedia corpus to output
         dataset = self.build_wiki_corpus(dataset=dataset)
 
         # write to disk
-        if self.output_file is not None:
-            log.info(f"Save the dataset to file n_lines={len(dataset)}")
-            dataset.save_to_disk(str(self.output_file))
+        if self.output_dir is not None:
+            log.info(f"Save the dataset to file n_files={len(dataset)}")
+            self.save_to_txt(output_dir=self.output_dir, dataset=dataset)
+            # dataset.save_to_disk(str(self.output_file))
 
         # upload to drive
         if self.drive is not None:
             log.info("Uploading file to Google Drive..")
-            file = self.drive.upload_to_drive(path_to_file=str(self.output_file))
+            file = self.drive.upload_to_drive(path_to_file=str(self.output_dir))
             log.info(f"Uploaded file to Google Drive: <{file}>")
 
         return dataset
 
+    @staticmethod
+    def save_to_txt(output_dir: Optional[Path], dataset: DatasetDict) -> None:
+        """Save each article in the dataset to a txt file"""
+
+        def slugify(value, allow_unicode=False):
+            """
+            Taken from https://github.com/django/django/blob/master/django/utils/text.py
+            Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated
+            dashes to single dashes. Remove characters that aren't alphanumerics,
+            underscores, or hyphens. Convert to lowercase. Also strip leading and
+            trailing whitespace, dashes, and underscores.
+            """
+            value = str(value)
+            if allow_unicode:
+                value = unicodedata.normalize("NFKC", value)
+            else:
+                value = (
+                    unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+                )
+            value = re.sub(r"[^\w\s-]", "", value.lower())
+            return re.sub(r"[-\s]+", "-", value).strip("-_")
+
+        if not Path(output_dir).is_dir():
+            os.mkdir(output_dir)
+        for row in dataset:
+            if isinstance(row["text"], str):
+                lines = [row["title"], row["text"]]
+                file_name = slugify(row["title"])
+                with open(f"{output_dir}/{file_name}.txt", "w") as f:
+                    f.write("\n".join(lines))
+
     def extract_page_titles(self, dataset: DatasetDict) -> DatasetDict:
         """Extracts a list of Wikipedia pages for each question.
-        Only keep "wiki.pages" and "question.idx" """
+        Only keep "wiki.query" and "question.idx" """
         dataset = dataset.map(
             self.query_articles,
             **self.map_kwargs,
             desc="Search for Wikipedia pages",
         )
-
+        rich.print(f"[red] {dataset.column_names}")
         # drop unnecessary columns
         columns = get_column_names(dataset)
-        cols_to_remove = [c for c in columns if c not in ["wiki.pages", "question.idx"]]
+        cols_to_remove = [c for c in columns if c not in ["wiki.query", "question.idx"]]
         return dataset.remove_columns(cols_to_remove)
 
     def build_wiki_corpus(self, dataset: DatasetDict) -> Dataset:
         """Builds the Wikipedia Corpus based on extracted Wikipedia pages"""
-
+        rich.print(f"[red] {dataset.column_names}")
         # step 1: flatten the nested list of pages
         dataset = dataset.map(
             FlattenWikiPages(),
@@ -237,7 +273,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
             reduced_dataset = {}
             for row in track(dataset, description="Iterating through the dataset"):
-                page = row["wiki.pages"]
+                page = row["wiki.query"]
                 split = row["split"]
                 qst_idx = row["question.idx"]
 
@@ -250,7 +286,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             # step 3.2: save to file and load as Dataset
             # (if we load from the dataset from memory, it stays in memory, so we need to cache it)
             log.info(f"Saving the dataset to {cache_file}")
-            reduced_dataset = ({"wiki.page": page, **row} for page, row in reduced_dataset.items())
+            reduced_dataset = ({"wiki.query": page, **row} for page, row in reduced_dataset.items())
             with open(cache_file, "w") as f:
                 for row in reduced_dataset:
                     f.write(json.dumps(row) + "\n")
@@ -272,7 +308,8 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             {
                 "split": "question.split",
                 "question.idx": "question.idx",
-                "wiki.page": "title",
+                "wiki.query": "query",
+                "wiki.title": "title",
                 "wiki.text": "text",
             }
         )
