@@ -15,6 +15,7 @@ from datasets import DatasetDict
 from datasets import load_dataset
 
 from ..pipelines.preprocessing import FormatAndTokenize
+from ..pipelines.preprocessing.text import AppendDot
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
@@ -169,12 +170,10 @@ class CorpusBuilder(HfDatasetBuilder):
             # yield sentences from each document
             Gate(self.to_sentences, self.get_generate_sentences_pipe(), update=True),
             # tokenize, only add special tokens if sentence mode is on
-            PrintBatch(),
             Parallel(
                 self.get_text_tokenizer_pipe(),
                 Gate(self.append_document_title, self.get_title_tokenizer_pipe()),
             ),
-            PrintBatch(),
             # if not sentence mode, generate equal length-passages and add the special
             # tokens to each passage,
             Gate(
@@ -182,10 +181,22 @@ class CorpusBuilder(HfDatasetBuilder):
                 self.get_generate_passages_pipe(),
                 update=True,
             ),
-            PrintBatch(),
+            Gate(
+                self.append_document_title,
+                DropKeys(
+                    keys=[
+                        "title.attention_mask",
+                        "title.idx",
+                        "title.input_ids",
+                        "title.offset_mapping",
+                        "title.text",
+                        "title.title",
+                    ]
+                ),
+                update=True,
+            ),
             # cleanup remaining special tokens in the text
             CleanupSpecialTokens("document.text", self.tokenizer, update=True),
-            PrintBatch(),
         )
 
         # process the whole dataset (tokenization + passage generation)
@@ -218,6 +229,7 @@ class CorpusBuilder(HfDatasetBuilder):
         return GeneratePassages(
             size=self.passage_length,
             stride=self.passage_stride,
+            append_document_titles=self.append_document_title,
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
@@ -251,9 +263,8 @@ class CorpusBuilder(HfDatasetBuilder):
     def get_title_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
-        # add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
-        # add_special_tokens = self.to_sentences and self.add_special_tokens
         return Sequential(
+            AppendDot(text_fields="title", update=True),
             FormatAndTokenize(
                 prefix=None,
                 key="title",
@@ -313,6 +324,17 @@ class CorpusBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             **decode_kwargs,
         )
+
+    @staticmethod
+    def append_dot(dataset: DatasetDict) -> DatasetDict:
+        """Append a dot to each title before tokenizing"""
+
+        def add_dot(row):
+            row["title"] = row["title"] + "."
+            return row
+
+        dataset.map(add_dot)
+        return dataset
 
 
 class MedQaCorpusBuilder(CorpusBuilder):
