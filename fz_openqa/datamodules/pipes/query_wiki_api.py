@@ -4,6 +4,7 @@ from typing import List
 from typing import Union
 
 import wikipedia
+from wikipedia.exceptions import PageError
 
 from fz_openqa.utils.datastruct import Batch
 
@@ -17,7 +18,7 @@ class QueryWikiAPI:
     @staticmethod
     def query_api(answer_str: str) -> List[str]:
         """Returns a list of all the article's titles (max 10) that contain the query."""
-        return wikipedia.search(answer_str)
+        return wikipedia.search(answer_str, results=5)
 
     @staticmethod
     def _extract_wiki_pages(answer_options: Union[str, List], fn: Callable) -> List[str]:
@@ -34,7 +35,7 @@ class QueryWikiAPI:
     def __call__(self, batch: Batch, text_key: str = "answer.text", **kwargs) -> Batch:
         text_key = text_key or self.text_key
         assert text_key is not None, "attribute `text_key` must be set."
-        batch["wiki.pages"] = [
+        batch["wiki.query"] = [
             self._extract_wiki_pages(eg, self.query_api) for eg in batch[text_key]
         ]
         return batch
