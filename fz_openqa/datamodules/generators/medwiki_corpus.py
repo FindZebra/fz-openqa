@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from pathlib import Path
@@ -22,7 +23,7 @@ _DESCRIPTION = "A class to load the Wikipedia-based MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/medqa-corpus-en.zip"
+_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/data/medqa_x_wiki_corpus_v1.zip"
 
 
 class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
@@ -66,7 +67,7 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"output_dir": Path(downloaded_file) / "en"},
+                gen_kwargs={"output_dir": Path(downloaded_file) / "medqa_x_wikipedia_corpus_v1"},
             )
         ]
 
@@ -79,4 +80,6 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         ]
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
-                yield i, {"document.text": f.read(), "document.idx": i, "document.title": ""}
+                title = f.readline(limit=1)
+                text = f.read()
+                yield i, {"document.text": text, "document.idx": i, "document.title": title}
