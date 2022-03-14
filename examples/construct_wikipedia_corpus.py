@@ -7,7 +7,7 @@ import rich
 import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.builders import MedQABuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
@@ -27,28 +27,23 @@ def run(config):
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
-    text_formatter = TextFormatter(
-        remove_ref=True,
-        remove_linebreaks=True,
-    )
-
     # define the medqa builder
-    dataset_builder = MedQABuilder(
+    dataset_builder = QaBuilder(
         tokenizer=None,
-        text_formatter=text_formatter,
+        text_formatter=None,
         use_subset=config.get("use_subset", False),
         cache_dir=config.get("cache_dir", default_cache_dir),
         num_proc=4,
     )
     dataset_builder.subset_size = [1000, 100, 100]
 
-    file_name = "wikipedia_corpus_v2"
+    directory_name = "wikipedia_corpus_v5"
     if config.get("use_subset", False):
-        file_name += "_subset"
+        directory_name += "_subset"
     wiki_builder = WikixMedQaCorpusBuilder(
         dataset_builder=dataset_builder,
         query_articles=QueryWikiAPI(text_key="answer.text"),
-        file_name=file_name,
+        directory_name=directory_name,
         cache_dir=default_cache_dir,
         upload_to_drive=True,
         num_proc=4,

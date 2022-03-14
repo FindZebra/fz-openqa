@@ -55,20 +55,21 @@ def run(config: DictConfig) -> None:
         "medwikipedia": MedWikipediaCorpusBuilder,
         "wikixmedqa": WikixMedQaCorpusBuilder,
         "quality": QuALITYCorpusBuilder,
-    }[config.get("corpus", "medqa")]
+    }[config.get("corpus", "medwikipedia")]
 
     # initialize the data module
     builder = Cls(
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,
-        use_subset=config.get("use_subset", False),
+        use_subset=config.get("use_subset", True),
         cache_dir=config.sys.get("cache_dir"),
-        num_proc=2,
-        analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],
+        num_proc=1,
+        append_document_title=True,
+        analytics=None,
     )
     dm = DataModule(builder=builder)
-    dm.prepare_data()
+
     dm.setup()
     dm.display_samples(n_samples=5)
 
