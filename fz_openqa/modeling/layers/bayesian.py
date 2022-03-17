@@ -1,12 +1,15 @@
 import math
 from typing import Optional
 
-import rich
 import torch
 from torch import nn
+from torch.distributions import Categorical
+from torch.distributions import Distribution
 from torch.distributions import kl_divergence
+from torch.distributions import MixtureSameFamily
 from torch.distributions import MultivariateNormal
 from torch.distributions import Normal
+from torch.distributions import register_kl
 
 
 def flat_to_triangular(flat_params, with_diagonal=False):
@@ -88,26 +91,47 @@ class MultivariateParameterization(nn.Module):
 class DiagonalParameterization(nn.Module):
     """Parametrize `n_parameters` using a Multivariate Gaussian distribution."""
 
-    def __init__(self, n_parameters: int, scale_init: float = 1e-3):
+    def __init__(
+        self,
+        layer: nn.Linear,
+        log_scale_1: float = -0.0,
+        log_scale_2: float = -6.0,
+        pi: float = 0.5,
+    ):
         super(DiagonalParameterization, self).__init__()
-        self.n_parameters = n_parameters
         # location parameter
-        self.loc = nn.Parameter(torch.zeros((n_parameters)))
+        loc = layer.weight.view(-1).clone()
+        if layer.bias is not None:
+            loc = torch.cat([loc, layer.bias.view(-1).clone()])
+        self._loc_posterior = nn.Parameter(loc.data)
+        self.n_parameters = self._loc_posterior.data.numel()
 
         # diagonal covariance
-        self.logvar = nn.Parameter((scale_init * torch.ones((n_parameters))).log())
+        log_scale_init = pi * log_scale_1 + (1 - pi) * log_scale_2
+        self._logvar_posterior = nn.Parameter(log_scale_init * torch.ones_like(self._loc_posterior))
 
         # initial values
-        self.register_buffer("_loc_init", self.loc.data.clone())
-        self.register_buffer("_logvar_init", self.logvar.data.clone())
+        self.register_buffer("_logvar_prior", torch.tensor([log_scale_1, log_scale_2]))
+        self.register_buffer("_loc_prior", torch.zeros_like(self._logvar_prior.data))
+        self.register_buffer("_prior_mixture_weights", torch.tensor([pi, 1 - pi]))
 
     @property
-    def dist(self) -> Normal:
-        return Normal(self.loc, self.logvar.exp())
+    def posterior(self) -> Normal:
+        return Normal(self._loc_posterior, self._logvar_posterior.exp())
 
     @property
-    def unit(self) -> Normal:
-        return Normal(self._loc_init, self._logvar_init.exp())
+    def prior(self) -> Distribution:
+        components = Normal(self._loc_prior, self._logvar_prior.exp())
+        cat = Categorical(self._prior_mixture_weights)
+        return MixtureSameFamily(cat, components)
+
+
+@register_kl(Normal, MixtureSameFamily)
+def kl_normal_mixture_normal(p: Normal, q: MixtureSameFamily):
+    p = Normal(p.loc.unsqueeze(-1), p.scale.unsqueeze(-1))
+    q = q.expand(p.batch_shape)
+    kl = kl_divergence(p, q._component_distribution)
+    return (q._mixture_distribution.probs * kl).sum(-1)
 
 
 class BayesianLinear(nn.Module):
@@ -116,8 +140,6 @@ class BayesianLinear(nn.Module):
         in_features: int,
         out_features: int,
         bias=True,
-        gain_init: Optional[float] = None,
-        base_dist: str = "diagonal",
         share_sampled_params: bool = False,
     ):
         super(BayesianLinear, self).__init__()
@@ -126,32 +148,17 @@ class BayesianLinear(nn.Module):
         self.use_bias = bias
         self.share_sampled_params = share_sampled_params
 
-        # total number of parameters
-        n_parameters = in_features * out_features
-        if self.use_bias:
-            n_parameters += out_features
-
-        # compute scale for init (Xavier)
-        if gain_init is None:
-            scale_init = nn.Linear(in_features, out_features).weight.std()
-        else:
-            scale_init = gain_init * math.sqrt(2.0 / float(self.in_features + self.out_features))
-
-        # register parameters
-        if base_dist == "multivariate":
-            self.BayesianLinear = MultivariateParameterization(n_parameters, scale_init)
-        elif base_dist == "diagonal":
-            self.BayesianLinear = DiagonalParameterization(n_parameters, scale_init)
-        else:
-            raise ValueError(f"Unknown base distribution {base_dist}")
+        # Initialize the layer from a determinisitc one
+        layer = nn.Linear(in_features, out_features, bias=bias)
+        self.BayesianLinear = DiagonalParameterization(layer)
 
     def entropy(self) -> torch.Tensor:
-        return self.BayesianLinear.dist.entropy().mean()
+        return self.BayesianLinear.posterior.entropy().sum()
 
     def kl(self) -> torch.Tensor:
-        q = self.BayesianLinear.dist
-        p = self.BayesianLinear.unit
-        return kl_divergence(q, p).mean()
+        q = self.BayesianLinear.posterior
+        p = self.BayesianLinear.prior
+        return kl_divergence(q, p).sum()
 
     def sample_weights(self, x: torch.Tensor) -> torch.Tensor:
         """Sample weights from the distribution."""
@@ -161,15 +168,15 @@ class BayesianLinear(nn.Module):
                 f"Expected input size {self.in_features}, got {hdim} " f"(input: {x.shape})"
             )
         if self.share_sampled_params:
-            return self.BayesianLinear.dist.rsample()
+            return self.BayesianLinear.posterior.rsample()
         else:
-            return self.BayesianLinear.dist.rsample(sample_shape=(bs,))
+            return self.BayesianLinear.posterior.rsample(sample_shape=(bs,))
 
     def forward(self, x: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
 
         if weights is None:
             # when no weights are provided, take the mean of the distribution
-            weights = self.BayesianLinear.loc
+            weights = self.BayesianLinear._loc_posterior
         if self.use_bias:
             b = weights[..., : self.out_features]
             W = weights[..., self.out_features :]
