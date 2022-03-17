@@ -95,11 +95,13 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
     callbacks: List[Callback] = []
     if config.get("callbacks", None):
-        for _, cb_conf in config["callbacks"].items():
-            if "_target_" in cb_conf:
+        for cid, cb_conf in config["callbacks"].items():
+            if cb_conf is not None and "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
                 callback = instantiate(cb_conf)
                 callbacks.append(callback)
+            else:
+                log.warning(f"Skipping callback {cid}: <{cb_conf}>")
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
