@@ -6,6 +6,7 @@ from pathlib import Path
 import datasets
 import hydra
 import rich
+
 import wandb
 
 sys.path.append(str(Path(__file__).parent.parent.as_posix()))
