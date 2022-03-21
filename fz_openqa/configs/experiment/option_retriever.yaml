@@ -6,10 +6,10 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: in_batch
+  - override /model/module/gradients: reinforce
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: random
+  - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: multiply_by_relevance
@@ -79,7 +79,7 @@ model:
       output_size: ${model.hidden_size}
       use_mask: false
       use_answer_mask: false
-      bayesian: true
+      bayesian: false
       learn_scale: false
       scale: 1.
       share_parameters: true
@@ -87,14 +87,14 @@ model:
     reader_head:
       output_size: ${model.hidden_size}
       use_mask: false
-      bayesian: true
+      bayesian: false
       learn_scale: false
       scale: 1.
       share_parameters: true
       bias: false
     gradients:
       use_baseline: false # todo
-      expr: A
+      expr: A2
 
 
 datamodule:
