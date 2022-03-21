@@ -67,7 +67,7 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"output_dir": Path(downloaded_file) / "medqa_x_wikipedia_corpus_v1"},
+                gen_kwargs={"output_dir": Path(downloaded_file) / "wikipedia_corpus_v5"},
             )
         ]
 
@@ -80,6 +80,6 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         ]
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
-                title = f.readline(limit=1)
+                title = f.readline()
                 text = f.read()
                 yield i, {"document.text": text, "document.idx": i, "document.title": title}
