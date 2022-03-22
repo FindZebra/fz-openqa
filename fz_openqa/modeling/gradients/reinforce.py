@@ -15,6 +15,13 @@ from fz_openqa.modeling.gradients.base import Space
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 
 
+def kl_uniform(logits: Tensor, dim: int = -1) -> Tensor:
+    log_p = logits.log_softmax(dim=dim)
+    N = log_p.size(dim)
+    log_q = -torch.ones_like(log_p) * math.log(N)
+    return (log_p.exp() * (log_p - log_q)).sum(dim=dim)
+
+
 class ReinforceGradients(Gradients):
     def __init__(
         self,
@@ -84,46 +91,43 @@ class ReinforceGradients(Gradients):
 
         """
         gamma = kwargs.get("gamma", self.gamma)
+        reader_kl_weight = kwargs.get("reader_kl_weight", None)
+        retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
 
         if self.space == Space.LOG:
             warnings.warn("ReinforceGradients has not been tested for log space")
 
-        f_theta = reader_score
-        f_phi = retriever_score
-        f_psi = retrieval_score
-        log_s = retrieval_log_weight
+        f_theta_ = reader_score
+        f_phi_ = retriever_score
+        f_psi_ = retrieval_score
+        log_s_ = retrieval_log_weight
         diagnostics = {}
 
         # check inputs
-        assert f_theta is not None
-        assert f_phi is not None
-        assert f_psi is not None
-        assert log_s is not None
-
-        # scale the retriever scores to match the retrieval scores
-        # M_psi = f_psi.max(dim=-1, keepdim=True).values
-        # M_phi = f_phi.max(dim=-1, keepdim=True).values
-        # f_phi = f_phi - M_phi + M_psi
+        assert f_theta_ is not None
+        assert f_phi_ is not None
+        assert f_psi_ is not None
+        assert log_s_ is not None
 
         # reader likelihood `log p(a | d, q)`
-        log_p_a__d_ = f_theta.log_softmax(dim=1)
+        log_p_a__d_ = f_theta_.log_softmax(dim=1)
 
         # `log \zeta = f_\phi(d) - f_\psi(d)`
-        log_zeta_ = f_phi - f_psi
+        log_zeta_ = f_phi_ - f_psi_
 
         # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
         log_zeta_hat_ = log_zeta_ + log_p_a__d_
 
         # importance weights
-        log_w_ = (log_s + log_zeta_).log_softmax(dim=-1).detach()
-        log_w_hat_ = (log_s + log_zeta_hat_).log_softmax(dim=-1).detach()
+        log_w_ = (log_s_ + log_zeta_).log_softmax(dim=-1).detach()
+        log_w_hat_ = (log_s_ + log_zeta_hat_).log_softmax(dim=-1).detach()
 
-        # compute `sum_{d \in S} w(d) f_\phi(d)`
+        # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
         # log_p_d__a_ = f_phi - (log_w_ * f_phi).logsumexp(dim=-1, keepdim=True)
-        log_p_d__a_ = f_phi - (log_w_.exp().detach() * f_phi).sum(dim=-1, keepdim=True)
+        log_p_d__a_ = f_phi_ - (log_w_.exp().detach() * f_phi_).sum(dim=-1, keepdim=True)
 
         # compute cartesian product: `D \in \Dset^{(M)}`
-        args = f_theta, f_phi, f_psi, log_s, log_w_, log_w_hat_, log_p_d__a_
+        args = f_theta_, f_phi_, f_psi_, log_s_, log_w_, log_w_hat_, log_p_d__a_
         f_theta, f_phi, f_psi, log_s, log_w, log_w_hat, log_p_d__a = batch_cartesian_product(*args)
 
         # reader likelihood `log p(a | d, q)`
@@ -144,6 +148,12 @@ class ReinforceGradients(Gradients):
         lb_p_ast = lb_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
         diagnostics["reader/lb"] = lb_p_ast
         diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
+
+        # compute KL divergence to Uniform
+        kl_reader = kl_uniform(log_p_a, dim=1)
+        diagnostics["reader/kl_uniform"] = kl_reader
+        kl_retriever = kl_uniform(f_phi_, dim=2).sum(1)
+        diagnostics["retriever/kl_uniform"] = kl_retriever
 
         # slice log p(a_st | q, A, D)
         targets_ = targets.view(targets.size(0), 1, 1)
@@ -200,6 +210,12 @@ class ReinforceGradients(Gradients):
             loss = -(reader_loss + gamma * retriever_loss)
         else:
             raise ValueError(f"expr must be either A, B or C, got {self.expr}")
+
+        # add the KL temrs
+        if reader_kl_weight is not None:
+            loss = loss + reader_kl_weight * kl_reader
+        if retriever_kl_weight is not None:
+            loss = loss + retriever_kl_weight * kl_retriever
 
         return {
             "loss": loss,

@@ -65,12 +65,22 @@ model:
   optimizer_params:
     lr: 1e-5
     weight_decay: 1e-3
-    correct_bias: false
+    correct_bias: false # todo: remove and use torch's AdamW
     # eps: 1e-8 # as in the Colbert repo
   parameters:
     gamma: 1
     question_mask: 1
     alpha: 0
+    reader_kl_weight:
+      mode: cosine
+      num_steps: 10_000
+      initial_value: 0.5
+      final_value: 0
+    retriever_kl_weight:
+      mode: cosine
+      num_steps: 10_000
+      initial_value: 0.5
+      final_value: 0
   module:
     resample_k: null
     alpha: 0
