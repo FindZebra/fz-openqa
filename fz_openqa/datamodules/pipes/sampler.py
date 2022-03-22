@@ -282,13 +282,13 @@ class PrioritySampler(Sampler):
 
     @staticmethod
     def sample(
-        logits: torch.Tensor, m: int, largest: bool = False, mode: str = "uniform"
+        logits: torch.Tensor, k: int = None, largest: bool = False, mode: str = "uniform"
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample `log p(z)` using priority sampling with subset of size `m`
 
         Args:
             logits (torch.Tensor): un-normalized logits of the distribution
-            m (int): size of the subset to sample
+            k (int): size of the subset to sample
             mode (str): sampling mode, one of `uniform`, `exponential`
 
         Returns:
@@ -313,13 +313,13 @@ class PrioritySampler(Sampler):
 
         log_u = u.log()
         keys = log_pz - log_u
-        z = keys.argsort(dim=-1, descending=True)[..., : m + 1]
-        if m < logits.shape[-1]:
+        z = keys.argsort(dim=-1, descending=True)[..., : k + 1]
+        if k < logits.shape[-1]:
             z_tau = z[..., -1:]
             log_tau = keys.gather(dim=-1, index=z_tau)[..., :1]
         else:
             log_tau = -float("inf") + torch.zeros_like(log_pz)
-        z = z[..., :m]
+        z = z[..., :k]
         log_pz = log_pz.gather(dim=-1, index=z)
         if mode == "uniform":
             log_qz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))

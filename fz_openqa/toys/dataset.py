@@ -20,7 +20,7 @@ class ClassDataset(datasets.MNIST):
         self.targets = self.targets[mask]
 
         # slice the dataset for the given group
-        assert group in {None, "data", "knowledge"}
+        assert group in {None, "data", "knowledge", "all"}
         if group is not None:
             rgn = np.random.RandomState(0)
             mask = rgn.binomial(1, 0.5, size=self.targets.shape).astype(np.bool)
@@ -28,6 +28,8 @@ class ClassDataset(datasets.MNIST):
                 pass
             elif group == "knowledge":
                 mask = ~mask
+            elif group == "all":
+                mask = slice(None, None)
             else:
                 raise ValueError("Invalid group value")
             self.data = self.data[mask]
@@ -50,7 +52,7 @@ class ClassDataset(datasets.MNIST):
             noise = torch.randn_like(data)
             mask = torch.empty((len(data),)).uniform_()
             mask = mask.view(-1, 1, 1, 1)
-            perturb_level = mask.clone().uniform_(1, 3).long().float()
+            perturb_level = mask.clone().uniform_(1, 2).long().float()
             data = torch.where(mask < noise_level, noise, data + perturb_level * noise)
             data = data.clamp(-1, 1)
 
@@ -76,8 +78,14 @@ def generate_toy_datasets(*, labels: List[int] = -1, noise_level: float = 0, **d
         i: ClassDataset(i, "data", train=True, noise_level=0, **dataset_kwargs).data for i in labels
     }
     knowledge = {
-        i: ClassDataset(i, "knowledge", train=True, noise_level=noise_level, **dataset_kwargs).data
-        for i in labels
+        i: ClassDataset(
+            i,
+            "knowledge" if i in labels else "all",
+            train=True,
+            noise_level=noise_level,
+            **dataset_kwargs
+        ).data
+        for i in range(10)
     }
     test_data = {
         i: ClassDataset(i, None, train=False, noise_level=0, **dataset_kwargs).data for i in labels
@@ -88,8 +96,7 @@ def generate_toy_datasets(*, labels: List[int] = -1, noise_level: float = 0, **d
     test_data, test_labels = concatenate(test_data, labels)
 
     # concatenate the knowledge base
-    min_len = min(len(d) for d in knowledge.values())
-    knowledge = torch.cat([knowledge[i][:min_len].unsqueeze(0) for i in labels], dim=0)
+    knowledge = torch.cat(list(knowledge.values()), dim=0)
 
     return {
         "train": {"targets": train_labels, "data": train_data},
