@@ -64,25 +64,23 @@ class ReinforceGradients(Gradients):
         r"""
         Compute the loss and diagnostics. This methods assumes using three probabilities
         distributions:
-            1. reader: `p_\theta(ast|A, D) =  \exp f_\theta(D,ast) / \sum_A \exp f_\theta(D,A)`
-            3. retriever: `p_\phi(D|A)` = softmax(`f_\phi(D,A)`) / \sum_D softmax(`f_\phi(D,A)`)
-            3. checkpoint: `p_\psi(D|A)` = softmax(`f_\psi(D,A)`) / \sum_D softmax(`f_\psi(D,A)`)
-            4. proposal: q(D)
+            1. reader: `p_\theta(ast|A, D) =  \exp f_\theta(D,ast) / \sum_A \exp f_\theta(D,A, q)`
+            3. retriever: `p_\phi(d|q)` = softmax(`f_\phi(d,q)`) / \sum_D softmax(`f_\phi(d,q)`)
+            3. checkpoint: `p_\psi(d|q)` = softmax(`f_\psi(d,q)`) / \sum_D softmax(`f_\psi(d,q)`)
+            4. proposal: q(d) (priority sampling), with importance weights s(d) = p_\psi(d|q) / q(d)
 
         Parameters
         ----------
         retriever_score
-            f_\phi(D): shape [bs, n_opts, n_docs]
+            f_\phi(d,q): shape [bs, n_opts, n_docs]
         reader_score
-            f_\theta(D): shape [bs, n_opts, n_docs]
+            f_\theta(d,q): shape [bs, n_opts, n_docs]
         targets
             a_\star: shape [bs]
         retrieval_score
-            f_\psi(D): shape [bs, n_opts, n_docs]
-        retrieval_log_prob
-            log q(D): shape [bs, n_opts, n_docs]
-        retrieval_log_Z
-            \log \sum_{D \in S} \exp f_\psi(D): shape [bs, n_opts, n_docs]
+            f_\psi(d,q): shape [bs, n_opts, n_docs]
+        retrieval_log_weight
+            log s(d,q): shape [bs, n_opts, n_docs]
 
         Returns
         -------
@@ -93,9 +91,6 @@ class ReinforceGradients(Gradients):
         gamma = kwargs.get("gamma", self.gamma)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
-
-        if self.space == Space.LOG:
-            warnings.warn("ReinforceGradients has not been tested for log space")
 
         f_theta_ = reader_score
         f_phi_ = retriever_score
@@ -149,19 +144,18 @@ class ReinforceGradients(Gradients):
         diagnostics["reader/lb"] = lb_p_ast
         diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
 
-        # compute KL divergence to Uniform
+        # compute KL divergence w.r.t to a uniform prior (regularization)
         kl_reader = kl_uniform(log_p_a, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader
         kl_retriever = kl_uniform(f_phi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever
 
-        # slice log p(a_st | q, A, D)
+        # log p(a_st | q, A, D)
         targets_ = targets.view(targets.size(0), 1, 1)
         targets_ = targets_.expand(targets.size(0), 1, log_p_a__d.size(2))
         log_p_ast_d = log_p_a__d.gather(dim=1, index=targets_).squeeze(1)
 
-        # compute the gradient estimate
-
+        # compute the baseline (unused in current experiments)
         if self.use_baseline:
             space = {"A": Space.EXP, "B": Space.EXP, "C": Space.LOG}[self.expr]
             log_b = self.baseline(
@@ -175,6 +169,7 @@ class ReinforceGradients(Gradients):
         else:
             log_b = None
 
+        # compute the gradient estimate
         if self.expr == "A":
             h = log_p_ast_d + gamma * log_p_D__A
             score = (log_W - log_p_ast.unsqueeze(-1) + log_p_ast_d).exp()
@@ -222,8 +217,9 @@ class ReinforceGradients(Gradients):
             "reader/entropy": -(log_p_a.exp() * log_p_a).sum(dim=1).mean().detach(),
             "reader/logp": log_p_ast.detach(),
             "_reader_logits_": log_p_a.detach(),
+            "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
-            "_doc_logits_": retriever_score.detach(),
+            "_retriever_scores_": retriever_score.detach(),
             "_retriever_reading_logits_": retriever_score.sum(-1).detach(),
             **diagnostics,
         }

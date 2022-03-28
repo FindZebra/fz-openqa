@@ -126,7 +126,7 @@ class Gradients(nn.Module):
             "reader/logp": q.logp_a_star.detach(),
             "_reader_logits_": q.logp_a.detach(),
             "_reader_targets_": targets.detach(),
-            "_doc_logits_": q.log_p_d__a_no_perm.detach(),
+            "_retriever_scores_": q.log_p_d__a_no_perm.detach(),
             "_retriever_reading_logits_": q.log_p_d__a_no_perm.sum(-1).detach(),
             **diagnostics,
         }

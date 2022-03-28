@@ -230,7 +230,7 @@ class TestOptionRetriever(TestModel):
             model.estimator = InBatchGradients()
             output = model.evaluate(ref_batch)
             model.estimator = _estimator
-            doc_logits = output['_doc_logits_'].clone()
+            doc_logits = output['_retriever_scores_'].clone()
             doc_logits.zero_()
             # doc_logits /= 10
             # doc_logits = doc_logits + torch.randn_like(doc_logits)
@@ -251,7 +251,7 @@ class TestOptionRetriever(TestModel):
 
             if VERBOSE and i % 10 == 0:
                 probs = output['_reader_logits_'].exponentiate().detach().numpy()
-                doc_probs = output['_doc_logits_'].detach()
+                doc_probs = output['_retriever_scores_'].detach()
                 # doc_dist = (doc_probs - doc_targets).pow(2)
                 rich.print(f"{i} - loss={loss:.3f},"
                            f" probs[0]={probs[0]}, "
@@ -277,7 +277,7 @@ class TestOptionRetriever(TestModel):
             rich.print(f">>> probs: {probs}")
             rich.print(f">>> probs.target: {target_probs}")
 
-            doc_score = output['_doc_logits_'].softmax(-1).detach()
+            doc_score = output['_retriever_scores_'].softmax(-1).detach()
             print(get_separator())
             rich.print(f"doc logits: \n{doc_score.numpy()}")
             print(get_separator())

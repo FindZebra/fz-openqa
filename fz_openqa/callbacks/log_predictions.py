@@ -87,7 +87,7 @@ class LogPredictions(Callback):
             "answer.target",
             "document.retrieval_score",
         ]
-        preds_keys = ["_reader_logits_", "_doc_logits_"]
+        preds_keys = ["_reader_logits_", "_retriever_scores_", "_reader_scores_"]
         out = {k: v[mask] for k, v in batch.items() if k in batch_keys}
         out.update({k: v[mask] for k, v in outputs.items() if k in preds_keys})
 
@@ -116,22 +116,29 @@ class LogPredictions(Callback):
             scores = row["document.retrieval_score"]
             target = row["answer.target"]
             for i, qids in enumerate(row["question.input_ids"]):
+                is_correct = i == target
                 html += "<hr>"
                 html += '<div class="option" style="background-color:#eee;">\n'
-                label = CORRECT_LABEL if i == target else INCORRECT_LABEL
+                label = CORRECT_LABEL if is_correct else INCORRECT_LABEL
                 html += f"<h3>{label} Opt#{i} (Q#{k}) - prob={probs[i]:.2f}</h3>\n"
                 html += self.decode(qids)
                 html += '</div">\n'
 
                 # documents
-                doc_probs = row["_doc_logits_"][i].softmax(-1)
-                js = doc_probs.argsort(-1, descending=True)
+                doc_scores = row["_retriever_scores_"][i]
+                doc_probs = doc_scores.softmax(-1)
+                reader_scores = row["_reader_scores_"][i]
+                sort_score = doc_scores + reader_scores
+                js = sort_score.argsort(-1, descending=True)
                 html += '<div class="row" style="background-color:#fff;">\n'
                 for _j, j in enumerate(js[:3]):
                     html += '<div tag="document" class="column">\n'
                     html += (
-                        f"<h4>Doc #{_j}, retriever_prob={doc_probs[j]:.2f},"
-                        f" retrieval_score={scores[i, j]:.2f}</h4>\n"
+                        f"<h4>Doc #{_j}, "
+                        f"retriever_prob={doc_probs[j]:.2f}, "
+                        f"retrieval_score={scores[i, j]:.2f}, "
+                        f"reader_score={reader_scores[j]:.2f}, "
+                        f"</h4>\n"
                     )
                     dids = row["document.input_ids"][i][j]
                     html += self.decode(dids)
