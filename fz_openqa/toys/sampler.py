@@ -100,7 +100,7 @@ class ToySampler:
     @torch.no_grad()
     def index(self, model: ToyOptionRetriever = None):
         if model is None:
-            nd = self.knowledge.shape
+            nd = self.knowledge.shape[0]
             for split, data in self.data.items():
                 nq = data.shape[0]
                 self.scores[split] = torch.zeros(

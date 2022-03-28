@@ -9,27 +9,33 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch import Tensor
+from torch.nn import Sequential
 
 
 class Encoder(nn.Module):
     def __init__(self, output_size: int = 128):
         super(Encoder, self).__init__()
         self.conv1 = nn.Conv2d(1, 8, 3, 1)
+        self.norm_1 = nn.InstanceNorm2d(8)
         self.conv2 = nn.Conv2d(8, 16, 3, 1)
+        self.norm_2 = nn.InstanceNorm2d(16)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
         self.fc1 = nn.Linear(9216 // 4, output_size)
+        self.norm_3 = nn.LayerNorm(output_size)
 
     def forward(self, x):
         x = self.conv1(x)
         x = F.relu(x)
+        x = self.norm_1(x)
         x = self.conv2(x)
         x = F.relu(x)
+        x = self.norm_2(x)
         x = F.max_pool2d(x, 2)
         x = self.dropout1(x)
         x = torch.flatten(x, 1)
         x = self.fc1(x)
-        x = F.relu(x)
+        x = self.norm_3(x)
         x = self.dropout2(x)
         return x
 
@@ -95,11 +101,13 @@ class ToyOptionRetriever(nn.Module):
         if share_backbone:
             rich.print("[magenta]SHARING BACKBONE")
             self.backbone = Encoder(hidden)
-            self.retriever_head = nn.Linear(hidden, output_size)
-            self.reader_head = nn.Linear(hidden, output_size)
+            self.retriever_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
+            self.reader_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
         else:
             self.backbone = lambda x: x
-            self.retriever_head = nn.Sequential(Encoder(hidden), nn.Linear(hidden, output_size))
+            self.retriever_head = nn.Sequential(
+                Encoder(hidden), nn.ReLU(), nn.Linear(hidden, output_size)
+            )
             self.reader_head = deepcopy(self.retriever_head)
 
         self.reader_log_temperature = nn.Parameter(torch.tensor(temperature).log())
