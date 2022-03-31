@@ -396,13 +396,9 @@ class OptionRetriever(Module):
             output["retriever/top_rank"] = top_rank.float().mean()
 
             # min-max of the retrieval rank
-            output["retriever/n_samples"] = retrieval_rank.size(-1)
-            output["retriever/max_sampled_rank"] = (
-                (retrieval_rank.max(dim=-1).values).float().mean()
-            )
-            output["retriever/min_sampled_rank"] = (
-                (retrieval_rank.min(dim=-1).values).float().mean()
-            )
+            output["retrieval/n_samples"] = retrieval_rank.size(-1)
+            output["retrieval/max_sampled_rank"] = retrieval_rank.max().float()
+            output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
 
     @staticmethod
     def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:
@@ -443,7 +439,7 @@ class OptionRetriever(Module):
         """
 
         # scaling the heads in `step_end` (here) allows using samples across all devices
-        reader_score = output["_reader_logits_"]
+        reader_score = output["_reader_scores_"]
         retriever_score = output["_retriever_scores_"]
         if not self.reader_head.is_scaled:
             self.reader_head.set_scale(reader_score)

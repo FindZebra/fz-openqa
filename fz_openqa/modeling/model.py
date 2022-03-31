@@ -8,7 +8,6 @@ from typing import Optional
 from typing import Union
 
 import rich
-import transformers
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lamb import Lamb
@@ -248,7 +247,7 @@ class Model(LightningModule):
         # choose the optimizer class
         OptimizerCls = {
             "adam": optim.Adam,
-            "adamw": transformers.optimization.AdamW,
+            "adamw": optim.AdamW,
             "adamax": optim.Adamax,
             "sgd": optim.SGD,
             "rmsprop": optim.RMSprop,

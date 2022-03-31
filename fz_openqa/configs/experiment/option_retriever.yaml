@@ -27,15 +27,17 @@ defaults:
       - progress_bar
 
 base:
-  seed: 4272019677 # TODO: remove
+  seed: null # TODO: remove
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
   exp_info: "Colbert + Bayesian head"
-  batch_size: 32
+  batch_size: 128
   device_batch_size: 1
+  eval_device_batch_size: 8
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
+  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
   sharing_strategy: file_system
   git_hash: ${git_hash:}
   git_hash_short: ${git_hash_short:}
@@ -45,8 +47,12 @@ trainer:
   strategy: dp
   min_epochs: 1
   max_epochs: 1_000
-  gradient_clip_val: 0.5
-  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
+  gradient_clip_val: 2.0 # todo: changed from 0.5
+  accumulate_grad_batches:
+    0: ${int_mul:${base.accumulate_grad_batches},1}
+    20: ${int_mul:${base.accumulate_grad_batches},2}
+    50: ${int_mul:${base.accumulate_grad_batches},3}
+    100: ${int_mul:${base.accumulate_grad_batches},4}
   val_check_interval: 0.5
   precision: 32
   # track_grad_norm: 2
@@ -54,33 +60,29 @@ trainer:
 model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 10_000
+  num_training_steps: 100_000
   hidden_size: 32
   bert:
     config:
       hidden_dropout_prob: 0.1
-      attention_probs_dropout_prob: 0.1
+      attention_probs_dropout_prob: 0.3 # todo: hanged this from 0.1
 
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 3e-6
     weight_decay: 1e-3
-    correct_bias: false # todo: remove and use torch's AdamW
-    # eps: 1e-8 # as in the Colbert repo
+    # correct_bias: false # todo: remove and use torch's AdamW
+    eps: 1e-8 # as in the Colbert repo
   parameters:
     gamma: 1
     question_mask: 1
     alpha: 0
-    reader_kl_weight:
-      mode: cosine
-      num_steps: 10_000
-      initial_value: 0.5
-      final_value: 0
+    reader_kl_weight: 0.5
     retriever_kl_weight:
       mode: cosine
-      num_steps: 10_000
-      initial_value: 0.5
-      final_value: 0
+      num_steps: 5_000
+      initial_value: 0.1
+      final_value: 0.01
   module:
     resample_k: null
     alpha: 0
@@ -110,8 +112,8 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 15 # todo !!!
-    reset_optimizer: true # TODO !!
+    freq: 10
+    reset_optimizer: false # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
@@ -119,7 +121,7 @@ datamodule:
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
-  eval_batch_size: ${int_mul:${datamodule.train_batch_size},2}
+  eval_batch_size: ${int_mul:${base.eval_device_batch_size},${base.n_devices}}
   num_workers: 12
   pin_memory: true
 
@@ -139,7 +141,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 1_000 # todo> next exp
+  n_retrieved_documents: 300 # todo> next exp
   n_documents: 10
 
   # tag documents as positive or negative
@@ -181,7 +183,7 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 1. # todo !!!
+    es_temperature: 5. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
     p: 30
     dtype: float16
