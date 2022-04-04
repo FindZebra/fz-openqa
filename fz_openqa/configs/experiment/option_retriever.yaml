@@ -82,7 +82,7 @@ model:
       mode: cosine
       num_steps: 5_000
       initial_value: 0.1
-      final_value: 0.01
+      final_value: 1e-5
   module:
     resample_k: null
     alpha: 0
