@@ -3,7 +3,7 @@
 #SBATCH --output=./slurm/%j.out
 #SBATCH --ntasks=1 --cpus-per-task=24 --mem=90G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
-#SBATCH --time=3-00:00:00
+#SBATCH --time=5-00:00:00
 
 # variables
 NAME="xyt-DIKU-fxmatch-reiA-colbert-optim-L350"
@@ -24,7 +24,6 @@ fi
 
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
-  model/module/gradients=in_batch \
   base.device_batch_size=2 \
   base.eval_device_batch_size=2 \
   base.sharing_strategy=file_descriptor \

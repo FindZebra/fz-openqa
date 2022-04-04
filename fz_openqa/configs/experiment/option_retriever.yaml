@@ -51,9 +51,8 @@ trainer:
   accumulate_grad_batches:
     _target_: fz_openqa.utils.config.IntDict
     "0": ${int_mul:${base.accumulate_grad_batches},1}
-    "20": ${int_mul:${base.accumulate_grad_batches},2}
-    "50": ${int_mul:${base.accumulate_grad_batches},3}
-    "100": ${int_mul:${base.accumulate_grad_batches},4}
+    "60": ${int_mul:${base.accumulate_grad_batches},2}
+    "120": ${int_mul:${base.accumulate_grad_batches},3}
   val_check_interval: 1.0
   precision: 32
   # track_grad_norm: 2
@@ -66,7 +65,7 @@ model:
   bert:
     config:
       hidden_dropout_prob: 0.1
-      attention_probs_dropout_prob: 0.3 # todo: hanged this from 0.1
+      attention_probs_dropout_prob: 0.1
 
   optimizer: adamw
   optimizer_params:
