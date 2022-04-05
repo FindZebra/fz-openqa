@@ -112,7 +112,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10
+    freq: 20
     reset_optimizer: false # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:

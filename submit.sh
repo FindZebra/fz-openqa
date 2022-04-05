@@ -25,10 +25,9 @@ fi
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
   base.device_batch_size=2 \
-  base.eval_device_batch_size=2 \
-  base.sharing_strategy=file_descriptor \
+  base.eval_device_batch_size=1 \
   trainer.precision=32 \
-  datamodule.num_workers=12 \
+  datamodule.num_workers=8 \
   datamodule.builder.dataset_builder.max_length=350 \
   +setup_with_model=${setup_with_model} \
   +kill_es=true \
