@@ -8,11 +8,11 @@ from typing import List
 
 import numpy as np
 import rich
-import wandb
 from datasets import Split
 from rich.console import Console
 from torch import Tensor
 
+import wandb
 from ..index.base import camel_to_snake
 from ..utils.datastruct import OpenQaDataset
 from ..utils.typing import HfDataset

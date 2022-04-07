@@ -7,11 +7,12 @@ from typing import List
 import datasets
 import pytorch_lightning as pl
 import transformers
-import wandb
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
+
+import wandb
 
 
 def empty(*args, **kwargs):

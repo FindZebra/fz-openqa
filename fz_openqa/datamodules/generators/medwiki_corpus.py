@@ -1,6 +1,11 @@
 import json
+import os
+import re
+from pathlib import Path
 
 import datasets
+
+TXT_PATTERN = r"^.*\.txt$"
 
 
 class MedWikipediaCorpusConfig(datasets.BuilderConfig):
@@ -14,15 +19,15 @@ class MedWikipediaCorpusConfig(datasets.BuilderConfig):
         super(MedWikipediaCorpusConfig, self).__init__(**kwargs)
 
 
-_DESCRIPTION = "A class to load a collection of MedQA related Wikipedia articles"
+_DESCRIPTION = "A class to load the Wikipedia-based MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1h1SSvTWg7aW1g5-IVQy4_fd3D_yY74H2/view?usp=sharing"
+_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/data/medqa_x_wiki_corpus_v1.zip"
 
 
 class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
-    """FzCorpus Dataset. Version 0.0.1"""
+    """MedWikipediaCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
     force = False
@@ -44,28 +49,37 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     @staticmethod
     def _get_drive_url(url):
-        base_url = "https://drive.google.com/uc?id="
-        split_url = url.split("/")
-        return base_url + split_url[5]
+        if "drive.google.com" in url:
+            base_url = "https://drive.google.com/uc?id="
+            split_url = url.split("/")
+            return base_url + split_url[5]
+        else:
+            return url
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
         downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        if not Path(downloaded_file).is_dir():
+            raise Exception(
+                f"Could not download the dataset Content of `downloaded_file`:"
+                f"{open(downloaded_file, 'r').read()}"
+            )
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": downloaded_file},
+                gen_kwargs={"output_dir": Path(downloaded_file) / "wikipedia_corpus_v5"},
             )
         ]
 
-    def _generate_examples(self, filepath: str):
+    def _generate_examples(self, output_dir: str):
         """Yields examples."""
-
-        with open(filepath, "r") as f:
-            data = json.load(f)
-            for idx, article in enumerate(data):
-                yield idx, {
-                    "document.text": article["text"],
-                    "document.title": article["title"],
-                    "document.idx": idx,
-                }
+        data_files = [
+            os.path.join(output_dir, p)
+            for p in os.listdir(output_dir)
+            if re.findall(TXT_PATTERN, p)
+        ]
+        for i, fn in enumerate(data_files):
+            with open(fn, "r") as f:
+                title = f.readline()
+                text = f.read()
+                yield i, {"document.text": text, "document.idx": i, "document.title": title}

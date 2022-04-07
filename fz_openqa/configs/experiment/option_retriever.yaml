@@ -164,9 +164,11 @@ datamodule:
       n_answer_tokens: 1 # previous exps: 10
       max_length: 350 # todo!!!
     corpus_builder:
+      dset_name: medqa
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
       passage_stride: 100
+      append_document_title: true
 
   # Index parameters
   index_builder:
