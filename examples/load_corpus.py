@@ -1,6 +1,9 @@
 import logging
 import os
+import sys
 from pathlib import Path
+
+sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
 import hydra
@@ -64,9 +67,9 @@ def run(config: DictConfig) -> None:
         text_formatter=textformatter,
         use_subset=config.get("use_subset", True),
         cache_dir=config.sys.get("cache_dir"),
-        num_proc=1,
-        append_document_title=True,
-        analytics=None,
+        num_proc=2,
+        analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],
+        append_document_title=config.get("append_title", True),
     )
     dm = DataModule(builder=builder)
 

@@ -8,7 +8,6 @@ from typing import List
 from typing import Optional
 
 import dill  # type: ignore
-import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -32,9 +31,6 @@ from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import PrintText
-from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
@@ -46,6 +42,15 @@ from fz_openqa.utils.pretty import pretty_decode
 logger = logging.getLogger(__name__)
 
 TXT_PATTERN = r"^.*\.txt$"
+
+CORPUS_GENERATORS = {
+    "medqa": (meqa_en_corpus.__file__,),
+    "medwiki": (medwiki_corpus.__file__,),
+    "fz": (fz_corpus.__file__,),
+    "file": (file_corpus.__file__,),
+    "wikipedia": ("wikipedia", "20200501.en"),
+    "quality": (quality.__file__,),
+}
 
 
 class CorpusBuilder(HfDatasetBuilder):
@@ -66,13 +71,11 @@ class CorpusBuilder(HfDatasetBuilder):
         name of the columns
     """
 
-    dset_script_path_or_id = file_corpus.__file__
-    dset_name: Optional[str] = None
     pt_attributes: List[str] = [
         "document.input_ids",
         "document.attention_mask",
     ]
-    subset_size: List[int] = [3]
+    subset_size: List[int] = [1]
     column_names = [
         "document.text",
         "document.input_ids",
@@ -85,6 +88,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def __init__(
         self,
+        dset_name: str = "file",
         passage_length: int = 200,
         passage_stride: int = 100,
         to_sentences: bool = False,
@@ -95,12 +99,20 @@ class CorpusBuilder(HfDatasetBuilder):
     ):
         super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
 
-        assert self.max_length is None, (
-            "`max_length` is not a valid argument for this dataset "
-            "and should be left to None. "
-            "Use the argument `passage_length` instead."
-        )
+        for dn in dset_name.split("+"):
+            if dn not in CORPUS_GENERATORS:
+                raise ValueError(
+                    f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
+                )
 
+        if self.max_length is not None:
+            raise ValueError(
+                "`max_length` is not a valid argument for this dataset "
+                "and should be left to None. "
+                "Use the argument `passage_length` instead."
+            )
+
+        self.dset_name = dset_name
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
@@ -112,35 +124,48 @@ class CorpusBuilder(HfDatasetBuilder):
             )
             self.passage_length = self.passage_stride = None
 
-        # if append_document_title:
-        #     raise NotImplementedError
         self.append_document_title = append_document_title
 
     @staticmethod
-    def _load_dataset(script, **kwargs):
-        args = [script]
+    def _load_dataset(*args, input_dir=None, **kwargs):
+        args = list(args)
+
+        if args[0] == "file":
+            kwargs["data_files"] = [
+                os.path.join(input_dir, p)
+                for p in os.listdir(input_dir)
+                if re.findall(TXT_PATTERN, p)
+            ]
+
         dataset = load_dataset(*args, **kwargs)
         if isinstance(dataset, DatasetDict):
             dataset = concatenate_datasets(list(dataset.values()))
         return dataset
 
     def load_base_dataset(self) -> DatasetDict:
-        """Load the base HuggingFace dataset."""
-        input_files = (
-            [
-                os.path.join(self.input_dir, p)
-                for p in os.listdir(self.input_dir)
-                if re.findall(TXT_PATTERN, p)
-            ]
-            if self.input_dir is not None
-            else None
-        )
-        return self._load_dataset(
-            self.dset_script_path_or_id,
-            name=self.dset_name,
-            cache_dir=self.cache_dir,
-            data_files=input_files,
-        )
+        kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
+
+        # split dataset names using `+`
+        dset_names = self.dset_name.split("+")
+
+        # load datasets
+        dsets = [self._load_dataset(*CORPUS_GENERATORS[dn], **kwargs) for dn in dset_names]
+
+        # concatenate datasets
+        if len(dset_names) == 1:
+            return dsets[0]
+        else:
+            shared_columns = set.intersection(*[set(dset.column_names) for dset in dsets])
+            if any(shared_columns != set(dset.column_names) for dset in dsets):
+
+                def drop_cols(dset: Dataset):
+                    cols = set(dset.column_names)
+                    cols_to_drop = cols - shared_columns
+                    logger.warning(f"Dropping columns {cols_to_drop} from dataset")
+                    return dset.remove_columns(list(cols_to_drop))
+
+                dsets = [drop_cols(dset) for dset in dsets]
+            return concatenate_datasets(dsets)
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
@@ -164,6 +189,12 @@ class CorpusBuilder(HfDatasetBuilder):
                 with_indices=True,
                 desc="Indexing documents",
             )
+
+        # if titles are empty, deactivate the append_document_title
+        if "title" in dataset.column_names and self.append_document_title is True:
+            if all(len(t) == 0 for t in dataset[:100]["title"]):
+                self.append_document_title = False
+                logger.warning("No title found in dataset, `append_document_title` is set to False")
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
@@ -335,69 +366,3 @@ class CorpusBuilder(HfDatasetBuilder):
 
         dataset.map(add_dot)
         return dataset
-
-
-class MedQaCorpusBuilder(CorpusBuilder):
-    subset_size = [1]
-    dset_script_path_or_id = meqa_en_corpus.__file__
-
-
-class FzCorpusBuilder(CorpusBuilder):
-    subset_size = [20]
-    dset_script_path_or_id = fz_corpus.__file__
-
-
-class QuALITYCorpusBuilder(CorpusBuilder):
-    subset_size = [10]
-    dset_script_path_or_id = quality.__file__
-    dset_name = "documents"
-
-
-class WikipediaCorpusBuilder(CorpusBuilder):
-    subset_size = [10]
-    dset_script_path_or_id = "wikipedia"
-    dset_name = "20200501.en"
-
-
-class MedWikipediaCorpusBuilder(CorpusBuilder):
-    subset_size = [20]
-    dset_script_path_or_id = medwiki_corpus.__file__
-
-
-class FZxMedQaCorpusBuilder(CorpusBuilder):
-    subset_size = [3]
-    dset_script_path_or_id: List = [
-        fz_corpus.__file__,
-        meqa_en_corpus.__file__,
-    ]
-
-    def load_base_dataset(self) -> DatasetDict:
-        assert self.input_dir is None
-        kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        shared_columns = set.intersection(*[set(dset.column_names) for dset in dsets])
-        if any(shared_columns != set(dset.column_names) for dset in dsets):
-
-            def drop_cols(dset: Dataset):
-                cols = set(dset.column_names)
-                cols_to_drop = cols - shared_columns
-                logger.warning(f"Dropping columns {cols_to_drop} from dataset")
-                return dset.remove_columns(list(cols_to_drop))
-
-            dsets = [drop_cols(dset) for dset in dsets]
-        return concatenate_datasets(dsets)
-
-
-class FZxMedQaxWikiCorpusBuilder(CorpusBuilder):
-    subset_size = [3]
-    dset_script_path_or_id: List = [
-        fz_corpus.__file__,
-        meqa_en_corpus.__file__,
-        medwiki_corpus.__file__,
-    ]
-
-    def load_base_dataset(self) -> DatasetDict:
-        assert self.input_dir is None
-        kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self._load_dataset(s, **kwargs) for s in self.dset_script_path_or_id]
-        return concatenate_datasets(dsets)

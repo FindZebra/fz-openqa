@@ -5,12 +5,13 @@ from typing import Optional
 import numpy as np
 import pytorch_lightning as pl
 import spacy
-import wandb
 from pip._internal import main as pipmain
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
+
+import wandb
 
 logger = logging.getLogger(__name__)
 

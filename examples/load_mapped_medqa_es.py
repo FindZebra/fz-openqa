@@ -4,9 +4,9 @@ from pathlib import Path
 import datasets
 import hydra
 import rich
-import wandb
 
 import fz_openqa
+import wandb
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics import LogRetrievedDocuments
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
