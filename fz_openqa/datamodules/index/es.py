@@ -8,9 +8,11 @@ from typing import List
 from typing import Optional
 
 from datasets import Dataset
+from loguru import logger
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+from ...utils.pretty import pprint_batch
 from ..utils.dataset import keep_only_columns
 from .base import Index
 from .base import IndexMode
@@ -30,13 +32,12 @@ DEFAULT_ES_BODY = OmegaConf.to_object(
     OmegaConf.load(Path(es_body.__file__).parent / "default.yaml")
 )
 
-logger = logging.getLogger("fz_openqa.index.elasticsearch")
 DEFAULT_MAP_KWARGS = {"batch_size": 100, "num_proc": 4}
 
 
 class ElasticSearchIndex(Index):
     preprocessing_pipe: Optional[Pipe] = None
-    default_key: str = "text"
+    default_key: List[str] = ["text", "answer_text"]
     no_fingerprint: List[str] = Index.no_fingerprint + ["engine", "prep_map_kwargs"]
     _es_chunk_size: int = 10
 
@@ -49,6 +50,7 @@ class ElasticSearchIndex(Index):
         analyze_es_tokens: Optional[bool] = False,
         prep_map_kwargs: Optional[Dict] = None,
         es_temperature: Optional[float] = 1.0,
+        auxiliary_weight: Optional[float] = 0.0,
         **kwargs,
     ):
 
@@ -62,6 +64,7 @@ class ElasticSearchIndex(Index):
         self.es_body = es_body
         self.analyze_es_tokens = analyze_es_tokens
         self.temperature = es_temperature
+        self.auxiliary_weight = auxiliary_weight
 
         # override max_chunk_size
         if self.max_chunksize != self._es_chunk_size:
@@ -69,10 +72,8 @@ class ElasticSearchIndex(Index):
         self.max_chunksize = self._es_chunk_size
 
         # input keys
-        msg = f"ElasticSearch Index is only implemented for one key. Got {self.required_keys}"
-        assert len(self.required_keys) == 1, msg
         self.index_text_key = self.input_keys(mode=IndexMode.INDEX)[0]
-        self.query_text_key = self.input_keys(mode=IndexMode.QUERY)[0]
+        self.query_text_key, self.auxiliary_text_key = self.input_keys(mode=IndexMode.QUERY)
         self.text_keys = [self.index_text_key, self.query_text_key]
 
         # pipe used to potentially filter the input text
@@ -135,9 +136,16 @@ class ElasticSearchIndex(Index):
 
         # fetch the texts
         texts = query[self.query_text_key]
+        auxiliary_texts = query.get(self.auxiliary_text_key, None)
 
         # query Elastic Search
-        scores, indexes, contents = self.engine.es_search_bulk(self.index_name, texts, k=k)
+        scores, indexes, contents = self.engine.es_search_bulk(
+            self.index_name,
+            texts,
+            k=k,
+            auxiliary_queries=auxiliary_texts,
+            auxiliary_weight=self.auxiliary_weight,
+        )
 
         # if analyze is True, we need to fetch the analyzed text
         if self.analyze_es_tokens:

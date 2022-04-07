@@ -74,7 +74,7 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         relevance_classifier: Optional[RelevanceClassifier],
-        score_transform: Optional[ScoreTransform],
+        score_transform: Optional[ScoreTransform] = None,
         sampler: Optional[Sampler],
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,

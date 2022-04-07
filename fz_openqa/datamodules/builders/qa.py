@@ -25,6 +25,7 @@ from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_row_idx
@@ -345,6 +346,7 @@ class ConcatQaBuilder(QaBuilder):
                 input_filter=In(["question.text", "answer.text"]),
                 update=True,
             ),
+            RenameKeys({"answer.text": "question.answer_text"}),
             input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 
