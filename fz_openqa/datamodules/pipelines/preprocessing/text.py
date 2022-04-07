@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: F407
 
 import re
 from functools import partial
@@ -116,3 +116,21 @@ class FormatAndTokenize(Sequential):
             format_out,
             **kwargs,
         )
+
+
+class AppendDot(Pipe):
+    def __init__(self, text_fields: str | List[str], **kwargs):
+        super().__init__(**kwargs)
+        if isinstance(text_fields, str):
+            text_fields = [text_fields]
+        self.text_fields = text_fields
+
+    def add_dot(self, x: str) -> str:
+        return x + "."
+
+    def _call_batch(self, batch: Batch, text_fields: str = "title", **kwargs) -> Batch:
+        out = {}
+        for text_field in self.text_fields:
+            out[text_field] = list(map(self.add_dot, batch[text_field]))
+
+        return out

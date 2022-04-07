@@ -6,12 +6,12 @@ from pathlib import Path
 import datasets
 import hydra
 import rich
-
 import wandb
 
 sys.path.append(str(Path(__file__).parent.parent.as_posix()))
 
 import fz_openqa
+import wandb
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics import LogRetrievedDocuments
 from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
