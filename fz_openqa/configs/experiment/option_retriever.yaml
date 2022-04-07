@@ -48,11 +48,11 @@ trainer:
   min_epochs: 1
   max_epochs: 1_000
   gradient_clip_val: 2.0 # todo: changed from 0.5
-  accumulate_grad_batches:
-    _target_: fz_openqa.utils.config.IntDict
-    "0": ${int_mul:${base.accumulate_grad_batches},1}
-    "60": ${int_mul:${base.accumulate_grad_batches},2}
-    "120": ${int_mul:${base.accumulate_grad_batches},3}
+  accumulate_grad_batches: ${base.accumulate_grad_batches}
+#    _target_: fz_openqa.utils.config.IntDict
+#    "0": ${int_mul:${base.accumulate_grad_batches},1}
+#    "60": ${int_mul:${base.accumulate_grad_batches},2}
+#    "120": ${int_mul:${base.accumulate_grad_batches},3}
   val_check_interval: 1.0
   precision: 32
   # track_grad_norm: 2
@@ -60,7 +60,7 @@ trainer:
 model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 100_000
+  num_training_steps: 20_000 # TODO !!
   hidden_size: 32
   bert:
     config:
@@ -80,7 +80,7 @@ model:
     reader_kl_weight: 0.5
     retriever_kl_weight:
       mode: cosine
-      num_steps: 5_000
+      num_steps: 10_000
       initial_value: 0.1
       final_value: 1e-5
   module:
@@ -112,8 +112,8 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 20
-    reset_optimizer: false # TODO !!
+    freq: 10
+    reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
@@ -141,7 +141,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 300 # todo> next exp
+  n_retrieved_documents: 300
   n_documents: 10
 
   # tag documents as positive or negative
@@ -163,8 +163,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: false # todo
-      test: false # todo
+      validation: true
+      test: true
 
   # OpenQA builder parameters
   builder:
