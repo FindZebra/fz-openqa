@@ -2,11 +2,9 @@ from typing import Any
 from typing import Optional
 
 import einops
-import rich
 import torch
 from torch.nn import functional as F
 
-from ...utils.pretty import pprint_batch
 from .option_retriever import Similarity
 from .utils import check_only_first_doc_positive
 from .utils import flatten_first_dims

@@ -1,18 +1,14 @@
 import math
-from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
-import einops
 import torch
 import torch.nn.functional as F
 from torch import einsum
 from torch import nn
 from torch import Tensor
-from torch import unique
 
 from fz_openqa.modeling.heads import DprHead
-from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.layers import BayesianLinear
 
 

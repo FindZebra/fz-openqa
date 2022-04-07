@@ -2,7 +2,6 @@ import json
 import re
 
 import datasets
-import rich
 
 TXT_PATTERN = r"^.*\.txt$"
 

@@ -13,7 +13,6 @@ from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch

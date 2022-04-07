@@ -108,7 +108,7 @@ class ReinforceGradients(Gradients):
 
         # `\sum_j log p_j(d_j)`
         log_w = (log_s + log_zeta).log_softmax(dim=-1)
-        log_w = log_w.detach()  # todo: added detach()
+        log_w = log_w.detach()
 
         # compute cartesian product: `D \in \Dset^{(M)}`
         reader_score_, f_phi_, log_w_, log_zeta_, log_s_ = batch_cartesian_product(
@@ -133,7 +133,7 @@ class ReinforceGradients(Gradients):
         log_p_ast_d = log_p_a__d.gather(dim=1, index=targets_).squeeze(1)
 
         # compute the gradient estimate
-        log_N = +math.log(log_s_.shape[-1])
+        log_N = math.log(log_s_.shape[-1])
         log_s_normalized_ = log_s_ - log_s_.logsumexp(dim=-1, keepdim=True) + log_N
         log_p_d__a = f_phi_ - (log_s_normalized_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
         log_p_D__A = log_p_d__a.sum(1)
@@ -152,20 +152,22 @@ class ReinforceGradients(Gradients):
 
         if self.expr == "A":
             h = log_p_ast_d + gamma * log_p_D__A
-            weight = (log_W_ + log_p_ast_d + log_p_ast.unsqueeze(-1)).exp()
+            weight = (log_W_ + log_p_ast_d - log_p_ast.unsqueeze(-1)).exp()
             if log_b is not None:
-                weight -= (log_W_ + log_b + log_p_ast.unsqueeze(-1)).exp()
+                weight -= (log_W_ + log_b - log_p_ast.unsqueeze(-1)).exp()
             loss = -1 * (weight.detach() * h).sum(-1)
+
         elif self.expr in {"B", "B-zero"}:
-            weight = (log_W_ + log_p_ast_d + log_p_ast.unsqueeze(-1)).exp()
+            weight = (log_W_ + log_p_ast_d - log_p_ast.unsqueeze(-1)).exp()
             if log_b is not None:
-                weight -= (log_W_ + log_b + log_p_ast.unsqueeze(-1)).exp()
+                weight -= (log_W_ + log_b - log_p_ast.unsqueeze(-1)).exp()
             reader_loss = log_p_ast
             if self.expr == "B":
                 retriever_loss = (weight.detach() * log_p_d__a.sum(1)).sum(-1)
             else:
                 retriever_loss = 0
             loss = -(reader_loss + gamma * retriever_loss)
+
         elif self.expr == "C":
             if log_b is None:
                 log_b = 0

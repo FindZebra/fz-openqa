@@ -1,10 +1,61 @@
+from collections import defaultdict
 from typing import Dict
 
-import rich
 import torch
 
 from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.toys.model import ToyOptionRetriever
+
+
+def weighted_mc_sample(logits, k: int, n: int = 100):
+    device = logits.device
+    probs = torch.softmax(logits, dim=-1)
+    *bs, n_choices = probs.shape
+    probs = probs.view(-1, n_choices)
+
+    zs = []
+    log_weights = []
+    MAX_ITERS = 1e6
+
+    for probs_k in probs:
+        n_ = n
+        z_counts = defaultdict(lambda: 0)
+        j = 0
+        while len(z_counts.keys()) < k:
+            # sample
+            z = torch.multinomial(probs_k, n_, replacement=True)
+
+            # take the top-k values
+            zu, zc = z.unique(return_counts=True)
+            idx = torch.argsort(zc, descending=True)[:k]
+            zu = zu[idx]
+            zc = zc[idx]
+
+            # update the counts
+            for zu_, zc_ in zip(zu, zc):
+                z_counts[zu_] += zc_
+
+            j += 1
+            if j > MAX_ITERS:
+                raise RuntimeError("Too many iterations")
+
+            if j % 10 == 0:
+                n_ *= 2
+
+        z_counts = list(sorted(z_counts.items(), key=lambda x: x[1], reverse=True))[:k]
+        z = torch.tensor([x for x, c in z_counts], dtype=torch.long, device=device)
+        zc = torch.tensor([c for x, c in z_counts], dtype=logits.dtype, device=device)
+        zs.append(z)
+        log_weights.append(torch.log(zc / zc.sum()))
+
+    zs = torch.stack(zs, dim=0)
+    log_weights = torch.stack(log_weights, dim=0)
+
+    return zs.view(*bs, k), log_weights.view(*bs, k)
+
+
+logits = 5 * torch.randn(2, 3, 1000)
+z, log_w = weighted_mc_sample(logits, k=10)
 
 
 class ToySampler:
@@ -16,6 +67,7 @@ class ToySampler:
         s_range=100,
         batch_size: int = 32,
         n_samples: int = 10,
+        sampler: str = "priority",
     ):
         self.s_range = s_range
         self.data = data
@@ -24,6 +76,9 @@ class ToySampler:
         self.scores = {k: None for k in data.keys()}
         self.batch_size = batch_size
         self.n_samples = n_samples
+        self.sampler = {"priority": PrioritySampler.sample, "weighted_mc": weighted_mc_sample}[
+            sampler
+        ]
 
     @torch.no_grad()
     def index(self, model: ToyOptionRetriever = None):
@@ -56,7 +111,7 @@ class ToySampler:
         q_scores = self.scores[split][qids]
 
         # priority sample
-        z, log_weight = PrioritySampler.sample(q_scores, k, mode="uniform")
+        z, log_weight = self.sampler(q_scores, k)
 
         # slice the scores
         q_scores = q_scores.gather(2, index=z)

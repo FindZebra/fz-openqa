@@ -3,8 +3,6 @@ from typing import Any
 from typing import Dict
 
 from fz_openqa.datamodules.builders import DatasetBuilder
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.nesting import Expand
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
 
@@ -19,21 +17,28 @@ def get(row: Dict[str, Any], key: str, *i: int, default=None) -> Any:
 
 
 def format_row_flat_questions(
-    row: Dict[str, Any], *, tokenizer, dataset_builder: DatasetBuilder, **kwargs
+    row: Dict[str, Any],
+    *,
+    tokenizer,
+    dataset_builder: DatasetBuilder,
+    max_documents: int = 3,
+    **kwargs,
 ) -> str:
     decode_kwargs = {
         "skip_special_tokens": False,
         "tokenizer": tokenizer,
     }
 
-    repr = dataset_builder.format_row(row)
+    repr = dataset_builder.format_row(
+        row,
+    )
     repr += get_separator("-") + "\n"
     repr += f"* Documents: n={len(row['document.text'])}"
     if "document.match_score" in row:
         repr += f", n_positive={sum(row['document.match_score'] > 0)}, "
         f"n_negative={sum(row['document.match_score'] == 0)}\n"
     repr += "\n"
-    for j in range(min(len(row["document.text"]), 3)):
+    for j in range(min(len(row["document.text"]), max_documents)):
         repr += get_separator(".") + "\n"
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
@@ -59,7 +64,7 @@ def format_row_flat_questions(
 
 
 def format_row_nested_questions(
-    row: Dict[str, Any], *, tokenizer, document_nesting_level: int, **kwargs
+    row: Dict[str, Any], *, tokenizer, document_nesting_level: int, max_documents: int = 5, **kwargs
 ) -> str:
     decode_kwargs = {
         "skip_special_tokens": False,
@@ -86,7 +91,9 @@ def format_row_nested_questions(
         if document_nesting_level == 2:
             # print documents attached to the question-answer pair
             document_row = {k: v[i] for k, v in row.items() if k.startswith("document.")}
-            repr += repr_documents(document_row, locator, **decode_kwargs)
+            repr += repr_documents(
+                document_row, locator, **decode_kwargs, max_documents=max_documents
+            )
 
     if document_nesting_level == 1:
         repr += repr_documents(row, "", **decode_kwargs)
@@ -94,7 +101,7 @@ def format_row_nested_questions(
     return repr
 
 
-def repr_documents(row, locator, **decode_kwargs) -> str:
+def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str:
     """represent a row of documents"""
     repr = ""
     repr += get_separator(".") + "\n"
@@ -106,16 +113,16 @@ def repr_documents(row, locator, **decode_kwargs) -> str:
         )
     repr += "\n"
     # for each document
-    for j in range(min(len(row["document.input_ids"]), 5)):
+    for j in range(min(len(row["document.input_ids"]), max_documents)):
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
         repr += f"|---* {locator} - Document #{1 + j} "
-        repr += f"(id={get(row, 'document.idx', j)}, row_idx={get(row,'document.row_idx', j)}), "
+        repr += f"(id={get(row, 'document.idx', j)}, row_idx={get(row, 'document.row_idx', j)}), "
         repr += f"score={row['document.retrieval_score'][j]:.2f}, "
         if "document.match_score" in row:
             repr += f"match_score={row['document.match_score'][j]}, " f"match_on={match_on}"
         if "document.question_idx" in row:
-            repr += f", question_idx={get(row,'document.question_idx', j)}"
+            repr += f", question_idx={get(row, 'document.question_idx', j)}"
         repr += "\n"
 
         doc_style = "yellow" if match_on else "white"

@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=fz-openqa
 #SBATCH --output=./slurm/%j.out
-#SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
-#SBATCH -p gpu --gres=gpu:titanrtx:4
+#SBATCH --ntasks=1 --cpus-per-task=32 --mem=128G
+#SBATCH -p gpu --gres=gpu:titanrtx:8
 #SBATCH --time=1-00:00:00
 
 # variables
-NAME="colbert-bayes-reinforce-v4.2.b-es-f15-k10-P1000-DIKU-8"
+NAME="xyt-DIKU-scaled-fxmatch-inbatch-v4.4.A-L350-9.3.1"
 setup_with_model=false
 
 # display basic info
@@ -24,7 +24,12 @@ fi
 
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
-  +device_batch_size=2 \
+  model/module/gradients=in_batch \
+  base.device_batch_size=2 \
+  base.sharing_strategy=file_descriptor \
+  trainer.precision=32 \
+  datamodule.num_workers=12 \
+  datamodule.builder.dataset_builder.max_length=350 \
   +setup_with_model=${setup_with_model} \
   +kill_es=true \
   logger.wandb.name=${NAME}

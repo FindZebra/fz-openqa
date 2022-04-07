@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 import torch
 
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
@@ -9,8 +7,6 @@ from fz_openqa.datamodules.index.utils.maxsim.base_worker import TensorWorker
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimInput
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
-
-logger = logging.getLogger(__name__)
 
 
 class MaxSimWorker(TensorWorker):

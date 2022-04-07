@@ -8,11 +8,9 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
-from hydra._internal.instantiate._instantiate2 import _resolve_target
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
@@ -172,6 +170,7 @@ class Module(nn.Module, ABC):
             assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
         else:
             bert_config = {}
+
         bert: BertPreTrainedModel = maybe_instantiate(bert, **bert_config)
 
         # extend BERT embeddings for the added special tokens

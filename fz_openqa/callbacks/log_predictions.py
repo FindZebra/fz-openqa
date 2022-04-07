@@ -1,17 +1,17 @@
-import logging
 from typing import Any
 from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
 import spacy
+import wandb
+from loguru import logger
 from pip._internal import main as pipmain
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
 
-import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class LogPredictions(Callback):
 
         html = "<h1>Model predictions</h1>\n"
         for k, row in enumerate(self.data):
-            html += '<div tag="Question" style="font-size:11px">\n'
+            html += '<div tag="Question" style="font-size:12px">\n'
             html += f"<h2>Q #{k}</h2>\n"
             probs = row["_reader_logits_"].softmax(-1)
             scores = row["document.retrieval_score"]

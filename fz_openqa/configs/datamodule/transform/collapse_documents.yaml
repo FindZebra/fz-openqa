@@ -1,4 +1,4 @@
 _target_: fz_openqa.datamodules.pipes.CollapseDocuments
 
 update: true
-keys: [input_ids, attention_mask]
+keys: [ input_ids, attention_mask ]

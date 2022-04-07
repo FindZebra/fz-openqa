@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import logging
+import math
 from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
-import rich
 import torch
-from datasets import Split
+from loguru import logger as log
 from torch import Tensor
 
-from fz_openqa.datamodules.index.dense import FaissIndex
+from fz_openqa.datamodules.index.dense import DenseIndex
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.io import log_mem_size
@@ -21,12 +20,11 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
+
 # required to allow searching faiss with tensors
 
-log = logging.getLogger(__name__)
 
-
-class ColbertIndex(FaissIndex):
+class ColbertIndex(DenseIndex):
     """
     Implementation of the Colbert index. This implementation supports multi-GPU.
     Half of the GPUs are allocated to faiss, and the other half to the MaxSim operator.
@@ -47,13 +45,12 @@ class ColbertIndex(FaissIndex):
     _max_add_per_gpu = 1 << 25
     _max_num_proc: int = 1
 
-    no_fingerprint: List[str] = FaissIndex.no_fingerprint + [
+    no_fingerprint: List[str] = DenseIndex.no_fingerprint + [
         "_max_sim",
         "_vectors" "_emb2pid",
         "in_memory",
         "_is_gpu",
         "_max_add_per_gpu",
-        "keep_maxsim_on_cpu",
         "maxsim_chunksize",
     ]
 
@@ -61,20 +58,12 @@ class ColbertIndex(FaissIndex):
         self,
         *args,
         p: int = 100,
-        keep_maxsim_on_cpu: bool = False,
         maxsim_chunksize: int = 10000,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.p = p
-        self.keep_maxsim_on_cpu = keep_maxsim_on_cpu
         self.maxsim_chunksize = maxsim_chunksize
-
-    def _preprocess_query(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
-    ) -> Batch:
-        """Preprocess the batch before query"""
-        return self.predict_queries(batch, idx=idx, split=split, format=OutputFormat.TORCH)
 
     def _call_batch(
         self,
@@ -95,6 +84,9 @@ class ColbertIndex(FaissIndex):
         if self._max_sim is None:
             self._init_maxsim()
 
+        # pprint_batch(query, f"{type(self)} : query")
+
+        doc_ids = query.get("question.document_idx", None)
         query = self._preprocess_query(query, idx=idx, **kwargs)
         q_vectors: Tensor = query[Predict.output_key]
 
@@ -109,7 +101,11 @@ class ColbertIndex(FaissIndex):
         search_results = None
         for idx, i in enumerate(range(0, batch_size, eff_batch_size)):
             chunk_i = q_vectors[i : i + eff_batch_size]
-            data = self._max_sim(chunk_i, k=k, p=self.p, idx=idx)
+            if doc_ids is not None:
+                doc_ids_i = doc_ids[i : i + eff_batch_size]
+            else:
+                doc_ids_i = None
+            data = self._max_sim(chunk_i, k=k, p=self.p, idx=idx, doc_ids=doc_ids_i)
 
             # cast to SearchResult
             r = SearchResult(
@@ -126,9 +122,9 @@ class ColbertIndex(FaissIndex):
         return self._format_output(search_results, output_format=output_format)
 
     def _init_maxsim(self):
-        faiss_devices, maxsim_devices = self._allocate_gpus(faiss.get_num_gpus())
+        faiss_devices, maxsim_devices = self._allocate_gpus()
         self._max_sim = MaxSim(
-            token_index=self.index_file,
+            token_index=self.index_path,
             vectors=self.vectors_table,
             emb2pid=self.emb2pid,
             ranking_devices=maxsim_devices,
@@ -138,14 +134,12 @@ class ColbertIndex(FaissIndex):
         self._max_sim.cuda()
 
     def free_memory(self):
-        if hasattr(self, "_index") and self._index is not None:
-            del self._index
-            self._index = None
+        super(ColbertIndex, self).free_memory()
         if hasattr(self, "_max_sim") and self._max_sim is not None:
             del self._max_sim
             self._max_sim = None
 
-    def _build_ends(self):
+    def _train_ends(self):
         self.free_memory()
 
     def __del__(self):
@@ -172,21 +166,24 @@ class ColbertIndex(FaissIndex):
             self._emb2pid = build_emb2pid_from_vectors(self.vectors_table)
         return self._emb2pid
 
-    def _allocate_gpus(self, n_gpus):
+    def _allocate_gpus(self):
         """Allocate GPUs to the faiss index and to max_sim"""
+        n_gpus = torch.cuda.device_count()
         gpus = list(range(n_gpus))
-        if n_gpus > 1:
-            if not self.keep_maxsim_on_cpu:
-                n_maxsim = int(n_gpus * 3 / 4)
-                faiss_gpus = gpus[n_maxsim:]
-                maxsim_gpus = gpus[:n_maxsim]
-            else:
-                faiss_gpus = gpus
-                maxsim_gpus = []
+        log.info(f"Found: {n_gpus} GPUs: {gpus}")
+        if self.keep_faiss_on_cpu:
+            faiss_gpus = []
+            maxsim_gpus = gpus
+        elif n_gpus > 1:
+            n_maxsim = min(-(-int(math.floor(n_gpus * 0.75))), n_gpus - 1)
+            faiss_gpus = gpus[n_maxsim:]
+            maxsim_gpus = gpus[:n_maxsim]
         elif n_gpus == 1:
             faiss_gpus = gpus
-            maxsim_gpus = []
+            maxsim_gpus = gpus
         else:
             faiss_gpus = []
             maxsim_gpus = []
+
+        log.info(f"Device allocation : faiss={faiss_gpus} maxsim={maxsim_gpus}")
         return faiss_gpus, maxsim_gpus

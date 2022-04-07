@@ -1,9 +1,9 @@
-import math
 from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
 import einops
+import rich
 import torch
 import torch.nn.functional as F
 from torch import einsum
@@ -26,13 +26,15 @@ class DprHead(Head):
         bias: bool = True,
         share_parameters: bool = False,
         bayesian: bool = False,
-        learn_temperature: bool = False,
-        temperature: float = 1.0,
-        **kwargs
+        learn_scale: bool = False,
+        scale: float = 1.0,
+        **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
+        self.scale_init = scale
+        self.register_buffer("scaled", torch.tensor(0))
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -42,19 +44,51 @@ class DprHead(Head):
             if share_parameters:
                 self.d_head = self.q_head
             else:
-                self.d_head = Layer(self.input_size, self.output_size, bias=self.bias)
+                # NB: using deepcopy instead of initializing a new head is critical
+                # to ensure stable training. Do not re-init the heads!
+                self.d_head = deepcopy(self.q_head)
         else:
             self.q_head = self.d_head = None
 
-        # temperate
-        log_temperature = torch.tensor(math.log(temperature), dtype=torch.float)
-        if learn_temperature:
-            self.log_temperature = nn.Parameter(log_temperature)
+        scale_value = torch.tensor(1.0, dtype=torch.float)
+        offset_value = torch.tensor(0.0, dtype=torch.float)
+        if learn_scale:
+            self._scale = nn.Parameter(scale_value)
+            self._offset = nn.Parameter(offset_value)
         else:
-            self.register_buffer("log_temperature", log_temperature)
+            self.register_buffer("_scale", scale_value)
+            self.register_buffer("_offset", offset_value)
 
-    def temperature(self):
-        return self.log_temperature.exp()
+    @property
+    def scale_value(self):
+        return self._scale
+
+    @property
+    def offset(self):
+        return self._offset
+
+    def temperature(self) -> None:
+        return self.scale_value.pow(-1)
+
+    def set_scale(self, scores: Tensor):
+        self._scale.data = self.scale_init * scores.std().detach().pow(-1)
+        self._offset.data = -scores.mean().detach() * self._scale.data
+        self.scaled.data += 1
+
+        scores = self.scale(scores)
+        rich.print(
+            f"> standardized | out.mean={scores.mean():.3f}, "
+            f"out.std={scores.std():.3f}, "
+            f"scale={self._scale.data:.3f}, "
+            f"offset={self._offset.data:.3f}, "
+            f"scaled={self.scaled}"
+        )
+
+        return scores
+
+    def scale(self, hq: Tensor) -> Tensor:
+        hq = hq * self.scale_value
+        return hq
 
     def forward(
         self,
@@ -65,7 +99,7 @@ class DprHead(Head):
         q_mask: Optional[Tensor] = None,
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tensor:
 
         # preprocess
@@ -73,7 +107,13 @@ class DprHead(Head):
         hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
 
         # compute the score
-        return self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+        score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+
+        if self.scaled < 1:
+            rich.print(f">> SCALING: {self.scaled} : {self.scale_init}")
+            score = self.set_scale(score)
+
+        return score + self.offset
 
     def score(
         self,
@@ -82,7 +122,7 @@ class DprHead(Head):
         hd: Tensor,
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tensor:
         if not self.across_batch:
             return einsum("boh, bodh -> bod", hq, hd)
@@ -101,10 +141,9 @@ class DprHead(Head):
 
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
-            # cls_repr /= float(cls_repr.shape[-1])**0.5
 
         if head == "question":
-            cls_repr = cls_repr / self.temperature()
+            cls_repr = self.scale(cls_repr)
 
         return cls_repr
 

@@ -1,4 +1,3 @@
-import logging
 from functools import partial
 from typing import Dict
 from typing import List
@@ -10,6 +9,7 @@ import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
+from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
-from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
@@ -25,8 +24,6 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
-
-logger = logging.getLogger(__name__)
 
 
 class DataModule(LightningDataModule):
@@ -183,7 +180,7 @@ class DataModule(LightningDataModule):
         return f"{self.__class__.__name__}(\nbuilder={self.builder}\n)"
 
     @rank_zero_only
-    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False):
+    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False, **kwargs):
         """Sample a batch and pretty print it."""
         train_batch = next(iter(self.train_dataloader()))
 
@@ -200,11 +197,11 @@ class DataModule(LightningDataModule):
         try:
             for i in range(min(n_samples, infer_batch_size(train_batch))):
                 print(get_separator())
-                self.display_one_sample({k: v[i] for k, v in train_batch.items()})
+                self.display_one_sample({k: v[i] for k, v in train_batch.items()}, **kwargs)
         except Exception as e:
             logger.exception(e)
         print(get_separator("="))
 
-    def display_one_sample(self, example: Dict[str, torch.Tensor]):
+    def display_one_sample(self, example: Dict[str, torch.Tensor], **kwargs):
         """Decode and print one example from the batch"""
-        rich.print(self.builder.format_row(example))
+        rich.print(self.builder.format_row(example, **kwargs))

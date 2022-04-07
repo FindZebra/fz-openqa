@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import re
 import unicodedata
@@ -16,6 +15,7 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
+from loguru import logger as log
 from rich.progress import track
 
 from fz_openqa.datamodules.builders import DatasetBuilder
@@ -26,8 +26,6 @@ from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.pretty import pprint_batch
-
-log = logging.getLogger(__name__)
 
 CLIENT_SECRET_FILE = f"{os.getcwd()}/fz_openqa/utils/client-secrets.json"
 API_NAME = "drive"

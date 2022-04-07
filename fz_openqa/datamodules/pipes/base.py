@@ -1,5 +1,4 @@
 import json
-import logging
 from abc import abstractmethod
 from copy import copy
 
@@ -8,8 +7,6 @@ try:
 except Exception:
     from singledispatchmethod import singledispatchmethod
 
-
-logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -34,7 +31,7 @@ from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.functional import get_batch_eg
 from fz_openqa.utils.json_struct import reduce_json_struct
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class Pipe(Component):
@@ -200,16 +197,21 @@ class Pipe(Component):
             The output batch
         """
 
-        # filter some input keys
-        _batch = self._filter_keys(batch)
+        try:
+            # filter some input keys
+            _batch = self._filter_keys(batch)
 
-        # process the batch
-        output = self._call_batch(_batch, idx=idx, **kwargs)
+            # process the batch
+            output = self._call_batch(_batch, idx=idx, **kwargs)
 
-        # update the input batch with the output if update is set to True
-        if self.update:
-            batch.update(output)
-            output = batch
+            # update the input batch with the output if update is set to True
+            if self.update:
+                batch.update(output)
+                output = batch
+
+        except Exception as e:
+            logger.exception(e)
+            raise e
 
         return output
 
@@ -242,11 +244,17 @@ class Pipe(Component):
         if self.update is True:
             raise AttributeError("Pipe.update is set to True, cannot update a list of examples")
 
-        # filter some input keys
-        _egs = list(map(self._filter_keys, examples))
+        try:
+            # filter some input keys
+            _egs = list(map(self._filter_keys, examples))
 
-        # process the batch
-        return self._call_egs(_egs, idx=idx, **kwargs)
+            # process the batch
+            output = self._call_egs(_egs, idx=idx, **kwargs)
+        except Exception as e:
+            logger.exception(e)
+            raise e
+
+        return output
 
     @__call__.register(Dataset)
     def _(

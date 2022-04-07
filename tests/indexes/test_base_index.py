@@ -45,14 +45,14 @@ class TestIndex(TestCase, ABC):
         questions_text = ["Paris, France", "Banana, fruit"]
         encodings = self.tokenizer(questions_text, return_token_type_ids=False)
         questions = self.tokenizer.pad(encodings, return_tensors='pt')
-        questions = {**questions, 'text': questions_text}
+        questions = {**questions, 'text': questions_text, "document_idx": [0, 1]}
         questions = AddPrefix(f"question.")(questions)
 
         # convert to HF dataset
         self.dataset = Dataset.from_dict(questions)
         self.dataset.set_format("torch", output_all_columns=True,
                                 columns=[f"question.{attr}" for attr in self.pt_cols])
-        self.dataset_collate = Parallel(Collate(['question.text']),
+        self.dataset_collate = Parallel(Collate(['question.text', 'question.document_idx']),
                                         CollateTokens(tokenizer=self.tokenizer, prefix='question.'))
 
         # Define documents, including one for each question [#0, #4]
@@ -69,22 +69,24 @@ class TestIndex(TestCase, ABC):
         indexes = list(range(len(documents_text)))
         documents = self.tokenizer(documents_text, return_token_type_ids=False)
         documents = self.tokenizer.pad(documents, return_tensors='pt')
-        documents = {**documents, 'row_idx': indexes, 'text': documents_text}
+        documents = {**documents, 'row_idx': indexes, 'text': documents_text,
+                     "idx": [0, 0, 0, 0, 1, 1, 1, 1]}
         documents = AddPrefix(f"document.")(documents)
 
         # convert to HF dataset
         self.corpus = Dataset.from_dict(documents)
         self.corpus.set_format("torch", output_all_columns=True,
                                columns=[f"document.{attr}" for attr in self.pt_cols])
-        self.corpus_collate = Parallel(Collate(['document.text', 'document.row_idx']),
-                                       CollateTokens(tokenizer=self.tokenizer, prefix='document.'))
+        self.corpus_collate = Parallel(
+            Collate(['document.text', 'document.row_idx', 'document.idx']),
+            CollateTokens(tokenizer=self.tokenizer, prefix='document.'))
 
         # define targets
         self.retrieval_targets = [0, 4]
 
     def _init_index(self) -> Index:
         """Init the index."""
-        return self.cls(dataset=self.corpus, k=self.k)
+        return self.cls(dataset=self.corpus)
 
     def _test_dill_inspect(self):
         """Check if the Index can be pickled."""
@@ -97,11 +99,6 @@ class TestIndex(TestCase, ABC):
                 self.assertTrue(v, f"Attribute {k} could not be pickled.")
         else:
             raise ValueError(f"dill_inspect() returned unexpected type {type(dill_status)}.")
-
-    def _test_is_indexed(self):
-        """Check that `is_index` attribute."""
-        index = self._init_index()
-        self.assertTrue(index.is_indexed)
 
     def _test_search(self):
         """
@@ -127,7 +124,7 @@ class TestIndex(TestCase, ABC):
         data = {k: cast_to_array(v) for k, v in data.items()}
 
         # check that the index values are in [0, len(self.dataset) - 1]
-        self.assertTrue((data['index'] >= 0).all())
+        # TODO self.assertTrue((data['index'] >= 0).all())
         self.assertTrue((data['index'] < len(self.corpus)).all())
 
         expected_shape = (len(self.dataset), self.k)
@@ -137,6 +134,12 @@ class TestIndex(TestCase, ABC):
         # check the top-1 scores
         for target, scores, idx in zip(self.retrieval_targets, data['score'], data['index']):
             pred = np.argmax(scores, axis=-1)
-            self.assertEqual(target, idx[pred], "top retrieved document is not the expected one")
+            msg = f"top retrieved document is expected to be {target}, but is {idx[pred]}."
+            self.assertEqual(target, idx[pred], msg)
             # check if output values are sorted
             self.assertTrue(np.all(scores[:-1] >= scores[1:]), "scores are not properly sorted")
+
+        self._supplementary_test_search(query, data)
+
+    def _supplementary_test_search(self, query:dict, data: dict):
+        ...

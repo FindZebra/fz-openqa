@@ -2,18 +2,19 @@ import os
 import shutil
 import tempfile
 
-import faiss
 from datasets import Dataset
 
-from fz_openqa.datamodules.index import Index, FaissIndex
+from fz_openqa.datamodules.index import Index, DenseIndex
 from fz_openqa.modeling.zero_shot import ZeroShot
 from tests.indexes.test_base_index import TestIndex
 
 
-class TestFaissIndex(TestIndex):
+class TestDenseIndex(TestIndex):
     """Test the faiss index without using the Trainer to process data with the model"""
-    cls: Index.__class__ = FaissIndex
+    cls: Index.__class__ = DenseIndex
     _model_head = "flat"
+    index_handler= "flat"
+    index_factory = "Flat"
 
     def setUp(self) -> None:
         super().setUp()
@@ -29,14 +30,21 @@ class TestFaissIndex(TestIndex):
         shutil.rmtree(self.cache_dir)
 
     @staticmethod
-    def _init_index_with(index_cls: Index.__class__, *, corpus: Dataset, model=None, collate=None,
+    def _init_index_with(index_cls: Index.__class__,
+                         *,
+                         corpus: Dataset,
+                         model=None,
+                         collate=None,
+                         handler=None,
+                         index_factory=None,
                          **kwargs) -> Index:
-        return index_cls(dataset=corpus, model=model, batch_size=2,
+        return index_cls(dataset=corpus,
+                         model=model,
+                         batch_size=2,
                          model_output_keys=['_hq_', '_hd_'],
                          collate_pipe=collate,
-                         faiss_args={
-                             "factory": "Flat",
-                             "metric_type": faiss.METRIC_INNER_PRODUCT},
+                         index_factory=index_factory,
+                         handler=handler,
                          dtype="float32",
                          persist_cache=False,
                          # colbert p value
@@ -44,15 +52,17 @@ class TestFaissIndex(TestIndex):
                          **kwargs)
 
     def _init_index(self) -> Index:
-        return TestFaissIndex._init_index_with(self.cls, corpus=self.corpus, model=self.model,
+        return TestDenseIndex._init_index_with(self.cls,
+                                               corpus=self.corpus,
+                                               model=self.model,
                                                collate=self.corpus_collate,
-                                               cache_dir=self.cache_dir)
+                                               cache_dir=self.cache_dir,
+                                               handler=self.index_handler,
+                                               index_factory=self.index_factory)
+
 
     def test_dill_inspect(self):
         self._test_dill_inspect()
-
-    def test_is_index(self):
-        self._test_is_indexed()
 
     def test_search(self):
         self._test_search()

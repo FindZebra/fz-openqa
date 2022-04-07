@@ -114,6 +114,6 @@ class Gdrive:
                 "mimeType": "*/*",
             }
             # Create new file
-            file = self._instance.files().create(body=file_metadata, media_body=content).execute()
+            file = self._instance.files().build(body=file_metadata, media_body=content).execute()
 
         return file

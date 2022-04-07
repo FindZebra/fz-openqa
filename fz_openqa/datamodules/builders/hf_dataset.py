@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 from typing import Callable
@@ -10,6 +9,7 @@ from typing import Optional
 
 from datasets import DatasetDict
 from datasets import load_dataset
+from loguru import logger
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
@@ -26,8 +26,6 @@ from fz_openqa.datamodules.utils.dataset import take_subset
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 
 def cache_hf_dataset(func):
@@ -206,8 +204,13 @@ class HfDatasetBuilder(DatasetBuilder):
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """format a row from the dataset"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """format a row from the dataset
+
+        Parameters
+        ----------
+        **kwargs
+        """
         return pretty_decode(
             row["input_ids"],
             tokenizer=self.tokenizer,

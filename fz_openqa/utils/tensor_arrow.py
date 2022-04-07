@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import multiprocessing as mp
 import shutil
 from pathlib import Path
@@ -17,8 +16,7 @@ import pyarrow as pa
 import torch
 from datasets.features import numpy_to_pyarrow_listarray
 from datasets.table import MemoryMappedTable
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 from fz_openqa.utils.datastruct import PathLike
 

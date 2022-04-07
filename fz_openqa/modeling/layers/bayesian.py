@@ -1,6 +1,5 @@
 import math
 
-import rich
 import torch
 from torch import nn
 from torch.distributions import MultivariateNormal

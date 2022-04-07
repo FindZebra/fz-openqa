@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-import logging
-from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import T
 from typing import Tuple
 from typing import Union
 
-import faiss
-import numpy as np
-import rich
 import torch
+from loguru import logger
 from torch import Tensor
 
+from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import ctx
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import DeviceQueue
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
 from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.utils.maxsim.datastruct import FaissInput
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimInput
 from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
@@ -27,8 +22,6 @@ from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-logger = logging.getLogger(__name__)
 
 
 class MaxSim(torch.nn.Module):
@@ -50,7 +43,7 @@ class MaxSim(torch.nn.Module):
     def __init__(
         self,
         *,
-        token_index: faiss.Index | PathLike,
+        token_index: IndexHandler | PathLike,
         vectors: TensorArrowTable | Tensor,
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],
@@ -59,10 +52,16 @@ class MaxSim(torch.nn.Module):
         max_queue_size: int = 5,
     ):
         super(MaxSim, self).__init__()
+        logger.info(
+            f"Setting MaxSim with "
+            f"{len(ranking_devices)} ranking devices "
+            f"and {len(faiss_devices)} faiss devices."
+        )
         # init the token_index
         self.token_index = TokenIndex(token_index, faiss_devices)
 
         # Store `emb2pid`
+        self._validate_emb2pid(emb2pid, vectors)
         self.register_buffer("emb2pid", emb2pid)
 
         # setup the Rankers
@@ -79,7 +78,7 @@ class MaxSim(torch.nn.Module):
         # Initialize Input and Output queues
         self.ranking_input_queues: List[ctx.Queue] = []
         self.ranking_output_queues: List[ctx.Queue] = []
-        for device in ranking_devices:
+        for _ in ranking_devices:
             q = ctx.Queue(maxsize=max_queue_size)
             self.ranking_input_queues.append(q)
             q = ctx.Queue(maxsize=max_queue_size)
@@ -89,10 +88,26 @@ class MaxSim(torch.nn.Module):
         self.receivers = [iter(q.get, WorkerSignal.EXIT) for q in self.ranking_output_queues]
 
         # initialize the MaxSim workers
-        self.maxsim_workers = self._init_maxsim_rankers(vectors, ranking_devices, max_chunksize)
+        self.maxsim_workers = self._init_maxsim_rankers(
+            vectors, self.ranking_devices, max_chunksize
+        )
 
         # initialize the MaxSimReducer
-        self.maxsim_reducer = MaxSimReducer(device=ranking_devices[-1])
+        self.maxsim_reducer = MaxSimReducer(device=self.ranking_devices[-1])
+
+    @staticmethod
+    def _validate_emb2pid(emb2pid, vectors):
+        if set(range(len(vectors))) != set(emb2pid.unique().tolist()):
+            raise ValueError(
+                f"All positions in `vector` must be in `emb2pid`."
+                f"{set(range(len(vectors)))} != {set(emb2pid.unique().tolist())}"
+            )
+
+        if emb2pid.min() != 0:
+            raise ValueError(f"`emb2pid` must start at 0. Found {emb2pid.min()}")
+
+        if emb2pid.max() != len(vectors) - 1:
+            raise ValueError(f"`emb2pid` must end at {len(vectors) - 1}. Found {emb2pid.max()}")
 
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
@@ -114,8 +129,19 @@ class MaxSim(torch.nn.Module):
             maxsim_workers.append(worker)
 
         # test the consistency of the partition
-        assert len(vectors) == sum(len(w.max_sim.vectors) for w in maxsim_workers)
-        assert (vectors[-1].data == maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all()
+        n_vecs_workers = sum(len(w.max_sim.vectors) for w in maxsim_workers)
+        if len(vectors) != n_vecs_workers:
+            raise ValueError(
+                f"The partition is not consistent with the vectors. "
+                f"len(vectors)={len(vectors)}, "
+                f"workers={[len(w.max_sim.vectors) for w in maxsim_workers]}, "
+                f"sum={n_vecs_workers}"
+            )
+        if (vectors[-1].data != maxsim_workers[-1].max_sim.vectors[-1].cpu().data).all():
+            raise ValueError(
+                "The partition is not consistent with the vectors. "
+                "The last vector does not match the last vector of the last worker."
+            )
 
         # start the workers
         for w in maxsim_workers:
@@ -171,9 +197,12 @@ class MaxSim(torch.nn.Module):
     def _collect_worker_outputs(self):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
 
-    def _process_batch(self, q_vectors: Tensor, *, p: int, k: int) -> MaxSimOutput:
+    def _process_batch(
+        self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
+    ) -> MaxSimOutput:
         # process q_vectors using the token-level faiss index
-        token_ids = self.token_index(q_vectors, p)
+        token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
+
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
 
         # send the token_ids to each device
@@ -191,12 +220,18 @@ class MaxSim(torch.nn.Module):
 
     @torch.no_grad()
     def __call__(
-        self, q_vectors: Tensor | WorkerSignal, *, k: int = None, p: int = None, **kwargs
+        self,
+        q_vectors: Tensor | WorkerSignal,
+        *,
+        k: int = None,
+        p: int = None,
+        doc_ids: Optional[List[int]] = None,
+        **kwargs,
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
             assert p is not None and k is not None, "p and k must be specified"
-            return self._process_batch(q_vectors, p=p, k=k)
+            return self._process_batch(q_vectors, p=p, k=k, doc_ids=doc_ids)
 
         elif isinstance(q_vectors, WorkerSignal):
             # send the signal through the pipeline

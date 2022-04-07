@@ -1,5 +1,4 @@
 from typing import List
-from typing import Optional
 
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch

@@ -1,4 +1,3 @@
-import logging
 import os
 import re
 from functools import partial
@@ -12,6 +11,7 @@ from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
+from loguru import logger
 
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import AppendDot
@@ -26,7 +26,6 @@ from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel
@@ -38,8 +37,6 @@ from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 TXT_PATTERN = r"^.*\.txt$"
 
@@ -347,8 +344,13 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return Parallel(raw_collate_pipe, simple_attr_pipe, document_pipe)
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one example from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one example from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {"skip_special_tokens": False}
         return pretty_decode(
             row["document.input_ids"],

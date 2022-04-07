@@ -10,7 +10,6 @@ from typing import Union
 import numpy as np
 from torch import Tensor
 
-from ...utils.pretty import pprint_batch
 from ...utils.pretty import repr_batch
 from ...utils.shape import infer_batch_shape
 from .base import Pipe

@@ -1,5 +1,4 @@
 import json
-import logging
 from functools import partial
 from pathlib import Path
 from time import time
@@ -7,21 +6,18 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import dill
 import jsondiff
 import rich
 from datasets import Dataset
 from datasets import DatasetDict
+from loguru import logger
 
-from fz_openqa.datamodules.index import FaissIndex
-from fz_openqa.datamodules.index.index_pipes import SearchCorpus
-from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
-
-logger = logging.getLogger(__name__)
 
 
 class MapWithFingerprint:
@@ -87,7 +83,7 @@ class MapWithFingerprint:
             # process each split
             start_time = time()
             dataset[key] = dset.map(
-                partial(pipe, split=key),
+                partial(pipe, split=str(key)),
                 new_fingerprint=fingerprint,
                 with_indices=True,
                 **kwargs,
@@ -144,7 +140,7 @@ class MapWithFingerprint:
     def _check_pickling(self, pipe: Pipe):
         """check that the pipe can be pickled, which is necessary for multiprocessing"""
         try:
-            if not pipe.dill_inspect(reduce=True):
+            if not dill.pickles(pipe):
                 rich.print(pipe.dill_inspect())
                 raise TypeError(
                     "Couldn't pickle pipe. Code would fail if `num_proc`>1. "

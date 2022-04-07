@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 from typing import Dict
@@ -22,11 +23,16 @@ from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.toys.dataset import generate_toy_datasets
 from fz_openqa.toys.model import ToyOptionRetriever
+from fz_openqa.toys.running_stats import RunningStats
 from fz_openqa.toys.sampler import ToySampler
 from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 import wandb
+
+
+def norm(x):
+    return np.linalg.norm(x.reshape(-1), 2)
 
 
 def finish_wandb():
@@ -64,13 +70,17 @@ def run(config: DictConfig) -> None:
         logger = None
     datasets, knowledge = load_datasets(config)
     model = ToyOptionRetriever(
-        hidden=config.hidden_size, max_chunksize=10_000, share_backbone=config.share_backbone
+        hidden=config.hidden_size,
+        max_chunksize=10_000,
+        temperature=config.temperature,
+        share_backbone=config.share_backbone,
     )
     model.to(config.device)
     reinforce_args = {
         "use_baseline": config.use_baseline,
         "baseline_dtype": torch.float16,
         "max_baseline_samples": config.max_baseline_samples,
+        "gamma": config.gamma,
     }
     estimator_cls, estimator_args = {
         "in_batch": (InBatchGradients, {}),
@@ -87,12 +97,27 @@ def run(config: DictConfig) -> None:
         s_range=100,
         batch_size=config.batch_size,
         n_samples=config.n_samples,
+        sampler=config.sampler,
     )
 
     # training
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    if config.share_backbone:
+        param_groups = model.parameters()
+    else:
+        param_groups = [
+            {
+                "params": [p for n, p in model.named_parameters() if "reader" in n],
+                "lr": config.reader_lr,
+            },
+            {
+                "params": [p for n, p in model.named_parameters() if "retriever" in n],
+                "lr": config.retriever_lr,
+            },
+        ]
+    optimizer = torch.optim.Adam(param_groups, lr=config.lr)
     num_epochs = config.num_epochs
     global_step = 0
+    gradients = defaultdict(RunningStats)
     for epoch in range(num_epochs):
         train_accuracy = Accuracy().to(config.device)
         with Status("Indexing dataset.."):
@@ -110,7 +135,7 @@ def run(config: DictConfig) -> None:
         )
         for i, batch in enumerate(sampler.iter_split("train")):
             global_step += 1
-            optimizer.zero_grad()
+
             output = model.compute_score(q=batch["question"], d=batch["evidence"])
             diagnostics = estimator(
                 reader_score=output["reader_score"],
@@ -120,9 +145,16 @@ def run(config: DictConfig) -> None:
                 retrieval_log_weight=batch["retrieval_log_weight"],
             )
 
-            loss = diagnostics["loss"].mean()
+            loss = diagnostics["loss"]
+            loss = loss.mean()
             loss.backward()
             optimizer.step()
+
+            for k, p in model.named_parameters():
+                if p.requires_grad:
+                    gradients[k].push(p.grad.data.clone(), per_dim=True)
+
+            optimizer.zero_grad()
 
             # retriever diagnostics
             OptionRetriever._retriever_diagnostics(
@@ -165,6 +197,27 @@ def run(config: DictConfig) -> None:
                     global_step=global_step,
                     epoch=epoch,
                 )
+
+                # print gradients and reset
+                if logger is None:
+                    for k, g in gradients.items():
+                        rich.print(f"{k}: norm={norm(g.mean) :.3E}")
+                else:
+                    logger.log_metrics(
+                        format_diagnostics(
+                            {k: norm(g.mean) for k, g in gradients.items()}, split="gradients/norm"
+                        ),
+                        step=global_step,
+                    )
+                    logger.log_metrics(
+                        format_diagnostics(
+                            {k: np.mean(g.std) for k, g in gradients.items()},
+                            split="gradients/mean-std",
+                        ),
+                        step=global_step,
+                    )
+
+                gradients = defaultdict(RunningStats)
 
     if logger is not None:
         logger.finalize("completed")

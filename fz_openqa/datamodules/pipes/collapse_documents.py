@@ -1,11 +1,9 @@
 from typing import List
 from typing import Optional
 
-import rich
 import torch
 from torch import Tensor
 
-from fz_openqa.datamodules.index.search_result import pad_to_length
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
 

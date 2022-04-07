@@ -1,7 +1,6 @@
 _target_: ???
 
 # input keys
-required_keys: ???
 query_field: question
 index_field: document
 

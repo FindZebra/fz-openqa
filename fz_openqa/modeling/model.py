@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections
 from copy import copy
 from typing import Any
 from typing import Dict
@@ -9,13 +8,13 @@ from typing import Optional
 from typing import Union
 
 import rich
+import transformers
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lamb import Lamb
 from pytorch_lightning import LightningModule
 from torch import optim
 from torch import Tensor
-from transformers import AdamW
 from transformers import BertPreTrainedModel
 from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
 from transformers import PreTrainedTokenizerFast
@@ -27,7 +26,6 @@ from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class Model(LightningModule):
@@ -76,7 +74,6 @@ class Model(LightningModule):
         num_training_steps: int = 10000,
         num_warmup_steps: int = 1000,
         optimizer_params: Dict[str, Any] = None,
-        use_parameter_groups: bool = False,
         ema_decay: Optional[float] = None,
         parameters: Optional[Parameters | Dict[str, Any]] = None,
         **kwargs,
@@ -84,15 +81,14 @@ class Model(LightningModule):
         super().__init__()
 
         if optimizer_params is None:
-            optimizer_params = {"lr": 1e-3}
+            optimizer_params = {}
 
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
-        self.save_hyperparameters(ignore=["bert", "tokenizer", "module", "parameters"])
+        self.save_hyperparameters()
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
         assert self.hparams["optimizer_params"] == optimizer_params
-        assert self.hparams["use_parameter_groups"] == use_parameter_groups
         assert self.hparams["monitor_metric"] == monitor_metric
         assert self.hparams["num_training_steps"] == num_training_steps
         assert self.hparams["num_warmup_steps"] == num_warmup_steps
@@ -217,22 +213,42 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
-        if self.hparams.use_parameter_groups:
-            optimizer_grouped_parameters = self._get_parameter_groups()
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        weight_decay = self.hparams.optimizer_params.pop("weight_decay", 0.0)
+        optimizer_grouped_parameters = [
+            {
+                "params": list(
+                    only_trainable(
+                        [
+                            p
+                            for n, p in self.named_parameters()
+                            if not any(nd in n for nd in no_decay)
+                        ]
+                    )
+                ),
+                "weight_decay": weight_decay,
+            },
+            {
+                "params": list(
+                    only_trainable(
+                        [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)]
+                    )
+                ),
+                "weight_decay": 0.0,
+            },
+        ]
 
-            for group in optimizer_grouped_parameters:
-                rich.print(
-                    f"> param group: lr={group.get('lr', None)}, "
-                    f"weight_decay={group.get('weight_decay', None)}, "
-                    f"n_params={len(group['params'])}"
-                )
-        else:
-            optimizer_grouped_parameters = only_trainable(self.parameters())
+        for group in optimizer_grouped_parameters:
+            rich.print(
+                f"> Optimizer group: "
+                f"n_params={len(group['params'])}, "
+                f"weight_decay={group['weight_decay']}"
+            )
 
         # choose the optimizer class
         OptimizerCls = {
             "adam": optim.Adam,
-            "adamw": optim.AdamW,
+            "adamw": transformers.optimization.AdamW,
             "adamax": optim.Adamax,
             "sgd": optim.SGD,
             "rmsprop": optim.RMSprop,
@@ -261,89 +277,39 @@ class Model(LightningModule):
             if opt_state is not None:
                 rich.print(">> setting optimizer state!")
                 optimizer.load_state_dict(opt_state)
-            if scheduler_state is not None:
+            if scheduler_state is not None and lr_scheduler is not None:
                 rich.print(">> setting scheduler state!")
                 lr_scheduler.load_state_dict(scheduler_state)
             self.opt_states = None
 
-        lr_scheduler_config = {
-            # REQUIRED: The scheduler instance
-            "scheduler": lr_scheduler,
-            # The unit of the scheduler's step size, could also be 'step'.
-            # 'epoch' updates the scheduler on epoch end whereas 'step'
-            # updates it after a optimizer update.
-            "interval": "step",
-            # How many epochs/steps should pass between calls to
-            # `scheduler.step()`. 1 corresponds to updating the learning
-            # rate after every epoch/step.
-            "frequency": 1,
-            # Metric to to monitor for schedulers like `ReduceLROnPlateau`
-            "monitor": self.hparams.monitor_metric,
-            # If set to `True`, will enforce that the value specified 'monitor'
-            # is available when the scheduler is updated, thus stopping
-            # training if not found. If set to `False`, it will only produce a warning
-            "strict": True,
-            # If using the `LearningRateMonitor` callback to monitor the
-            # learning rate progress, this keyword can be used to specify
-            # a custom logged name
-            "name": None,
+        output = {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                # REQUIRED: The scheduler instance
+                "scheduler": lr_scheduler,
+                # The unit of the scheduler's step size, could also be 'step'.
+                # 'epoch' updates the scheduler on epoch end whereas 'step'
+                # updates it after a optimizer update.
+                "interval": "step",
+                # How many epochs/steps should pass between calls to
+                # `scheduler.step()`. 1 corresponds to updating the learning
+                # rate after every epoch/step.
+                "frequency": 1,
+                # Metric to to monitor for schedulers like `ReduceLROnPlateau`
+                "monitor": self.hparams.monitor_metric,
+                # If set to `True`, will enforce that the value specified 'monitor'
+                # is available when the scheduler is updated, thus stopping
+                # training if not found. If set to `False`, it will only produce a warning
+                "strict": True,
+                # If using the `LearningRateMonitor` callback to monitor the
+                # learning rate progress, this keyword can be used to specify
+                # a custom logged name
+                "name": None,
+            },
         }
-
-        output = {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
         return output
 
-    def _get_parameter_groups(self):
-        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
-        optimizer_grouped_parameters = [
-            {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay) and "bert." in n
-                    ]
-                ),
-                "weight_decay": self.hparams.weight_decay,
-                "lr": self.hparams.bert_lr,
-            },
-            {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay) and "bert." in n
-                    ]
-                ),
-                "weight_decay": 0.0,
-                "lr": self.hparams.bert_lr,
-            },
-            {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if not any(nd in n for nd in no_decay) and "bert." not in n
-                    ]
-                ),
-                "weight_decay": self.hparams.weight_decay,
-                "lr": self.hparams.lr,
-            },
-            {
-                "params": only_trainable(
-                    [
-                        p
-                        for n, p in self.named_parameters()
-                        if any(nd in n for nd in no_decay) and "bert." not in n
-                    ]
-                ),
-                "weight_decay": 0.0,
-                "lr": self.hparams.lr,
-            },
-        ]
-        return optimizer_grouped_parameters
-
     def on_before_zero_grad(self, *args, **kwargs):
-        # https://forums.pytorchlightning.ai/t/adopting-exponential-moving-average-ema-for-pl-pipeline/488
         if self.ema is not None:
             self.ema(self)
 

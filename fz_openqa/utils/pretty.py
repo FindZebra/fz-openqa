@@ -1,4 +1,3 @@
-import logging
 import re
 import shutil
 from typing import Dict
@@ -9,17 +8,15 @@ from typing import Union
 import numpy as np
 import rich
 from datasets import arrow_dataset
+from loguru import logger
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.json_struct import flatten_json_struct
 from fz_openqa.utils.shape import infer_batch_shape
 from fz_openqa.utils.shape import infer_shape
-
-logger = logging.getLogger(__name__)
 
 
 def replace_subsequent(text, pattern, display_pattern):

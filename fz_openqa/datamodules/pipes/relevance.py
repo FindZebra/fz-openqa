@@ -1,5 +1,6 @@
+import math
 import re
-import warnings
+import string
 from dataclasses import dataclass
 from functools import partial
 from itertools import zip_longest
@@ -12,32 +13,22 @@ from typing import Optional
 from typing import Sequence
 from typing import Tuple
 
+import nltk
 import numpy as np
+import rich
 import spacy
-
-try:
-    import scispacy
-except ImportError:
-    scispacy = None
-
-if scispacy is not None:
-    from scispacy.linking import EntityLinker  # type: ignore
-    from scispacy.linking_utils import Entity
-else:
-    from spacy.pipeline import EntityLinker  # type: ignore
-
-    Entity = None
-
-
+from scispacy.linking import EntityLinker  # type: ignore
+from scispacy.linking_utils import Entity
 from spacy import Language
 from spacy.tokens import Doc
 from spacy.tokens.span import Span
 
-from ...utils.functional import infer_batch_size
-from .base import Pipe
+from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.utils.static import ALL_STOP_WORDS
 from fz_openqa.datamodules.pipes.utils.static import DISCARD_TUIs
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import infer_batch_size
 
 np.warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
@@ -132,13 +123,16 @@ class RelevanceClassifier(Pipe):
         Needs to be implemented for each sub-class."""
         raise NotImplementedError
 
-    def classify(self, pair: Pair) -> int:
+    def classify(self, pair: Pair) -> float:
         matches = self._get_matches(pair)
-        return len(matches)
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[int, List[str]]:
+        score = float(len(matches))
+        return score
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[float, List[str]]:
         matches = self._get_matches(pair)
-        return (len(matches), matches)
+        score = float(len(matches))
+        return (score, matches)
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Preprocessing allows transforming all the pairs,
@@ -169,7 +163,6 @@ class RelevanceClassifier(Pipe):
 
         # reshape as [batch_size, n_documents] and cast as Tensor
         output[self.output_key] = list(results)
-
         return output
 
     def _get_data_pairs(self, batch: Batch, batch_size: Optional[int] = None) -> Iterable[Pair]:
@@ -189,6 +182,62 @@ class ExactMatch(RelevanceClassifier):
         if doc_text is None or answer_text is None:
             raise ValueError(f"Missing text for document or answer: {pair}")
         return find_all(doc_text, [answer_text])
+
+
+class PartialMatch(RelevanceClassifier):
+    """
+    Compute a normalized score based on the number of matched answer words in the document.
+    todo: use n-grams
+    """
+
+    def __init__(self, *, max_grams: int = 5, **kwargs):
+        super(PartialMatch, self).__init__(**kwargs)
+        self.max_grams = max_grams
+
+    @staticmethod
+    def filter_token(token: str) -> bool:
+        if len(token) < 3:
+            return False
+        elif token in ALL_STOP_WORDS:
+            return False
+        else:
+            return True
+
+    def classify_and_interpret(self, pair: Pair) -> Tuple[float, List[str]]:
+        doc_text = pair.document[f"{self.document_field}.text"]
+        answer_text = pair.answer[f"{self.answer_field}.text"]
+        if doc_text is None or answer_text is None:
+            raise ValueError(f"Missing text for document or answer: {pair}")
+
+        # lowercase and split answer string
+        answer_text = answer_text.lower()
+        answer_tokens = answer_text.split()
+
+        # compute n-grams
+        n_grams = {n: nltk.ngrams(answer_tokens, n) for n in range(1, self.max_grams + 1)}
+        n_grams = {n: [" ".join(g) for g in grams] for n, grams in n_grams.items()}
+
+        # filter tokens
+        n_grams = {
+            n: list(filter(PartialMatch.filter_token, tokens)) for n, tokens in n_grams.items()
+        }
+
+        # compute score
+        n_tokens = sum(len(tokens) for tokens in n_grams.values())
+        if n_tokens == 0:
+            return 0.0, []
+
+        doc_text = doc_text.lower()
+        matches = {n: [a for a in tokens if a in doc_text] for n, tokens in n_grams.items()}
+
+        score = sum(float(n) * len(tokens) for n, tokens in matches.items())
+        matches = [m for n, tokens in matches.items() for m in tokens]
+
+        return (score, matches)
+
+    def classify(self, pair: Pair) -> float:
+        score, _ = self.classify_and_interpret(pair)
+        return score
 
 
 class AliasBasedMatch(RelevanceClassifier):

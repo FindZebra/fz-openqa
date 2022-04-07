@@ -1,4 +1,3 @@
-import logging
 from functools import partial
 from typing import Any
 from typing import Dict
@@ -9,6 +8,7 @@ import rich
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets.arrow_dataset import concatenate_datasets
+from loguru import logger
 
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
@@ -33,8 +33,6 @@ from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
-
-logger = logging.getLogger(__name__)
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
@@ -88,6 +86,7 @@ class QaBuilder(HfDatasetBuilder):
         *args,
         min_answer_length: Optional[int] = None,
         n_query_tokens: int = 1,
+        n_answer_tokens: int = 1,
         query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
         **kwargs,
@@ -96,6 +95,7 @@ class QaBuilder(HfDatasetBuilder):
         self.min_answer_length = min_answer_length
         self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
+        self.n_answer_tokens = n_answer_tokens
 
         # set the dataset attributes
         self.dset_script_path_or_id = QA_DATASETS[dset_name][0]
@@ -170,7 +170,7 @@ class QaBuilder(HfDatasetBuilder):
             tokenizer=self.tokenizer,
             max_length=self.max_length,
             add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=ANS_TOKEN,
+            spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
             shape=[-1, self.n_options],
         )
 
@@ -218,8 +218,13 @@ class QaBuilder(HfDatasetBuilder):
             ),
         )
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,
@@ -306,11 +311,15 @@ class ConcatQaBuilder(QaBuilder):
         return dataset
 
     def get_concat_qa_pipe(self):
+        # register features that also need to be expanded to match the concatenated shape
+        additional_question_features = ["question.document_idx"]
+
+        # register the tokens that prefix the question
         q_start_tokens = []
         if self.add_special_tokens:
             q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
-            q_start_tokens.extend([QUERY_TOKEN])
+            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 
         if len(q_start_tokens) > 0:
             add_spec_tokens_pipe = Apply(
@@ -320,6 +329,7 @@ class ConcatQaBuilder(QaBuilder):
         else:
             add_spec_tokens_pipe = None
 
+        # return the final pipe
         return Sequential(
             self.text_formatter.copy(text_key=["question.text", "answer.text"], update=True),
             add_spec_tokens_pipe,
@@ -327,14 +337,15 @@ class ConcatQaBuilder(QaBuilder):
                 axis=1,
                 n=self.n_options,
                 update=True,
-                input_filter=In(["question.text"]),
+                input_filter=In(["question.text", *additional_question_features]),
             ),
             ApplyAsFlatten(
                 ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
                 level=1,
                 input_filter=In(["question.text", "answer.text"]),
+                update=True,
             ),
-            input_filter=In(["question.text", "answer.text"]),
+            input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 
     def get_qa_tokenizer_pipe(self):
@@ -357,7 +368,7 @@ class ConcatQaBuilder(QaBuilder):
                 max_length=self.max_length,
                 add_encoding_tokens=self.add_encoding_tokens,
                 add_special_tokens=self.add_special_tokens,
-                spec_tokens=self.n_query_tokens * [ANS_TOKEN],
+                spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
                 shape=[-1, self.n_options],
             ),
             query_expansion_pipe,
@@ -389,8 +400,13 @@ class ConcatQaBuilder(QaBuilder):
             ),
         )
 
-    def format_row(self, row: Dict[str, Any]) -> str:
-        """Decode and print one row from the batch"""
+    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
+        """Decode and print one row from the batch
+
+        Parameters
+        ----------
+        **kwargs
+        """
         decode_kwargs = {
             "skip_special_tokens": False,
             "tokenizer": self.tokenizer,
