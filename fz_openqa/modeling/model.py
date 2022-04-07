@@ -8,7 +8,6 @@ from typing import Optional
 from typing import Union
 
 import rich
-import transformers
 from datasets import Split
 from omegaconf import DictConfig
 from pytorch_lamb import Lamb
@@ -213,7 +212,7 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
-        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
         weight_decay = self.hparams.optimizer_params.pop("weight_decay", 0.0)
         optimizer_grouped_parameters = [
             {
@@ -248,7 +247,7 @@ class Model(LightningModule):
         # choose the optimizer class
         OptimizerCls = {
             "adam": optim.Adam,
-            "adamw": transformers.optimization.AdamW,
+            "adamw": optim.AdamW,
             "adamax": optim.Adamax,
             "sgd": optim.SGD,
             "rmsprop": optim.RMSprop,

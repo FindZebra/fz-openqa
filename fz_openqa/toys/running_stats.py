@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from torch import Tensor
 
 # handle pytorch tensors etc, by using tensorboardX's method
@@ -88,10 +89,40 @@ calculate-a-running-standard-deviation>
 
     def __repr__(self):
         return (
-            "<RunningMean(mean={: 2.4f}, std={: 2.4f}, n={: 2f}, m={: 2.4f}, s={: 2.4f})>".format(
-                self.mean, self.std, self.n, self.m, self.s
-            )
+            f"<RunningMean(mean={self.mean}, std={self.std}, n={self.n}, m={self.m}, s={self.s})>"
         )
 
-    def __str__(self):
-        return "mean={: 2.4f}, std={: 2.4f}".format(self.mean, self.std)
+    def flatten(self):
+        return RunningStats(n=self.n, m=self.m.reshape(-1), s=self.s.reshape(-1))
+
+    def cat(self, other):
+
+        # check compatibility
+        if not isinstance(other, type(self)):
+            raise ValueError(
+                f"Incompatible type: {type(other)} != {type(self)}"
+                f"self: {self}\n"
+                f"other: {other}"
+            )
+        if other.n != self.n:
+            raise ValueError(f"Incompatible n: {other.n} != {self.n}")
+        if not isinstance(other.m, type(self.m)):
+            raise ValueError(
+                f"Incompatible type: {type(other.m)} != {type(self.m)}"
+                f"self: {self}\n"
+                f"other: {other}"
+            )
+        if not isinstance(other.s, type(self.s)):
+            raise ValueError(
+                f"Incompatible type: {type(other.s)} != {type(self.s)}.\n"
+                f"self: {self}\n"
+                f"other: {other}"
+            )
+
+        # concatenate
+        cat_op = {
+            Tensor: torch.cat,
+            np.ndarray: np.concatenate,
+        }[type(self.m)]
+
+        return RunningStats(n=self.n, m=cat_op([self.m, other.m]), s=cat_op([self.s, other.s]))

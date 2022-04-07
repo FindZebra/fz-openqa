@@ -34,6 +34,8 @@ nltk = "^3.7"
 pytest = "^5.2"
 parameterized = "^0.8.1"
 hypothesis = "^6.36.2"
+matplotlib = "^3.5.1"
+seaborn = "^0.11.2"
 
 [tool.poetry.scripts]
 fzqa = "fz_openqa.cli:main"

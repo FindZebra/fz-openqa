@@ -24,8 +24,6 @@ datamodule.corpus_builder:
   passage_length: 100
   passage_stride: 100
 
-model:
-  hidden_size: null
 
 logger: null
 callbacks: null

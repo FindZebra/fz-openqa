@@ -95,11 +95,13 @@ def train(config: DictConfig) -> Optional[float]:
     # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
     callbacks: List[Callback] = []
     if config.get("callbacks", None):
-        for _, cb_conf in config["callbacks"].items():
-            if "_target_" in cb_conf:
+        for cid, cb_conf in config["callbacks"].items():
+            if cb_conf is not None and "_target_" in cb_conf:
                 log.info(f"Instantiating callback <{cb_conf._target_}>")
                 callback = instantiate(cb_conf)
                 callbacks.append(callback)
+            else:
+                log.warning(f"Skipping callback {cid}: <{cb_conf}>")
 
     # Init Lightning loggers
     logger: List[LightningLoggerBase] = []
@@ -174,7 +176,7 @@ def train(config: DictConfig) -> Optional[float]:
     # Evaluate Module on test set after training
     if not config.trainer.get("fast_dev_run"):
         log.info("Starting testing..")
-        trainer.test(dataloaders=datamodule.test_dataloader())
+        trainer.test(model=model, dataloaders=datamodule.test_dataloader())
 
     # Make sure everything closed properly
     log.info("Finalizing..")
@@ -301,6 +303,7 @@ def train_with_dataset_updates(
     reset_optimizer: bool = False,
     index_first_epoch: bool = False,
     test_every_update: bool = True,
+    load_best_model: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -368,7 +371,7 @@ def train_with_dataset_updates(
 
     # load the best model and return it
     log.info("Training completed. Loading best model and re-indexing the dataset")
-    if trainer.checkpoint_callback.last_model_path is not None:
+    if load_best_model and trainer.checkpoint_callback.last_model_path is not None:
         model = model.load_from_checkpoint(trainer.checkpoint_callback.last_model_path)
     else:
         log.info("No checkpoint found. Using the last model.")

@@ -9,7 +9,7 @@ from torch import Tensor
 
 
 def batch_cartesian_product(
-    x: List[Tensor | None], max_size: Optional[int] = None
+    *inputs: Tensor, max_size: Optional[int] = None
 ) -> Iterable[Tensor | None]:
     """
     Cartesian product of a batch of tensors.
@@ -23,8 +23,7 @@ def batch_cartesian_product(
     Tensor
      tensor of shape (batch_size, n_vecs, n_dims^n_vecs, ...)
     """
-
-    x0 = next(iter(y for y in x if y is not None))
+    x0, *xs = inputs
     bs, n_vecs, n_dims, *_ = x0.shape
     if max_size is not None and max_size < n_dims:
         max_size = None
@@ -36,7 +35,7 @@ def batch_cartesian_product(
         perm = perm[None, :].expand(n_vecs, -1)
         index = index.gather(index=perm, dim=1)
     index = index[None, :, :].expand(bs, *index.shape)
-    for y in x:
+    for y in (x0, *xs):
         if y is not None:
             bs, n_vecs, n_dims, *dims = y.shape
             _index = index.view(*index.shape, *(1 for _ in dims))

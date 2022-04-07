@@ -57,12 +57,13 @@ class ColbertHead(DprHead):
         mask: Optional[Tensor] = None,
         batch: Optional[Dict[str, Tensor]] = None,
         question_mask: float = 1.0,
+        weights: Optional[Tensor] = None,
         **kwargs,
     ) -> Tensor:
-
+        head_kwargs = {"weights": weights} if weights is not None else {}
         if self.output_size is not None:
             head_op = {"document": self.d_head, "question": self.q_head}[head]
-            last_hidden_state = head_op(last_hidden_state)
+            last_hidden_state = head_op(last_hidden_state, **head_kwargs)
 
         if self.normalize:
             last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)

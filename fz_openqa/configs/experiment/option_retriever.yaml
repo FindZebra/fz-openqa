@@ -6,10 +6,10 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: in_batch
+  - override /model/module/gradients: reinforce
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: random
+  - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: multiply_by_relevance
@@ -27,15 +27,17 @@ defaults:
       - progress_bar
 
 base:
-  seed: 4272019677 # TODO: remove
+  seed: null # TODO: remove
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
   exp_info: "Colbert + Bayesian head"
   batch_size: 32
   device_batch_size: 1
+  eval_device_batch_size: 8
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
+  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
   sharing_strategy: file_system
   git_hash: ${git_hash:}
   git_hash_short: ${git_hash_short:}
@@ -45,16 +47,20 @@ trainer:
   strategy: dp
   min_epochs: 1
   max_epochs: 1_000
-  gradient_clip_val: 0.5
-  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
-  val_check_interval: 0.5
+  gradient_clip_val: 2.0 # todo: changed from 0.5
+  accumulate_grad_batches: ${base.accumulate_grad_batches}
+#    _target_: fz_openqa.utils.config.IntDict
+#    "0": ${int_mul:${base.accumulate_grad_batches},1}
+#    "60": ${int_mul:${base.accumulate_grad_batches},2}
+#    "120": ${int_mul:${base.accumulate_grad_batches},3}
+  val_check_interval: 1.0
   precision: 32
   # track_grad_norm: 2
 
 model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 10_000
+  num_training_steps: 20_000 # TODO !!
   hidden_size: 32
   bert:
     config:
@@ -63,13 +69,20 @@ model:
 
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 3e-6
     weight_decay: 1e-3
-    correct_bias: false
-    # eps: 1e-8 # as in the Colbert repo
+    # correct_bias: false # todo: remove and use torch's AdamW
+    eps: 1e-8 # as in the Colbert repo
   parameters:
     gamma: 1
     question_mask: 1
+    alpha: 0
+    reader_kl_weight: 0.5
+    retriever_kl_weight:
+      mode: cosine
+      num_steps: 10_000
+      initial_value: 0.1
+      final_value: 1e-5
   module:
     resample_k: null
     alpha: 0
@@ -78,7 +91,7 @@ model:
       output_size: ${model.hidden_size}
       use_mask: false
       use_answer_mask: false
-      bayesian: false # todo
+      bayesian: false
       learn_scale: false
       scale: 1.
       share_parameters: true
@@ -93,13 +106,13 @@ model:
       bias: false
     gradients:
       use_baseline: false # todo
-      expr: A
+      expr: A2
 
 
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 15 # todo !!!
+    freq: 10
     reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
@@ -108,7 +121,7 @@ datamodule:
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
-  eval_batch_size: ${int_mul:${datamodule.train_batch_size},2}
+  eval_batch_size: ${int_mul:${base.eval_device_batch_size},${base.n_devices}}
   num_workers: 12
   pin_memory: true
 
@@ -128,7 +141,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 1_000 # todo> next exp
+  n_retrieved_documents: 300
   n_documents: 10
 
   # tag documents as positive or negative
@@ -150,8 +163,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: false # todo
-      test: false # todo
+      validation: true
+      test: true
 
   # OpenQA builder parameters
   builder:
@@ -162,7 +175,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 10 # todo!!!
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 350 # todo!!!
+      max_length: 512 # todo!!!
     corpus_builder:
       dset_name: medqa
       use_subset: ${datamodule.corpus_subset}
@@ -172,10 +185,10 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 1. # todo !!!
+    es_temperature: 5. # todo !!!
     model_output_keys: [ _hq_, _hd_ ]
-    p: 100
-    dtype: ${trainer.precision}
+    p: 30
+    dtype: float16
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
     persist_cache: false

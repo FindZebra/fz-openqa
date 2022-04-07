@@ -11,9 +11,9 @@ from fz_openqa.training import training
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.config import resolve_config_paths
-from fz_openqa.utils.git import get_git_branch_name
-from fz_openqa.utils.git import get_git_revision_hash
-from fz_openqa.utils.git import get_git_revision_short_hash
+from fz_openqa.utils.git import git_branch_name
+from fz_openqa.utils.git import git_revision_hash
+from fz_openqa.utils.git import git_revision_short_hash
 
 
 def int_div(a, *b):
@@ -38,11 +38,12 @@ def int_max(a, *b):
 
 
 N_GPUS = torch.cuda.device_count()
-GIT_HASH = get_git_revision_hash()
-GIT_HASH_SHORT = get_git_revision_short_hash()
-GIT_BRANCH_NAME = get_git_branch_name()
+GIT_HASH = git_revision_hash()
+GIT_HASH_SHORT = git_revision_short_hash()
+GIT_BRANCH_NAME = git_branch_name()
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("int", lambda x: int(x))
 OmegaConf.register_new_resolver("int_mul", int_mul)
 OmegaConf.register_new_resolver("int_div", int_div)
 OmegaConf.register_new_resolver("int_max", int_max)

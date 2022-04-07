@@ -14,6 +14,11 @@ from pytorch_lightning.utilities import rank_zero_only
 YAML_PATTERN = r"^.*\.yaml$"
 
 
+class IntDict(dict):
+    def __init__(self, **kwargs):
+        super().__init__({int(k): v for k, v in kwargs.items()})
+
+
 def null_constructor(*args, **kwargs):
     return None
 

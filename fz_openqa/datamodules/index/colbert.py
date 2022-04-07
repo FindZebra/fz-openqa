@@ -175,7 +175,7 @@ class ColbertIndex(DenseIndex):
             faiss_gpus = []
             maxsim_gpus = gpus
         elif n_gpus > 1:
-            n_maxsim = min(-(-int(math.floor(n_gpus * 0.75))), n_gpus - 1)
+            n_maxsim = min(-(-int(math.floor(n_gpus * 0.5))), n_gpus - 1)
             faiss_gpus = gpus[n_maxsim:]
             maxsim_gpus = gpus[:n_maxsim]
         elif n_gpus == 1:
