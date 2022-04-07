@@ -25,7 +25,6 @@ defaults:
       - lr_monitor
       - log_predictions
       - progress_bar
-      - swa
 
 base:
   seed: 4272019677 # TODO: remove
