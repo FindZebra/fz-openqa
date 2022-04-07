@@ -6,23 +6,17 @@ from pathlib import Path
 import datasets
 import hydra
 import rich
-import wandb
 
 sys.path.append(str(Path(__file__).parent.parent.as_posix()))
 
 import fz_openqa
-import wandb
 from fz_openqa import configs
-from fz_openqa.datamodules.analytics import LogRetrievedDocuments
-from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
-from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
 from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
-from fz_openqa.datamodules.builders import MedQaCorpusBuilder
-from fz_openqa.datamodules.builders import OpenQaBuilder
+from fz_openqa.datamodules.builders import OpenQaBuilder, CorpusBuilder
 from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
-from fz_openqa.datamodules.pipes import ExactMatch, MultiplyScoreByRelevance, PartialMatch
+from fz_openqa.datamodules.pipes import ExactMatch, MultiplyScoreByRelevance
 from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -56,7 +50,8 @@ def run(config):
     dataset_builder.subset_size = [100, 50, 50]
 
     # define the corpus builder
-    corpus_builder = MedQaCorpusBuilder(
+    corpus_builder = CorpusBuilder(
+        dset_name="medqa",
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=False,
