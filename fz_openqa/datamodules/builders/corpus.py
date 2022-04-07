@@ -144,7 +144,7 @@ class CorpusBuilder(HfDatasetBuilder):
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
 
         # split dataset names using `+`
-        dset_names = self.dset_name.split("+")
+        dset_names = sorted(self.dset_name.split("+"))
 
         # load datasets
         dsets = [self._load_dataset(*CORPUS_GENERATORS[dn], **kwargs) for dn in dset_names]
