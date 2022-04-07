@@ -9,16 +9,19 @@ class ConcatTextFields(Pipe):
     Concatenate two text fields
     """
 
-    def __init__(self, keys: List[str], *, new_key: str = "concatenated", **kwargs):
+    def __init__(
+        self, keys: List[str], *, new_key: str = "concatenated", separator: str = ". ", **kwargs
+    ):
         super().__init__(**kwargs)
         self.fields = keys
+        self.separator = separator
         self.new_field = new_key
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         columns = [batch[field] for field in self.fields]
         new_column = []
         for u in zip(*columns):
-            new_column += [" ".join(u)]
+            new_column += [self.separator.join(u)]
         output = {self.new_field: new_column}
         return output
 

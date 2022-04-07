@@ -13,15 +13,7 @@ from omegaconf import OmegaConf
 
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
-from fz_openqa.datamodules.builders.corpus import FzCorpusBuilder
-from fz_openqa.datamodules.builders.corpus import MedQaCorpusBuilder
-from fz_openqa.datamodules.builders.corpus import MedWikipediaCorpusBuilder
-from fz_openqa.datamodules.builders.corpus import QuALITYCorpusBuilder
-
-try:
-    from fz_openqa.datamodules.builders.medqa_x_wikipedia_corpus import WikixMedQaCorpusBuilder
-except ImportError:
-    WikixMedQaCorpusBuilder = None
+from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -52,16 +44,9 @@ def run(config: DictConfig) -> None:
         remove_breaks=True,
     )
 
-    Cls = {
-        "medqa": MedQaCorpusBuilder,
-        "fz": FzCorpusBuilder,
-        "medwikipedia": MedWikipediaCorpusBuilder,
-        "wikixmedqa": WikixMedQaCorpusBuilder,
-        "quality": QuALITYCorpusBuilder,
-    }[config.get("corpus", "medwikipedia")]
-
     # initialize the data module
-    builder = Cls(
+    builder = CorpusBuilder(
+        dset_name=config.get("dset_name", "medqa"),
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,

@@ -1,6 +1,9 @@
 import logging
 import os
+import sys
 from pathlib import Path
+
+sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
 import hydra
@@ -9,21 +12,16 @@ import transformers
 from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 
-import fz_openqa
 from fz_openqa import configs
 from fz_openqa.datamodules.analytics import RetrieverAccuracy
 from fz_openqa.datamodules.analytics import RetrieverDistribution
-from fz_openqa.datamodules.analytics.count_matched_questions import CountMatchedQuestions
-from fz_openqa.datamodules.analytics.plot_match_triggers import PlotTopMatchTriggers
-from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
 from fz_openqa.datamodules.builders import ConcatQaBuilder
-from fz_openqa.datamodules.builders import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders import CorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch
 from fz_openqa.datamodules.pipes import Sampler
-from fz_openqa.datamodules.pipes import SamplerBoostPositives
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
@@ -40,7 +38,7 @@ def run(config):
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -62,7 +60,8 @@ def run(config):
     dataset_builder.subset_size = [200, 50, 50]
 
     # define the corpus builder
-    corpus_builder = MedQaCorpusBuilder(
+    corpus_builder = CorpusBuilder(
+        dset_name=config.get("corpus_name", "medqa"),
         tokenizer=tokenizer,
         text_formatter=text_formatter,
         use_subset=False,
@@ -74,10 +73,12 @@ def run(config):
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
-        index_builder=ElasticSearchIndexBuilder(),
+        index_builder=ElasticSearchIndexBuilder(
+            auxiliary_weight=config.get("es_aux_weight", 10),
+        ),
         relevance_classifier=ExactMatch(interpretable=True),
         n_retrieved_documents=21,
-        sampler=Sampler(total=10),  # SamplerBoostPositives(total=10, n_boosted=1),
+        sampler=Sampler(total=10, largest=True),  # SamplerBoostPositives(total=10, n_boosted=1),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 100),
         analytics=[
@@ -92,7 +93,7 @@ def run(config):
     # preprocess the data
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=1)
+    dm.display_samples(n_samples=10)
 
     # access dataset
     rich.print(dm.dataset)

@@ -26,6 +26,7 @@ from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
 from fz_openqa.datamodules.pipes import AddPrefix
 from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import DropKeys
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import GeneratePassages
 from fz_openqa.datamodules.pipes import Parallel

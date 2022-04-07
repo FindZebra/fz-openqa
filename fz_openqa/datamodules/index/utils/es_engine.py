@@ -1,7 +1,9 @@
+import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.client.indices import IndicesClient
@@ -108,24 +110,64 @@ class ElasticSearchEngine:
             refresh="true",
         )
 
-    def es_search_bulk(self, index_name: str, queries: List[str], k: int):
+    def es_search_bulk(
+        self,
+        index_name: str,
+        queries: List[str],
+        auxiliary_queries: List[str] = None,
+        auxiliary_weight: float = 0,
+        k: int = 10,
+    ):
         """
         Batch search in ElasticSearch Index
         """
 
-        req_head = [{"index": index_name}] * len(queries)
-        req_body = [
-            {
-                "query": {"match": {"text": {"query": queries[i], "zero_terms_query": "all"}}},
+        if auxiliary_queries is None and auxiliary_weight > 0:
+            warnings.warn("auxiliary_queries is None, but auxiliary_weight > 0")
+
+        request = []
+        for i, query in enumerate(queries):
+
+            # this is the main query
+            query_parts = [
+                {
+                    "match": {
+                        "text": {
+                            "query": query,
+                            # "zero_terms_query": "all",
+                            "operator": "or",
+                        }
+                    }
+                },
+            ]
+
+            # this is an additional query term using the auxiliary_queries (answer option)
+            if auxiliary_queries is not None and auxiliary_weight > 0:
+                query_parts.append(
+                    {
+                        "match": {
+                            "text": {
+                                "query": auxiliary_queries[i],
+                                "operator": "or",
+                                "boost": auxiliary_weight,
+                            }
+                        }
+                    },
+                )
+
+            # final request
+            r = {
+                "query": {
+                    "bool": {"should": query_parts},
+                },
                 "from": 0,
                 "size": k,
             }
-            for i in range(len(queries))
-        ]
 
-        request = [item for sublist in zip(req_head, req_body) for item in sublist]
+            # append the header and body of the request
+            request.extend([{"index": index_name}, r])
 
-        result = self.instance.msearch(body=request, request_timeout=200)
+        result = self.instance.msearch(body=request, index=index_name, request_timeout=200)
 
         indexes, scores, contents = [], [], []
         for query in result["responses"]:

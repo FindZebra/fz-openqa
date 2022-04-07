@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
-from loguru import logger
+
 import wandb
 
 
