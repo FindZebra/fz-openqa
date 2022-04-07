@@ -80,7 +80,7 @@ model:
     reader_kl_weight: 0.5
     retriever_kl_weight:
       mode: cosine
-      num_steps: 10_000
+      num_steps: 5_000
       initial_value: 0.1
       final_value: 1e-5
   module:
