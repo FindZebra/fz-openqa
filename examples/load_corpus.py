@@ -50,7 +50,7 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.sys.get("cache_dir"),
         num_proc=2,
         analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],

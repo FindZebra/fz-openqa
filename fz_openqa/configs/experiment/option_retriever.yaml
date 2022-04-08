@@ -12,7 +12,7 @@ defaults:
   - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
-  - override /datamodule/score_transform: null # multiply_by_relevance
+  - override /datamodule/score_transform: none
   - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy

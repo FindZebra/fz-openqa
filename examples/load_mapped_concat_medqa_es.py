@@ -91,12 +91,12 @@ def run(config):
     dm = DataModule(builder=builder, num_workers=0)
 
     # preprocess the data
-    dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=10)
 
     # access dataset
     rich.print(dm.dataset)
+
+    dm.display_samples(n_samples=10)
 
     # sample a batch
     # _ = next(iter(dm.train_dataloader()))

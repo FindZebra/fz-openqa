@@ -1,4 +1,3 @@
-import string
 from functools import partial
 from typing import Any
 from typing import Dict
@@ -19,11 +18,13 @@ from ..pipes.nesting import Expand
 from ..pipes.nesting import Nested
 from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
+from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
+from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RenameKeys
@@ -37,14 +38,6 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
 
-RACE_MAPPING = {
-    "example_id": "question.document_id",
-    "article": "document.text",
-    "answer": "answer.target",
-    "question": "question.text",
-    "options": "answer.text",
-}
-
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
     "medqa-tw": (medqa.__file__, "tw"),
@@ -53,8 +46,6 @@ QA_DATASETS = {
     "race-hard": ("race", "hard"),
     "race-middle": ("race", "middle"),
 }
-
-COLUMN_MAPPINGS = {"race": RACE_MAPPING}
 
 
 class QaBuilder(HfDatasetBuilder):
@@ -126,22 +117,21 @@ class QaBuilder(HfDatasetBuilder):
         using "+" as a separator. e.g. "tw+us"
         """
         dset_names = sorted(self.dset_name.split("+"))
-
         logger.info(f"Loading: {self.dset_script_path_or_id} with {dset_names}")
 
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [load_dataset(self.dset_script_path_or_id, name=n, **kwargs) for n in dset_names]
 
-        if self.dset_script_path_or_id in COLUMN_MAPPINGS:
+        if self.dset_script_path_or_id in DATASET_ADAPTERS:
+            adapter = DATASET_ADAPTERS[self.dset_script_path_or_id]()
             dsets = [
-                DatasetDict(
-                    {
-                        s: d.rename_columns(COLUMN_MAPPINGS[self.dset_script_path_or_id])
-                        for s, d in ds.items()
-                    }
+                adapter(
+                    dset,
+                    num_proc=self.num_proc,
                 )
-                for ds in dsets
+                for dset in dsets
             ]
+            dsets = [ds for ds, corpus in dsets]
 
         if len(dsets) == 1:
             return dsets[0]
@@ -174,22 +164,14 @@ class QaBuilder(HfDatasetBuilder):
             logger.info(f"Dropping document columns {cols}")
             dataset = dataset.remove_columns(cols)
 
-        # set the labels registered as [A, B, C, D] to 0, 1, 2, 3
-        if all(x in string.ascii_uppercase for x in dataset["train"][:100]["answer.target"]):
-            dataset = dataset.map(
-                Apply({"answer.target": string.ascii_uppercase.index}, element_wise=True),
-                batched=True,
-                num_proc=self.num_proc,
-                desc="Converting A,B,C,D labels to indices",
-            )
-
         # Tokenize the text fields (questions, answers, and documents, if any)
         if self.tokenizer:
+            has_document_columns = any("document." in c for c in dataset["train"].column_names)
             dataset = dataset.map(
                 Parallel(
                     self.get_question_tokenizer_pipe(),
                     self.get_answer_tokenizer_pipe(),
-                    self.get_document_tokenizer_pipe(),
+                    Gate(has_document_columns, self.get_document_tokenizer_pipe()),
                 ),
                 batched=True,
                 num_proc=self.num_proc,
@@ -258,7 +240,13 @@ class QaBuilder(HfDatasetBuilder):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
-            CollateField("document", tokenizer=self.tokenizer, level=0, id="collate-documents"),
+            CollateField(
+                "document",
+                tokenizer=self.tokenizer,
+                level=0,
+                id="collate-documents",
+                include_only=["document.text", "document.input_ids", "document.attention_mask"],
+            ),
             CollateField(
                 "answer",
                 level=0,
@@ -454,37 +442,28 @@ class ConcatQaBuilder(QaBuilder):
 
     def _get_collate_pipe(self):
         # get the raw text questions, extract and collate
-        return Sequential(
-            Parallel(
-                CollateField(
-                    "question",
-                    exclude=["input_ids", "attention_mask"],
-                    to_tensor=["document_idx"],
-                    level=0,
-                    id="collate-questions",
-                ),
-                CollateField(
-                    "answer",
-                    level=0,
-                    exclude=["input_ids", "attention_mask"],
-                    to_tensor=["target"],
-                    id="collate-answer-attributes",
-                ),
-                CollateField(
-                    "question",
-                    tokenizer=self.tokenizer,
-                    level=1,
-                    include_only=["input_ids", "attention_mask"],
-                    id="pad-nested-question-tokens",
-                ),
-                CollateField(
-                    "document",
-                    tokenizer=self.tokenizer,
-                    level=0,
-                    id="collate-documents",
-                ),
+        return Parallel(
+            CollateField(
+                "question",
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["document_idx"],
+                level=0,
+                id="collate-questions",
             ),
-            PrintBatch("COLLATE"),
+            CollateField(
+                "answer",
+                level=0,
+                exclude=["input_ids", "attention_mask"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
+            ),
+            CollateField(
+                "question",
+                tokenizer=self.tokenizer,
+                level=1,
+                include_only=["input_ids", "attention_mask"],
+                id="pad-nested-question-tokens",
+            ),
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:

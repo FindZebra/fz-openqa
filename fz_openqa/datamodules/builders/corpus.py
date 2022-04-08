@@ -16,6 +16,7 @@ from loguru import logger
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import AppendDot
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
+from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
@@ -48,6 +49,7 @@ CORPUS_GENERATORS = {
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__,),
+    "race": ("race", "all"),
 }
 
 
@@ -135,10 +137,7 @@ class CorpusBuilder(HfDatasetBuilder):
                 if re.findall(TXT_PATTERN, p)
             ]
 
-        dataset = load_dataset(*args, **kwargs)
-        if isinstance(dataset, DatasetDict):
-            dataset = concatenate_datasets(list(dataset.values()))
-        return dataset
+        return load_dataset(*args, **kwargs)
 
     def load_base_dataset(self) -> DatasetDict:
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
@@ -147,7 +146,21 @@ class CorpusBuilder(HfDatasetBuilder):
         dset_names = sorted(self.dset_name.split("+"))
 
         # load datasets
-        dsets = [self._load_dataset(*CORPUS_GENERATORS[dn], **kwargs) for dn in dset_names]
+        dsets = []
+        for dn in dset_names:
+            dset_args = CORPUS_GENERATORS[dn]
+            # load dataset
+            dset = self._load_dataset(*dset_args, **kwargs)
+
+            # adapt dataset
+            dset_id = dset_args[0]
+            if dset_id in DATASET_ADAPTERS:
+                adapter = DATASET_ADAPTERS[dset_id]()
+                _, dset = adapter(dset, num_proc=self.num_proc)
+
+            if isinstance(dset, DatasetDict):
+                dset = concatenate_datasets(list(dset.values()))
+            dsets.append(dset)
 
         # concatenate datasets
         if len(dset_names) == 1:
@@ -262,7 +275,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["document.idx", "document.title", "document.question_idx"],
+            global_keys=["document.idx", "document.uid", "document.title", "document.question_idx"],
             verbose=self.verbose,
         )
 

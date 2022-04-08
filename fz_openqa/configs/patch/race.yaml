@@ -1,0 +1,49 @@
+# @package _global_
+
+defaults:
+  - override /model/bert: roberta-base #deberta-v3-base
+  - override /datamodule/relevance_classifier: none
+  - override /datamodule/score_transform: none
+
+setup_with_model: true
+
+trainer:
+  val_check_interval: 1.0
+
+# override the builder parameters to use the quality builder
+datamodule:
+  n_retrieved_documents: 20
+
+  # dataset updates
+  dataset_update:
+    freq: 5
+
+  builder:
+    # update the builder parameters to use the quality builder
+    dataset_builder:
+      dset_name: race
+      max_length: 128
+      query_expansion: 128
+      n_query_tokens: 1
+      n_answer_tokens: 1
+    corpus_builder:
+      dset_name: race
+      passage_length: 200
+      passage_stride: 100
+
+    # Index parameters
+    index_builder:
+      p: 10
+      max_chunksize: null
+      maxsim_chunksize: 4_000
+      persist_cache: false
+      index_factory: Flat
+      handler: multi
+      nprobe: 1
+      keep_faiss_on_cpu: true
+      train_faiss_on_cpu: true
+
+
+logger:
+  wandb:
+    group: option-retriever-race
