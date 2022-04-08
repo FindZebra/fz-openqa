@@ -150,7 +150,7 @@ class ReinforceGradients(Gradients):
         kl_reader = kl_divergence(log_p_a, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
-        kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
+        # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever
 
         # log p(a_st | q, A, D)
@@ -213,7 +213,7 @@ class ReinforceGradients(Gradients):
         if reader_kl_weight is not None:
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
-            loss = loss + retriever_kl_weight * 0.5 * (kl_retriever + kl_retrieval)
+            loss = loss + retriever_kl_weight * kl_retriever
 
         return {
             "loss": loss,
