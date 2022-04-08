@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -15,10 +14,13 @@ from fz_openqa.modeling.gradients.base import Space
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 
 
-def kl_uniform(logits: Tensor, dim: int = -1) -> Tensor:
-    log_p = logits.log_softmax(dim=dim)
+def kl_divergence(p_logits: Tensor, q_logits: Optional[Tensor] = None, dim: int = -1) -> Tensor:
+    log_p = p_logits.log_softmax(dim=dim)
     N = log_p.size(dim)
-    log_q = -torch.ones_like(log_p) * math.log(N)
+    if q_logits is None:
+        log_q = -torch.ones_like(log_p) * math.log(N)
+    else:
+        log_q = q_logits.log_softmax(dim=dim)
     return (log_p.exp() * (log_p - log_q)).sum(dim=dim)
 
 
@@ -145,9 +147,10 @@ class ReinforceGradients(Gradients):
         diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
 
         # compute KL divergence w.r.t to a uniform prior (regularization)
-        kl_reader = kl_uniform(log_p_a, dim=1)
+        kl_reader = kl_divergence(log_p_a, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader
-        kl_retriever = kl_uniform(f_phi_, dim=2).sum(1)
+        kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
+        kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever
 
         # log p(a_st | q, A, D)
@@ -210,7 +213,7 @@ class ReinforceGradients(Gradients):
         if reader_kl_weight is not None:
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
-            loss = loss + retriever_kl_weight * kl_retriever
+            loss = loss + retriever_kl_weight * 0.5 * (kl_retriever + kl_retrieval)
 
         return {
             "loss": loss,
