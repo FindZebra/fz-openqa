@@ -84,7 +84,7 @@ model:
       initial_value: 0.1
       final_value: 1e-5
   module:
-    split_bert_layers: 4
+    split_bert_layers: 2
     resample_k: null
     alpha: 0
     max_batch_size: 200
@@ -113,7 +113,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10
+    freq: 20
     reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
@@ -150,13 +150,13 @@ datamodule:
   #    interpretable: false
 
 
-  # transform the score based on the relevance classifier
-  score_transform:
-    factor: 1.0
-    normalize: false
-    exponentiate: false
-    max_score: 1.0
-    temperature: 1.0
+#  # transform the score based on the relevance classifier
+#  score_transform:
+#    factor: 1.0
+#    normalize: false
+#    exponentiate: false
+#    max_score: 1.0
+#    temperature: 1.0
 
   # document sampler
   sampler:
@@ -176,7 +176,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 10 # todo!!!
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 512 # todo!!!
+      max_length: 350 # todo!!!
     corpus_builder:
       dset_name: medqa
       use_subset: ${datamodule.corpus_subset}
@@ -187,7 +187,7 @@ datamodule:
   # Index parameters
   index_builder:
     es_temperature: 5. # todo !!!
-    auxiliary_weight: 5.
+    auxiliary_weight: 5. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
     p: 10
     dtype: float16

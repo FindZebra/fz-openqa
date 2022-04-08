@@ -4,13 +4,11 @@ from abc import ABC
 from abc import abstractmethod
 from typing import Dict
 from typing import Optional
-from typing import Union
 
+import rich
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
-from transformers import AutoModel
-from transformers import BertConfig
 from transformers.models.bert.modeling_bert import BertEncoder
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 
@@ -28,7 +26,7 @@ class Head(nn.Module, ABC):
         bert: DictConfig | BertPreTrainedModel,
         output_size: int,
         split_bert_layers: int = 0,
-        **kwargs
+        **kwargs,
     ):
         super(Head, self).__init__()
 
@@ -55,7 +53,7 @@ class Head(nn.Module, ABC):
         q_mask: Optional[Tensor] = None,
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tensor:
         """
         Compute the score for each pair `f([q_j; a_j], d_jk)`.
@@ -81,15 +79,25 @@ class Head(nn.Module, ABC):
         """
         raise NotImplementedError
 
-    def preprocess(
-        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
-    ) -> Tensor:
+    def preprocess(self, last_hidden_state: Tensor, head: str, **kwargs) -> Tensor:
         if self.bert_layers is not None:
-            last_hidden_state = self.bert_layers(last_hidden_state)
+            attention_mask = kwargs.get("batch", {}).get(f"{head}.attention_mask", None)
+            bs = last_hidden_state.shape[:-2]
+            last_hidden_state = last_hidden_state.view(-1, *last_hidden_state.shape[-2:])
+            if attention_mask is not None:
+                attention_mask = attention_mask.view(-1, *attention_mask.shape[-1:])
+                attention_mask = attention_mask.unsqueeze(-1) * attention_mask.unsqueeze(-2)
+                attention_mask = (1.0 - attention_mask) * -10000.0
+                # final shape [bs, n_heads, seq_len, seq_len]
+                attention_mask = attention_mask.unsqueeze(1)
 
-        return last_hidden_state
+            for i, layer in enumerate(self.bert_layers):
+                last_hidden_state, *_ = layer(last_hidden_state, attention_mask=attention_mask)
+            last_hidden_state = last_hidden_state.view(*bs, *last_hidden_state.shape[-2:])
+
+        return self._preprocess(last_hidden_state, head, **kwargs)
 
     def _preprocess(
-        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         return last_hidden_state

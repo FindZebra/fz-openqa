@@ -53,7 +53,7 @@ class ZeroHead(DprHead):
     ) -> Tensor:
 
         # preprocess
-        hq = self._preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
+        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
 
         # compute the score
         return self.score(hq=hq, batch=batch, **kwargs)
