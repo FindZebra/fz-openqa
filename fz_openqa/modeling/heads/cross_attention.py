@@ -89,7 +89,7 @@ class CrossAttentionHead(Head):
         score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
         return score
 
-    def preprocess(
+    def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocess")

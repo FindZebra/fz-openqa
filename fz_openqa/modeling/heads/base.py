@@ -1,11 +1,20 @@
+from __future__ import annotations
+
 from abc import ABC
 from abc import abstractmethod
 from typing import Dict
 from typing import Optional
+from typing import Union
 
+from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
+from transformers import AutoModel
 from transformers import BertConfig
+from transformers.models.bert.modeling_bert import BertEncoder
+from transformers.models.bert.modeling_bert import BertPreTrainedModel
+
+from fz_openqa.modeling.modules.utils.bert import instantiate_bert_model_with_config
 
 
 class Head(nn.Module, ABC):
@@ -13,11 +22,28 @@ class Head(nn.Module, ABC):
 
     id: str = "base"
 
-    def __init__(self, *, bert_config: BertConfig, output_size: int, **kwargs):
+    def __init__(
+        self,
+        *,
+        bert: DictConfig | BertPreTrainedModel,
+        output_size: int,
+        split_bert_layers: int = 0,
+        **kwargs
+    ):
         super(Head, self).__init__()
 
-        self.input_size = bert_config.hidden_size
+        # instantiate bert
+        bert = instantiate_bert_model_with_config(bert)
+
+        self.input_size = bert.config.hidden_size
         self.output_size = output_size
+
+        # use the last K layers of the BERT model
+        if split_bert_layers == 0:
+            self.bert_layers = None
+        else:
+            bert_encoder: BertEncoder = bert.encoder
+            self.bert_layers = nn.ModuleList(bert_encoder.layer[-split_bert_layers:])
 
     @abstractmethod
     def forward(
@@ -56,6 +82,14 @@ class Head(nn.Module, ABC):
         raise NotImplementedError
 
     def preprocess(
+        self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
+    ) -> Tensor:
+        if self.bert_layers is not None:
+            last_hidden_state = self.bert_layers(last_hidden_state)
+
+        return last_hidden_state
+
+    def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None
     ) -> Tensor:
         return last_hidden_state

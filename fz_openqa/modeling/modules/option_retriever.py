@@ -143,14 +143,14 @@ class OptionRetriever(Module):
             h = self._forward_field(batch, "document", **kwargs)
             if predict:
                 mask = self.mask(batch, "document")
-                h = self.retriever_head.preprocess(h, "document", mask=mask, batch=batch)
+                h = self.retriever_head._preprocess(h, "document", mask=mask, batch=batch)
             output["_hd_"] = h
 
         if "question.input_ids" in batch:
             h = self._forward_field(batch, "question", **kwargs)
             if predict:
                 mask = self.mask(batch, "question")
-                h = self.retriever_head.preprocess(h, "question", mask=mask, batch=batch)
+                h = self.retriever_head._preprocess(h, "question", mask=mask, batch=batch)
             output["_hq_"] = h
 
         return output
