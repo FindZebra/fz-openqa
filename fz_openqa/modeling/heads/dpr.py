@@ -138,8 +138,8 @@ class DprHead(Head):
             d_weights = None
 
         # preprocess
-        hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, weights=d_weights, **kwargs)
-        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
+        hd = self._preprocess(hd, "document", mask=d_mask, batch=batch, weights=d_weights, **kwargs)
+        hq = self._preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
 
         # compute the score
         score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
@@ -164,7 +164,7 @@ class DprHead(Head):
             hd = self._flatten_documents(hd, doc_ids)
             return einsum("boh, mh -> bom", hq, hd)
 
-    def preprocess(
+    def _preprocess(
         self,
         last_hidden_state: Tensor,
         head: str,
