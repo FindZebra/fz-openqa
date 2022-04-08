@@ -50,7 +50,7 @@ class ColbertHead(DprHead):
             max_scores, _ = scores.max(-1)
             return max_scores.sum(-1)
 
-    def preprocess(
+    def _preprocess(
         self,
         last_hidden_state: Tensor,
         head: str,
