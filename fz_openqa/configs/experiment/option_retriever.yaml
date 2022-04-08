@@ -163,8 +163,8 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
-      test: true
+      validation: false
+      test: false
 
   # OpenQA builder parameters
   builder:
