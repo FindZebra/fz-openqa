@@ -90,7 +90,7 @@ model:
     max_batch_size: 200
     retriever_head:
       output_size: ${model.hidden_size}
-      use_mask: false
+      use_mask: true
       use_answer_mask: false
       bayesian: false
       learn_scale: false
@@ -99,7 +99,7 @@ model:
       bias: false
     reader_head:
       output_size: ${model.hidden_size}
-      use_mask: false
+      use_mask: true
       bayesian: false
       learn_scale: false
       scale: 1.
@@ -173,7 +173,7 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us
-      query_expansion: 350
+      query_expansion: null
       n_query_tokens: 1 # todo!!! (10)
       n_answer_tokens: 1 # previous exps: 10
       max_length: 350 # todo!!!

@@ -123,7 +123,7 @@ class OptionRetriever(Module):
     def mask(self, batch: Batch, field: str) -> Tensor:
         """prepare the head mask for the given field."""
         if field == "question":
-            mask = torch.ones_like(batch["question.attention_mask"].float())
+            mask = batch["question.attention_mask"].clone().float()
             mask[mask == self._pad_token_id] = 0
         elif field == "document":
             inputs_ids = batch["document.input_ids"]
