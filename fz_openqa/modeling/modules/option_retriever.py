@@ -306,6 +306,7 @@ class OptionRetriever(Module):
             retriever_score,
             d_batch.get("document.retrieval_score", None),
             d_batch.get("document.retrieval_rank", None),
+            match_score=d_batch.get("document.match_score", None),
             output=step_output,
         )
 
@@ -346,6 +347,7 @@ class OptionRetriever(Module):
         retrieval_scores: Optional[Tensor],
         retrieval_rank: Optional[Tensor],
         *,
+        match_score: Optional[Tensor] = None,
         output: Dict,
     ):
         """
@@ -399,6 +401,12 @@ class OptionRetriever(Module):
             output["retrieval/n_samples"] = retrieval_rank.size(-1)
             output["retrieval/max_sampled_rank"] = retrieval_rank.max().float()
             output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
+
+        if match_score is not None:
+            match_logits = (match_score > 0).float().log_softmax(dim=-1)
+            kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
+            kl_relevance = kl_relevance.sum(dim=(1, 2))
+            output["retriever/kl_relevance"] = kl_relevance.mean()
 
     @staticmethod
     def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:
