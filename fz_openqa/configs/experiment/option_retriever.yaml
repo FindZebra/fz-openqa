@@ -60,7 +60,7 @@ trainer:
 model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 20_000 # TODO !!
+  num_training_steps: 100_000 # TODO !!
   hidden_size: 32
   bert:
     config:
@@ -84,7 +84,7 @@ model:
       initial_value: 0.1
       final_value: 1e-5
   module:
-    split_bert_layers: 2
+    split_bert_layers: 0
     resample_k: null
     alpha: 0
     max_batch_size: 200
@@ -114,7 +114,7 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: 20
-    reset_optimizer: true # TODO !!
+    reset_optimizer: false # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
@@ -173,8 +173,8 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: medqa-us
-      query_expansion: null
-      n_query_tokens: 10 # todo!!!
+      query_expansion: 350
+      n_query_tokens: 1 # todo!!! (10)
       n_answer_tokens: 1 # previous exps: 10
       max_length: 350 # todo!!!
     corpus_builder:
