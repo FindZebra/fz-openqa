@@ -90,23 +90,25 @@ model:
     max_batch_size: 200
     retriever_head:
       output_size: ${model.hidden_size}
+      normalize: false
       use_mask: true
-      is_scaled: true
+      is_scaled: false
       use_answer_mask: false
       bayesian: false
       learn_scale: false
       scale: 1.
-      scale_init: 0.1
+      scale_init: 1.
       share_parameters: true
       bias: false
     reader_head:
       output_size: ${model.hidden_size}
       use_mask: true
-      is_scaled: true
+      normalize: false
+      is_scaled: false
       bayesian: false
       learn_scale: false
       scale: 1.
-      scale_init: 0.1
+      scale_init: 1.
       share_parameters: true
       bias: false
     gradients:
