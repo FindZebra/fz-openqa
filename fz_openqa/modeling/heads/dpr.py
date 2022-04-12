@@ -31,13 +31,15 @@ class DprHead(Head):
         learn_scale: bool = False,
         scale: float = 1.0,
         auto_scale: bool = False,
+        is_scaled: bool = False,
+        scale_init: float = 1.0,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
         self.scale_init = scale
-        self.register_buffer("is_scaled", torch.tensor(0))
+        self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
         self.auto_scale = auto_scale
 
         Layer = nn.Linear if not bayesian else BayesianLinear
@@ -56,7 +58,7 @@ class DprHead(Head):
         else:
             self.q_head = self.d_head = None
 
-        scale_value = torch.tensor(1.0, dtype=torch.float)
+        scale_value = torch.tensor(scale_init, dtype=torch.float)
         offset_value = torch.tensor(0.0, dtype=torch.float)
         if learn_scale:
             self._scale = nn.Parameter(scale_value)
@@ -95,7 +97,7 @@ class DprHead(Head):
         return self.scale_value.pow(-1)
 
     def set_scale(self, scores: Tensor):
-        self._scale.data = self.scale_init * scores.std().detach().pow(-1)
+        self._scale.data = self.scale_init * scores.std().detach().pow(-1) * self._scale.data
         self._offset.data = -scores.mean().detach() * self._scale.data
         self.is_scaled.data += 1
 

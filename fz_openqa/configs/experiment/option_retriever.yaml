@@ -91,18 +91,22 @@ model:
     retriever_head:
       output_size: ${model.hidden_size}
       use_mask: true
+      is_scaled: true
       use_answer_mask: false
       bayesian: false
       learn_scale: false
       scale: 1.
+      scale_init: 0.1
       share_parameters: true
       bias: false
     reader_head:
       output_size: ${model.hidden_size}
       use_mask: true
+      is_scaled: true
       bayesian: false
       learn_scale: false
       scale: 1.
+      scale_init: 0.1
       share_parameters: true
       bias: false
     gradients:
