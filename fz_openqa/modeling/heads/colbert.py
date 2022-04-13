@@ -19,12 +19,14 @@ class ColbertHead(DprHead):
         *,
         use_mask: bool = False,
         use_answer_mask=False,
+        soft_score: bool = False,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.use_mask = use_mask
         self.use_answer_mask = use_answer_mask
+        self.soft_score = soft_score
         if self.use_answer_mask:
             assert tokenizer is not None, "tokenizer must be provided if use_answer_mask is True"
             self.sep_token_id = tokenizer.sep_token_id
@@ -40,6 +42,25 @@ class ColbertHead(DprHead):
         mask: Optional[Tensor] = None,
         **kwargs,
     ) -> Tensor:
+
+        if self.soft_score:
+            if self.across_batch:
+                raise NotImplementedError("soft_score across_batch not implemented")
+
+            # split hq and hd
+            hq_1, hq_2 = hq.chunk(2, dim=-1)
+            hd_1, hd_2 = hd.chunk(2, dim=-1)
+
+            # attention model
+            attn_scores = einsum("bouh, bodvh -> boduv", hq_1, hd_1)
+            attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
+            attn_scores = attn_scores.softmax(dim=-1)
+
+            # values
+            values = einsum("bouh, bodvh -> boduv", hq_2, hd_2)
+            scores = (attn_scores * values).sum(dim=(-2, -1))
+            return scores
+
         if not self.across_batch:
             scores = einsum("bouh, bodvh -> boduv", hq, hd)
             max_scores, _ = scores.max(-1)

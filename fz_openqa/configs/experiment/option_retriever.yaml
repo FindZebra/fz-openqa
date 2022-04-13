@@ -89,6 +89,7 @@ model:
     alpha: 0
     max_batch_size: 200
     retriever_head:
+      soft_score: false
       output_size: ${model.hidden_size}
       normalize: false
       use_mask: true
@@ -101,6 +102,7 @@ model:
       share_parameters: true
       bias: false
     reader_head:
+      soft_score: true
       output_size: ${model.hidden_size}
       use_mask: true
       normalize: false
