@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import string
 from enum import Enum
 from typing import Any
@@ -307,6 +308,8 @@ class OptionRetriever(Module):
             d_batch.get("document.retrieval_score", None),
             d_batch.get("document.retrieval_rank", None),
             match_score=d_batch.get("document.match_score", None),
+            document_ids=d_batch.get("document.row_idx", None),
+            reader_score=reader_score,
             output=step_output,
         )
 
@@ -348,6 +351,8 @@ class OptionRetriever(Module):
         retrieval_rank: Optional[Tensor],
         *,
         match_score: Optional[Tensor] = None,
+        document_ids: Optional[Tensor] = None,
+        reader_score: Optional[Tensor] = None,
         output: Dict,
     ):
         """
@@ -402,11 +407,26 @@ class OptionRetriever(Module):
             output["retrieval/max_sampled_rank"] = retrieval_rank.max().float()
             output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
 
+        # match score diagnostics
         if match_score is not None:
             match_logits = (match_score > 0).float().log_softmax(dim=-1)
             kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
             kl_relevance = kl_relevance.sum(dim=(1, 2))
             output["retriever/kl_relevance"] = kl_relevance.mean()
+
+        # diversity of the retrieved documents
+        if document_ids is not None:
+            unique_ids = document_ids.view(-1).unique()
+            output["retrieval/n_unique_docs"] = unique_ids.size(0)
+            prop_unique_docs = unique_ids.size(0) / math.prod(document_ids.shape)
+            output["retrieval/prop_unique_docs"] = prop_unique_docs
+
+        # reader score diagnostics
+        if reader_score is not None:
+            reader_score_ = reader_score - reader_score.mean(dim=-1, keepdim=True)
+            retriever_score_ = retriever_score - retriever_score.mean(dim=-1, keepdim=True)
+            scores_diff = (retriever_score_ - reader_score_).pow(2).mean()
+            output["retriever/scores_diff"] = scores_diff
 
     @staticmethod
     def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:
