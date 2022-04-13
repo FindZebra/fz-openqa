@@ -134,11 +134,16 @@ class Model(LightningModule):
     def predict(self, batch: Batch, **kwargs) -> Batch:
         return self.module.predict(batch, **kwargs, **self.params)
 
+    def evaluate(self, batch: Batch, *, split: Split = Split.TRAIN, **kwargs) -> Batch:
+        output = self._step(batch, split=split, **kwargs)
+        output_ = self._step_end(output, split=split, **kwargs)
+        return {**output, **output_}
+
     def _step(
         self,
         batch: Batch,
-        batch_idx: int,
-        dataloader_idx: Optional[int],
+        batch_idx: int = None,
+        dataloader_idx: Optional[int] = None,
         *,
         split: Split,
         **kwargs,
