@@ -1,6 +1,7 @@
 """
 Functions to process json-like structures
 """
+from copy import copy
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -11,8 +12,18 @@ from typing import T
 from typing import Tuple
 from typing import Union
 
+from omegaconf import DictConfig
 
-def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Union[List, Dict]:
+
+def copy_with_override(data: Dict, key: Any, value: Any) -> Dict:
+    data = copy(data)
+    data[key] = value
+    return data
+
+
+def apply_to_json_struct(
+    data: Union[List, Dict], fn: Callable, strict=False, **kwargs
+) -> Union[List, Dict]:
     """
     Apply a function to a json-like structure
     Parameters
@@ -28,13 +39,15 @@ def apply_to_json_struct(data: Union[List, Dict], fn: Callable, **kwargs) -> Uni
     -------
     json-like structure
     """
-    if isinstance(data, dict):
+    if isinstance(data, (dict, DictConfig)):
         try:
             output = {
-                key: apply_to_json_struct(value, fn, key=key, **kwargs)
+                key: apply_to_json_struct(value, fn, **copy_with_override(kwargs, "key", key))
                 for key, value in data.items()
             }
         except Exception:
+            if strict:
+                raise
             output = {key: apply_to_json_struct(value, fn, **kwargs) for key, value in data.items()}
 
         return output

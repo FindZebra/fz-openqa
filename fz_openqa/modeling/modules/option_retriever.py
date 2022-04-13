@@ -137,22 +137,31 @@ class OptionRetriever(Module):
 
         return mask
 
-    def _forward(self, batch: Batch, predict: bool = True, **kwargs) -> Batch:
+    def _forward(
+        self, batch: Batch, predict: bool = True, head: str = "retriever", **kwargs
+    ) -> Batch:
         output = {}
+        heads = {"reader": self.reader_head, "retriever": self.retriever_head}
+        head_suffixes = {"retriever": "", "reader": "reader_"}
+        fields_with_prefixes = {"document": "_hd_", "question": "_hq_"}
 
-        if "document.input_ids" in batch:
-            h = self._forward_field(batch, "document", **kwargs)
-            if predict:
-                mask = self.mask(batch, "document")
-                h = self.retriever_head._preprocess(h, "document", mask=mask, batch=batch)
-            output["_hd_"] = h
+        # process all available fields
+        for field_name, field_prefix in fields_with_prefixes.items():
+            if f"{field_name}.input_ids" in batch:
 
-        if "question.input_ids" in batch:
-            h = self._forward_field(batch, "question", **kwargs)
-            if predict:
-                mask = self.mask(batch, "question")
-                h = self.retriever_head._preprocess(h, "question", mask=mask, batch=batch)
-            output["_hq_"] = h
+                # process the `input_ids` using the backbone (BERT)
+                h = self._forward_field(batch, field_name, **kwargs)
+
+                # process `h` using the head(s)
+                if predict:
+                    mask = self.mask(batch, field_name)
+                    for hid in head.split("+"):
+                        head_layer = heads[hid]
+                        head_suffix = head_suffixes[hid]
+                        h_ = head_layer._preprocess(h, field_name, mask=mask, batch=batch)
+                        output[f"{field_prefix}{head_suffix}"] = h_
+                else:
+                    output[field_prefix] = h
 
         return output
 

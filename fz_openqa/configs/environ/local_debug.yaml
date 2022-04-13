@@ -1,0 +1,29 @@
+# @package _global_
+
+defaults:
+  - override /sys: local.yaml
+  - override /model/bert: mini.yaml
+
+trainer:
+  gpus: 0
+  checkpoint_callback: False
+
+
+datamodule:
+  use_subset: True
+  train_batch_size: 4
+  eval_batch_size: 4
+  num_proc: 2
+  num_workers: 2
+  n_documents:
+    train: 10
+    validation: 10
+    test: 10
+
+datamodule.corpus_builder:
+  passage_length: 100
+  passage_stride: 100
+
+
+logger: null
+callbacks: null
