@@ -48,16 +48,16 @@ class ColbertHead(DprHead):
                 raise NotImplementedError("soft_score across_batch not implemented")
 
             # split hq and hd
-            hq_1, hq_2 = hq.chunk(2, dim=-1)
-            hd_1, hd_2 = hd.chunk(2, dim=-1)
+            hq_a, hq_v = hq.chunk(2, dim=-1)
+            hd_a, hd_v = hd.chunk(2, dim=-1)
 
             # attention model
-            attn_scores = einsum("bouh, bodvh -> boduv", hq_1, hd_1)
+            attn_scores = einsum("bouh, bodvh -> boduv", hq_a, hd_a)
             attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
             attn_scores = attn_scores.softmax(dim=-1)
 
             # values
-            values = einsum("bouh, bodvh -> boduv", hq_2, hd_2)
+            values = einsum("bouh, bodvh -> boduv", hq_v, hd_v)
             scores = (attn_scores * values).sum(dim=(-2, -1))
             return scores
 
@@ -87,7 +87,12 @@ class ColbertHead(DprHead):
             last_hidden_state = head_op(last_hidden_state, **head_kwargs)
 
         if self.normalize:
-            last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
+            if not self.soft_score:
+                last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
+            else:
+                h_a, h_v = last_hidden_state.chunk(2, dim=-1)
+                h_v = F.normalize(h_v, p=2, dim=-1)
+                last_hidden_state = torch.cat([h_a, h_v], dim=-1)
 
         if self.use_mask and mask is not None:
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
