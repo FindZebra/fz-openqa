@@ -202,8 +202,14 @@ class MaxSim(torch.nn.Module):
     ) -> MaxSimOutput:
         # process q_vectors using the token-level faiss index
         token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
+        utok_ids = torch.unique(token_ids)
+        logger.info(f"toks. unique: {100 * utok_ids.numel() / token_ids.numel():.2f}%")
+        logger.info(f"toks. unique * p={p}: {100 * utok_ids.numel() / token_ids.numel() * p:.2f}%")
 
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
+        upids = torch.unique(pids)
+        logger.info(f"pids. unique: {100 * upids.numel() / pids.numel():.2f}%")
+        logger.info(f"pids. unique * p={p}: {100 * upids.numel() / pids.numel() * p:.2f}%")
 
         # send the token_ids to each device
         for q, device in zip(self.ranking_input_queues, self.ranking_devices):
