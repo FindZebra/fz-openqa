@@ -1,5 +1,7 @@
 # @package _global_
 
+setup_with_model: false
+
 defaults:
   - sys: local
   - trainer: minimal
@@ -11,6 +13,19 @@ defaults:
   - hydra: default
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
+
+
+datamodule:
+  sampler:
+    total: ${datamodule.n_documents}
+    temperature: 1
+    largest:
+      train: false
+      validation: false
+      test: false
+
+  index_builder:
+    persist_cache: true
 
 #datamodule:
 #  num_proc: 4

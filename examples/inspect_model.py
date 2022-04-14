@@ -1,7 +1,9 @@
+import json
 import logging
 import os
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
@@ -28,6 +30,9 @@ import seaborn as sns
 
 sns.set()
 
+# PATH = "2022-04-13/16-46-28" # no norm
+PATH = "2022-04-11/12-16-00"  # norm
+
 
 @torch.no_grad()
 @hydra.main(
@@ -44,11 +49,15 @@ def run(config: DictConfig) -> None:
     # avoid "too many open files" error
     torch.multiprocessing.set_sharing_strategy("file_system")
 
+    # output directory
+    output_dir = Path("outputs")
+    output_dir.mkdir(exist_ok=True, parents=True)
+
     # set the default checkpoint based on the environment
     if os.environ.get("USER") == "valv" and sys.platform != "darwin":
-        DEFAULT_CKPT = "/scratch/valv/fz-openqa/runs/2022-04-12/12-28-19"
+        DEFAULT_CKPT = f"/scratch/valv/fz-openqa/runs/{PATH}"
     else:
-        DEFAULT_CKPT = "/Users/valv/Documents/Research/remote_data/12-28-19"
+        DEFAULT_CKPT = f"/Users/valv/Documents/Research/remote_data/{PATH.split()[-1]}"
 
     # load a checkpoint
     loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
@@ -60,20 +69,33 @@ def run(config: DictConfig) -> None:
     logging.info("Loading model...")
     model: Model = loader.load_model(zero_shot=config.get("zero_shot", False))
     logger.info(f"Loaded model {type(model.module)}, fingerprint={get_fingerprint(model)}")
+    logger.info(f"Reader temperature: {model.module.reader_head.temperature()}")
+    logger.info(f"Retriever temperature: {model.module.retriever_head.temperature()}")
+
+    # define the trainer
+    trainer = loader.instantiate("trainer")
+    rich.print(f">> trainer = {trainer}")
 
     # build all the datasets
     datamodule = loader.instantiate("datamodule")
-    datamodule.setup()
-    rich.print(f">> Datamodule: {datamodule}")
-
-    # define the trainer
-    trainer = instantiate(config.get("trainer", {}))
-    rich.print(f">> trainer = {trainer}")
+    if config.get("subset_size", None) is not None:
+        datamodule.builder.dataset_builder.subset_size = config.subset_size
+    if config.get("setup_with_model", False):
+        logger.info("Setting up datasets with model...")
+        datamodule.setup(trainer=trainer, model=model)
+    else:
+        logger.info("Setting up datasets without model...")
+        datamodule.setup()
 
     # get batch of data
     train_loader = datamodule.train_dataloader()
     batch = next(iter(train_loader))
     pprint_batch(batch, "Training batch")
+    pids = batch["document.row_idx"]
+    pid_freq = Counter(pids.view(-1).cpu().detach().numpy().tolist())
+    rich.print({k: f for k, f in pid_freq.most_common(20)})
+    with open(output_dir / "pid_freq.json", "w") as f:
+        f.write(json.dumps({k: f for k, f in pid_freq.most_common()}, indent=2))
 
     # process the data
     model.eval()
@@ -81,67 +103,82 @@ def run(config: DictConfig) -> None:
     pprint_batch(output, "Output batch")
 
     # inspect the data
-    output_dir = Path("outputs")
-    output_dir.mkdir(exist_ok=True, parents=True)
-    logger.info(f"Writing to: {output_dir.absolute()}")
-    TERM_SIZE = shutil.get_terminal_size()[0]
-    N_SAMPLES = 10
-    N_DOCS = 3
-    H_MAX = None
-    W_MAX = None
-    d_input_ids = batch.get("document.input_ids")
-    q_input_ids = batch.get("question.input_ids")
-    hq = output.get("_hq_")
-    hd = output.get("_hd_")
-    scores = torch.einsum("bmqh,bmkdh->bmkqd", hq, hd)
-    targets = batch.get("answer.target")
-    for i in range(min(N_SAMPLES, len(hq))):
-        j = targets[i]
-        d_input_ids_i = d_input_ids[i][j]
-        q_input_ids_i = q_input_ids[i][j]
-        q_input_ids_i_ = [q.item() for q in q_input_ids_i]
-        if loader.tokenizer.pad_token_id in q_input_ids_i_:
-            q_padding_idx = q_input_ids_i_.index(loader.tokenizer.pad_token_id)
-        else:
-            q_padding_idx = None
-        q_input_ids_i = q_input_ids_i[:q_padding_idx]
-        scores_i = scores[i][j][:q_padding_idx]
-        # hq_i = hq[i][j]
-        # hd_i = hd[i][j]
-        msg = f" Question {i+1} "
-        rich.print(f"{msg:=^{TERM_SIZE}}")
-        rich.print(pretty_decode(q_input_ids_i, tokenizer=loader.tokenizer))
+    with open(output_dir / "outputs.txt", "w") as f:
+        logger.info(f"Writing to: {output_dir.absolute()}")
+        TERM_SIZE = shutil.get_terminal_size()[0]
+        N_SAMPLES = 10
+        N_DOCS = 10
+        H_MAX = 100
+        W_MAX = 100
+        d_input_ids = batch.get("document.input_ids")
+        q_input_ids = batch.get("question.input_ids")
+        retrieval_score = batch.get("document.retrieval_score")
+        hq = output.get("_hq_")
+        hd = output.get("_hd_")
+        scores = torch.einsum("bmqh,bmkdh->bmkqd", hq, hd)
+        targets = batch.get("answer.target")
+        for i in range(min(N_SAMPLES, len(hq))):
+            j = targets[i]
+            d_input_ids_i = d_input_ids[i][j]
+            q_input_ids_i = q_input_ids[i][j]
+            retrieval_score_i = retrieval_score[i][j]
+            q_input_ids_i_ = [int(q.item()) for q in q_input_ids_i]
 
-        for k in range(N_DOCS):
-            # hd_ik = hd_i[k]
-            scores_ik = scores_i[k]
-            scores_ik = scores_ik.softmax(dim=-1)
-            d_input_ids_ik = d_input_ids_i[k]
-            msg = f" Document {i+1}:{k+1} "
+            if int(loader.tokenizer.pad_token_id) in q_input_ids_i_:
+                q_padding_idx = q_input_ids_i_.index(int(loader.tokenizer.pad_token_id))
+            else:
+                q_padding_idx = None
+            q_input_ids_i = q_input_ids_i[:q_padding_idx]
+            scores_i = scores[i][j]
+            # hq_i = hq[i][j]
+            # hd_i = hd[i][j]
+            msg = f" Question {i+1} "
             rich.print(f"{msg:=^{TERM_SIZE}}")
-            rich.print(pretty_decode(d_input_ids_ik, tokenizer=loader.tokenizer, style="white"))
-            rich.print(f"Scores: {scores_ik.shape}")
+            u = pretty_decode(q_input_ids_i, tokenizer=loader.tokenizer)
+            rich.print(u)
+            f.write(f"{msg}\n{u}\n")
 
-            # visualize the scores
-            q_tokens = [loader.tokenizer.decode(t, skip_special_tokens=True) for t in q_input_ids_i]
-            d_tokens = [
-                loader.tokenizer.decode(t, skip_special_tokens=True) for t in d_input_ids_ik
-            ]
+            for k in range(N_DOCS):
+                # hd_ik = hd_i[k]
+                retrieval_score_ik = retrieval_score_i[k]
+                scores_ik = scores_i[k, :q_padding_idx, :]
+                scores_ik = scores_ik.softmax(dim=-1)
+                d_input_ids_ik = d_input_ids_i[k]
+                msg = f" Document {i+1}-{k+1} : score={retrieval_score_ik:.2f} "
+                rich.print(f"{msg:=^{TERM_SIZE}}")
+                u = pretty_decode(d_input_ids_ik, tokenizer=loader.tokenizer, style="white")
+                rich.print(u)
+                f.write(f"{msg}\n{u}\n")
 
-            # print corresponding `max` scores
-            for qi, q_token in enumerate(q_tokens):
-                qj = scores_ik[i].argmax(dim=-1)
-                rich.print(f"{q_token:>10} -> {d_tokens[qj]:<10}")
+                # visualize the scores
+                q_tokens = [
+                    loader.tokenizer.decode(t, skip_special_tokens=True) for t in q_input_ids_i
+                ]
+                d_tokens = [
+                    loader.tokenizer.decode(t, skip_special_tokens=True) for t in d_input_ids_ik
+                ]
 
-            # heatmap
-            plt.figure(figsize=(20, 20))
-            sns.heatmap(
-                scores_ik[:H_MAX, :W_MAX],
-                xticklabels=d_tokens[:W_MAX],
-                yticklabels=q_tokens[:H_MAX],
-            )
-            plt.savefig(output_dir / f"heatmap-{i}-{k}.png")
-            plt.close()
+                # print corresponding `max` scores
+                # for qi, q_token in enumerate(q_tokens):
+                #     qj = scores_ik[i].argmax(dim=-1)
+                #     rich.print(f"{q_token:>10} -> {d_tokens[qj]:<10}")
+
+                # heatmap
+                plt.figure(figsize=(20, 20))
+                y = scores_ik[:H_MAX, :W_MAX]
+
+                # highlight the max score
+                # ym = 1.2 * y.max().item()
+                # _, ymi = y.max(dim=1)
+                # y = y.scatter(dim=1, index=ymi[:, None], value=float(ym))
+
+                sns.heatmap(
+                    y,
+                    xticklabels=d_tokens[:W_MAX],
+                    yticklabels=q_tokens[:H_MAX],
+                )
+                plt.savefig(output_dir / f"heatmap-{i}-{k}.png")
+                plt.close()
 
     logger.info(f"Written to: {output_dir.absolute()}")
 
