@@ -163,8 +163,14 @@ class FaissHandler(IndexHandler):
 
         # set `nprobe`
         if nprobe is not None:
-            gspace = faiss.GpuParameterSpace()  # type: ignore
-            gspace.set_index_parameter(self._index, "nprobe", nprobe)
+            try:
+                gspace = faiss.GpuParameterSpace()  # type: ignore
+                gspace.set_index_parameter(self._index, "nprobe", nprobe)
+            except Exception:
+                try:
+                    self._index.nprobe = nprobe
+                except Exception:
+                    pass
 
     @abc.abstractmethod
     def free_memory(self):
