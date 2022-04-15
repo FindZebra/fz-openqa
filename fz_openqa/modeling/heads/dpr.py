@@ -126,7 +126,7 @@ class DprHead(Head):
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
 
         # sample weights todo: only `if self.training`
         if isinstance(self.q_head, BayesianLinear):
@@ -144,12 +144,12 @@ class DprHead(Head):
         hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
 
         # compute the score
-        score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+        score, diagnostics = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
 
         if self.auto_scale and self.is_scaled < 1:
             score = self.set_scale(score)
 
-        return score + self.offset
+        return score + self.offset, diagnostics
 
     def score(
         self,
@@ -159,12 +159,13 @@ class DprHead(Head):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
+        diagnostics = {}
         if not self.across_batch:
-            return einsum("boh, bodh -> bod", hq, hd)
+            return einsum("boh, bodh -> bod", hq, hd), diagnostics
         else:
             hd = self._flatten_documents(hd, doc_ids)
-            return einsum("boh, mh -> bom", hq, hd)
+            return einsum("boh, mh -> bom", hq, hd), diagnostics
 
     def _preprocess(
         self,

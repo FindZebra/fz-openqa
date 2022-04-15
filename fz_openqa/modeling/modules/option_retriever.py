@@ -133,7 +133,7 @@ class OptionRetriever(Module):
             for w in self.skiplist:
                 mask[inputs_ids == w] = 0
         else:
-            ValueError(f"Unknown field {field}")
+            raise ValueError(f"Unknown field {field}")
 
         return mask
 
@@ -290,22 +290,27 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        reader_score = self.reader_head(
+        reader_score, reader_dgs = self.reader_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
-        retriever_score = self.retriever_head(
+        retriever_score, retriever_dgs = self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
+
+        pprint_batch(retriever_dgs, "Option retriever::retriever_dgs", silent=False)
+        pprint_batch(reader_dgs, "Option retriever::reader_dgs", silent=False)
 
         # log documents ids
         step_output["retriever/max-doc-id"] = batch["document.row_idx"].max()

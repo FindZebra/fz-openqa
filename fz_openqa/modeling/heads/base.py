@@ -26,9 +26,13 @@ class Head(nn.Module, ABC):
         bert: DictConfig | BertPreTrainedModel,
         output_size: int,
         split_bert_layers: int = 0,
+        id: Optional[str] = None,
         **kwargs,
     ):
         super(Head, self).__init__()
+
+        if id is not None:
+            self.id = id
 
         # instantiate bert
         bert = instantiate_bert_model_with_config(bert)
@@ -54,7 +58,7 @@ class Head(nn.Module, ABC):
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
         """
         Compute the score for each pair `f([q_j; a_j], d_jk)`.
 

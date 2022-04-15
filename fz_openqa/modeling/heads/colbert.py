@@ -1,8 +1,11 @@
+import math
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from torch import einsum
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
@@ -19,19 +22,29 @@ class ColbertHead(DprHead):
         *,
         use_mask: bool = False,
         use_answer_mask=False,
-        soft_score: bool = False,
+        use_soft_score: bool = False,
+        compute_agg_score: bool = False,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.use_mask = use_mask
         self.use_answer_mask = use_answer_mask
-        self.soft_score = soft_score
+        self.use_soft_score = use_soft_score
+        self.compute_agg_score = compute_agg_score
         if self.use_answer_mask:
             assert tokenizer is not None, "tokenizer must be provided if use_answer_mask is True"
             self.sep_token_id = tokenizer.sep_token_id
         else:
             self.sep_token_id = None
+
+        logger.info(
+            f"Initialized {self.__class__.__name__} (id={self.id}) with "
+            f"use_mask={self.use_mask}, "
+            f"use_answer_mask={self.use_answer_mask}, "
+            f"soft_score={self.use_soft_score}, "
+            f"compute_agg_score={self.compute_agg_score}"
+        )
 
     def score(
         self,
@@ -41,9 +54,27 @@ class ColbertHead(DprHead):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
 
-        if self.soft_score:
+        diagnostics = {}
+
+        # compute the aggregated score
+        if self.compute_agg_score:
+            upids = torch.unique(doc_ids)
+            rich.print(f">> prop doc ids: {100*len(upids) / doc_ids.numel():.2f}%, n={len(upids)}")
+            hd_flat = self._flatten_documents(hd, doc_ids)
+            rich.print(f">> flattened hd: {hd_flat.shape}")
+            hq_flat = hq.view(-1, *hq.shape[-2:])
+            flat_scores = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
+            max_scores, _ = flat_scores.max(-1)
+            flat_scores = max_scores.sum(-1)
+            # estimate log p(d) = \sum_q log p(d,q)
+            nq = hq_flat.shape[0]
+            log_p_d = (flat_scores - flat_scores.logsumexp(-1, keepdim=True) - math.log(nq)).sum(0)
+            diagnostics["log_p_d"] = log_p_d
+
+        # compute the score using self-attention
+        if self.use_soft_score:
             if self.across_batch:
                 raise NotImplementedError("soft_score across_batch not implemented")
 
@@ -59,17 +90,20 @@ class ColbertHead(DprHead):
             # values
             values = einsum("bouh, bodvh -> boduv", hq_v, hd_v)
             scores = (attn_scores * values).sum(dim=(-2, -1))
-            return scores
 
-        if not self.across_batch:
+        elif not self.across_batch:
+            # compute the basic Colbert scores
             scores = einsum("bouh, bodvh -> boduv", hq, hd)
             max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+            scores = max_scores.sum(-1)
         else:
+            # compute the Colbert scores for ALL documents within the batch
             hd = self._flatten_documents(hd, doc_ids)
             scores = einsum("bouh, mvh -> bomuv", hq, hd)
             max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+            scores = max_scores.sum(-1)
+
+        return scores, diagnostics
 
     def _preprocess(
         self,
@@ -87,7 +121,7 @@ class ColbertHead(DprHead):
             last_hidden_state = head_op(last_hidden_state, **head_kwargs)
 
         if self.normalize:
-            if not self.soft_score:
+            if not self.use_soft_score:
                 last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
             else:
                 h_a, h_v = last_hidden_state.chunk(2, dim=-1)
