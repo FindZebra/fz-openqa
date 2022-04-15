@@ -133,7 +133,7 @@ class OptionRetriever(Module):
             for w in self.skiplist:
                 mask[inputs_ids == w] = 0
         else:
-            ValueError(f"Unknown field {field}")
+            raise ValueError(f"Unknown field {field}")
 
         return mask
 
@@ -290,20 +290,22 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        reader_score = self.reader_head(
+        reader_score, reader_dgs = self.reader_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
-        retriever_score = self.retriever_head(
+        retriever_score, retriever_dgs = self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
 
@@ -320,6 +322,7 @@ class OptionRetriever(Module):
             document_ids=d_batch.get("document.row_idx", None),
             reader_score=reader_score,
             output=step_output,
+            **retriever_dgs
         )
 
         # compute the gradients
@@ -331,6 +334,7 @@ class OptionRetriever(Module):
                 retrieval_score=d_batch.get("document.retrieval_score", None),
                 retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
                 **kwargs,
+                **retriever_dgs
             )
         )
 
@@ -362,6 +366,7 @@ class OptionRetriever(Module):
         match_score: Optional[Tensor] = None,
         document_ids: Optional[Tensor] = None,
         reader_score: Optional[Tensor] = None,
+        agg_retriever_score: Optional[Tensor] = None,
         output: Dict,
     ):
         """
@@ -387,6 +392,13 @@ class OptionRetriever(Module):
         # entropy `H(p(D | q, A))`
         retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
         output["retriever/entropy"] = retriever_entropy.mean()
+
+        # entropy H(p(d))
+        if agg_retriever_score is not None:
+            log_nq = math.log(agg_retriever_score.size(0))
+            log_p_d = (agg_retriever_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
+            retriever_entropy_agg = -(log_p_d.exp() * log_p_d).sum(dim=-1)
+            output["retriever/entropy_agg"] = retriever_entropy_agg.mean()
 
         if retrieval_scores is not None:
             #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
