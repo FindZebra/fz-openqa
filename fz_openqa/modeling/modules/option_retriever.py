@@ -309,9 +309,6 @@ class OptionRetriever(Module):
             **kwargs,
         )
 
-        pprint_batch(retriever_dgs, "Option retriever::retriever_dgs", silent=False)
-        pprint_batch(reader_dgs, "Option retriever::reader_dgs", silent=False)
-
         # log documents ids
         step_output["retriever/max-doc-id"] = batch["document.row_idx"].max()
         step_output["retriever/min-doc-id"] = batch["document.row_idx"].min()
@@ -325,6 +322,7 @@ class OptionRetriever(Module):
             document_ids=d_batch.get("document.row_idx", None),
             reader_score=reader_score,
             output=step_output,
+            **retriever_dgs
         )
 
         # compute the gradients
@@ -336,6 +334,7 @@ class OptionRetriever(Module):
                 retrieval_score=d_batch.get("document.retrieval_score", None),
                 retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
                 **kwargs,
+                **retriever_dgs
             )
         )
 
@@ -367,6 +366,7 @@ class OptionRetriever(Module):
         match_score: Optional[Tensor] = None,
         document_ids: Optional[Tensor] = None,
         reader_score: Optional[Tensor] = None,
+        log_p_d: Optional[Tensor] = None,
         output: Dict,
     ):
         """
@@ -392,6 +392,11 @@ class OptionRetriever(Module):
         # entropy `H(p(D | q, A))`
         retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
         output["retriever/entropy"] = retriever_entropy.mean()
+
+        # entropy H(p(d))
+        if log_p_d is not None:
+            retriever_entropy_agg = -(log_p_d * log_p_d).sum(dim=-1)
+            output["retriever/entropy_agg"] = retriever_entropy_agg.mean()
 
         if retrieval_scores is not None:
             #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`

@@ -17,6 +17,30 @@ from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.layers import BayesianLinear
 
 
+def unique_with_indices(x, dim=None):
+    """Unique elements of x and indices of those unique elements
+    https://github.com/pytorch/pytorch/issues/36748#issuecomment-619514810
+
+    e.g.
+
+    unique(tensor([
+        [1, 2, 3],
+        [1, 2, 4],
+        [1, 2, 3],
+        [1, 2, 5]
+    ]), dim=0)
+    => (tensor([[1, 2, 3],
+                [1, 2, 4],
+                [1, 2, 5]]),
+        tensor([0, 1, 3]))
+    """
+    uids, inverse = torch.unique(
+        x, sorted=True, return_inverse=True, dim=dim)
+    perm = torch.arange(inverse.size(0), dtype=inverse.dtype,
+                        device=inverse.device)
+    inverse, perm = inverse.flip([0]), perm.flip([0])
+    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm)
+
 class DprHead(Head):
     """Score question and document representations."""
 
@@ -196,6 +220,6 @@ class DprHead(Head):
             raise ValueError("doc_ids is required to compute the score across the batch")
         hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
         doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
-        udoc_ids, uids = unique(doc_ids, return_inverse=True)
+        udoc_ids, uids = unique_with_indices(doc_ids)
         hd = hd[uids]
         return hd

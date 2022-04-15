@@ -60,17 +60,13 @@ class ColbertHead(DprHead):
 
         # compute the aggregated score
         if self.compute_agg_score:
-            upids = torch.unique(doc_ids)
-            rich.print(f">> prop doc ids: {100*len(upids) / doc_ids.numel():.2f}%, n={len(upids)}")
             hd_flat = self._flatten_documents(hd, doc_ids)
-            rich.print(f">> flattened hd: {hd_flat.shape}")
             hq_flat = hq.view(-1, *hq.shape[-2:])
             flat_scores = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
             max_scores, _ = flat_scores.max(-1)
             flat_scores = max_scores.sum(-1)
             # estimate log p(d) = \sum_q log p(d,q)
-            nq = hq_flat.shape[0]
-            log_p_d = (flat_scores - flat_scores.logsumexp(-1, keepdim=True) - math.log(nq)).sum(0)
+            log_p_d = (flat_scores.log_softmax(dim=-1) - math.log(flat_scores.size(0))).sum(0)
             diagnostics["log_p_d"] = log_p_d
 
         # compute the score using self-attention
