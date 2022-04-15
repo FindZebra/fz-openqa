@@ -61,7 +61,7 @@ class ReinforceGradients(Gradients):
         targets: Tensor,
         retrieval_score: Optional[Tensor] = None,
         retrieval_log_weight: Optional[Tensor] = None,
-        log_p_d: Optional[Tensor] = None,
+        agg_retriever_score: Optional[Tensor] = None,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
         r"""
@@ -153,6 +153,8 @@ class ReinforceGradients(Gradients):
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
         # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever
+        log_nq = math.log(agg_retriever_score.size(0))
+        log_p_d = (agg_retriever_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
         kl_agg_retriever = kl_divergence(log_p_d, dim=-1)
         diagnostics["retriever/kl_agg_uniform"] = kl_agg_retriever
 

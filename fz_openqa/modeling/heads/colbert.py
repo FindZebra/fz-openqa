@@ -62,12 +62,10 @@ class ColbertHead(DprHead):
         if self.compute_agg_score:
             hd_flat = self._flatten_documents(hd, doc_ids)
             hq_flat = hq.view(-1, *hq.shape[-2:])
-            flat_scores = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
-            max_scores, _ = flat_scores.max(-1)
-            flat_scores = max_scores.sum(-1)
-            # estimate log p(d) = \sum_q log p(d,q)
-            log_p_d = (flat_scores.log_softmax(dim=-1) - math.log(flat_scores.size(0))).sum(0)
-            diagnostics["log_p_d"] = log_p_d
+            agg_retriever_score = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
+            max_scores, _ = agg_retriever_score.max(-1)
+            agg_retriever_score = max_scores.sum(-1)
+            diagnostics["agg_retriever_score"] = agg_retriever_score
 
         # compute the score using self-attention
         if self.use_soft_score:

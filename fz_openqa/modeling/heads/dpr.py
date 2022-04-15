@@ -41,23 +41,24 @@ def unique_with_indices(x, dim=None):
     inverse, perm = inverse.flip([0]), perm.flip([0])
     return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm)
 
+
 class DprHead(Head):
     """Score question and document representations."""
 
     def __init__(
-        self,
-        *,
-        across_batch: bool = False,
-        normalize: bool = False,
-        bias: bool = True,
-        share_parameters: bool = False,
-        bayesian: bool = False,
-        learn_scale: bool = False,
-        scale: float = 1.0,
-        auto_scale: bool = False,
-        is_scaled: bool = False,
-        scale_init: float = 1.0,
-        **kwargs,
+            self,
+            *,
+            across_batch: bool = False,
+            normalize: bool = False,
+            bias: bool = True,
+            share_parameters: bool = False,
+            bayesian: bool = False,
+            learn_scale: bool = False,
+            scale: float = 1.0,
+            auto_scale: bool = False,
+            is_scaled: bool = False,
+            scale_init: float = 1.0,
+            **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
@@ -141,15 +142,15 @@ class DprHead(Head):
         return hq
 
     def forward(
-        self,
-        *,
-        hd: Tensor,
-        hq: Tensor,
-        doc_ids: Optional[Tensor] = None,
-        q_mask: Optional[Tensor] = None,
-        d_mask: Optional[Tensor] = None,
-        batch: Dict[str, Tensor] = None,
-        **kwargs,
+            self,
+            *,
+            hd: Tensor,
+            hq: Tensor,
+            doc_ids: Optional[Tensor] = None,
+            q_mask: Optional[Tensor] = None,
+            d_mask: Optional[Tensor] = None,
+            batch: Dict[str, Tensor] = None,
+            **kwargs,
     ) -> (Tensor, Dict):
 
         # sample weights todo: only `if self.training`
@@ -176,13 +177,13 @@ class DprHead(Head):
         return score + self.offset, diagnostics
 
     def score(
-        self,
-        *,
-        hq: Tensor,
-        hd: Tensor,
-        doc_ids: Optional[Tensor] = None,
-        mask: Optional[Tensor] = None,
-        **kwargs,
+            self,
+            *,
+            hq: Tensor,
+            hd: Tensor,
+            doc_ids: Optional[Tensor] = None,
+            mask: Optional[Tensor] = None,
+            **kwargs,
     ) -> (Tensor, Dict):
         diagnostics = {}
         if not self.across_batch:
@@ -192,12 +193,12 @@ class DprHead(Head):
             return einsum("boh, mh -> bom", hq, hd), diagnostics
 
     def _preprocess(
-        self,
-        last_hidden_state: Tensor,
-        head: str,
-        mask: Optional[Tensor] = None,
-        weights: Optional[Tensor] = None,
-        **kwargs,
+            self,
+            last_hidden_state: Tensor,
+            head: str,
+            mask: Optional[Tensor] = None,
+            weights: Optional[Tensor] = None,
+            **kwargs,
     ) -> Tensor:
         head_kwargs = {"weights": weights} if weights is not None else {}
         cls_repr = last_hidden_state[..., 0, :]  # CLS token
