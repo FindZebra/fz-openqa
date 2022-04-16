@@ -78,6 +78,7 @@ model:
     question_mask: 1
     alpha: 0
     reader_kl_weight: 0.5
+    agg_retriever_kl_weight: 0
     retriever_kl_weight:
       mode: cosine
       num_steps: 5_000

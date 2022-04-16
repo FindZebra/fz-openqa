@@ -94,6 +94,7 @@ class ReinforceGradients(Gradients):
         gamma = kwargs.get("gamma", self.gamma)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+        agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
 
         f_theta_ = reader_score
         f_phi_ = retriever_score
@@ -218,7 +219,9 @@ class ReinforceGradients(Gradients):
         if reader_kl_weight is not None:
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
-            loss = loss + retriever_kl_weight * kl_agg_retriever
+            loss = loss + retriever_kl_weight * kl_retriever
+        if agg_retriever_kl_weight is not None:
+            loss = loss + agg_retriever_kl_weight * kl_agg_retriever
 
         return {
             "loss": loss,
