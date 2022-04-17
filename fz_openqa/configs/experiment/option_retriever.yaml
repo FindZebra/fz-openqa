@@ -74,8 +74,8 @@ model:
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
   parameters:
-    tau: 0.3
-    maxim_retriever_kl_weight: 0.3
+    tau: null
+    maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     gamma: 1
     question_mask: 1
