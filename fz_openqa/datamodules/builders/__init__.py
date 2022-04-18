@@ -3,6 +3,7 @@ from .corpus import CorpusBuilder
 from .corpus import FzCorpusBuilder
 from .corpus import FZxMedQaCorpusBuilder
 from .corpus import MedQaCorpusBuilder
+from .corpus import MedWikipediaCorpusBuilder
 from .corpus import QuALITYCorpusBuilder
 from .corpus import WikipediaCorpusBuilder
 from .fz_queries import FzQueriesBuilder

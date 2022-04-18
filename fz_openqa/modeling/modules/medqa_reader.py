@@ -2,15 +2,12 @@ from enum import Enum
 from typing import Any
 from typing import Optional
 
-import einops
 import rich
 from datasets import Split
 from torch import Tensor
 
 from ...utils.pretty import pprint_batch
 from .base import Module
-from .utils.concatenate import concat_questions_and_documents
-from .utils.concatenate import stack_questions_and_documents
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -22,15 +19,12 @@ class ConcatStrategy(Enum):
 class MedQaReader(Module):
     # name of the features required for a forward pass
     _required_feature_names = [
-        "answer.target",
-        "question.input_ids",
-        "question.attention_mask",
-        "document.input_ids",
-        "document.attention_mask",
+        "qad.input_ids",
+        "qad.attention_mask",
     ]
 
     # named of the features required for evaluation
-    _required_eval_feature_names = ["answer.target", "document.match_score"]
+    _required_eval_feature_names = ["answer.target"]
 
     # prefix for the logged metrics
     task_id: Optional[str] = "reader"
@@ -55,46 +49,33 @@ class MedQaReader(Module):
         self.answer_metrics = self._get_base_metrics(prefix=prefix)
 
     def _forward(self, batch: Batch, targets: Optional[Tensor] = None, **kwargs) -> Batch:
-        # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
-        # checks inputs, set parameters and concat the questions with the documents
-        # pprint_batch(batch)
-        # self.bert.tokenizer
+        pprint_batch(batch)
+        DEBUG = False
+        if DEBUG:
+            pprint_batch(batch, "batch")
+            # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
+            rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
+            rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
+            rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
 
-        rich.print(f"[magenta] input question tokens: {batch['question.input_ids'].shape}")
-        rich.print(f"[magenta] input document tokens: {batch['document.input_ids'].shape}")
-
-        # concatenate questions and documents such that there is no padding between Q and D
-        args = {"pad_token_id": self._pad_token_id, "max_length": self.max_length}
-        if self.concat_strategy == ConcatStrategy.CONCAT:
-            # returns tokens of shape [bs, n_opts, total_length]
-            qd_batch = concat_questions_and_documents(batch, **args)
-        elif self.concat_strategy == ConcatStrategy.STACK:
-            # returns tokens of shape [bs * n_docs, n_opts, total_length]
-            qd_batch = stack_questions_and_documents(batch, **args)
-        else:
-            raise ValueError(f"Unknown concat strategy: {self.concat_strategy}")
-
-        pprint_batch(qd_batch, "qd_batch")
-        # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
-        rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
-        rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
-        rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
-
-        rich.print(f"[magenta] padded tokens: {qd_batch['input_ids'].shape}")
-        for i in range(min(len(qd_batch["input_ids"]), 16)):
-            print(100 * "=")
-            rich.print(f"- batch el #{i+1}")
-            tokens = qd_batch["input_ids"][i]
-            for j in range(2):
-                rich.print(f"- option #{j+1}")
-                print(100 * "-")
-                # rich.print(f"[red] {tokens[j].tolist()}")
-                decoded = self.tokenizer.decode(tokens[j].tolist())
-                rich.print(f"[cyan] {decoded}")
-        exit()
+            rich.print(f"[magenta] padded tokens: {batch['qad.input_ids'].shape}")
+            for i in range(min(len(batch["qad.input_ids"]), 16)):
+                print(100 * "=")
+                rich.print(f"- batch el #{i+1}")
+                tokens = batch["qad.input_ids"][i]
+                for j in range(4):
+                    rich.print(f"- option #{j+1}")
+                    print(100 * "-")
+                    # rich.print(f"[red] {tokens[j].tolist()}")
+                    decoded = self.tokenizer.decode(tokens[j].tolist())
+                    rich.print(f"[cyan] {decoded}")
+            exit()
 
         return self.bert(
-            qd_batch["input_ids"], qd_batch["attention_mask"], labels=targets, return_dict=True
+            batch["qad.input_ids"],
+            batch["qad.attention_mask"],
+            labels=targets,
+            return_dict=True,
         )
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:

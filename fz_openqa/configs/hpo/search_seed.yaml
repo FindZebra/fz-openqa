@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - override /sys: hpo-titan.yaml
+  - override /space: search_seed.yaml
+
+ray:
+  local_mode: True
+  configure_logging: True
+  logging_level: info
+
+experiment:
+  experiment: medqa_reader_only.yaml
+  sys: titan.yaml
