@@ -159,9 +159,10 @@ def run(config: DictConfig) -> None:
                 ]
 
                 # print corresponding `max` scores
-                # for qi, q_token in enumerate(q_tokens):
-                #     qj = scores_ik[i].argmax(dim=-1)
-                #     rich.print(f"{q_token:>10} -> {d_tokens[qj]:<10}")
+                with open(output_dir / f"max_mapping-{i}-{k}.txt", 'w') as fmp:
+                    for qi, q_token in enumerate(q_tokens):
+                        qj = scores_ik[i].argmax(dim=-1)
+                        fmp.write(f"{q_token:>10} -> {d_tokens[qj]:<10}\n")
 
                 # heatmap
                 plt.figure(figsize=(20, 20))
@@ -181,34 +182,6 @@ def run(config: DictConfig) -> None:
                 plt.close()
 
     logger.info(f"Written to: {output_dir.absolute()}")
-
-    # # build the index
-    # index_builder = instantiate(
-    #     config.datamodule.index_builder,
-    #     model=model,
-    #     trainer=trainer,
-    #     dataset=corpus,
-    #     collate_pipe=corpus_builder.get_collate_pipe(),
-    # )
-    #
-    # logger.info(f"Indexing index with {index_builder}..")
-    # index: Index = index_builder()
-    #
-    # # query the index with the dataset
-    # logger.info(f"Indexing dataset (pipe={index.fingerprint(reduce=True)})..")
-    # indexed_dataset = index(
-    #     dataset,
-    #     collate_fn=dataset_builder.get_collate_pipe(
-    #         columns=["question.input_ids", "question.attention_mask"]
-    #     ),
-    #     k=config.get("topk", 1000),
-    #     batch_size=10,
-    #     trainer=trainer,
-    #     num_proc=4,
-    #     cache_fingerprint=Path(cache_dir) / "rank_fz_queries_fingerprints",
-    #     fingerprint_kwargs_exclude=["trainer"],
-    #     set_new_fingerprint=True,
-    # )
 
 
 if __name__ == "__main__":
