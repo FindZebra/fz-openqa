@@ -89,6 +89,7 @@ model:
       initial_value: 0.1
       final_value: 1e-5
   module:
+    mask_punctuation: false
     split_bert_layers: 0
     resample_k: null
     alpha: 0

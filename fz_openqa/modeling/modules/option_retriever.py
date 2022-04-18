@@ -68,6 +68,7 @@ class OptionRetriever(Module):
             reader_head: Head | DictConfig,
             retriever_head: Head | DictConfig,
             alpha: float = 0,
+            mask_punctuation: bool = False,
             resample_k: int = None,
             max_batch_size: Optional[int] = None,
             gradients: Gradients | DictConfig = InBatchGradients(),
@@ -89,10 +90,12 @@ class OptionRetriever(Module):
         self.estimator = maybe_instantiate(gradients)
 
         # punctuation masking
-        self.skiplist = [
-            self.tokenizer.encode(symbol, add_special_tokens=False)[0]
-            for symbol in string.punctuation
-        ]
+        self.skiplist = []
+        if mask_punctuation:
+            self.skiplist += [
+                self.tokenizer.encode(symbol, add_special_tokens=False)[0]
+                for symbol in string.punctuation
+            ]
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
 
         # check bert fingerprint

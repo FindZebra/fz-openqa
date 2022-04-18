@@ -7,6 +7,7 @@ from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
 import torch
+from loguru import logger
 from loguru import logger as log
 from torch import Tensor
 
@@ -20,7 +21,6 @@ from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-from loguru import logger
 
 
 
