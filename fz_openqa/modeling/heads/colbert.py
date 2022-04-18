@@ -121,12 +121,12 @@ class ColbertHead(DprHead):
 
         # sample locations and reduce over `document` dimension
         if tau is None:
-            q_scores, _ = scores.max(-1)
+            q_scores, _ = scores.max(dim=-1)
         else:
             tau_ = tau if tau > 0 else 1.
             q_locs = torch.nn.functional.gumbel_softmax(log_attn_scores,
                                                         tau=tau_, hard=(tau <= 0), dim=-1)
-            q_scores = (q_locs * scores).sum(-1)
+            q_scores = (q_locs * scores).sum(dim=-1)
         return q_scores, log_attn_scores
 
     def _preprocess(

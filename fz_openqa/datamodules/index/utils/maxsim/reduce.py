@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import List
 
+import rich
 import torch
+from loguru import logger
 from torch import Tensor
 from torch.nn import functional as F
 
@@ -40,14 +42,23 @@ class MaxSimReducer(object):
         # concatenate
         all_scores, all_pids = (torch.cat(x, dim=-1) for x in (scores, pids))
 
+        # debug
+        upids = torch.unique(all_pids)
+        prop_unique = 100 * upids.numel() / all_pids.numel() if all_pids.numel() > 0 else -1
+        number_of_docs = all_pids[all_pids >= 0].numel() / all_pids.size(0)
+        logger.info(f"pids. unique: {prop_unique:.2f}%, docs/item: {number_of_docs:.3f}")
+
         # take the top-k results given the MaxSim score
         k_ = min(k, all_scores.shape[-1])
         all_scores = all_scores.to(torch.float32)
-        _, maxsim_idx = torch.topk(all_scores, k=k_, dim=-1, largest=True, sorted=True)
+        maxsim_idx = torch.topk(all_scores, k=k_, dim=-1, largest=True, sorted=True).indices
 
         # fetch the corresponding document indices and return
-        maxsim_scores = all_scores.gather(index=maxsim_idx, dim=1)
-        maxsim_pids = all_pids.gather(index=maxsim_idx, dim=1)
+        maxsim_scores = all_scores.gather(index=maxsim_idx, dim=-1)
+        maxsim_pids = all_pids.gather(index=maxsim_idx, dim=-1)
+
+        assert maxsim_pids.shape[-1] > 0
+
         if maxsim_scores.shape[1] < k or maxsim_pids.shape[1] < k:
             maxsim_pids, maxsim_scores = self._pad_outputs(k, maxsim_pids, maxsim_scores)
         output = MaxSimOutput(

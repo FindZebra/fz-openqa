@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from typing import List
 from typing import Optional
 from typing import T
 from typing import Tuple
 from typing import Union
 
+import rich
 import torch
 from loguru import logger
 from torch import Tensor
@@ -19,6 +21,7 @@ from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
 from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
 from fz_openqa.datamodules.index.utils.maxsim.reduce import MaxSimReducer
 from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
+from fz_openqa.datamodules.index.utils.maxsim.utils import get_unique_pids
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -41,22 +44,24 @@ class MaxSim(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        *,
-        token_index: IndexHandler | PathLike,
-        vectors: TensorArrowTable | Tensor,
-        emb2pid: TensorArrowTable | Tensor,
-        ranking_devices: List[int],
-        faiss_devices: List[int],
-        max_chunksize: Optional[int] = 10_000,
-        max_queue_size: int = 5,
+            self,
+            *,
+            token_index: IndexHandler | PathLike,
+            vectors: TensorArrowTable | Tensor,
+            emb2pid: TensorArrowTable | Tensor,
+            ranking_devices: List[int],
+            faiss_devices: List[int],
+            max_chunksize: Optional[int] = 10_000,
+            max_queue_size: int = 5,
+            deduplicate_pids:bool=True,
     ):
         super(MaxSim, self).__init__()
         logger.info(
             f"Setting MaxSim with "
             f"{len(ranking_devices)} ranking devices "
-            f"and {len(faiss_devices)} faiss devices."
+            f"and {len(faiss_devices)} faiss devices. deduplicate_pids={deduplicate_pids}"
         )
+        self.deduplicate_pids = deduplicate_pids
         # init the token_index
         self.token_index = TokenIndex(token_index, faiss_devices)
 
@@ -150,11 +155,11 @@ class MaxSim(torch.nn.Module):
         return maxsim_workers
 
     def _init_maxsim_worker(
-        self,
-        vectors: Tensor | TensorArrowTable,
-        part: Tuple[int, int],
-        max_chunksize: Optional[int] = None,
-        **kwargs,
+            self,
+            vectors: Tensor | TensorArrowTable,
+            part: Tuple[int, int],
+            max_chunksize: Optional[int] = None,
+            **kwargs,
     ):
         ranker = MaxSimRanker(vectors, boundaries=part, max_chunksize=max_chunksize)
         worker = MaxSimWorker(max_sim=ranker, **kwargs)
@@ -198,20 +203,30 @@ class MaxSim(torch.nn.Module):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
 
     def _process_batch(
-        self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
+            self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
     ) -> MaxSimOutput:
-        # process q_vectors using the token-level faiss index
-        token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
-        utok_ids = torch.unique(token_ids)
-        logger.info(f"toks. unique: {100 * utok_ids.numel() / token_ids.numel():.2f}%")
-        logger.info(f"toks. unique * p={p}: {100 * utok_ids.numel() / token_ids.numel() * p:.2f}%")
 
+
+        # process q_vectors using the token-level faiss index
+        _time = time.time()
+        token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
+        faiss_time = time.time() - _time
+
+        # retriever the pids from the token_ids, at this step, there are duplicated pids.
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
-        upids = torch.unique(pids)
-        logger.info(f"pids. unique: {100 * upids.numel() / pids.numel():.2f}%")
-        logger.info(f"pids. unique * p={p}: {100 * upids.numel() / pids.numel() * p:.2f}%")
+
+        # Deduplicate pids; this step is done on `device`, which is set by default on CPU.
+        # This step can be quite slow, but it saves a lot of memory.
+        if self.deduplicate_pids:
+            _time = time.time()
+            pids = get_unique_pids(pids)
+            deduplicate_time = time.time() - _time
+        else:
+            deduplicate_time = 0
+
 
         # send the token_ids to each device
+        _time = time.time()
         for q, device in zip(self.ranking_input_queues, self.ranking_devices):
             q_vectors_i = q_vectors.to(device, non_blocking=True)
             pids_i = pids.clone().to(device, non_blocking=True)
@@ -220,19 +235,29 @@ class MaxSim(torch.nn.Module):
 
         # wait for the results to be ready
         maxsim_outputs = self._collect_worker_outputs()
+        ranking_time = time.time() - _time
 
         # reduce the results
-        return self.maxsim_reducer(maxsim_outputs, k=k)
+        _time = time.time()
+        output = self.maxsim_reducer(maxsim_outputs, k=k)
+        reduce_time = time.time() - _time
+
+        logger.info(f"Runtime: "
+                    f"faiss:{faiss_time:.1f}s, "
+                    f"deduplicate:{deduplicate_time:.1f}s, "
+                    f"ranking:{ranking_time:.1f}s, "
+                    f"reduce:{reduce_time:.1f}s")
+        return output
 
     @torch.no_grad()
     def __call__(
-        self,
-        q_vectors: Tensor | WorkerSignal,
-        *,
-        k: int = None,
-        p: int = None,
-        doc_ids: Optional[List[int]] = None,
-        **kwargs,
+            self,
+            q_vectors: Tensor | WorkerSignal,
+            *,
+            k: int = None,
+            p: int = None,
+            doc_ids: Optional[List[int]] = None,
+            **kwargs,
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
