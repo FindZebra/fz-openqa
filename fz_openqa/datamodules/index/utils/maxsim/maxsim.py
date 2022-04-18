@@ -56,11 +56,9 @@ class MaxSim(torch.nn.Module):
             deduplicate_pids:bool=True,
     ):
         super(MaxSim, self).__init__()
-        logger.info(
-            f"Setting MaxSim with "
-            f"{len(ranking_devices)} ranking devices "
-            f"and {len(faiss_devices)} faiss devices. deduplicate_pids={deduplicate_pids}"
-        )
+        logger.info(f"Setting MaxSim with ranking devices: {ranking_devices}")
+        logger.info(f"Setting MaxSim with faiss (tokens) devices: {faiss_devices}")
+
         self.deduplicate_pids = deduplicate_pids
         # init the token_index
         self.token_index = TokenIndex(token_index, faiss_devices)
@@ -205,7 +203,6 @@ class MaxSim(torch.nn.Module):
     def _process_batch(
             self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
     ) -> MaxSimOutput:
-
 
         # process q_vectors using the token-level faiss index
         _time = time.time()
