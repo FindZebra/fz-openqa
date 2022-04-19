@@ -18,14 +18,14 @@ class ColbertHead(DprHead):
     """Score question and document representations."""
 
     def __init__(
-            self,
-            *,
-            use_mask: bool = False,
-            use_answer_mask=False,
-            use_soft_score: bool = False,
-            compute_agg_score: bool = False,
-            tokenizer: Optional[PreTrainedTokenizerFast] = None,
-            **kwargs,
+        self,
+        *,
+        use_mask: bool = False,
+        use_answer_mask=False,
+        use_soft_score: bool = False,
+        compute_agg_score: bool = False,
+        tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.use_mask = use_mask
@@ -47,15 +47,15 @@ class ColbertHead(DprHead):
         )
 
     def score(
-            self,
-            *,
-            hq: Tensor,
-            hd: Tensor,
-            doc_ids: Optional[Tensor] = None,
-            mask: Optional[Tensor] = None,
-            **kwargs,
+        self,
+        *,
+        hq: Tensor,
+        hd: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        mask: Optional[Tensor] = None,
+        **kwargs,
     ) -> (Tensor, Dict):
-        tau = kwargs.get('tau', None)
+        tau = kwargs.get("tau", None)
 
         diagnostics = {}
 
@@ -64,8 +64,8 @@ class ColbertHead(DprHead):
             hd_flat = self._flatten_documents(hd, doc_ids)
             hq_flat = hq.view(-1, *hq.shape[-2:])
             agg_retriever_score = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
-            max_scores, _ = agg_retriever_score.max(-1)
-            agg_retriever_score = max_scores.sum(-1)
+            agg_retriever_score, _ = self._reduce_doc_vectors(agg_retriever_score, tau)
+            agg_retriever_score = agg_retriever_score.sum(-1)
             diagnostics["agg_score"] = agg_retriever_score
 
         # compute the score using self-attention
@@ -109,7 +109,7 @@ class ColbertHead(DprHead):
         # aggregate document loc probs over q
         log_nq = math.log(log_p_dloc.size(-2))
         log_p_dloc = (log_p_dloc - log_nq).logsumexp(dim=-2)
-        diagnostics['log_p_dloc'] = log_p_dloc
+        diagnostics["log_p_dloc"] = log_p_dloc
 
         return scores, diagnostics
 
@@ -123,21 +123,22 @@ class ColbertHead(DprHead):
         if tau is None:
             q_scores, _ = scores.max(dim=-1)
         else:
-            tau_ = tau if tau > 0 else 1.
-            q_locs = torch.nn.functional.gumbel_softmax(log_attn_scores,
-                                                        tau=tau_, hard=(tau <= 0), dim=-1)
+            tau_ = tau if tau > 0 else 1.0
+            q_locs = torch.nn.functional.gumbel_softmax(
+                log_attn_scores, tau=tau_, hard=(tau <= 0), dim=-1
+            )
             q_scores = (q_locs * scores).sum(dim=-1)
         return q_scores, log_attn_scores
 
     def _preprocess(
-            self,
-            last_hidden_state: Tensor,
-            head: str,
-            mask: Optional[Tensor] = None,
-            batch: Optional[Dict[str, Tensor]] = None,
-            question_mask: float = 1.0,
-            weights: Optional[Tensor] = None,
-            **kwargs,
+        self,
+        last_hidden_state: Tensor,
+        head: str,
+        mask: Optional[Tensor] = None,
+        batch: Optional[Dict[str, Tensor]] = None,
+        question_mask: float = 1.0,
+        weights: Optional[Tensor] = None,
+        **kwargs,
     ) -> Tensor:
         head_kwargs = {"weights": weights} if weights is not None else {}
         if self.output_size is not None:
