@@ -143,7 +143,7 @@ def run(config: DictConfig) -> None:
                 # hd_ik = hd_i[k]
                 retrieval_score_ik = retrieval_score_i[k]
                 scores_ik = scores_i[k, :q_padding_idx, :]
-                scores_ik = scores_ik.softmax(dim=-1)
+                # scores_ik = scores_ik.softmax(dim=-1)
                 d_input_ids_ik = d_input_ids_i[k]
                 msg = f" Document {i+1}-{k+1} : score={retrieval_score_ik:.2f} "
                 rich.print(f"{msg:=^{TERM_SIZE}}")
@@ -171,8 +171,11 @@ def run(config: DictConfig) -> None:
 
                 # highlight the max score
                 # ym = 1.2 * y.max().item()
-                # _, ymi = y.max(dim=1)
-                # y = y.scatter(dim=1, index=ymi[:, None], value=float(ym))
+                # for i in range(y.shape[0]):
+                #     ym_i = y[i].max().item()
+                #     for j in range(y.shape[1]):
+                #         if y[i, j] >= ym_i:
+                #             y[i, j] = ym
 
                 sns.heatmap(
                     y,

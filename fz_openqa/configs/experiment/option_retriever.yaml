@@ -99,12 +99,12 @@ model:
       use_soft_score: false
       compute_agg_score: true
       output_size: ${model.hidden_size}
-      normalize: true
+      normalize: false
       use_mask: true
       is_scaled: true
       use_answer_mask: false
       bayesian: false
-      learn_scale: false
+      learn_scale: true
       scale: 1.
       scale_init: 0.1
       share_parameters: true
@@ -117,7 +117,7 @@ model:
       normalize: false
       is_scaled: true
       bayesian: false
-      learn_scale: false
+      learn_scale: true
       scale: 1.
       scale_init: 0.1
       share_parameters: true

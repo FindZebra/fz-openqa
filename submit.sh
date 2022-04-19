@@ -6,7 +6,7 @@
 #SBATCH --time=5-00:00:00
 
 # variables
-NAME="xyt-DIKU-fxmatch-reiA-colbert-optim-L350"
+NAME="xytx-DIKU-fxmatch-reiA-colbert-optim-L350"
 setup_with_model=false
 
 # display basic info
