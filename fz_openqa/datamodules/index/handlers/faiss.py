@@ -49,14 +49,14 @@ class FaissHandler(IndexHandler):
     """This class implements a low level index."""
 
     def _build(
-            self,
-            vectors: torch.Tensor | TensorArrowTable | np.ndarray,
-            *,
-            index_factory: str = "Flat",
-            nprobe: int = 8,
-            keep_on_cpu: bool = False,
-            train_on_cpu: bool = False,
-            **kwargs,
+        self,
+        vectors: torch.Tensor | TensorArrowTable | np.ndarray,
+        *,
+        index_factory: str = "Flat",
+        nprobe: int = 8,
+        keep_on_cpu: bool = False,
+        train_on_cpu: bool = False,
+        **kwargs,
     ):
         """build the index from the vectors."""
         if isinstance(vectors, TensorArrowTable):
@@ -87,7 +87,7 @@ class FaissHandler(IndexHandler):
             )
 
         # set `nprobe`
-        self._index.nprobe = self.config.get('nprobe', None)
+        self._index.nprobe = self.config.get("nprobe", None)
 
         # move the index to GPU
         if not self.train_on_cpu:
@@ -138,7 +138,7 @@ class FaissHandler(IndexHandler):
         try:
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
             try:
-                self._index.nprobe = self.config.get('nprobe', None)
+                self._index.nprobe = self.config.get("nprobe", None)
             except Exception as e:
                 logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                 pass
@@ -162,7 +162,7 @@ class FaissHandler(IndexHandler):
         self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=devices)
 
         # set `nprobe`
-        nprobe = self.config.get('nprobe', None)
+        nprobe = self.config.get("nprobe", None)
         if nprobe is not None:
             try:
                 gspace = faiss.GpuParameterSpace()  # type: ignore
@@ -175,7 +175,7 @@ class FaissHandler(IndexHandler):
                     logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                     pass
         else:
-            logger.warning(f"Parameter `nprobe` is not set")
+            logger.warning("Parameter `nprobe` is not set")
 
     @abc.abstractmethod
     def free_memory(self):
@@ -191,7 +191,7 @@ class FaissHandler(IndexHandler):
 
     @abc.abstractmethod
     def __call__(
-            self, query: torch.Tensor, *, k: int, **kwargs
+        self, query: torch.Tensor, *, k: int, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Call the index."""
         if not isinstance(self._index, TorchIndex):

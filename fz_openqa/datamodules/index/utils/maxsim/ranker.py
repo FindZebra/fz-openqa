@@ -75,9 +75,9 @@ class MaxSimRanker(nn.Module):
             chunksize = pids.shape[1]
 
         for i in range(0, pids.shape[1], chunksize):
-            pid_chunk = pids[:, i:i + chunksize]
+            pid_chunk = pids[:, i : i + chunksize]
             scores_chunk = self._score(pid_chunk, q_vectors, self.vectors)
-            scores[:, i:i + chunksize] = scores_chunk
+            scores[:, i : i + chunksize] = scores_chunk
 
         # if k is unspecified, only sort
         if k is None or k > scores.shape[1]:

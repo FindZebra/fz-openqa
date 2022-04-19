@@ -63,16 +63,16 @@ class OptionRetriever(Module):
     ]
 
     def __init__(
-            self,
-            *args,
-            reader_head: Head | DictConfig,
-            retriever_head: Head | DictConfig,
-            alpha: float = 0,
-            mask_punctuation: bool = False,
-            resample_k: int = None,
-            max_batch_size: Optional[int] = None,
-            gradients: Gradients | DictConfig = InBatchGradients(),
-            **kwargs,
+        self,
+        *args,
+        reader_head: Head | DictConfig,
+        retriever_head: Head | DictConfig,
+        alpha: float = 0,
+        mask_punctuation: bool = False,
+        resample_k: int = None,
+        max_batch_size: Optional[int] = None,
+        gradients: Gradients | DictConfig = InBatchGradients(),
+        **kwargs,
     ):
 
         super().__init__(*args, **kwargs)
@@ -141,7 +141,7 @@ class OptionRetriever(Module):
         return mask
 
     def _forward(
-            self, batch: Batch, predict: bool = True, head: str = "retriever", **kwargs
+        self, batch: Batch, predict: bool = True, head: str = "retriever", **kwargs
     ) -> Batch:
         output = {}
         heads = {"reader": self.reader_head, "retriever": self.retriever_head}
@@ -169,12 +169,12 @@ class OptionRetriever(Module):
         return output
 
     def _forward_field(
-            self,
-            batch: Batch,
-            field: str,
-            silent: bool = True,
-            max_batch_size: Optional[int] = None,
-            **kwargs,
+        self,
+        batch: Batch,
+        field: str,
+        silent: bool = True,
+        max_batch_size: Optional[int] = None,
+        **kwargs,
     ) -> Tensor:
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
@@ -329,7 +329,7 @@ class OptionRetriever(Module):
             document_ids=d_batch.get("document.row_idx", None),
             reader_score=reader_score,
             output=step_output,
-            **retriever_dgs
+            **retriever_dgs,
         )
 
         # compute the gradients
@@ -342,7 +342,7 @@ class OptionRetriever(Module):
                 retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
                 **kwargs,
                 **retriever_dgs,
-                **reader_dgs
+                **reader_dgs,
             )
         )
 
@@ -367,17 +367,17 @@ class OptionRetriever(Module):
     @staticmethod
     @torch.no_grad()
     def _retriever_diagnostics(
-            retriever_score: Tensor,
-            retrieval_scores: Optional[Tensor],
-            retrieval_rank: Optional[Tensor],
-            *,
-            match_score: Optional[Tensor] = None,
-            document_ids: Optional[Tensor] = None,
-            reader_score: Optional[Tensor] = None,
-            retriever_agg_score: Optional[Tensor] = None,
-            retriever_log_p_dloc: Optional[Tensor] = None,
-            output: Dict,
-            **kwargs
+        retriever_score: Tensor,
+        retrieval_scores: Optional[Tensor],
+        retrieval_rank: Optional[Tensor],
+        *,
+        match_score: Optional[Tensor] = None,
+        document_ids: Optional[Tensor] = None,
+        reader_score: Optional[Tensor] = None,
+        retriever_agg_score: Optional[Tensor] = None,
+        retriever_log_p_dloc: Optional[Tensor] = None,
+        output: Dict,
+        **kwargs,
     ):
         """
         Compute diagnostics for the rank of the retrieved documents.
@@ -481,7 +481,7 @@ class OptionRetriever(Module):
     def _select_with_index(v: Any | Tensor, index: Tensor) -> Any | Tensor:
         if not isinstance(v, torch.Tensor):
             return v
-        leaf_shape = v.shape[len(index.shape):]
+        leaf_shape = v.shape[len(index.shape) :]
         _index = index.view(*index.shape, *(1 for _ in leaf_shape))
         _index = _index.expand(*index.shape, *leaf_shape)
         v = v.gather(index=_index, dim=2)
@@ -559,11 +559,11 @@ class OptionRetriever(Module):
         }
 
     def step_end(
-            self,
-            output: Batch,
-            split: Optional[Split],
-            update_metrics: bool = True,
-            filter_features: bool = True,
+        self,
+        output: Batch,
+        split: Optional[Split],
+        update_metrics: bool = True,
+        filter_features: bool = True,
     ) -> Any:
         if split is not None and not split == Split.TRAIN:
             filter_features = False

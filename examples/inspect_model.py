@@ -67,8 +67,10 @@ def run(config: DictConfig) -> None:
 
     # load model
     logging.info("Loading model...")
-    model: Model = loader.load_model(zero_shot=config.get("zero_shot", False),
-                                     checkpoint_type=config.get('checkpoint_type', 'last'))
+    model: Model = loader.load_model(
+        zero_shot=config.get("zero_shot", False),
+        checkpoint_type=config.get("checkpoint_type", "last"),
+    )
     logger.info(f"Loaded model {type(model.module)}, fingerprint={get_fingerprint(model)}")
     logger.info(f"Reader temperature: {model.module.reader_head.temperature()}")
     logger.info(f"Retriever temperature: {model.module.retriever_head.temperature()}")
@@ -160,7 +162,7 @@ def run(config: DictConfig) -> None:
                 ]
 
                 # print corresponding `max` scores
-                with open(output_dir / f"max_mapping-{i}-{k}.txt", 'w') as fmp:
+                with open(output_dir / f"max_mapping-{i}-{k}.txt", "w") as fmp:
                     for qi, q_token in enumerate(q_tokens):
                         qj = scores_ik[i].argmax(dim=-1)
                         fmp.write(f"{q_token:>10} -> {d_tokens[qj]:<10}\n")

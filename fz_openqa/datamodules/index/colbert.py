@@ -23,7 +23,6 @@ from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-
 class ColbertIndex(DenseIndex):
     """
     Implementation of the Colbert index. This implementation supports multi-GPU.
@@ -53,7 +52,7 @@ class ColbertIndex(DenseIndex):
         "_max_add_per_gpu",
         "maxsim_chunksize",
         "fais_gpu_ratio",
-        "n_ranking_workers"
+        "n_ranking_workers",
     ]
 
     def __init__(
@@ -61,8 +60,8 @@ class ColbertIndex(DenseIndex):
         *args,
         p: int = 100,
         maxsim_chunksize: int = 10000,
-        fais_gpu_ratio:float=0.5,
-        n_ranking_workers:int=4,
+        fais_gpu_ratio: float = 0.5,
+        n_ranking_workers: int = 4,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -190,7 +189,7 @@ class ColbertIndex(DenseIndex):
             faiss_gpus = []
             maxsim_gpus = gpus
         elif n_gpus > 1:
-            n_faiss = - math.floor(- self.fais_gpu_ratio * n_gpus)
+            n_faiss = -math.floor(-self.fais_gpu_ratio * n_gpus)
             faiss_gpus = gpus[:n_faiss]
             maxsim_gpus = gpus[n_faiss:]
         elif n_gpus == 1:

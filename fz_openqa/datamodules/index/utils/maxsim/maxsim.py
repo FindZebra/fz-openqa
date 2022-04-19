@@ -45,16 +45,16 @@ class MaxSim(torch.nn.Module):
     """
 
     def __init__(
-            self,
-            *,
-            token_index: IndexHandler | PathLike,
-            vectors: TensorArrowTable | Tensor,
-            emb2pid: TensorArrowTable | Tensor,
-            ranking_devices: List[int],
-            faiss_devices: List[int],
-            max_chunksize: Optional[int] = 10_000,
-            max_queue_size: int = 5,
-            deduplicate_pids: bool = True,
+        self,
+        *,
+        token_index: IndexHandler | PathLike,
+        vectors: TensorArrowTable | Tensor,
+        emb2pid: TensorArrowTable | Tensor,
+        ranking_devices: List[int],
+        faiss_devices: List[int],
+        max_chunksize: Optional[int] = 10_000,
+        max_queue_size: int = 5,
+        deduplicate_pids: bool = True,
     ):
         super(MaxSim, self).__init__()
         logger.info(f"Setting MaxSim with ranking devices: {ranking_devices}")
@@ -154,11 +154,11 @@ class MaxSim(torch.nn.Module):
         return maxsim_workers
 
     def _init_maxsim_worker(
-            self,
-            vectors: Tensor | TensorArrowTable,
-            part: Tuple[int, int],
-            max_chunksize: Optional[int] = None,
-            **kwargs,
+        self,
+        vectors: Tensor | TensorArrowTable,
+        part: Tuple[int, int],
+        max_chunksize: Optional[int] = None,
+        **kwargs,
     ):
         ranker = MaxSimRanker(vectors, boundaries=part, max_chunksize=max_chunksize)
         worker = MaxSimWorker(max_sim=ranker, **kwargs)
@@ -202,7 +202,7 @@ class MaxSim(torch.nn.Module):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
 
     def _process_batch(
-            self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
+        self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
     ) -> MaxSimOutput:
 
         # replace nans in q_vectors (padding)
@@ -242,28 +242,29 @@ class MaxSim(torch.nn.Module):
         output = self.maxsim_reducer(maxsim_outputs, k=k)
         reduce_time = time.time() - _time
 
-        logger.info(f"Runtime: "
-                    f"faiss:{faiss_time:.1f}s, "
-                    f"deduplicate:{deduplicate_time:.1f}s, "
-                    f"ranking:{ranking_time:.1f}s, "
-                    f"reduce:{reduce_time:.1f}s")
+        logger.info(
+            f"Runtime: "
+            f"faiss:{faiss_time:.1f}s, "
+            f"deduplicate:{deduplicate_time:.1f}s, "
+            f"ranking:{ranking_time:.1f}s, "
+            f"reduce:{reduce_time:.1f}s"
+        )
 
         if torch.isnan(output.scores).any():
-            import rich
             rich.print(f"> scores: {output.scores}")
-            raise ValueError(f"MaxSim returned NaNs.")
+            raise ValueError("MaxSim returned NaNs.")
 
         return output
 
     @torch.no_grad()
     def __call__(
-            self,
-            q_vectors: Tensor | WorkerSignal,
-            *,
-            k: int = None,
-            p: int = None,
-            doc_ids: Optional[List[int]] = None,
-            **kwargs,
+        self,
+        q_vectors: Tensor | WorkerSignal,
+        *,
+        k: int = None,
+        p: int = None,
+        doc_ids: Optional[List[int]] = None,
+        **kwargs,
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
