@@ -23,6 +23,7 @@ from fz_openqa.datamodules.index.utils.maxsim.reduce import MaxSimReducer
 from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
 from fz_openqa.datamodules.index.utils.maxsim.utils import get_unique_pids
 from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
+from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
@@ -53,7 +54,7 @@ class MaxSim(torch.nn.Module):
             faiss_devices: List[int],
             max_chunksize: Optional[int] = 10_000,
             max_queue_size: int = 5,
-            deduplicate_pids:bool=True,
+            deduplicate_pids: bool = True,
     ):
         super(MaxSim, self).__init__()
         logger.info(f"Setting MaxSim with ranking devices: {ranking_devices}")
@@ -204,6 +205,9 @@ class MaxSim(torch.nn.Module):
             self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
     ) -> MaxSimOutput:
 
+        # replace nans in q_vectors (padding)
+        q_vectors[q_vectors != q_vectors] = 0
+
         # process q_vectors using the token-level faiss index
         _time = time.time()
         token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
@@ -220,7 +224,6 @@ class MaxSim(torch.nn.Module):
             deduplicate_time = time.time() - _time
         else:
             deduplicate_time = 0
-
 
         # send the token_ids to each device
         _time = time.time()
@@ -244,6 +247,12 @@ class MaxSim(torch.nn.Module):
                     f"deduplicate:{deduplicate_time:.1f}s, "
                     f"ranking:{ranking_time:.1f}s, "
                     f"reduce:{reduce_time:.1f}s")
+
+        if torch.isnan(output.scores).any():
+            import rich
+            rich.print(f"> scores: {output.scores}")
+            raise ValueError(f"MaxSim returned NaNs.")
+
         return output
 
     @torch.no_grad()
