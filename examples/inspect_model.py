@@ -67,7 +67,8 @@ def run(config: DictConfig) -> None:
 
     # load model
     logging.info("Loading model...")
-    model: Model = loader.load_model(zero_shot=config.get("zero_shot", False))
+    model: Model = loader.load_model(zero_shot=config.get("zero_shot", False),
+                                     checkpoint_type=config.get('checkpoint_type', 'last'))
     logger.info(f"Loaded model {type(model.module)}, fingerprint={get_fingerprint(model)}")
     logger.info(f"Reader temperature: {model.module.reader_head.temperature()}")
     logger.info(f"Retriever temperature: {model.module.retriever_head.temperature()}")

@@ -25,6 +25,7 @@ fi
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
   base.device_batch_size=2 \
+  base.infer_batch_mul=2 \
   base.eval_device_batch_size=1 \
   trainer.precision=32 \
   datamodule.num_workers=8 \

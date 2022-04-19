@@ -35,7 +35,7 @@ base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
-  infer_batch_mul: 10
+  infer_batch_mul: 100
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
   accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
