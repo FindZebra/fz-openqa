@@ -9,7 +9,7 @@ from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipes.min_length import MinLength
 from fz_openqa.datamodules.utils.dataset import format_size_difference
-from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.transformations import set_index_column
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.pretty import pretty_decode
 
@@ -63,13 +63,7 @@ class FzQueriesBuilder(QaBuilder):
             )
 
         # add an index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="question.row_idx"),
-            batched=False,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing",
-        )
+        dataset = set_index_column(dataset, key="question.row_idx")
 
         return dataset
 

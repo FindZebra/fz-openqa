@@ -16,6 +16,7 @@ from loguru import logger
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import AppendDot
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
+from ..utils.transformations import set_index_column
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
@@ -35,7 +36,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
@@ -194,14 +194,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # add the document index column if not already provided
         if "idx" not in dataset.column_names:
-            dataset = dataset.map(
-                partial(set_row_idx, key="idx"),
-                batched=True,
-                batch_size=1000,
-                num_proc=self.num_proc,
-                with_indices=True,
-                desc="Indexing documents",
-            )
+            dataset = set_index_column(dataset, key="idx")
 
         # if titles are empty, deactivate the append_document_title
         if "title" in dataset.column_names and self.append_document_title is True:
@@ -254,14 +247,7 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
         # add index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="document.row_idx"),
-            batched=True,
-            batch_size=1000,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing documents",
-        )
+        dataset = set_index_column(dataset, key="document.row_idx")
 
         return dataset
 

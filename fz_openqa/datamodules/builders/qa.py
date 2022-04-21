@@ -30,7 +30,7 @@ from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import add_spec_token
-from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.transformations import set_index_column
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
@@ -181,14 +181,7 @@ class QaBuilder(HfDatasetBuilder):
             )
 
         # add an index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="question.row_idx"),
-            batched=True,
-            batch_size=1000,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing rows",
-        )
+        dataset = set_index_column(dataset, key="question.row_idx")
 
         return dataset
 
@@ -367,13 +360,7 @@ class ConcatQaBuilder(QaBuilder):
         )
 
         # add an index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="question.row_idx"),
-            batched=True,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing",
-        )
+        dataset = set_index_column(dataset, key="question.row_idx")
 
         return dataset
 
