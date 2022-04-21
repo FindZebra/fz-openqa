@@ -1,8 +1,11 @@
+import math
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from torch import einsum
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
@@ -19,17 +22,29 @@ class ColbertHead(DprHead):
         *,
         use_mask: bool = False,
         use_answer_mask=False,
+        use_soft_score: bool = False,
+        compute_agg_score: bool = False,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.use_mask = use_mask
         self.use_answer_mask = use_answer_mask
+        self.use_soft_score = use_soft_score
+        self.compute_agg_score = compute_agg_score
         if self.use_answer_mask:
             assert tokenizer is not None, "tokenizer must be provided if use_answer_mask is True"
             self.sep_token_id = tokenizer.sep_token_id
         else:
             self.sep_token_id = None
+
+        logger.info(
+            f"Initialized {self.__class__.__name__} (id={self.id}) with "
+            f"use_mask={self.use_mask}, "
+            f"use_answer_mask={self.use_answer_mask}, "
+            f"soft_score={self.use_soft_score}, "
+            f"compute_agg_score={self.compute_agg_score}"
+        )
 
     def score(
         self,
@@ -39,18 +54,83 @@ class ColbertHead(DprHead):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> Tensor:
-        if not self.across_batch:
+    ) -> (Tensor, Dict):
+        tau = kwargs.get("tau", None)
+
+        diagnostics = {}
+
+        # compute the aggregated score
+        if self.compute_agg_score:
+            hd_flat = self._flatten_documents(hd, doc_ids)
+            hq_flat = hq.view(-1, *hq.shape[-2:])
+            agg_retriever_score = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
+            agg_retriever_score, _ = self._reduce_doc_vectors(agg_retriever_score, tau)
+            agg_retriever_score = agg_retriever_score.sum(-1)
+            diagnostics["agg_score"] = agg_retriever_score
+
+        # compute the score using self-attention
+        if self.use_soft_score:
+            if self.across_batch:
+                raise NotImplementedError("soft_score across_batch not implemented")
+
+            # split hq and hd
+            hq_a, hq_v = hq.chunk(2, dim=-1)
+            hd_a, hd_v = hd.chunk(2, dim=-1)
+
+            # attention model
+            attn_scores = einsum("bouh, bodvh -> boduv", hq_a, hd_a)
+            attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
+            log_p_dloc = attn_scores.log_softmax(dim=-1)
+
+            # values
+            values = einsum("bouh, bodvh -> boduv", hq_v, hd_v)
+            scores = (log_p_dloc.exp() * values).sum(dim=(-2, -1))
+
+        elif not self.across_batch:
+            # compute the basic Colbert scores
             scores = einsum("bouh, bodvh -> boduv", hq, hd)
-            max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
+
+            # sum over document dimension
+            q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
+
+            # sum over query dimension
+            scores = q_scores.sum(-1)
         else:
+            # compute the Colbert scores for ALL documents within the batch
             hd = self._flatten_documents(hd, doc_ids)
             scores = einsum("bouh, mvh -> bomuv", hq, hd)
-            max_scores, _ = scores.max(-1)
-            return max_scores.sum(-1)
 
-    def preprocess(
+            # sum over document dimension
+            q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
+
+            # sum over query dimension
+            scores = q_scores.sum(-1)
+
+        # aggregate document loc probs over q
+        log_nq = math.log(log_p_dloc.size(-2))
+        log_p_dloc = (log_p_dloc - log_nq).logsumexp(dim=-2)
+        diagnostics["log_p_dloc"] = log_p_dloc
+
+        return scores, diagnostics
+
+    def _reduce_doc_vectors(self, scores, tau):
+        # attention_scores
+        attn_scores = scores.clone()
+        attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
+        log_attn_scores = attn_scores.log_softmax(dim=-1)
+
+        # sample locations and reduce over `document` dimension
+        if tau is None:
+            q_scores, _ = scores.max(dim=-1)
+        else:
+            tau_ = tau if tau > 0 else 1.0
+            q_locs = torch.nn.functional.gumbel_softmax(
+                log_attn_scores, tau=tau_, hard=(tau <= 0), dim=-1
+            )
+            q_scores = (q_locs * scores).sum(dim=-1)
+        return q_scores, log_attn_scores
+
+    def _preprocess(
         self,
         last_hidden_state: Tensor,
         head: str,
@@ -66,11 +146,16 @@ class ColbertHead(DprHead):
             last_hidden_state = head_op(last_hidden_state, **head_kwargs)
 
         if self.normalize:
-            last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
+            if not self.use_soft_score:
+                last_hidden_state = F.normalize(last_hidden_state, p=2, dim=-1)
+            else:
+                h_a, h_v = last_hidden_state.chunk(2, dim=-1)
+                h_v = F.normalize(h_v, p=2, dim=-1)
+                last_hidden_state = torch.cat([h_a, h_v], dim=-1)
 
         if self.use_mask and mask is not None:
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
-            last_hidden_state = last_hidden_state / mask.sum(1, keepdim=True)
+            # last_hidden_state = last_hidden_state / mask.sum(1, keepdim=True)
 
         if self.use_answer_mask and head == "question" and question_mask < 1:
             # mask the tokens up to the first SEP token (use to separate answers from questions)

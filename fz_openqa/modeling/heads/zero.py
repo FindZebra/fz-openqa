@@ -50,18 +50,18 @@ class ZeroHead(DprHead):
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
         **kwargs
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
 
         # preprocess
         hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, **kwargs)
 
         # compute the score
-        return self.score(hq=hq, batch=batch, **kwargs)
+        return self.score(hq=hq, batch=batch, **kwargs), {}
 
     def score(self, *, hq: Tensor, **kwargs) -> Tensor:
         return einsum("boh -> bo", hq)
 
-    def preprocess(
+    def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Optional[Tensor]:
         cls_repr = last_hidden_state[..., 0, :]  # CLS token

@@ -13,6 +13,7 @@ from typing import Union
 from datasets import Dataset
 from datasets import DatasetDict
 from omegaconf import DictConfig
+from omegaconf import ListConfig
 from omegaconf import OmegaConf
 
 from fz_openqa.datamodules.analytics.base import Analytic
@@ -63,10 +64,10 @@ class DatasetBuilder:
     def run_analytics(self, dataset):
         if self.analytics is None:
             return
-        elif isinstance(self.analytics, list):
+        elif isinstance(self.analytics, (list, ListConfig)):
             for a in self.analytics:
                 a(dataset, builder=self)
-        elif isinstance(self.analytics, dict):
+        elif isinstance(self.analytics, (dict, DictConfig)):
             for k, v in self.analytics.items():
                 v(dataset, builder=self)
         elif isinstance(self.analytics, Analytic):

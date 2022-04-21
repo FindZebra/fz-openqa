@@ -14,7 +14,7 @@ from fz_openqa.utils import maybe_instantiate
 class Parameters:
     """Store a bunch of parameters with their Schedule objects."""
 
-    def __init__(self, **parameters: Dict[str, float | Schedule | Dict | DictConfig]):
+    def __init__(self, **parameters: Dict[None, str, float | Schedule | Dict | DictConfig]):
         self.parameters = {}
         for k, v in parameters.items():
             schedule = self.instantiate_schedule(v)
@@ -28,7 +28,7 @@ class Parameters:
         elif isinstance(v, (dict, DictConfig)):
             assert "mode" in v.keys(), "`mode` must be specified to init a `Schedule`."
             schedule = AutoSchedule(**v)
-        elif isinstance(v, Number):
+        elif isinstance(v, Number) or v is None:
             schedule = StaticSchedule(v)
         else:
             raise ValueError(f"Unrecognized parameter type: {type(v)}")

@@ -7,4 +7,5 @@ defaults:
 
 resample_k: null
 max_batch_size: null
+split_bert_layers: 0
 _id: option_retriever

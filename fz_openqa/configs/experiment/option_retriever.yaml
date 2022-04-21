@@ -31,10 +31,11 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   is_search: false
-  exp_info: "Colbert + Bayesian head"
+  exp_info: "--"
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
+  infer_batch_mul: 100
   n_devices: ${int_max:1,${trainer.gpus}}
   step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
   accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
@@ -60,7 +61,7 @@ trainer:
 model:
   ema_decay: null
   num_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 20_000 # TODO !!
+  num_training_steps: 100_000 # TODO !!
   hidden_size: 32
   bert:
     config:
@@ -74,34 +75,51 @@ model:
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
   parameters:
+    tau: null
+    maxim_retriever_kl_weight: null
+    maxim_reader_kl_weight: null
     gamma: 1
     question_mask: 1
     alpha: 0
     reader_kl_weight: 0.5
+    agg_retriever_kl_weight: 0
     retriever_kl_weight:
       mode: cosine
-      num_steps: 10_000
+      num_steps: 5_000
       initial_value: 0.1
       final_value: 1e-5
   module:
+    mask_punctuation: false
+    split_bert_layers: 0
     resample_k: null
     alpha: 0
     max_batch_size: 200
     retriever_head:
+      id: retriever
+      use_soft_score: false
+      compute_agg_score: true
       output_size: ${model.hidden_size}
-      use_mask: false
+      normalize: true
+      use_mask: true
+      is_scaled: true
       use_answer_mask: false
       bayesian: false
       learn_scale: false
       scale: 1.
+      scale_init: 0.1
       share_parameters: true
       bias: false
     reader_head:
+      id: reader
+      use_soft_score: true
       output_size: ${model.hidden_size}
-      use_mask: false
+      use_mask: true
+      normalize: false
+      is_scaled: true
       bayesian: false
       learn_scale: false
       scale: 1.
+      scale_init: 0.1
       share_parameters: true
       bias: false
     gradients:
@@ -112,8 +130,8 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 10
-    reset_optimizer: true # TODO !!
+    freq: 20
+    reset_optimizer: false # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
@@ -126,6 +144,8 @@ datamodule:
   pin_memory: true
 
   # dataset builder
+  dset_name: medqs-us
+  corpus_name: medqa
   use_subset: false
   corpus_subset: false
   num_proc: 8
@@ -149,13 +169,13 @@ datamodule:
   #    interpretable: false
 
 
-  # transform the score based on the relevance classifier
-  score_transform:
-    factor: 1.0
-    normalize: false
-    exponentiate: false
-    max_score: 1.0
-    temperature: 1.0
+#  # transform the score based on the relevance classifier
+#  score_transform:
+#    factor: 1.0
+#    normalize: false
+#    exponentiate: false
+#    max_score: 1.0
+#    temperature: 1.0
 
   # document sampler
   sampler:
@@ -163,21 +183,21 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
-      test: true
+      validation: false
+      test: false
 
   # OpenQA builder parameters
   builder:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      dset_name: medqa-us
+      dset_name: ${datamodule.dset_name}
       query_expansion: null
-      n_query_tokens: 10 # todo!!!
+      n_query_tokens: 1 # todo!!! (10)
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 512 # todo!!!
+      max_length: 350 # todo!!!
     corpus_builder:
-      dset_name: medqa
+      dset_name: ${datamodule.corpus_name}
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
       passage_stride: 100
@@ -186,21 +206,23 @@ datamodule:
   # Index parameters
   index_builder:
     es_temperature: 5. # todo !!!
-    auxiliary_weight: 5.
+    auxiliary_weight: 5. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
-    p: 10
+    p: 4096
     dtype: float16
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
     persist_cache: false
-    index_factory: IVF100,PQ16x8
+    index_factory: IVF10000,PQ16x8
     handler: flat
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false
-    nprobe: 12
+    fais_gpu_ratio: 0.5
+    n_ranking_workers: ${datamodule.num_workers}
+    nprobe: 32
     loader_kwargs:
-      batch_size: ${int_mul:${base.n_devices},500,${base.device_batch_size}}
-      num_workers: 12
+      batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+      num_workers: ${datamodule.num_workers}
       pin_memory: true
 
 

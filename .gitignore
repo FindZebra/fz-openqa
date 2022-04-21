@@ -13,6 +13,7 @@ compiled-dataset-*.jsonl
 .fingerprint/
 vectors/
 slurm/
+wandb/
 
 # Editors
 .vscode/

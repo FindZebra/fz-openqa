@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import string
 from enum import Enum
 from typing import Any
@@ -67,6 +68,7 @@ class OptionRetriever(Module):
         reader_head: Head | DictConfig,
         retriever_head: Head | DictConfig,
         alpha: float = 0,
+        mask_punctuation: bool = False,
         resample_k: int = None,
         max_batch_size: Optional[int] = None,
         gradients: Gradients | DictConfig = InBatchGradients(),
@@ -88,10 +90,12 @@ class OptionRetriever(Module):
         self.estimator = maybe_instantiate(gradients)
 
         # punctuation masking
-        self.skiplist = [
-            self.tokenizer.encode(symbol, add_special_tokens=False)[0]
-            for symbol in string.punctuation
-        ]
+        self.skiplist = []
+        if mask_punctuation:
+            self.skiplist += [
+                self.tokenizer.encode(symbol, add_special_tokens=False)[0]
+                for symbol in string.punctuation
+            ]
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
 
         # check bert fingerprint
@@ -123,7 +127,7 @@ class OptionRetriever(Module):
     def mask(self, batch: Batch, field: str) -> Tensor:
         """prepare the head mask for the given field."""
         if field == "question":
-            mask = torch.ones_like(batch["question.attention_mask"].float())
+            mask = batch["question.attention_mask"].clone().float()
             mask[mask == self._pad_token_id] = 0
         elif field == "document":
             inputs_ids = batch["document.input_ids"]
@@ -132,26 +136,35 @@ class OptionRetriever(Module):
             for w in self.skiplist:
                 mask[inputs_ids == w] = 0
         else:
-            ValueError(f"Unknown field {field}")
+            raise ValueError(f"Unknown field {field}")
 
         return mask
 
-    def _forward(self, batch: Batch, predict: bool = True, **kwargs) -> Batch:
+    def _forward(
+        self, batch: Batch, predict: bool = True, head: str = "retriever", **kwargs
+    ) -> Batch:
         output = {}
+        heads = {"reader": self.reader_head, "retriever": self.retriever_head}
+        head_suffixes = {"retriever": "", "reader": "reader_"}
+        fields_with_prefixes = {"document": "_hd_", "question": "_hq_"}
 
-        if "document.input_ids" in batch:
-            h = self._forward_field(batch, "document", **kwargs)
-            if predict:
-                mask = self.mask(batch, "document")
-                h = self.retriever_head.preprocess(h, "document", mask=mask, batch=batch)
-            output["_hd_"] = h
+        # process all available fields
+        for field_name, field_prefix in fields_with_prefixes.items():
+            if f"{field_name}.input_ids" in batch:
 
-        if "question.input_ids" in batch:
-            h = self._forward_field(batch, "question", **kwargs)
-            if predict:
-                mask = self.mask(batch, "question")
-                h = self.retriever_head.preprocess(h, "question", mask=mask, batch=batch)
-            output["_hq_"] = h
+                # process the `input_ids` using the backbone (BERT)
+                h = self._forward_field(batch, field_name, **kwargs)
+
+                # process `h` using the head(s)
+                if predict:
+                    mask = self.mask(batch, field_name)
+                    for hid in head.split("+"):
+                        head_layer = heads[hid]
+                        head_suffix = head_suffixes[hid]
+                        h_ = head_layer._preprocess(h, field_name, mask=mask, batch=batch)
+                        output[f"{field_prefix}{head_suffix}"] = h_
+                else:
+                    output[field_prefix] = h
 
         return output
 
@@ -280,22 +293,28 @@ class OptionRetriever(Module):
         output.update(d_out)
         pprint_batch(output, "Option retriever::outputs::final", silent=silent)
 
-        reader_score = self.reader_head(
+        reader_score, reader_dgs = self.reader_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
-        retriever_score = self.retriever_head(
+        retriever_score, retriever_dgs = self.retriever_head(
             hd=output["_hd_"],
             hq=output["_hq_"],
             q_mask=self.mask(batch, "question"),
             d_mask=self.mask(batch, "document"),
             batch={**d_batch, **q_batch},
+            doc_ids=d_batch["document.row_idx"],
             **kwargs,
         )
+
+        # rename head diagnostics
+        reader_dgs = {f"reader_{k}": v for k, v in reader_dgs.items()}
+        retriever_dgs = {f"retriever_{k}": v for k, v in retriever_dgs.items()}
 
         # log documents ids
         step_output["retriever/max-doc-id"] = batch["document.row_idx"].max()
@@ -306,7 +325,11 @@ class OptionRetriever(Module):
             retriever_score,
             d_batch.get("document.retrieval_score", None),
             d_batch.get("document.retrieval_rank", None),
+            match_score=d_batch.get("document.match_score", None),
+            document_ids=d_batch.get("document.row_idx", None),
+            reader_score=reader_score,
             output=step_output,
+            **retriever_dgs,
         )
 
         # compute the gradients
@@ -318,6 +341,8 @@ class OptionRetriever(Module):
                 retrieval_score=d_batch.get("document.retrieval_score", None),
                 retrieval_log_weight=d_batch.get("document.retrieval_log_weight", None),
                 **kwargs,
+                **retriever_dgs,
+                **reader_dgs,
             )
         )
 
@@ -346,7 +371,13 @@ class OptionRetriever(Module):
         retrieval_scores: Optional[Tensor],
         retrieval_rank: Optional[Tensor],
         *,
+        match_score: Optional[Tensor] = None,
+        document_ids: Optional[Tensor] = None,
+        reader_score: Optional[Tensor] = None,
+        retriever_agg_score: Optional[Tensor] = None,
+        retriever_log_p_dloc: Optional[Tensor] = None,
         output: Dict,
+        **kwargs,
     ):
         """
         Compute diagnostics for the rank of the retrieved documents.
@@ -372,6 +403,19 @@ class OptionRetriever(Module):
         retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
         output["retriever/entropy"] = retriever_entropy.mean()
 
+        # entropy H(p(d))
+        if retriever_agg_score is not None:
+            log_nq = math.log(retriever_agg_score.size(0))
+            log_p_d = (retriever_agg_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
+            retriever_entropy_agg = -(log_p_d.exp() * log_p_d).sum(dim=-1)
+            output["retriever/entropy_agg"] = retriever_entropy_agg.mean()
+
+        # agg. density of document locations (MaxSim)
+        if retriever_log_p_dloc is not None:
+            H_retriever_agg = -(retriever_log_p_dloc.exp() * retriever_log_p_dloc).sum(dim=-1)
+            output["retriever/maxsim_entropy"] = H_retriever_agg.mean()
+
+        # KL (retriever || U)
         if retrieval_scores is not None:
             #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
             M = retrieval_scores.max(dim=-1, keepdim=True).values
@@ -399,6 +443,27 @@ class OptionRetriever(Module):
             output["retrieval/n_samples"] = retrieval_rank.size(-1)
             output["retrieval/max_sampled_rank"] = retrieval_rank.max().float()
             output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
+
+        # match score diagnostics
+        if match_score is not None:
+            match_logits = (match_score > 0).float().log_softmax(dim=-1)
+            kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
+            kl_relevance = kl_relevance.sum(dim=(1, 2))
+            output["retriever/kl_relevance"] = kl_relevance.mean()
+
+        # diversity of the retrieved documents
+        if document_ids is not None:
+            unique_ids = document_ids.view(-1).unique()
+            output["retrieval/n_unique_docs"] = unique_ids.size(0)
+            prop_unique_docs = unique_ids.size(0) / math.prod(document_ids.shape)
+            output["retrieval/prop_unique_docs"] = prop_unique_docs
+
+        # reader score diagnostics
+        if reader_score is not None:
+            reader_score_ = reader_score - reader_score.mean(dim=-1, keepdim=True)
+            retriever_score_ = retriever_score - retriever_score.mean(dim=-1, keepdim=True)
+            scores_diff = (retriever_score_ - reader_score_).pow(2).mean()
+            output["retriever/scores_diff"] = scores_diff
 
     @staticmethod
     def _mask_scores(retriever_score: Tensor, original_retrieval_score: Optional[Tensor]) -> Tensor:

@@ -3,15 +3,20 @@ from typing import Optional
 from typing import Union
 
 import datasets
+import rich
+import torch
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
+from pytorch_lightning.utilities.cloud_io import load as pl_load
+from pytorch_lightning.utilities.migration import pl_legacy_patch
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
+from fz_openqa.utils.json_struct import apply_to_json_struct
 
 
 def get_drive_url(url):
@@ -115,19 +120,40 @@ class CheckpointLoader:
     def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
         path = self.model_checkpoint_path(match=checkpoint_type)
+        # if path is not None and not zero_shot:
+        #     logger.info(f"Loading model from checkpoint: {path}")
+        #     # need to override the saved `tokenizer` and `bert` hyperparameters
+        #     # so `sys.cache_dir` can be overridden
+        #     cls = _resolve_target(self.config.model._target_)
+        #     model = cls.load_from_checkpoint(
+        #         path,
+        #         tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
+        #         bert=OmegaConf.to_object(self.config.model.bert),
+        #         **kwargs,
+        #     )
+        # else:
+        #     logger.warning("No checkpoint found. Initializing model without checkpoint.")
+        #     model = instantiate(self.config.model, _recursive_=False)
+
         if path is not None and not zero_shot:
             logger.info(f"Loading model from checkpoint: {path}")
-            # need to override the saved `tokenizer` and `bert` hyperparameters
-            # so `sys.cache_dir` can be overridden
-            cls = _resolve_target(self.config.model._target_)
-            model = cls.load_from_checkpoint(
-                path,
-                tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
-                bert=OmegaConf.to_object(self.config.model.bert),
-                **kwargs,
-            )
+            cls: Model.__class__ = _resolve_target(self.config.model._target_)
+
+            # load pytorch
+            with pl_legacy_patch():
+                checkpoint = pl_load(path, map_location=torch.device("cpu"))
+
+            # drop callbacks
+            checkpoint.pop("callbacks", None)
+
+            # override hyper parameters
+            if "hyper_parameters" in checkpoint:
+                checkpoint["hyper_parameters"] = self.config.model
+
+            # instantiate and load model weights
+            model: Model = cls._load_model_state(checkpoint, **kwargs)
         else:
             logger.warning("No checkpoint found. Initializing model without checkpoint.")
-            model = instantiate(self.config.model, _recursive_=False)
+            model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
 
         return model

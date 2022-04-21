@@ -116,6 +116,10 @@ class DataModule(LightningDataModule):
         self.collate_pipe = self.builder.get_collate_pipe()
 
     def train_dataloader(self, *, shuffle: bool = True):
+        if shuffle is False:
+            logger.warning(
+                "You are using a non-shuffled dataloader. " "This is not recommended for training."
+            )
         collate_fn = self._get_collate_fn(split=Split.TRAIN)
 
         return DataLoader(

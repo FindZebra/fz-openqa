@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import collections
 import warnings
 from abc import ABC
@@ -17,7 +19,9 @@ from torch import Tensor
 from torchmetrics.classification import Accuracy
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from transformers.models.bert.modeling_bert import BertEncoder
 
+from fz_openqa.modeling.modules.utils.bert import instantiate_bert_model_with_config
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.tokenizers.static import ANS_TOKEN
@@ -77,15 +81,18 @@ class Module(nn.Module, ABC):
     def __init__(
         self,
         *,
-        bert: Union[DictConfig, BertPreTrainedModel],
-        tokenizer: Union[DictConfig, PreTrainedTokenizerFast],
+        bert: DictConfig | BertPreTrainedModel,
+        tokenizer: DictConfig | PreTrainedTokenizerFast,
+        split_bert_layers: int = 0,
         prefix: str = "",
         **kwargs,
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
         self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
-        self.bert: BertPreTrainedModel = self._instantiate_bert(bert=bert, tokenizer=self.tokenizer)
+        self.bert: BertPreTrainedModel = self._instantiate_bert(
+            bert=bert, tokenizer=self.tokenizer, split_bert_layers=split_bert_layers
+        )
         self._init_metrics(prefix=prefix)
 
     def _backbone(
@@ -149,7 +156,7 @@ class Module(nn.Module, ABC):
         *,
         bert: Union[BertPreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
-        **kwargs,
+        split_bert_layers: int = 0,
     ) -> BertPreTrainedModel:
         """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
 
@@ -157,21 +164,12 @@ class Module(nn.Module, ABC):
         self._pad_token_id = tokenizer.pad_token_id
 
         # instantiate the bert model using `bert.config`
-        if isinstance(bert, (dict, DictConfig)) and "config" in bert.keys():
-            bert_config = bert.pop("config", {})
-            if len(bert_config) > 0:
-                for key in ["_target_", "pretrained_model_name_or_path"]:
-                    bert_config.pop(key, None)
-                bert_config = maybe_instantiate(bert_config)
-            msg = (
-                "BERT parameter overrides must be specified in `BertConfig`, "
-                "not in the model config"
-            )
-            assert set(bert.keys()) == {"_target_", "pretrained_model_name_or_path"}, msg
-        else:
-            bert_config = {}
+        bert = instantiate_bert_model_with_config(bert)
 
-        bert: BertPreTrainedModel = maybe_instantiate(bert, **bert_config)
+        # drop the last `drop_bert_layers` layers
+        if split_bert_layers > 0:
+            encoder: BertEncoder = bert.encoder
+            encoder.layer = nn.ModuleList(encoder.layer[:-split_bert_layers])
 
         # extend BERT embeddings for the added special tokens
         if bert.get_input_embeddings().weight.shape[0] != len(tokenizer):

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
 import torch
+from loguru import logger
 from loguru import logger as log
 from torch import Tensor
 
@@ -19,9 +21,6 @@ from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
-
-
-# required to allow searching faiss with tensors
 
 
 class ColbertIndex(DenseIndex):
@@ -52,6 +51,8 @@ class ColbertIndex(DenseIndex):
         "_is_gpu",
         "_max_add_per_gpu",
         "maxsim_chunksize",
+        "fais_gpu_ratio",
+        "n_ranking_workers",
     ]
 
     def __init__(
@@ -59,11 +60,18 @@ class ColbertIndex(DenseIndex):
         *args,
         p: int = 100,
         maxsim_chunksize: int = 10000,
+        fais_gpu_ratio: float = 0.5,
+        n_ranking_workers: int = 4,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.p = p
         self.maxsim_chunksize = maxsim_chunksize
+
+        if self.keep_faiss_on_cpu:
+            fais_gpu_ratio = 0
+        self.fais_gpu_ratio = fais_gpu_ratio
+        self.n_ranking_workers = n_ranking_workers
 
     def _call_batch(
         self,
@@ -123,6 +131,12 @@ class ColbertIndex(DenseIndex):
 
     def _init_maxsim(self):
         faiss_devices, maxsim_devices = self._allocate_gpus()
+
+        # set number of ranking workers when no device is allocated
+        if len(maxsim_devices) == 0:
+            logger.info(f"Setting MaxSim rankers on CPU with {self.n_ranking_workers} workers")
+            maxsim_devices = self.n_ranking_workers * [-1]
+
         self._max_sim = MaxSim(
             token_index=self.index_path,
             vectors=self.vectors_table,
@@ -175,9 +189,9 @@ class ColbertIndex(DenseIndex):
             faiss_gpus = []
             maxsim_gpus = gpus
         elif n_gpus > 1:
-            n_maxsim = min(-(-int(math.floor(n_gpus * 0.5))), n_gpus - 1)
-            faiss_gpus = gpus[n_maxsim:]
-            maxsim_gpus = gpus[:n_maxsim]
+            n_faiss = -math.floor(-self.fais_gpu_ratio * n_gpus)
+            faiss_gpus = gpus[:n_faiss]
+            maxsim_gpus = gpus[n_faiss:]
         elif n_gpus == 1:
             faiss_gpus = gpus
             maxsim_gpus = gpus

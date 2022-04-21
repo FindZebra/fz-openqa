@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -13,12 +12,16 @@ from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.base import Space
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
+from fz_openqa.utils.functional import batch_reduce
 
 
-def kl_uniform(logits: Tensor, dim: int = -1) -> Tensor:
-    log_p = logits.log_softmax(dim=dim)
+def kl_divergence(p_logits: Tensor, q_logits: Optional[Tensor] = None, dim: int = -1) -> Tensor:
+    log_p = p_logits.log_softmax(dim=dim)
     N = log_p.size(dim)
-    log_q = -torch.ones_like(log_p) * math.log(N)
+    if q_logits is None:
+        log_q = -torch.ones_like(log_p) * math.log(N)
+    else:
+        log_q = q_logits.log_softmax(dim=dim)
     return (log_p.exp() * (log_p - log_q)).sum(dim=dim)
 
 
@@ -59,6 +62,9 @@ class ReinforceGradients(Gradients):
         targets: Tensor,
         retrieval_score: Optional[Tensor] = None,
         retrieval_log_weight: Optional[Tensor] = None,
+        retriever_agg_score: Optional[Tensor] = None,
+        retriever_log_p_dloc: Optional[Tensor] = None,
+        reader_log_p_dloc: Optional[Tensor] = None,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
         r"""
@@ -91,6 +97,9 @@ class ReinforceGradients(Gradients):
         gamma = kwargs.get("gamma", self.gamma)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+        agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
+        maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
+        maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
         f_theta_ = reader_score
         f_phi_ = retriever_score
@@ -145,10 +154,21 @@ class ReinforceGradients(Gradients):
         diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
 
         # compute KL divergence w.r.t to a uniform prior (regularization)
-        kl_reader = kl_uniform(log_p_a, dim=1)
-        diagnostics["reader/kl_uniform"] = kl_reader
-        kl_retriever = kl_uniform(f_phi_, dim=2).sum(1)
-        diagnostics["retriever/kl_uniform"] = kl_retriever
+        kl_reader = kl_divergence(log_p_a, dim=1)
+        diagnostics["reader/kl_uniform"] = kl_reader.mean()
+        kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
+        # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
+        diagnostics["retriever/kl_uniform"] = kl_retriever.mean()
+        log_nq = math.log(retriever_agg_score.size(0))
+        log_p_d = (retriever_agg_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
+        kl_agg_retriever = kl_divergence(log_p_d, dim=-1)
+        diagnostics["retriever/kl_agg_uniform"] = kl_agg_retriever.mean()
+        kl_maxsim_retriever = kl_divergence(retriever_log_p_dloc, dim=-1)
+        kl_maxsim_retriever = batch_reduce(kl_maxsim_retriever, op=torch.mean)
+        diagnostics["retriever/kl_maxsim"] = kl_maxsim_retriever
+        kl_maxsim_reader = kl_divergence(reader_log_p_dloc, dim=-1).mean(-1)
+        kl_maxsim_reader = batch_reduce(kl_maxsim_reader, op=torch.mean)
+        diagnostics["reader/kl_maxsim"] = kl_maxsim_reader.mean()
 
         # log p(a_st | q, A, D)
         targets_ = targets.view(targets.size(0), 1, 1)
@@ -211,6 +231,12 @@ class ReinforceGradients(Gradients):
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
+        if agg_retriever_kl_weight is not None:
+            loss = loss + agg_retriever_kl_weight * kl_agg_retriever
+        if maxsim_retriever_kl_weight is not None:
+            loss = loss + maxsim_retriever_kl_weight * kl_maxsim_retriever
+        if maxsim_reader_kl_weight is not None:
+            loss = loss + maxsim_reader_kl_weight * kl_maxsim_reader
 
         return {
             "loss": loss,

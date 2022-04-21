@@ -1,4 +1,5 @@
 import math
+from typing import Dict
 from typing import Optional
 
 import einops
@@ -30,7 +31,7 @@ class CrossAttentionHead(Head):
 
     def forward(
         self, *, hd: Tensor, hq: Tensor, q_mask: Optional[Tensor] = None, **kwargs
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
         # compute the features for the attention layer
         q = self.q(hq)
         q = einops.rearrange(
@@ -87,9 +88,9 @@ class CrossAttentionHead(Head):
 
         # compute the final score of shape [bs, n_opts, n_docs]
         score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
-        return score
+        return score, {}
 
-    def preprocess(
+    def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
         raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocess")

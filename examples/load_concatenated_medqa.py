@@ -15,6 +15,7 @@ from fz_openqa import configs
 from fz_openqa.datamodules.builders.qa import ConcatQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
+from fz_openqa.datamodules.analytics import SequenceLengths
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,13 @@ def run(config: DictConfig) -> None:
         n_query_tokens=config.get("n_query_tokens", 1),
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
+        analytics=[
+            SequenceLengths(output_dir="analytics/", verbose=True),
+        ],
     )
-    dm = DataModule(builder=builder)
+    dm = DataModule(
+        builder=builder,
+    )
     dm.prepare_data()
     dm.setup()
     dm.display_samples(n_samples=3)
@@ -52,9 +58,9 @@ def run(config: DictConfig) -> None:
     rich.print(dm.dataset)
 
     # sample a batch
-    batch = next(iter(dm.train_dataloader()))
-    rich.print(batch["question.input_ids"][0])
-    rich.print(batch["question.attention_mask"][0])
+    # batch = next(iter(dm.train_dataloader()))
+    # rich.print(batch["question.input_ids"][0])
+    # rich.print(batch["question.attention_mask"][0])
 
 
 if __name__ == "__main__":

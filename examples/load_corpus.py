@@ -52,7 +52,7 @@ def run(config: DictConfig) -> None:
         text_formatter=textformatter,
         use_subset=config.get("use_subset", False),
         cache_dir=config.sys.get("cache_dir"),
-        num_proc=2,
+        num_proc=config.get("num_proc", 2),
         analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],
         append_document_title=config.get("append_title", True),
     )
