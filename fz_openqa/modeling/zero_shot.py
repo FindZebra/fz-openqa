@@ -16,17 +16,25 @@ class ZeroShot(pl.LightningModule):
     def __init__(
         self,
         bert_id: str = "dmis-lab/biobert-base-cased-v1.2",
+        tokenizer: Optional[Any] = None,
         head: str = "flat",
         limit_size: Optional[int] = None,
         **kwargs,
     ):
         super(ZeroShot, self).__init__()
+        self.bert_id = bert_id
         self.bert = AutoModel.from_pretrained(bert_id)
+
         assert head in {"flat", "contextual"}
         self.head = head
         self.limit_size = limit_size
         self.is_colbert = nn.Parameter(tensor(head == "contextual"), requires_grad=False)
         self._limit_size = nn.Parameter(tensor(limit_size or 0), requires_grad=False)
+
+        # extend BERT embeddings
+        if tokenizer is not None:
+            if self.bert.get_input_embeddings().weight.shape[0] != len(tokenizer):
+                self.bert.resize_token_embeddings(len(tokenizer))
 
     def forward(self, batch: Batch, **kwargs) -> Any:
         output = {}

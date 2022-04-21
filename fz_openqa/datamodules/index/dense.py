@@ -22,6 +22,7 @@ from fz_openqa.datamodules.index.base import camel_to_snake
 from fz_openqa.datamodules.index.base import Index
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from fz_openqa.datamodules.index.handlers.index_lookup import IndexLookupHandler
 from fz_openqa.datamodules.index.handlers.multi_faiss import MultiFaissHandler
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
@@ -188,7 +189,10 @@ class DenseIndex(Index):
 
         """
         self._set_index_name(dataset=dataset)
-        Handler = {"flat": FaissHandler, "multi": MultiFaissHandler}[self.handler]
+        Handler = {"flat": FaissHandler, "multi": MultiFaissHandler, "lookup": IndexLookupHandler}[
+            self.handler
+        ]
+
         self._index = Handler(
             path=self.index_path,
             index_factory=self.index_factory,
@@ -250,20 +254,19 @@ class DenseIndex(Index):
             raise ValueError(f"Invalid vectors shape: {vectors.shape}, expected 2 or 3 dimensions.")
 
         # retrieve document ids
-        if isinstance(self._index, MultiFaissHandler):
+        if isinstance(self._index, (MultiFaissHandler, IndexLookupHandler)):
             doc_ids = dataset["document.idx"]
-            doc_ids = self._expand(doc_ids, stride)
+            doc_ids = self._expand_seq_length(doc_ids, stride)
         else:
             doc_ids = None
 
-        # build the index
-        self._index.build(vectors=vectors, doc_ids=doc_ids)  # todo: load doc ids from here directly
+        self._index.build(vectors=vectors, doc_ids=doc_ids)
 
         # end building the index
         logger.info(f"Built index of size={len(self._index)}, type={type(self._index)}")
         self._train_ends()
 
-    def _expand(self, flat_values: List, stride: int):
+    def _expand_seq_length(self, flat_values: List, stride: int):
         if stride is not None:
             flat_values = [stride * [idx] for idx in flat_values]
             flat_values = [item for sublist in flat_values for item in sublist]

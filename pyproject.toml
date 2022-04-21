@@ -7,7 +7,7 @@ authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
 torch = ">=1.10"
-datasets = "1.17.0"
+datasets = "1.18.4"
 transformers = "^4.16.2"
 hydra-core = "^1.1.1"
 pytorch-lightning = "^1.5.10"

@@ -1,12 +1,13 @@
 import os
 import re
-from functools import partial
+from collections import Counter
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -50,7 +51,7 @@ CORPUS_GENERATORS = {
     "fz": (fz_corpus.__file__,),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
-    "quality": (quality.__file__,),
+    "quality": (quality.__file__, None),
     "race": ("race", "all"),
 }
 
@@ -155,9 +156,8 @@ class CorpusBuilder(HfDatasetBuilder):
             dset = self._load_dataset(*dset_args, **kwargs)
 
             # adapt dataset
-            dset_id = dset_args[0]
-            if dset_id in DATASET_ADAPTERS:
-                adapter = DATASET_ADAPTERS[dset_id]()
+            if dn in DATASET_ADAPTERS:
+                adapter = DATASET_ADAPTERS[dn]()
                 _, dset = adapter(dset, num_proc=self.num_proc)
 
             if isinstance(dset, DatasetDict):
@@ -193,6 +193,12 @@ class CorpusBuilder(HfDatasetBuilder):
                 dataset = dataset.rename_column(attr, new_attr)
 
         # add the document index column if not already provided
+        if "uid" in dataset.column_names:
+            ids = dataset["uid"]
+            if len(ids) != len(set(ids)):
+                rich.print(Counter(ids))
+                raise ValueError("Duplicated `document.uid` found in dataset")
+
         if "idx" not in dataset.column_names:
             dataset = set_index_column(dataset, key="idx")
 
@@ -252,7 +258,7 @@ class CorpusBuilder(HfDatasetBuilder):
         return dataset
 
     def get_generate_sentences_pipe(self):
-        return GenerateSentences(global_keys=["idx", "cui", "title", "question_idx"])
+        return GenerateSentences(global_keys=["idx", "uid", "cui", "title", "question_idx"])
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -336,6 +342,7 @@ class CorpusBuilder(HfDatasetBuilder):
             keys=[
                 "document.row_idx",
                 "document.idx",
+                "document.uid",
                 "document.passage_idx",
                 "document.retrieval_score",
             ]

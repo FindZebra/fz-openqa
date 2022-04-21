@@ -41,7 +41,7 @@ from fz_openqa.utils.pretty import pretty_decode
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
     "medqa-tw": (medqa.__file__, "tw"),
-    "quality": (quality.__file__, "questions"),
+    "quality": (quality.__file__, None),
     "race": ("race", "all"),
     "race-hard": ("race", "hard"),
     "race-middle": ("race", "middle"),
@@ -113,13 +113,14 @@ class QaBuilder(HfDatasetBuilder):
 
         self.dset_name = dset_name
 
-    def load_one_dataset(self, dset_id, dset_name, **kwargs):
+    def load_one_dataset(self, dset_name, **kwargs):
         # load the dataset
-        dataset = load_dataset(dset_id, dset_name, **kwargs)
+        dset_args = QA_DATASETS.get(dset_name, (dset_name,))
+        dataset = load_dataset(*dset_args, **kwargs)
 
         # adapt the dataset
-        if dset_id in DATASET_ADAPTERS:
-            adapter = DATASET_ADAPTERS[dset_id]()
+        if dset_name in DATASET_ADAPTERS:
+            adapter = DATASET_ADAPTERS[dset_name]()
             dataset, corpus = adapter(dataset, num_proc=self.num_proc)
         return dataset
 
@@ -133,7 +134,7 @@ class QaBuilder(HfDatasetBuilder):
             script_id, name = QA_DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self.load_one_dataset(*QA_DATASETS[n], **kwargs) for n in dset_names]
+        dsets = [self.load_one_dataset(n, **kwargs) for n in dset_names]
 
         if len(dsets) == 1:
             return dsets[0]

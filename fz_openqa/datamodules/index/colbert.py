@@ -60,14 +60,14 @@ class ColbertIndex(DenseIndex):
         p: int = 100,
         maxsim_chunksize: int = 10000,
         fais_gpu_ratio: float = 0.5,
-        n_ranking_workers: int = 4,
+        n_ranking_workers: int = 2,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.p = p
         self.maxsim_chunksize = maxsim_chunksize
 
-        if self.keep_faiss_on_cpu:
+        if self.keep_faiss_on_cpu or self.handler == "lookup":
             fais_gpu_ratio = 0
         self.fais_gpu_ratio = fais_gpu_ratio
         self.n_ranking_workers = n_ranking_workers

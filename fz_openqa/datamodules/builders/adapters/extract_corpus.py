@@ -5,7 +5,7 @@ from datasets import concatenate_datasets
 from datasets import DatasetDict
 
 
-def extract_corpus(dataset: DatasetDict, key: str, **kwargs) -> (DatasetDict, List):
+def extract_corpus(dataset: DatasetDict, *, key: str, **kwargs) -> (DatasetDict, List):
     """Extract corpus from a QA dataset (e.g. `SQUAD`)."""
     # take the columns corresponding to `key` in each dataset
     values = {s: d[key] for s, d in dataset.items()}

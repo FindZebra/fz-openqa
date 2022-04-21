@@ -392,9 +392,8 @@ class OpenQaBuilder(DatasetBuilder):
                     to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
                     id="collate-nested-document-attributes",
                 ),
-                PrintBatch("A.1"),
             ),
-            Sequential(self.dataset_builder._get_collate_pipe(), PrintBatch("A.2")),
+            self.dataset_builder._get_collate_pipe(),
         )
 
         # B. select documents (resample the field `document.row_idx`)
@@ -412,9 +411,7 @@ class OpenQaBuilder(DatasetBuilder):
         return BlockSequential(
             [
                 ("Collate Q&A + document indexes", collate_qad),
-                ("Print B", PrintBatch("B")),
                 ("Select documents", select_documents),
-                ("Print C", PrintBatch("C")),
                 ("Fetch document data", fetch_documents),
                 ("Transform", self.transform),
             ],
