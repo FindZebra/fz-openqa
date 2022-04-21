@@ -144,6 +144,8 @@ datamodule:
   pin_memory: true
 
   # dataset builder
+  dset_name: medqs-us
+  corpus_name: medqa
   use_subset: false
   corpus_subset: false
   num_proc: 8
@@ -189,13 +191,13 @@ datamodule:
     batch_size: 100
     writer_batch_size: 1_000
     dataset_builder:
-      dset_name: medqa-us
+      dset_name: ${datamodule.dset_name}
       query_expansion: null
       n_query_tokens: 1 # todo!!! (10)
       n_answer_tokens: 1 # previous exps: 10
       max_length: 350 # todo!!!
     corpus_builder:
-      dset_name: medqa
+      dset_name: ${datamodule.corpus_name}
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
       passage_stride: 100
@@ -206,7 +208,7 @@ datamodule:
     es_temperature: 5. # todo !!!
     auxiliary_weight: 5. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
-    p: 2048
+    p: 4096
     dtype: float16
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000

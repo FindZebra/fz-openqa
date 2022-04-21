@@ -99,8 +99,11 @@ class QaBuilder(HfDatasetBuilder):
         self.n_answer_tokens = n_answer_tokens
 
         # set the dataset attributes
-        self.dset_script_path_or_id = QA_DATASETS[dset_name][0]
-        self.dset_name = QA_DATASETS[dset_name][1]
+        for dn in dset_name.split("+"):
+            if dn not in QA_DATASETS:
+                raise ValueError(f"Unknown dataset {dn}, available: {list(QA_DATASETS.keys())}")
+
+        self.dset_name = dset_name
 
     def load_base_dataset(self) -> DatasetDict:
         """
@@ -108,11 +111,11 @@ class QaBuilder(HfDatasetBuilder):
         using "+" as a separator. e.g. "tw+us"
         """
         dset_names = sorted(self.dset_name.split("+"))
-
-        rich.print(f">> loading: {self.dset_script_path_or_id} with {dset_names}")
-
+        for dset_name in dset_names:
+            script_id, name = QA_DATASETS[dset_name]
+            logger.info(f"Loading dataset `{script_id}` with `{name}`")
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [load_dataset(self.dset_script_path_or_id, name=n, **kwargs) for n in dset_names]
+        dsets = [load_dataset(*QA_DATASETS[n], **kwargs) for n in dset_names]
 
         if len(dsets) == 1:
             return dsets[0]
