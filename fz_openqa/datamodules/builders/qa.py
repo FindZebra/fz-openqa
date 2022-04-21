@@ -4,6 +4,7 @@ from typing import Dict
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets.arrow_dataset import concatenate_datasets
@@ -26,7 +27,6 @@ from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import add_spec_token
@@ -113,6 +113,16 @@ class QaBuilder(HfDatasetBuilder):
 
         self.dset_name = dset_name
 
+    def load_one_dataset(self, dset_id, dset_name, **kwargs):
+        # load the dataset
+        dataset = load_dataset(dset_id, dset_name, **kwargs)
+
+        # adapt the dataset
+        if dset_id in DATASET_ADAPTERS:
+            adapter = DATASET_ADAPTERS[dset_id]()
+            dataset, corpus = adapter(dataset, num_proc=self.num_proc)
+        return dataset
+
     def load_base_dataset(self) -> DatasetDict:
         """
         Loads the base dataset. Multiple dataset names can be passed
@@ -123,18 +133,7 @@ class QaBuilder(HfDatasetBuilder):
             script_id, name = QA_DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [load_dataset(*QA_DATASETS[n], **kwargs) for n in dset_names]
-
-        if self.dset_script_path_or_id in DATASET_ADAPTERS:
-            adapter = DATASET_ADAPTERS[self.dset_script_path_or_id]()
-            dsets = [
-                adapter(
-                    dset,
-                    num_proc=self.num_proc,
-                )
-                for dset in dsets
-            ]
-            dsets = [ds for ds, corpus in dsets]
+        dsets = [self.load_one_dataset(*QA_DATASETS[n], **kwargs) for n in dset_names]
 
         if len(dsets) == 1:
             return dsets[0]
