@@ -1,4 +1,3 @@
-import json
 import os
 import re
 from pathlib import Path
@@ -23,13 +22,28 @@ _DESCRIPTION = "A class to load the Wikipedia-based MedQA corpus"
 _VERSION = "0.0.1"
 _HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
 _CITATION = ""
-_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/data/medqa_x_wiki_corpus_v1.zip"
+_URLS = {
+    "v1": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
+    "medqa_x_wiki_corpus_v1.zip",
+    "v2": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
+    "medqa_x_wiki_corpus_v2.zip",
+}
 
 
 class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     """MedWikipediaCorpus Dataset. Version 0.0.1"""
 
     VERSION = datasets.Version(_VERSION)
+    BUILDER_CONFIGS = [
+        MedWikipediaCorpusConfig(
+            name="v1",
+            description="Subset of Wikipedia built for the US Medqa",
+        ),
+        MedWikipediaCorpusConfig(
+            name="v2",
+            description="Subset of Wikipedia built for the US Medqa, smaller version",
+        ),
+    ]
     force = False
 
     def _info(self):
@@ -58,7 +72,11 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        url = _URLS[self.config.name]
+        import rich
+
+        rich, print(f">> Downloading {url}")
+        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(url))
         if not Path(downloaded_file).is_dir():
             raise Exception(
                 f"Could not download the dataset Content of `downloaded_file`:"
@@ -67,19 +85,25 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"output_dir": Path(downloaded_file) / "wikipedia_corpus_v5"},
+                gen_kwargs={"output_dir": Path(downloaded_file)},
             )
         ]
 
     def _generate_examples(self, output_dir: str):
-        """Yields examples."""
-        data_files = [
-            os.path.join(output_dir, p)
-            for p in os.listdir(output_dir)
-            if re.findall(TXT_PATTERN, p)
-        ]
+        # enter the subdirectory
+        path = [
+            p
+            for p in Path(output_dir).iterdir()
+            if p.is_dir() and p.name.startswith("med_x_wikipedia_corpus_")
+        ][0]
+
+        # list files
+        data_files = [os.path.join(path, p) for p in os.listdir(path) if re.findall(TXT_PATTERN, p)]
+
+        # iterate and yield documents
         for i, fn in enumerate(data_files):
             with open(fn, "r") as f:
+                # the first line is the title
                 title = f.readline()
                 text = f.read()
                 yield i, {"document.text": text, "document.idx": i, "document.title": title}
