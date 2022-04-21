@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import List
 
-import rich
 import torch
 from loguru import logger
 from torch import Tensor
 from torch.nn import functional as F
 
-from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
+from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimOutput
 
 
 class MaxSimReducer(object):

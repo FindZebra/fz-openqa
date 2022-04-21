@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import math
 from typing import List
 from typing import Optional
@@ -12,11 +11,11 @@ from loguru import logger as log
 from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import DenseIndex
+from fz_openqa.datamodules.index.maxsim.maxsim import MaxSim
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.datamodules.index.utils.io import read_vectors_from_table
-from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
