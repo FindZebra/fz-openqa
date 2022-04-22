@@ -90,6 +90,7 @@ def run(config):
     index_builder = ColbertIndexBuilder(
         model=model,
         trainer=trainer,
+        dtype="float16",
         model_output_keys=["_hd_", "_hq_"],
         collate_pipe=corpus_builder._get_collate_pipe(),
         loader_kwargs={

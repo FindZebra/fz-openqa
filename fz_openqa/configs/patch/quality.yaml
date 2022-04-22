@@ -6,9 +6,13 @@ defaults:
 
 setup_with_model: true
 
+
+base:
+  device_batch_size: 2
+  infer_batch_mul: 100
+
 trainer:
   val_check_interval: 1.0
-
 
 model:
   hidden_size: 128
@@ -22,7 +26,7 @@ datamodule:
 
   # dataset updates
   dataset_update:
-    freq: 5
+    freq: 1
     reset_optimizer: true
     test_every_update: false
     builder_args:

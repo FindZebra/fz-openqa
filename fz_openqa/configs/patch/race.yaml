@@ -29,7 +29,7 @@ datamodule:
 
   # dataset updates
   dataset_update:
-    freq: 5
+    freq: 1
 
   builder:
     # update the builder parameters to use the quality builder
