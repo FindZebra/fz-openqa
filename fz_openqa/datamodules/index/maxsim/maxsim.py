@@ -65,6 +65,9 @@ class MaxSim(torch.nn.Module):
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)
+        # Add -1
+        ones = torch.ones_like(emb2pid[..., -1:])
+        emb2pid = torch.cat([emb2pid, -ones], dim=-1)
         self.register_buffer("emb2pid", emb2pid)
 
         # setup the Rankers

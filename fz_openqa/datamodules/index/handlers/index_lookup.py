@@ -42,15 +42,15 @@ class IndexLookupHandler(IndexHandler):
         for tokid, doc_id in enumerate(doc_ids):
             lookup_[doc_id].append(tokid)
 
-        n_cols = max(len(v) for v in lookup_.values())
-        n_rows = max(lookup_.keys())
+        n_cols = max(len(v) for v in lookup_.values()) + 1
+        n_rows = max(lookup_.keys()) + 1
+
+        # todo: need the handle the -1 on MaxSim side
         self._lookup = torch.empty(n_rows, n_cols, dtype=torch.int64).fill_(-1)
         for i in range(n_rows):
             self._lookup[i, : len(lookup_[i])] = torch.tensor(sorted(lookup_[i]))
 
         logger.info(f"Lookup table: {self._lookup.shape}")
-
-        # save
         self.save()
 
     def __len__(self) -> int:
