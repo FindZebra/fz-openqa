@@ -160,13 +160,22 @@ class FaissHandler(IndexHandler):
         # set `nprobe`
         nprobe = self.config.get("nprobe", None)
         if nprobe is not None:
+
+            # retrieve the coarse quantizer index (IVF, IMI, ...)
+            try:
+                ivf_index = faiss.extract_index_ivf(self._index)
+            except Exception as e:
+                logger.warning(e)
+                ivf_index = self._index
+
+            # set the nprobe parameter
             try:
                 gspace = faiss.GpuParameterSpace()  # type: ignore
-                gspace.set_index_parameter(self._index, "nprobe", nprobe)
+                gspace.set_index_parameter(ivf_index, "nprobe", nprobe)
             except Exception as e:
                 logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                 try:
-                    self._index.nprobe = nprobe
+                    ivf_index.nprobe = nprobe
                 except Exception as e:
                     logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                     pass
