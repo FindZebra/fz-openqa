@@ -208,6 +208,10 @@ class OptionRetriever(Module):
         Compute the forward pass for the question and the documents.
         """
 
+        # TODO : TEMPORARY FIX
+        _key = "document.retrieval_score"
+        batch[_key] = batch[_key].clamp(min=-1e3, max=1e6)
+
         # check features, check that the first document of each question is positive
         # process the batch using BERT and the heads
         kwargs["predict"] = False
