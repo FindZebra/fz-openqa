@@ -144,7 +144,7 @@ datamodule:
   pin_memory: true
 
   # dataset builder
-  dset_name: medqs-us
+  dset_name: medqa-us
   corpus_name: medqa
   use_subset: false
   corpus_subset: false
