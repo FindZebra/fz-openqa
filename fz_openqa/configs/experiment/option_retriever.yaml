@@ -60,7 +60,7 @@ trainer:
 
 model:
   ema_decay: null
-  num_warmup_steps: 1_000 # Colbert uses no warmup
+  num_warmup_steps: 5_000 # Colbert uses no warmup
   num_training_steps: 100_000 # TODO !!
   hidden_size: 32
   bert:
@@ -70,7 +70,7 @@ model:
 
   optimizer: adamw
   optimizer_params:
-    lr: 3e-6
+    lr: 1e-5
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -85,7 +85,7 @@ model:
     agg_retriever_kl_weight: 0
     retriever_kl_weight:
       mode: cosine
-      num_steps: 5_000
+      num_steps: 20_000
       initial_value: 0.1
       final_value: 1e-5
   module:
@@ -213,7 +213,7 @@ datamodule:
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
     persist_cache: false
-    index_factory: IVF10000,PQ16x8
+    index_factory: IVF100000,PQ32x8
     handler: flat
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false
