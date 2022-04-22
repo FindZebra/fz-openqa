@@ -17,6 +17,29 @@ from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.layers import BayesianLinear
 
 
+def unique_with_indices(x, dim=None):
+    """Unique elements of x and indices of those unique elements
+    https://github.com/pytorch/pytorch/issues/36748#issuecomment-619514810
+
+    e.g.
+
+    unique(tensor([
+        [1, 2, 3],
+        [1, 2, 4],
+        [1, 2, 3],
+        [1, 2, 5]
+    ]), dim=0)
+    => (tensor([[1, 2, 3],
+                [1, 2, 4],
+                [1, 2, 5]]),
+        tensor([0, 1, 3]))
+    """
+    uids, inverse = torch.unique(x, sorted=True, return_inverse=True, dim=dim)
+    perm = torch.arange(inverse.size(0), dtype=inverse.dtype, device=inverse.device)
+    inverse, perm = inverse.flip([0]), perm.flip([0])
+    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm)
+
+
 class DprHead(Head):
     """Score question and document representations."""
 
@@ -31,13 +54,15 @@ class DprHead(Head):
         learn_scale: bool = False,
         scale: float = 1.0,
         auto_scale: bool = False,
+        is_scaled: bool = False,
+        scale_init: float = 1.0,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.across_batch = across_batch
         self.bias = bias
         self.scale_init = scale
-        self.register_buffer("is_scaled", torch.tensor(0))
+        self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
         self.auto_scale = auto_scale
 
         Layer = nn.Linear if not bayesian else BayesianLinear
@@ -56,7 +81,7 @@ class DprHead(Head):
         else:
             self.q_head = self.d_head = None
 
-        scale_value = torch.tensor(1.0, dtype=torch.float)
+        scale_value = torch.tensor(scale_init, dtype=torch.float)
         offset_value = torch.tensor(0.0, dtype=torch.float)
         if learn_scale:
             self._scale = nn.Parameter(scale_value)
@@ -95,7 +120,7 @@ class DprHead(Head):
         return self.scale_value.pow(-1)
 
     def set_scale(self, scores: Tensor):
-        self._scale.data = self.scale_init * scores.std().detach().pow(-1)
+        self._scale.data = self.scale_init * scores.std().detach().pow(-1) * self._scale.data
         self._offset.data = -scores.mean().detach() * self._scale.data
         self.is_scaled.data += 1
 
@@ -124,7 +149,7 @@ class DprHead(Head):
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
 
         # sample weights todo: only `if self.training`
         if isinstance(self.q_head, BayesianLinear):
@@ -138,16 +163,16 @@ class DprHead(Head):
             d_weights = None
 
         # preprocess
-        hd = self._preprocess(hd, "document", mask=d_mask, batch=batch, weights=d_weights, **kwargs)
-        hq = self._preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
+        hd = self.preprocess(hd, "document", mask=d_mask, batch=batch, weights=d_weights, **kwargs)
+        hq = self.preprocess(hq, "question", mask=q_mask, batch=batch, weights=q_weights, **kwargs)
 
         # compute the score
-        score = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
+        score, diagnostics = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
 
         if self.auto_scale and self.is_scaled < 1:
             score = self.set_scale(score)
 
-        return score + self.offset
+        return score + self.offset, diagnostics
 
     def score(
         self,
@@ -157,12 +182,13 @@ class DprHead(Head):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> (Tensor, Dict):
+        diagnostics = {}
         if not self.across_batch:
-            return einsum("boh, bodh -> bod", hq, hd)
+            return einsum("boh, bodh -> bod", hq, hd), diagnostics
         else:
             hd = self._flatten_documents(hd, doc_ids)
-            return einsum("boh, mh -> bom", hq, hd)
+            return einsum("boh, mh -> bom", hq, hd), diagnostics
 
     def _preprocess(
         self,
@@ -193,6 +219,6 @@ class DprHead(Head):
             raise ValueError("doc_ids is required to compute the score across the batch")
         hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
         doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
-        udoc_ids, uids = unique(doc_ids, return_inverse=True)
+        udoc_ids, uids = unique_with_indices(doc_ids)
         hd = hd[uids]
         return hd

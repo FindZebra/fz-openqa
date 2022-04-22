@@ -3,10 +3,15 @@ from __future__ import annotations
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import T
 from typing import Union
 
 import torch
+from datasets import Dataset
+from datasets import DatasetDict
 from transformers import PreTrainedTokenizerFast
+
+from fz_openqa.datamodules.utils.typing import HfDataset
 
 
 def add_spec_token(
@@ -23,8 +28,24 @@ def add_spec_token(
     return f"{special_token}{text}"
 
 
-def set_row_idx(_, idx: int | List[int], key: str = "idx") -> Dict[str, Any]:
-    return {key: idx}
+def set_index_column(dataset: HfDataset, *, key: str) -> T:
+    if isinstance(dataset, DatasetDict):
+        return DatasetDict({k: set_index_column(v, key=key) for k, v in dataset.items()})
+    elif isinstance(dataset, Dataset):
+        return dataset.add_column(key, list(range(dataset.num_rows)))
+    else:
+        raise ValueError(f"Unsupported dataset type: {type(dataset)}")
+
+
+def set_constant_column(dataset: HfDataset, *, key: str, value: Any):
+    if isinstance(dataset, DatasetDict):
+        dataset = DatasetDict({k: set_index_column(v, key=key) for k, v in dataset.items()})
+    elif isinstance(dataset, Dataset):
+        dataset = dataset.add_column(key, len(dataset) * [value])
+    else:
+        raise ValueError(f"Unsupported dataset type: {type(dataset)}")
+
+    return dataset
 
 
 def append_document_title(example: Dict[str, Any]) -> Dict[str, Any]:

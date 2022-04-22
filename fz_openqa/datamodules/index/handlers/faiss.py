@@ -8,6 +8,7 @@ from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
+import rich
 import torch
 from faiss import IndexReplicas
 from loguru import logger
@@ -73,7 +74,7 @@ class FaissHandler(IndexHandler):
             f"keep_on_cpu={self.keep_on_cpu}, "
             f"train_on_cpu={self.train_on_cpu}, "
             f"index_factory={self.index_factory}, "
-            f"nprobe={nprobe}, "
+            f"nprobe={self.config.get('nprobe', None)}, "
             f"vectors: {vectors.shape}"
         )
 
@@ -86,7 +87,7 @@ class FaissHandler(IndexHandler):
             )
 
         # set `nprobe`
-        self._index.nprobe = nprobe
+        self._index.nprobe = self.config.get("nprobe", None)
 
         # move the index to GPU
         if not self.train_on_cpu:
@@ -112,7 +113,6 @@ class FaissHandler(IndexHandler):
     def index_file(self) -> Path:
         return self.path / "index.faiss"
 
-    @abc.abstractmethod
     def save(self):
         """save the index to file"""
         super().save()
@@ -121,7 +121,6 @@ class FaissHandler(IndexHandler):
         else:
             self._index.save(self.index_file)
 
-    @abc.abstractmethod
     def load(self):
         """save the index to file"""
         super().load()
@@ -130,20 +129,23 @@ class FaissHandler(IndexHandler):
             self._index.load(self.index_file)
         else:
             self._index = faiss.read_index(str(self.index_file))
-        self.keep_on_cpu = self.config.get("keep_on_cpu", None)
 
-    @abc.abstractmethod
     def cpu(self):
         """Move the index to CPU."""
         try:
             self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+            try:
+                self._index.nprobe = self.config.get("nprobe", None)
+            except Exception as e:
+                logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
+                pass
         except Exception:
             pass
 
-    @abc.abstractmethod
     def cuda(self, devices: Optional[List[int]] = None):
         """Move the index to CUDA."""
-        if self.keep_on_cpu or isinstance(faiss, IndexReplicas):
+        keep_on_cpu = self.config.get("keep_on_cpu", None)
+        if keep_on_cpu or isinstance(faiss, IndexReplicas):
             return
 
         if devices is None:
@@ -152,21 +154,25 @@ class FaissHandler(IndexHandler):
         if len(devices) == 0:
             return
 
-        # register `nprobe`
-        try:
-            nprobe = self._index.nprobe
-        except Exception:
-            nprobe = None
-
         # move the index to GPU
         self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=devices)
 
         # set `nprobe`
+        nprobe = self.config.get("nprobe", None)
         if nprobe is not None:
-            gspace = faiss.GpuParameterSpace()  # type: ignore
-            gspace.set_index_parameter(self._index, "nprobe", nprobe)
+            try:
+                gspace = faiss.GpuParameterSpace()  # type: ignore
+                gspace.set_index_parameter(self._index, "nprobe", nprobe)
+            except Exception as e:
+                logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
+                try:
+                    self._index.nprobe = nprobe
+                except Exception as e:
+                    logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
+                    pass
+        else:
+            logger.warning("Parameter `nprobe` is not set")
 
-    @abc.abstractmethod
     def free_memory(self):
         """Free the memory of the index."""
         self._index = None
@@ -178,7 +184,6 @@ class FaissHandler(IndexHandler):
     def __del__(self):
         self.free_memory()
 
-    @abc.abstractmethod
     def __call__(
         self, query: torch.Tensor, *, k: int, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:

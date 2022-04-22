@@ -9,6 +9,7 @@ from typing import Union
 
 import rich
 from datasets import Split
+from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lamb import Lamb
 from pytorch_lightning import LightningModule
@@ -134,11 +135,16 @@ class Model(LightningModule):
     def predict(self, batch: Batch, **kwargs) -> Batch:
         return self.module.predict(batch, **kwargs, **self.params)
 
+    def evaluate(self, batch: Batch, *, split: Split = Split.TRAIN, **kwargs) -> Batch:
+        output = self._step(batch, split=split, **kwargs)
+        output_ = self._step_end(output, split=split, **kwargs)
+        return {**output, **output_}
+
     def _step(
         self,
         batch: Batch,
-        batch_idx: int,
-        dataloader_idx: Optional[int],
+        batch_idx: int = None,
+        dataloader_idx: Optional[int] = None,
         *,
         split: Split,
         **kwargs,
@@ -212,8 +218,9 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
+        optimizer_params = copy(self.hparams.optimizer_params)
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
-        weight_decay = self.hparams.optimizer_params.pop("weight_decay", 0.0)
+        weight_decay = optimizer_params.pop("weight_decay", 0.0)
         optimizer_grouped_parameters = [
             {
                 "params": list(
@@ -238,8 +245,8 @@ class Model(LightningModule):
         ]
 
         for group in optimizer_grouped_parameters:
-            rich.print(
-                f"> Optimizer group: "
+            logger.info(
+                f"Optimizer group: "
                 f"n_params={len(group['params'])}, "
                 f"weight_decay={group['weight_decay']}"
             )
@@ -259,7 +266,7 @@ class Model(LightningModule):
         # define the optimizer using the above groups
         optimizer = OptimizerCls(
             optimizer_grouped_parameters,
-            **self.hparams.optimizer_params,
+            **optimizer_params,
         )
 
         # defile the learning rate scheduler
@@ -274,10 +281,10 @@ class Model(LightningModule):
             opt_state = self.opt_states.pop("optimizer", None)
             scheduler_state = self.opt_states.pop("lr_scheduler", None)
             if opt_state is not None:
-                rich.print(">> setting optimizer state!")
+                logger.warning("Setting Optimizer state!")
                 optimizer.load_state_dict(opt_state)
             if scheduler_state is not None and lr_scheduler is not None:
-                rich.print(">> setting scheduler state!")
+                logger.warning("Setting Scheduler state!")
                 lr_scheduler.load_state_dict(scheduler_state)
             self.opt_states = None
 

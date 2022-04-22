@@ -66,6 +66,7 @@ def run(config):
         text_formatter=text_formatter,
         use_subset=False,
         cache_dir=config.sys.cache_dir,
+        append_document_title=True,
         num_proc=4,
     )
 
@@ -74,10 +75,10 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=ElasticSearchIndexBuilder(
-            auxiliary_weight=config.get("es_aux_weight", 10),
+            auxiliary_weight=config.get("es_aux_weight", 5),
         ),
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=21,
+        n_retrieved_documents=100,
         sampler=Sampler(total=10, largest=True),  # SamplerBoostPositives(total=10, n_boosted=1),
         num_proc=config.get("num_proc", 2),
         batch_size=config.get("batch_size", 100),
@@ -91,12 +92,12 @@ def run(config):
     dm = DataModule(builder=builder, num_workers=0)
 
     # preprocess the data
-    dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=10)
 
     # access dataset
     rich.print(dm.dataset)
+
+    dm.display_samples(n_samples=10)
 
     # sample a batch
     # _ = next(iter(dm.train_dataloader()))

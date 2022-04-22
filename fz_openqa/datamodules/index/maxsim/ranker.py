@@ -8,8 +8,8 @@ from loguru import logger
 from torch import LongTensor
 from torch import nn
 from torch import Tensor
-from torch.nn import functional as F
 
+from fz_openqa.datamodules.index.maxsim.utils import get_unique_pids
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.datamodules.index.utils.io import read_vectors_from_table
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -59,13 +59,13 @@ class MaxSimRanker(nn.Module):
         # apply the offset and set all pids that are out of range to -1
         pids[(pids < 0) | (pids >= len(self.vectors))] = -1
 
-        # get the unique pids
-        pids = self._get_unique_pids(pids)
+        # get the unique pids across the batch dimension
+        pids = get_unique_pids(pids)
 
         # compute the scores
-        scores = torch.zeros(
+        scores = torch.empty(
             q_vectors.shape[0], pids.shape[1], dtype=q_vectors.dtype, device=q_vectors.device
-        )
+        ).fill_(-torch.inf)
 
         if self.max_chunksize is not None:
             # the chunksize must be divided by the batch size of q_vectors
@@ -76,31 +76,21 @@ class MaxSimRanker(nn.Module):
 
         for i in range(0, pids.shape[1], chunksize):
             pid_chunk = pids[:, i : i + chunksize]
-            scores[:, i : i + chunksize] = self._score(pid_chunk, q_vectors, self.vectors)
+            scores_chunk = self._score(pid_chunk, q_vectors, self.vectors)
+            scores[:, i : i + chunksize] = scores_chunk
 
-        # if k is specified, return the top k
-        if k is not None and k < scores.shape[1]:
-            _, maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True)
+        # if k is unspecified, only sort
+        if k is None or k > scores.shape[1]:
+            k = scores.shape[1]
 
-            scores = scores.gather(index=maxsim_idx, dim=1)
-            pids = pids.gather(index=maxsim_idx, dim=1)
+        # retriever the top-k documents
+        maxsim_idx = torch.topk(scores, k=k, dim=-1, largest=True, sorted=True).indices
+        scores = scores.gather(index=maxsim_idx, dim=-1)
+        pids = pids.gather(index=maxsim_idx, dim=-1)
 
         # recover pid offset, and return
         pids[pids >= 0] += self.boundaries[0]
         return scores, pids
-
-    @staticmethod
-    def _get_unique_pids(pids: Tensor, fill_value=-1) -> Tensor:
-        """
-        Get the unique pids across dimension 1 and pad to the max length.
-        `torch.unique` sorts the pids in ascending order, so we need to reverse with -1"""
-        upids = [torch.unique(r) for r in torch.unbind(-pids)]
-        max_length = max(len(r) for r in upids)
-
-        def _pad(r):
-            return F.pad(r, (0, max_length - len(r)), value=fill_value)
-
-        return -torch.cat([_pad(p)[None] for p in upids])
 
     @staticmethod
     def _score(pids: LongTensor, q_vectors: Tensor, vectors: Tensor):
@@ -109,9 +99,9 @@ class MaxSimRanker(nn.Module):
         # apply max sim to the retrieved vectors
         scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
         # max. over the documents tokens, for each query token
-        scores, _ = scores.max(axis=-1)
+        scores = scores.max(axis=-1).values
         # avg over all query tokens (length dimension)
-        scores = scores.mean(axis=-1)
+        scores = scores.sum(axis=-1)
         # set the score to -inf for the negative pids
         scores[pids < 0] = -torch.inf
 

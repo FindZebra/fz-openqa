@@ -79,7 +79,6 @@ class MultiFaissHandler(IndexHandler):
     def id_lookup_path(self) -> PathLike:
         return self.path / "id_lookup.json"
 
-    @abc.abstractmethod
     def save(self):
         """save the index to file"""
         super().save()
@@ -91,7 +90,6 @@ class MultiFaissHandler(IndexHandler):
         for index in self.indexes.values():
             index.save()
 
-    @abc.abstractmethod
     def load(self):
         """save the index to file"""
         super().load()
@@ -106,19 +104,16 @@ class MultiFaissHandler(IndexHandler):
 
         assert set(self.id_lookup.keys()) == set(self.indexes.keys())
 
-    @abc.abstractmethod
     def cpu(self):
         """Move the index to CPU."""
         for index in self.indexes.values():
             index.cpu()
 
-    @abc.abstractmethod
     def cuda(self, devices: Optional[List[int]] = None):
         """Move the index to CUDA."""
         for index in self.indexes.values():
             index.cuda(devices)
 
-    @abc.abstractmethod
     def free_memory(self):
         """Free the memory of the index."""
         for index in self.indexes.values():
@@ -131,7 +126,6 @@ class MultiFaissHandler(IndexHandler):
     def __del__(self):
         self.free_memory()
 
-    @abc.abstractmethod
     def __call__(
         self, query: torch.Tensor, *, k: int, doc_ids: List[int] | torch.Tensor = None, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:

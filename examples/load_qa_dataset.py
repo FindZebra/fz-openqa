@@ -1,19 +1,19 @@
-import logging
 import os
+import sys
 from pathlib import Path
+
+sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
 import hydra
 import rich
 from omegaconf import DictConfig
-from rich.logging import RichHandler
 
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-
-logger = logging.getLogger(__name__)
+from fz_openqa.datamodules.analytics import SequenceLengths
 
 
 @hydra.main(
@@ -35,6 +35,9 @@ def run(config: DictConfig) -> None:
         query_expansion=config.get("query_expansion", None),
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
+        analytics=[
+            SequenceLengths(output_dir="analytics/", verbose=True),
+        ],
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()

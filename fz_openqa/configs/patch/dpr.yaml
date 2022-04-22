@@ -2,15 +2,10 @@
 
 defaults:
   - override /model/module/retriever_head: dpr
-  - override /model/module/reader_head: dpr
 
-## activate dynamic resampling in the model
 model:
   module:
     retriever_head:
-      output_size: 768
-      normalize: false
-    reader_head:
       output_size: 768
       normalize: false
 
