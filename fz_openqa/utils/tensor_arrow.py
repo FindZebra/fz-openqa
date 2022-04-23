@@ -9,6 +9,7 @@ from typing import Iterable
 from typing import Iterator
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import numpy as np
@@ -319,6 +320,10 @@ class TensorArrowTable(TensorArrowBase):
 
     def __call__(self, index: ARRAY_INDEX) -> torch.Tensor:
         return self.__getitem__(index)
+
+    @property
+    def shape(self) -> Tuple[int, ...]:
+        return (len(self), *(int(x) for x in self._shared_shape))
 
     @torch.no_grad()
     def __getitem__(self, item: ARRAY_INDEX) -> Optional[torch.Tensor]:

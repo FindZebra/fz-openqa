@@ -25,7 +25,10 @@ class TorchIndex(nn.Module):
         ...
 
     def add(self, vectors: torch.Tensor, **kwargs):
-        self.register_buffer("vectors", vectors.to(torch.float32))
+        if hasattr(self, "vectors"):
+            self.vectors = torch.cat([self.vectors, vectors], dim=0)
+        else:
+            self.register_buffer("vectors", vectors)
 
     def save(self, path: Path):
         torch.save(self.vectors, path)
@@ -56,15 +59,14 @@ class FaissHandler(IndexHandler):
         nprobe: int = 8,
         keep_on_cpu: bool = False,
         train_on_cpu: bool = False,
+        faiss_train_size: int = None,
         **kwargs,
     ):
         """build the index from the vectors."""
-        if isinstance(vectors, TensorArrowTable):
-            vectors = vectors[:]
-        elif isinstance(vectors, np.ndarray):
+        if isinstance(vectors, np.ndarray):
             vectors = torch.from_numpy(vectors)
 
-        assert vectors.dim() == 2, f"The vectors must be 2D. vectors: {vectors.shape}"
+        assert len(vectors.shape) == 2, f"The vectors must be 2D. vectors: {vectors.shape}"
         self.dimension = vectors.shape[-1]
         self.index_factory = index_factory
         self.keep_on_cpu = keep_on_cpu
@@ -75,7 +77,8 @@ class FaissHandler(IndexHandler):
             f"train_on_cpu={self.train_on_cpu}, "
             f"index_factory={self.index_factory}, "
             f"nprobe={self.config.get('nprobe', None)}, "
-            f"vectors: {vectors.shape}"
+            f"vectors ({type(vectors)}): {len(vectors)},"
+            f"faiss_train_size={faiss_train_size}"
         )
 
         # init the index
@@ -93,12 +96,22 @@ class FaissHandler(IndexHandler):
         if not self.train_on_cpu:
             self.cuda()
 
+        # train the index
+        if faiss_train_size is not None and faiss_train_size < len(vectors):
+            train_ids = np.random.choice(len(vectors), faiss_train_size, replace=False)
+        else:
+            train_ids = slice(None, None)
+
+        train_vectors = vectors[train_ids]
+        train_vectors = train_vectors.to(torch.float32)
+        self._index.train(train_vectors)
+
         # add vectors to the index
-        # todo: avoid casting to float32
-        if not isinstance(self._index, TorchIndex):
-            vectors = vectors.to(torch.float32)
-        self._index.train(vectors)
-        self._index.add(vectors)
+        batch_size = faiss_train_size or len(vectors)
+        for i in range(0, len(vectors), batch_size):
+            vecs = vectors[i : i + batch_size]
+            vecs = vecs.to(torch.float32)
+            self._index.add(vecs)
 
         # free-up GPU memory
         self.cpu()
