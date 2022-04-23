@@ -1,9 +1,6 @@
-import logging
 import os
 import sys
 from pathlib import Path
-
-from fz_openqa.datamodules.analytics import SequenceLengths
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
@@ -16,8 +13,7 @@ from fz_openqa import configs
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-
-logger = logging.getLogger(__name__)
+from fz_openqa.datamodules.analytics import SequenceLengths
 
 
 @hydra.main(

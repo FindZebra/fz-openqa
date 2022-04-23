@@ -9,9 +9,9 @@ from torch import LongTensor
 from torch import nn
 from torch import Tensor
 
+from fz_openqa.datamodules.index.maxsim.utils import get_unique_pids
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.datamodules.index.utils.io import read_vectors_from_table
-from fz_openqa.datamodules.index.utils.maxsim.utils import get_unique_pids
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 

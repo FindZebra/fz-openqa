@@ -113,7 +113,6 @@ class FaissHandler(IndexHandler):
     def index_file(self) -> Path:
         return self.path / "index.faiss"
 
-    @abc.abstractmethod
     def save(self):
         """save the index to file"""
         super().save()
@@ -122,7 +121,6 @@ class FaissHandler(IndexHandler):
         else:
             self._index.save(self.index_file)
 
-    @abc.abstractmethod
     def load(self):
         """save the index to file"""
         super().load()
@@ -132,7 +130,6 @@ class FaissHandler(IndexHandler):
         else:
             self._index = faiss.read_index(str(self.index_file))
 
-    @abc.abstractmethod
     def cpu(self):
         """Move the index to CPU."""
         try:
@@ -145,7 +142,6 @@ class FaissHandler(IndexHandler):
         except Exception:
             pass
 
-    @abc.abstractmethod
     def cuda(self, devices: Optional[List[int]] = None):
         """Move the index to CUDA."""
         keep_on_cpu = self.config.get("keep_on_cpu", None)
@@ -164,20 +160,28 @@ class FaissHandler(IndexHandler):
         # set `nprobe`
         nprobe = self.config.get("nprobe", None)
         if nprobe is not None:
+
+            # retrieve the coarse quantizer index (IVF, IMI, ...)
+            try:
+                ivf_index = faiss.extract_index_ivf(self._index)
+            except Exception as e:
+                logger.warning(e)
+                ivf_index = self._index
+
+            # set the nprobe parameter
             try:
                 gspace = faiss.GpuParameterSpace()  # type: ignore
-                gspace.set_index_parameter(self._index, "nprobe", nprobe)
+                gspace.set_index_parameter(ivf_index, "nprobe", nprobe)
             except Exception as e:
                 logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                 try:
-                    self._index.nprobe = nprobe
+                    ivf_index.nprobe = nprobe
                 except Exception as e:
                     logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                     pass
         else:
             logger.warning("Parameter `nprobe` is not set")
 
-    @abc.abstractmethod
     def free_memory(self):
         """Free the memory of the index."""
         self._index = None
@@ -189,7 +193,6 @@ class FaissHandler(IndexHandler):
     def __del__(self):
         self.free_memory()
 
-    @abc.abstractmethod
     def __call__(
         self, query: torch.Tensor, *, k: int, **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:

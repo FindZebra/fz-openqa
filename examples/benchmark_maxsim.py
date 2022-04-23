@@ -6,10 +6,10 @@ import rich
 import torch
 from tqdm import tqdm
 
+from fz_openqa.datamodules.index.maxsim import WorkerSignal
+from fz_openqa.datamodules.index.maxsim.maxsim import MaxSim
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.io import log_mem_size
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.utils.maxsim.maxsim import MaxSim
 
 
 def run():

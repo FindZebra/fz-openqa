@@ -213,7 +213,7 @@ datamodule:
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
     persist_cache: false
-    index_factory: IVF100000,PQ32x8
+    index_factory: OPQ32,IVF100000,PQ32x8,RFlat
     handler: flat
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false

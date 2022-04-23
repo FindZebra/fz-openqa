@@ -77,7 +77,7 @@ def format_row_nested_questions(
 
     # for each question-answer pair
     for i, an in enumerate(row["question.input_ids"]):
-        locator = f"QA #{i + 1}"
+        locator = f"Option #{i + 1} (Q#{row.get('question.idx', None)})"
         repr += get_separator("-") + "\n"
         repr += f"|-* {locator}\n"
         # print question-answer pair

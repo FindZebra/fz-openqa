@@ -149,7 +149,7 @@ class GeneratePassages(Pipe):
                 )
 
             global_values = {}
-            if global_values is not None:
+            if global_keys is not None:
                 global_values = {k: examples[k][idx] for k in global_keys if k in examples.keys()}
 
             # do a first pass to compute the passage masks

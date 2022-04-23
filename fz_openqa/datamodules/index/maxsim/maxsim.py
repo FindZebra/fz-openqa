@@ -13,17 +13,16 @@ from loguru import logger
 from torch import Tensor
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import ctx
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import format_device
-from fz_openqa.datamodules.index.utils.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimInput
-from fz_openqa.datamodules.index.utils.maxsim.datastruct import MaxSimOutput
-from fz_openqa.datamodules.index.utils.maxsim.ranker import MaxSimRanker
-from fz_openqa.datamodules.index.utils.maxsim.reduce import MaxSimReducer
-from fz_openqa.datamodules.index.utils.maxsim.token_index import TokenIndex
-from fz_openqa.datamodules.index.utils.maxsim.utils import get_unique_pids
-from fz_openqa.datamodules.index.utils.maxsim.workers import MaxSimWorker
-from fz_openqa.datamodules.pipes import Sampler
+from fz_openqa.datamodules.index.maxsim.base_worker import ctx
+from fz_openqa.datamodules.index.maxsim.base_worker import format_device
+from fz_openqa.datamodules.index.maxsim.base_worker import WorkerSignal
+from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimInput
+from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimOutput
+from fz_openqa.datamodules.index.maxsim.ranker import MaxSimRanker
+from fz_openqa.datamodules.index.maxsim.reduce import MaxSimReducer
+from fz_openqa.datamodules.index.maxsim.token_index import TokenIndex
+from fz_openqa.datamodules.index.maxsim.utils import get_unique_pids
+from fz_openqa.datamodules.index.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
@@ -66,6 +65,9 @@ class MaxSim(torch.nn.Module):
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)
+        # Add -1
+        ones = torch.ones_like(emb2pid[..., -1:])
+        emb2pid = torch.cat([emb2pid, -ones], dim=-1)
         self.register_buffer("emb2pid", emb2pid)
 
         # setup the Rankers

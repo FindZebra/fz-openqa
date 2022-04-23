@@ -1,12 +1,13 @@
 import os
 import re
-from functools import partial
+from collections import Counter
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -16,6 +17,8 @@ from loguru import logger
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import AppendDot
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
+from ..utils.transformations import set_index_column
+from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import file_corpus
 from fz_openqa.datamodules.generators import fz_corpus
@@ -34,7 +37,6 @@ from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.datamodules.utils.transformations import set_row_idx
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.utils.pretty import pretty_decode
@@ -49,7 +51,8 @@ CORPUS_GENERATORS = {
     "fz": (fz_corpus.__file__,),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
-    "quality": (quality.__file__,),
+    "quality": (quality.__file__, None),
+    "race": ("race", "all"),
 }
 
 
@@ -137,19 +140,29 @@ class CorpusBuilder(HfDatasetBuilder):
                 if re.findall(TXT_PATTERN, p)
             ]
 
-        dataset = load_dataset(*args, **kwargs)
-        if isinstance(dataset, DatasetDict):
-            dataset = concatenate_datasets(list(dataset.values()))
-        return dataset
+        return load_dataset(*args, **kwargs)
 
     def load_base_dataset(self) -> DatasetDict:
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
 
         # split dataset names using `+`
-        dset_names = self.dset_name.split("+")
+        dset_names = sorted(self.dset_name.split("+"))
 
         # load datasets
-        dsets = [self._load_dataset(*CORPUS_GENERATORS[dn], **kwargs) for dn in dset_names]
+        dsets = []
+        for dn in dset_names:
+            dset_args = CORPUS_GENERATORS[dn]
+            # load dataset
+            dset = self._load_dataset(*dset_args, **kwargs)
+
+            # adapt dataset
+            if dn in DATASET_ADAPTERS:
+                adapter = DATASET_ADAPTERS[dn]()
+                _, dset = adapter(dset, num_proc=self.num_proc)
+
+            if isinstance(dset, DatasetDict):
+                dset = concatenate_datasets(list(dset.values()))
+            dsets.append(dset)
 
         # concatenate datasets
         if len(dset_names) == 1:
@@ -180,15 +193,14 @@ class CorpusBuilder(HfDatasetBuilder):
                 dataset = dataset.rename_column(attr, new_attr)
 
         # add the document index column if not already provided
+        if "uid" in dataset.column_names:
+            ids = dataset["uid"]
+            if len(ids) != len(set(ids)):
+                rich.print(Counter(ids))
+                raise ValueError("Duplicated `document.uid` found in dataset")
+
         if "idx" not in dataset.column_names:
-            dataset = dataset.map(
-                partial(set_row_idx, key="idx"),
-                batched=True,
-                batch_size=1000,
-                num_proc=self.num_proc,
-                with_indices=True,
-                desc="Indexing documents",
-            )
+            dataset = set_index_column(dataset, key="idx")
 
         # if titles are empty, deactivate the append_document_title
         if "title" in dataset.column_names and self.append_document_title is True:
@@ -241,19 +253,12 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
         # add index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="document.row_idx"),
-            batched=True,
-            batch_size=1000,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing documents",
-        )
+        dataset = set_index_column(dataset, key="document.row_idx")
 
         return dataset
 
     def get_generate_sentences_pipe(self):
-        return GenerateSentences(global_keys=["idx", "cui", "title", "question_idx"])
+        return GenerateSentences(global_keys=["idx", "uid", "cui", "title", "question_idx"])
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
@@ -264,7 +269,7 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["document.idx", "document.title", "document.question_idx"],
+            global_keys=["document.idx", "document.uid", "document.title", "document.question_idx"],
             verbose=self.verbose,
         )
 
@@ -337,6 +342,7 @@ class CorpusBuilder(HfDatasetBuilder):
             keys=[
                 "document.row_idx",
                 "document.idx",
+                "document.uid",
                 "document.passage_idx",
                 "document.retrieval_score",
             ]

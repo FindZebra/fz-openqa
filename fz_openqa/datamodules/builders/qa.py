@@ -19,18 +19,21 @@ from ..pipes.nesting import Expand
 from ..pipes.nesting import Nested
 from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
+from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import Apply
+from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.utils.transformations import add_spec_token
-from fz_openqa.datamodules.utils.transformations import set_row_idx
+from fz_openqa.datamodules.utils.transformations import set_index_column
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
+from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
@@ -38,7 +41,10 @@ from fz_openqa.utils.pretty import pretty_decode
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
     "medqa-tw": (medqa.__file__, "tw"),
-    "quality": (quality.__file__, "questions"),
+    "quality": (quality.__file__, None),
+    "race": ("race", "all"),
+    "race-hard": ("race", "hard"),
+    "race-middle": ("race", "middle"),
 }
 
 
@@ -90,6 +96,7 @@ class QaBuilder(HfDatasetBuilder):
         n_answer_tokens: int = 1,
         query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
+        drop_documents: bool = True,
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
@@ -97,6 +104,7 @@ class QaBuilder(HfDatasetBuilder):
         self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
         self.n_answer_tokens = n_answer_tokens
+        self.drop_documents = drop_documents
 
         # set the dataset attributes
         for dn in dset_name.split("+"):
@@ -104,6 +112,17 @@ class QaBuilder(HfDatasetBuilder):
                 raise ValueError(f"Unknown dataset {dn}, available: {list(QA_DATASETS.keys())}")
 
         self.dset_name = dset_name
+
+    def load_one_dataset(self, dset_name, **kwargs):
+        # load the dataset
+        dset_args = QA_DATASETS.get(dset_name, (dset_name,))
+        dataset = load_dataset(*dset_args, **kwargs)
+
+        # adapt the dataset
+        if dset_name in DATASET_ADAPTERS:
+            adapter = DATASET_ADAPTERS[dset_name]()
+            dataset, corpus = adapter(dataset, num_proc=self.num_proc)
+        return dataset
 
     def load_base_dataset(self) -> DatasetDict:
         """
@@ -115,7 +134,7 @@ class QaBuilder(HfDatasetBuilder):
             script_id, name = QA_DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [load_dataset(*QA_DATASETS[n], **kwargs) for n in dset_names]
+        dsets = [self.load_one_dataset(n, **kwargs) for n in dset_names]
 
         if len(dsets) == 1:
             return dsets[0]
@@ -143,27 +162,27 @@ class QaBuilder(HfDatasetBuilder):
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
-        # Tokenize the text fields (question and answers)
+        if self.drop_documents:
+            cols = {c for c in dataset.column_names if "document." in c}
+            logger.info(f"Dropping document columns {cols}")
+            dataset = dataset.remove_columns(cols)
+
+        # Tokenize the text fields (questions, answers, and documents, if any)
         if self.tokenizer:
+            has_document_columns = any("document." in c for c in dataset["train"].column_names)
             dataset = dataset.map(
                 Parallel(
                     self.get_question_tokenizer_pipe(),
                     self.get_answer_tokenizer_pipe(),
+                    Gate(has_document_columns, self.get_document_tokenizer_pipe()),
                 ),
                 batched=True,
                 num_proc=self.num_proc,
-                desc="Tokenizing questions and answers",
+                desc="Tokenizing",
             )
 
         # add an index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="question.row_idx"),
-            batched=True,
-            batch_size=1000,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing rows",
-        )
+        dataset = set_index_column(dataset, key="question.row_idx")
 
         return dataset
 
@@ -176,6 +195,17 @@ class QaBuilder(HfDatasetBuilder):
             add_encoding_tokens=self.add_encoding_tokens,
             spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
             shape=[-1, self.n_options],
+        )
+
+    def get_document_tokenizer_pipe(self):
+        return FormatAndTokenize(
+            prefix="document.",
+            text_formatter=self.text_formatter,
+            tokenizer=self.tokenizer,
+            max_length=self.max_length,
+            add_encoding_tokens=self.add_encoding_tokens,
+            spec_tokens=[DOC_TOKEN],
+            shape=None,
         )
 
     def get_question_tokenizer_pipe(self):
@@ -207,11 +237,25 @@ class QaBuilder(HfDatasetBuilder):
         return Parallel(
             CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
             CollateField(
+                "document",
+                tokenizer=self.tokenizer,
+                level=0,
+                id="collate-documents",
+                include_only=["document.text", "document.input_ids", "document.attention_mask"],
+            ),
+            CollateField(
                 "answer",
                 level=0,
                 exclude=["input_ids", "attention_mask"],
                 to_tensor=["target"],
                 id="collate-answer-attributes",
+            ),
+            CollateField(
+                "answer",
+                tokenizer=self.tokenizer,
+                level=1,
+                include_only=["input_ids", "attention_mask"],
+                id="pad-answer-tokens",
             ),
             CollateField(
                 "answer",
@@ -254,6 +298,17 @@ class QaBuilder(HfDatasetBuilder):
             )
             u += line
 
+        if "document.input_ids" in row:
+            u += "* Document:" + "\n"
+            u += (
+                pretty_decode(
+                    row["document.input_ids"],
+                    **decode_kwargs,
+                    style="white",
+                )
+                + "\n"
+            )
+
         return u
 
 
@@ -281,6 +336,8 @@ class ConcatQaBuilder(QaBuilder):
         "question.attention_mask",
         "answer.text",
         "answer.target",
+        "document.input_ids",
+        "document.attention_mask",
     ]
 
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
@@ -304,13 +361,7 @@ class ConcatQaBuilder(QaBuilder):
         )
 
         # add an index column
-        dataset = dataset.map(
-            partial(set_row_idx, key="question.row_idx"),
-            batched=True,
-            num_proc=self.num_proc,
-            with_indices=True,
-            desc="Indexing",
-        )
+        dataset = set_index_column(dataset, key="question.row_idx")
 
         return dataset
 

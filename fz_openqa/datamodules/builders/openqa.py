@@ -32,9 +32,11 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import ScoreTransform
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
@@ -187,7 +189,7 @@ class OpenQaBuilder(DatasetBuilder):
         if splits is not None:
             dataset = DatasetDict({k: v for k, v in dataset.items() if k in splits})
 
-        # build the index, potnetially using a model
+        # build the index, potentially using a model
         index = self.index_builder(
             dataset=corpus,
             model=model,
@@ -383,11 +385,13 @@ class OpenQaBuilder(DatasetBuilder):
         # A. Collate all attributes stored in `self.dataset`
         # document attributes are collated at level 0
         collate_qad = Parallel(
-            CollateField(
-                "document",
-                level=self.document_nesting_level,
-                to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
-                id="collate-nested-document-attributes",
+            Sequential(
+                CollateField(
+                    "document",
+                    level=self.document_nesting_level,
+                    to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
+                    id="collate-nested-document-attributes",
+                ),
             ),
             self.dataset_builder._get_collate_pipe(),
         )
