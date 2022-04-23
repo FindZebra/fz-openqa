@@ -103,11 +103,13 @@ class FaissHandler(IndexHandler):
             train_ids = slice(None, None)
 
         train_vectors = vectors[train_ids]
+        logger.info(f"Train the index with {len(train_vectors)} vectors.")
         train_vectors = train_vectors.to(torch.float32)
         self._index.train(train_vectors)
 
         # add vectors to the index
         batch_size = faiss_train_size or len(vectors)
+        logger.info(f"Adding {len(vectors)} to the index with batch size {batch_size}.")
         for i in range(0, len(vectors), batch_size):
             vecs = vectors[i : i + batch_size]
             vecs = vecs.to(torch.float32)
