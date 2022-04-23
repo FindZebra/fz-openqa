@@ -174,7 +174,13 @@ class DenseIndex(Index):
             self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
         )
 
-    def build(self, dataset: Dataset, nprobe: int = 8, **kwargs):
+    def build(
+        self,
+        dataset: Dataset,
+        nprobe: int = 8,
+        faiss_train_size=None,
+        **kwargs,
+    ):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
 
@@ -197,9 +203,10 @@ class DenseIndex(Index):
         self._index = Handler(
             path=self.index_path,
             index_factory=self.index_factory,
-            nprobe=nprobe,
             keep_on_cpu=self.keep_faiss_on_cpu,
             train_on_cpu=self.train_faiss_on_cpu,
+            nprobe=nprobe,
+            faiss_train_size=faiss_train_size,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
 
