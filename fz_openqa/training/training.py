@@ -341,13 +341,13 @@ def train_with_dataset_updates(
             )
             trainer.fit(
                 model=model,
-                train_dataloader=datamodule.train_dataloader(),
+                train_dataloaders=datamodule.train_dataloader(),
                 val_dataloaders=datamodule.val_dataloader(),
             )
             log.info(f"Epoch {trainer.current_epoch} completed.")
 
             # increment the epoch counter by one, seems to be missing in the original code
-            trainer.fit_loop.current_epoch += 1
+            # todo: trainer.fit_loop.current_epoch += 1
             if trainer.current_epoch > max_epochs:
                 break
             if trainer.state.status == TrainerStatus.INTERRUPTED:

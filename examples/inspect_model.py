@@ -72,8 +72,8 @@ def run(config: DictConfig) -> None:
         checkpoint_type=config.get("checkpoint_type", "last"),
     )
     logger.info(f"Loaded model {type(model.module)}, fingerprint={get_fingerprint(model)}")
-    logger.info(f"Reader temperature: {model.module.reader_head.temperature()}")
-    logger.info(f"Retriever temperature: {model.module.retriever_head.temperature()}")
+    logger.info(f"Reader temperature: {model.module.reader_head.temperature}")
+    logger.info(f"Retriever temperature: {model.module.retriever_head.temperature}")
 
     # define the trainer
     trainer = loader.instantiate("trainer")

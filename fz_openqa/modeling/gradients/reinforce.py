@@ -163,12 +163,18 @@ class ReinforceGradients(Gradients):
         log_p_d = (retriever_agg_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
         kl_agg_retriever = kl_divergence(log_p_d, dim=-1)
         diagnostics["retriever/kl_agg_uniform"] = kl_agg_retriever.mean()
-        kl_maxsim_retriever = kl_divergence(retriever_log_p_dloc, dim=-1)
-        kl_maxsim_retriever = batch_reduce(kl_maxsim_retriever, op=torch.mean)
-        diagnostics["retriever/kl_maxsim"] = kl_maxsim_retriever
-        kl_maxsim_reader = kl_divergence(reader_log_p_dloc, dim=-1).mean(-1)
-        kl_maxsim_reader = batch_reduce(kl_maxsim_reader, op=torch.mean)
-        diagnostics["reader/kl_maxsim"] = kl_maxsim_reader.mean()
+        if retriever_log_p_dloc is not None:
+            kl_maxsim_retriever = kl_divergence(retriever_log_p_dloc, dim=-1)
+            kl_maxsim_retriever = batch_reduce(kl_maxsim_retriever, op=torch.mean)
+            diagnostics["retriever/kl_maxsim"] = kl_maxsim_retriever
+        else:
+            kl_maxsim_retriever = 0
+        if reader_log_p_dloc is not None:
+            kl_maxsim_reader = kl_divergence(reader_log_p_dloc, dim=-1).mean(-1)
+            kl_maxsim_reader = batch_reduce(kl_maxsim_reader, op=torch.mean)
+            diagnostics["reader/kl_maxsim"] = kl_maxsim_reader.mean()
+        else:
+            kl_maxsim_reader = 0
 
         # log p(a_st | q, A, D)
         targets_ = targets.view(targets.size(0), 1, 1)

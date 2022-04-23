@@ -7,7 +7,9 @@ from typing import Optional
 
 import numpy as np
 import rich
-from datasets import DatasetDict, Split
+from datasets import DatasetDict
+from datasets import Split
+from loguru import logger
 
 from fz_openqa.datamodules.builders.adapters.base import DatasetAdapter
 from fz_openqa.datamodules.builders.adapters.extract_corpus import extract_corpus
@@ -15,7 +17,7 @@ from fz_openqa.datamodules.builders.adapters.utils import set_document_row_idx
 from fz_openqa.datamodules.utils.transformations import set_constant_column
 from fz_openqa.datamodules.utils.transformations import set_index_column
 from fz_openqa.datamodules.utils.typing import HfDataset
-from loguru import logger
+
 QUALITY_COL_MAPPING = {}
 
 
@@ -57,7 +59,9 @@ class QualityAdapter(DatasetAdapter):
 
         # replace the test split
         if len(dataset[Split.TEST]) == 0 or Split.TEST not in dataset.keys():
-            logger.warning(f"> {Split.TEST} split not found, replacing with {Split.VALIDATION} split")
+            logger.warning(
+                f"> {Split.TEST} split not found, " f"replacing with {Split.VALIDATION} split"
+            )
             dataset[Split.TEST] = dataset[Split.VALIDATION]
 
         return dataset, corpus
