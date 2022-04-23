@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -260,10 +261,15 @@ class DenseIndex(Index):
         else:
             doc_ids = None
 
+        t_init = time.time()
         self._index.build(vectors=vectors, doc_ids=doc_ids)
 
         # end building the index
-        logger.info(f"Built index of size={len(self._index)}, type={type(self._index)}")
+        logger.info(
+            f"Built index of size={len(self._index)}, "
+            f"type={type(self._index)}, "
+            f"build time={time.time() - t_init:.2f}s"
+        )
         self._train_ends()
 
     def _expand_seq_length(self, flat_values: List, stride: int):
