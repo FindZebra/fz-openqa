@@ -208,7 +208,7 @@ datamodule:
     es_temperature: 5. # todo !!!
     auxiliary_weight: 5. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
-    p: 4096
+    p: 2048
     dtype: float16
     max_chunksize: null
     maxsim_chunksize: 16_000 # size 128: 4_000
