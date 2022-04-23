@@ -165,7 +165,9 @@ class FaissHandler(IndexHandler):
     def cpu(self):
         """Move the index to CPU."""
         try:
-            self._index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+            cpu_index = faiss.index_gpu_to_cpu(self._index)  # type: ignore
+            del self._index
+            self._index = cpu_index
             try:
                 self._index.nprobe = self.config.get("nprobe", None)
             except Exception as e:
@@ -286,7 +288,7 @@ class FaissHandler(IndexHandler):
         co.useFloat16 = True
         co.useFloat16CoarseQuantizer = False
         co.usePrecomputed = False
-        co.indicesOptions = faiss.INDICES_CPU
+        # co.indicesOptions = faiss.INDICES_CPU # reduces precision, something's wrong?
         co.verbose = True
         co.reserveVecs = gpu_cfg.max_add
         co.shard = True
