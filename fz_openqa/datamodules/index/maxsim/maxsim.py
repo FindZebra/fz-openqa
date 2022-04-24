@@ -99,7 +99,7 @@ class MaxSim(torch.nn.Module):
         )
 
         # initialize the MaxSimReducer
-        self.maxsim_reducer = MaxSimReducer(device=self.ranking_devices[-1])
+        self.maxsim_reducer = MaxSimReducer(device=None)
 
     @staticmethod
     def _validate_emb2pid(emb2pid, vectors):
@@ -168,7 +168,8 @@ class MaxSim(torch.nn.Module):
 
     def cpu(self: T) -> T:
         try:
-            super(MaxSim, self).cpu()
+            # super(MaxSim, self).cpu()
+            pass
         except Exception:
             pass
         self.token_index.cpu()
@@ -181,7 +182,8 @@ class MaxSim(torch.nn.Module):
     def cuda(self: T, device: Optional[Union[int, torch.device]] = None) -> T:
         assert device is None
         try:
-            super(MaxSim, self).cuda()
+            # super(MaxSim, self).cuda()
+            pass
         except Exception:
             pass
         self.token_index.cuda()
@@ -216,6 +218,7 @@ class MaxSim(torch.nn.Module):
         faiss_time = time.time() - _time
 
         # retriever the pids from the token_ids, at this step, there are duplicated pids.
+        logger.info(f"emd2pid.device: {self.emb2pid.device}")
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
 
         # Deduplicate pids; this step is done on `device`, which is set by default on CPU.

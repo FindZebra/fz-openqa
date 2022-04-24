@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 from typing import Optional
@@ -8,7 +7,7 @@ from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
-import torch
+import torch  # type: ignore
 from faiss import IndexReplicas
 from loguru import logger
 from torch import nn
@@ -77,6 +76,7 @@ class FaissHandler(IndexHandler):
         keep_on_cpu: bool = False,
         train_on_cpu: bool = False,
         faiss_train_size: int = None,
+        shard_faiss: bool = False,
         **kwargs,
     ):
         """build the index from the vectors."""
@@ -84,33 +84,39 @@ class FaissHandler(IndexHandler):
             vectors = torch.from_numpy(vectors)
 
         assert len(vectors.shape) == 2, f"The vectors must be 2D. vectors: {vectors.shape}"
-        self.dimension = vectors.shape[-1]
-        self.index_factory = index_factory
-        self.keep_on_cpu = keep_on_cpu
-        self.train_on_cpu = train_on_cpu
-        logger.info(
+        self.config["dimension"] = vectors.shape[-1]
+
+        u = (
             f"Setup {type(self).__name__} with "
-            f"keep_on_cpu={self.keep_on_cpu}, "
-            f"train_on_cpu={self.train_on_cpu}, "
-            f"index_factory={self.index_factory}, "
-            f"nprobe={self.config.get('nprobe', None)}, "
-            f"vectors ({type(vectors)}): {len(vectors)},"
-            f"faiss_train_size={faiss_train_size}"
+            f"vectors ({type(vectors)}): ({len(vectors)}, {vectors.shape[-1]})"
         )
+        for k, v in [
+            ("index_factory", index_factory),
+            ("nprobe", nprobe),
+            ("keep_on_cpu", keep_on_cpu),
+            ("train_on_cpu", train_on_cpu),
+            ("faiss_train_size", faiss_train_size),
+            ("shard_faiss", shard_faiss),
+        ]:
+            self.config[k] = v
+            u += f", {k}={v}"
+
+        # log config
+        logger.info(u)
 
         # init the index
         if index_factory == "torch":
             self._index = TorchIndex()
         else:
             self._index = faiss.index_factory(
-                self.dimension, index_factory, faiss.METRIC_INNER_PRODUCT
+                self.config["dimension"], index_factory, faiss.METRIC_INNER_PRODUCT
             )
 
         # set `nprobe`
-        self._index.nprobe = self.config.get("nprobe", None)
+        self._index.nprobe = self.config["nprobe"]
 
         # move the index to GPU
-        if not self.train_on_cpu:
+        if not self.config["train_on_cpu"]:
             self.cuda()
 
         # train the index
@@ -169,27 +175,26 @@ class FaissHandler(IndexHandler):
             del self._index
             self._index = cpu_index
             try:
-                self._index.nprobe = self.config.get("nprobe", None)
+                self._index.nprobe = self.config["nprobe"]
             except Exception as e:
                 logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                 pass
         except Exception:
             pass
 
-    def _build_gpu_index(self, index, devices: List[int] = None):
+    def _build_sharded_gpu_index(self, index, devices: List[int] = None):
         if devices is None or len(devices) == 0:
             raise ValueError("devices must be a list of GPU ids")
 
         # GPU configuration
         gpu_resources, gpu_cfg = self._prepare_gpu_resources(devices)
-        vres, vdev = self._make_vres_vdev(gpu_resources)
+        vres, vdev = self._make_vres_vdev(gpu_resources, devices)
         co = self._make_cloner_options(gpu_cfg)
         return faiss.index_cpu_to_gpu_multiple(vres, vdev, index, co)
 
     def cuda(self, devices: Optional[List[int]] = None):
         """Move the index to CUDA."""
-        keep_on_cpu = self.config.get("keep_on_cpu", None)
-        if keep_on_cpu or isinstance(faiss, IndexReplicas):
+        if self.config["keep_on_cpu"] or isinstance(faiss, IndexReplicas):
             return
 
         if devices is None:
@@ -199,11 +204,13 @@ class FaissHandler(IndexHandler):
             return
 
         # move the index to GPU
-        self._index = self._build_gpu_index(self._index, devices)
+        if self.config["shard_faiss"]:
+            self._index = self._build_sharded_gpu_index(self._index, devices)
+        else:
+            self._index = faiss.index_cpu_to_gpus_list(self._index, gpus=devices)
 
         # set `nprobe`
-        nprobe = self.config.get("nprobe", None)
-        if nprobe is not None:
+        if self.config["nprobe"] is not None:
 
             # retrieve the coarse quantizer index (IVF, IMI, ...)
             try:
@@ -215,11 +222,11 @@ class FaissHandler(IndexHandler):
             # set the nprobe parameter
             try:
                 gspace = faiss.GpuParameterSpace()  # type: ignore
-                gspace.set_index_parameter(ivf_index, "nprobe", nprobe)
+                gspace.set_index_parameter(ivf_index, "nprobe", self.config["nprobe"])
             except Exception as e:
                 logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                 try:
-                    ivf_index.nprobe = nprobe
+                    ivf_index.nprobe = self.config["nprobe"]
                 except Exception as e:
                     logger.warning(f"Couldn't set the `nprobe` parameter: {e}")
                     pass
@@ -267,7 +274,7 @@ class FaissHandler(IndexHandler):
 
         return gpu_resources, gpu_config
 
-    def _make_vres_vdev(self, gpu_resources: List):
+    def _make_vres_vdev(self, gpu_resources: List, devices: List[int]):
         """
         return vectors of device ids and resources useful for gpu_multiple
         """
@@ -278,7 +285,7 @@ class FaissHandler(IndexHandler):
         vdev = faiss.IntVector()
 
         for i in range(ngpu):
-            vdev.push_back(i)
+            vdev.push_back(devices[i])
             vres.push_back(gpu_resources[i])
 
         return vres, vdev

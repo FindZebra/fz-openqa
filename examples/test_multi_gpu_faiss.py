@@ -20,7 +20,11 @@ if __name__ == "__main__":
 
         rich.print(f"tmpdir: {path}, devices={devices}")
         handler = FaissHandler(
-            path=path, index_factory="IVF100k,PQ32x8", nprobe=64, faiss_train_size=None
+            path=path,
+            index_factory="IVF100k,PQ32x8",
+            nprobe=32,
+            faiss_train_size=None,
+            faiss_shard=False,
         )
 
         # Create a dataset

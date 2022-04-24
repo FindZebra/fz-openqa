@@ -221,6 +221,7 @@ datamodule:
     faiss_train_size: null
     n_ranking_workers: ${datamodule.num_workers}
     nprobe: 32
+    shard_faiss: false
     loader_kwargs:
       batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
       num_workers: ${datamodule.num_workers}
