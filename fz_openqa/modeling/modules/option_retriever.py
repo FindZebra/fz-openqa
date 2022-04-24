@@ -524,6 +524,7 @@ class OptionRetriever(Module):
 
         return output
 
+    @torch.no_grad()
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         reader_logits = output.get("_reader_logits_", None)

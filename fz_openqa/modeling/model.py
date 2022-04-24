@@ -8,6 +8,7 @@ from typing import Optional
 from typing import Union
 
 import rich
+import torch
 from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
@@ -188,6 +189,7 @@ class Model(LightningModule):
         self.module.reset_metrics(split=split)
         return metrics
 
+    @torch.no_grad()
     def log_data(
         self,
         data: Batch,
