@@ -13,12 +13,13 @@ base:
   infer_batch_mul: 300
 
 trainer:
-  val_check_interval: 1.0
+  val_check_interval: 0.25
+  precision: 16
 
 model:
   hidden_size: 128
   module:
-    split_bert_layers: 4
+    split_bert_layers: 2
 
   optimizer_params:
     lr: 1e-5

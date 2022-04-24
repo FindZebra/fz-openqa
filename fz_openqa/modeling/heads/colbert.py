@@ -79,7 +79,7 @@ class ColbertHead(DprHead):
 
             # attention model
             attn_scores = einsum("bouh, bodvh -> boduv", hq_a, hd_a)
-            attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
+            attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e3)
             log_p_dloc = attn_scores.log_softmax(dim=-1)
 
             # values
@@ -116,7 +116,7 @@ class ColbertHead(DprHead):
     def _reduce_doc_vectors(self, scores, tau):
         # attention_scores
         attn_scores = scores.clone()
-        attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e9)
+        attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e3)
         log_attn_scores = attn_scores.log_softmax(dim=-1)
 
         # sample locations and reduce over `document` dimension
