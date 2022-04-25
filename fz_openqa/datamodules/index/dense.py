@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -173,7 +174,14 @@ class DenseIndex(Index):
             self.model, model_output_keys=model_output_keys, output_dtype=self.dtype
         )
 
-    def build(self, dataset: Dataset, nprobe: int = 8, **kwargs):
+    def build(
+        self,
+        dataset: Dataset,
+        nprobe: int = 8,
+        faiss_train_size=None,
+        shard_faiss=False,
+        **kwargs,
+    ):
         """
         Build and cache the index. Cache is skipped if `name` or `cache_dir` is not provided.
 
@@ -196,9 +204,11 @@ class DenseIndex(Index):
         self._index = Handler(
             path=self.index_path,
             index_factory=self.index_factory,
-            nprobe=nprobe,
             keep_on_cpu=self.keep_faiss_on_cpu,
             train_on_cpu=self.train_faiss_on_cpu,
+            nprobe=nprobe,
+            faiss_train_size=faiss_train_size,
+            shard_faiss=shard_faiss,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
 
@@ -260,10 +270,15 @@ class DenseIndex(Index):
         else:
             doc_ids = None
 
+        t_init = time.time()
         self._index.build(vectors=vectors, doc_ids=doc_ids)
 
         # end building the index
-        logger.info(f"Built index of size={len(self._index)}, type={type(self._index)}")
+        logger.info(
+            f"Built index of size={len(self._index)}, "
+            f"type={type(self._index)}, "
+            f"build time={time.time() - t_init:.2f}s"
+        )
         self._train_ends()
 
     def _expand_seq_length(self, flat_values: List, stride: int):
