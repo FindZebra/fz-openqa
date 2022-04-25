@@ -219,8 +219,8 @@ class OptionRetriever(Module):
         q_batch = {k: v for k, v in batch.items() if k.startswith("question.")}
         output = {}
         step_output = {
-            "reader/temperature": self.reader_head.temperature().detach(),
-            "retriever/temperature": self.retriever_head.temperature().detach(),
+            "reader/temperature": self.reader_head.temperature.detach(),
+            "retriever/temperature": self.retriever_head.temperature.detach(),
             "reader/offset": self.reader_head.offset.detach(),
             "retriever/offset": self.retriever_head.offset.detach(),
         }
@@ -510,9 +510,9 @@ class OptionRetriever(Module):
         # scaling the heads in `step_end` (here) allows using samples across all devices
         reader_score = output["_reader_scores_"]
         retriever_score = output["_retriever_scores_"]
-        if not self.reader_head.is_scaled:
+        if hasattr(self.reader_head, "is_scaled") and not self.reader_head.is_scaled:
             self.reader_head.set_scale(reader_score)
-        if not self.retriever_head.is_scaled:
+        if hasattr(self.retriever_head, "is_scaled") and not self.retriever_head.is_scaled:
             self.retriever_head.set_scale(retriever_score)
 
         # average losses

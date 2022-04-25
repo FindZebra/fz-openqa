@@ -371,8 +371,6 @@ class ConcatQaBuilder(QaBuilder):
 
         # register the tokens that prefix the question
         q_start_tokens = []
-        if self.add_special_tokens:
-            q_start_tokens.append(self.tokenizer.sep_token)
         if self.add_encoding_tokens:
             q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 

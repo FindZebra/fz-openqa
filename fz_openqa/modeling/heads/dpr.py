@@ -113,10 +113,7 @@ class DprHead(Head):
         return 0.0
 
     @property
-    def offset(self):
-        return self._offset
-
-    def temperature(self) -> None:
+    def temperature(self) -> Tensor:
         return self.scale_value.pow(-1)
 
     def set_scale(self, scores: Tensor):
