@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
@@ -20,11 +21,14 @@ from fz_openqa.datamodules.builders import CorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import ElasticSearchIndexBuilder
-from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.pipes import ExactMatch, SupervisedDatasetFilter, SamplerBoostPositives
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
+from fz_openqa.datamodules.builders.transforms.flatten_multiple_choice import FlattenMultipleChoice
+from fz_openqa.utils.pretty import pprint_batch
+
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
@@ -52,7 +56,7 @@ def run(config):
     dataset_builder = ConcatQaBuilder(
         tokenizer=tokenizer,
         text_formatter=text_formatter,
-        use_subset=config.get("use_subset", True),
+        use_subset=config.get("use_subset", False),
         cache_dir=config.sys.cache_dir,
         dset_name=config.get("dset_name", "medqa-us"),
         num_proc=4,
@@ -70,6 +74,11 @@ def run(config):
         num_proc=4,
     )
 
+    if config.get("flatten", False):
+        dataset_transform = FlattenMultipleChoice()
+    else:
+        dataset_transform = None
+
     # define the OpenQA builder
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
@@ -78,10 +87,10 @@ def run(config):
             auxiliary_weight=config.get("es_aux_weight", 5),
         ),
         relevance_classifier=ExactMatch(interpretable=True),
+        dataset_transform=dataset_transform,
         n_retrieved_documents=100,
-        sampler=Sampler(total=10, largest=True),  # SamplerBoostPositives(total=10, n_boosted=1),
+        sampler=SamplerBoostPositives(total=10, n_boosted=1),
         num_proc=config.get("num_proc", 2),
-        batch_size=config.get("batch_size", 100),
         analytics=[
             RetrieverAccuracy(output_dir="./analyses", verbose=True),
             RetrieverDistribution(output_dir="./analyses", verbose=True),

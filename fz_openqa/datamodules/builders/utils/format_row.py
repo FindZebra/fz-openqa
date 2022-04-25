@@ -1,10 +1,78 @@
 from copy import copy
 from typing import Any
+from typing import Callable
 from typing import Dict
 
-from fz_openqa.datamodules.builders import DatasetBuilder
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pretty_decode
+
+
+def format_row_flat_questions(row: Dict[str, Any], *, tokenizer, **kwargs) -> str:
+    decode_kwargs = {
+        "skip_special_tokens": False,
+        "tokenizer": tokenizer,
+    }
+    u = "* Question:"
+    u += (
+        pretty_decode(
+            row["question.input_ids"],
+            **decode_kwargs,
+            style="deep_sky_blue3",
+        )
+        + "\n"
+    )
+
+    if "answer.input_ids" in row:
+        u += get_separator("-") + "\n"
+        u += "* Answer Choices:" + "\n"
+        idx = row.get("answer.target", None)
+        for i, an in enumerate(row["answer.input_ids"]):
+            an_style = "green" if idx == i else "white"
+            line = f"   - ({'x' if idx == i else ' '}) " if idx is not None else "   - "
+            line += f"{pretty_decode(an, **decode_kwargs, only_text=True, style=an_style)}\n"
+            u += line
+
+    # if "document.input_ids" in row:
+    #     u += "* Document:" + "\n"
+    #     u += (
+    #             pretty_decode(
+    #                 row["document.input_ids"],
+    #                 **decode_kwargs,
+    #                 style="white",
+    #             )
+    #             + "\n"
+    #     )
+
+    return u
+
+
+def format_row_concatenated_questions(row: Dict[str, Any], *, tokenizer, **kwargs):
+    """Decode and print one row from the batch
+
+    Parameters
+    ----------
+    **kwargs
+    """
+    decode_kwargs = {
+        "skip_special_tokens": False,
+        "tokenizer": tokenizer,
+    }
+    repr = f"Question #{row.get('question.idx', None)}\n"
+
+    repr += get_separator("-") + "\n"
+    repr += "* Question-answer:" + "\n"
+    idx = row.get("answer.target", None)
+    for i, an in enumerate(row["question.input_ids"]):
+        an_style = "green" if idx == i else "white"
+        line = ""
+        if idx is not None:
+            line += f"   - ({'x' if idx == i else ' '}) "
+        else:
+            line += " - "
+        line += f"{pretty_decode(an, **decode_kwargs, only_text=False, style=an_style)}\n"
+        repr += line
+
+    return repr
 
 
 def get(row: Dict[str, Any], key: str, *i: int, default=None) -> Any:
@@ -16,11 +84,11 @@ def get(row: Dict[str, Any], key: str, *i: int, default=None) -> Any:
     return x
 
 
-def format_row_flat_questions(
+def format_row_flat_questions_with_docs(
     row: Dict[str, Any],
     *,
     tokenizer,
-    dataset_builder: DatasetBuilder,
+    format_question_fn: Callable,
     max_documents: int = 3,
     **kwargs,
 ) -> str:
@@ -29,9 +97,7 @@ def format_row_flat_questions(
         "tokenizer": tokenizer,
     }
 
-    repr = dataset_builder.format_row(
-        row,
-    )
+    repr = format_question_fn(row, tokenizer=tokenizer, **kwargs)
     repr += get_separator("-") + "\n"
     repr += f"* Documents: n={len(row['document.text'])}"
     if "document.match_score" in row:
@@ -63,7 +129,7 @@ def format_row_flat_questions(
     return repr
 
 
-def format_row_nested_questions(
+def format_row_nested_questions_with_docs(
     row: Dict[str, Any], *, tokenizer, document_nesting_level: int, max_documents: int = 5, **kwargs
 ) -> str:
     decode_kwargs = {

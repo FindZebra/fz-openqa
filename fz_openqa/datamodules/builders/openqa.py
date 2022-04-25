@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from copy import copy
 from enum import Enum
-from functools import partial
 from typing import Any
 from typing import Dict
 from typing import List
@@ -18,8 +17,11 @@ from omegaconf import DictConfig
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.qa import QaBuilder
+from fz_openqa.datamodules.builders.transforms.base import OpenQaTransform
+from fz_openqa.datamodules.builders.utils.format_row import format_row_concatenated_questions
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
-from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions
+from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions_with_docs
+from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions_with_docs
 from fz_openqa.datamodules.index import DenseIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
@@ -32,19 +34,17 @@ from fz_openqa.datamodules.pipes import BlockSequential
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
 from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes import ScoreTransform
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.dataset_filter import DatasetFilter
 from fz_openqa.datamodules.pipes.nesting import ApplyAsFlatten
 from fz_openqa.datamodules.pipes.nesting import Nested
-from fz_openqa.datamodules.utils.dataset import format_size_difference
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
+from fz_openqa.datamodules.utils.datastruct import OpenQaConfig
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
 from fz_openqa.datamodules.utils.typing import HfDataset
@@ -81,7 +81,7 @@ class OpenQaBuilder(DatasetBuilder):
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,
         sort_documents: bool = False,
-        dataset_filter: Optional[DatasetFilter] = None,
+        dataset_transform: Optional[OpenQaTransform] = None,
         num_proc: int = 2,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
@@ -95,10 +95,23 @@ class OpenQaBuilder(DatasetBuilder):
         self.dataset_builder = dataset_builder
         self.corpus_builder = corpus_builder
 
-        # nesting levels
+        # final dataset configuration & nesting levels
         if document_nesting_level is None:
             document_nesting_level = self.dataset_builder.nesting_level + 1
-        self.document_nesting_level = document_nesting_level
+        self._document_base_nesting_level = document_nesting_level
+
+        self.openqa_config: Optional[OpenQaConfig] = OpenQaConfig(
+            question_nesting_level=self.dataset_builder.nesting_level,
+            document_nesting_level=self._document_base_nesting_level,
+        )
+
+        # set transform and update the OpenQaConfig
+        if dataset_transform is not None:
+            assert isinstance(dataset_transform, OpenQaTransform)
+            self.openqa_config = dataset_transform(self.openqa_config)
+            self.dataset_transform = dataset_transform
+        else:
+            self.dataset_transform = None
 
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
@@ -117,7 +130,6 @@ class OpenQaBuilder(DatasetBuilder):
             "relevance_classifier": relevance_classifier,
             "score_transform": score_transform,
             "n_retrieved_documents": n_retrieved_documents,
-            "dataset_filter": dataset_filter,
             "sort_documents": sort_documents,
             "num_proc": num_proc,
             "batch_size": batch_size,
@@ -206,6 +218,15 @@ class OpenQaBuilder(DatasetBuilder):
             dataset=dataset, corpus=corpus, index=index, **map_args, **kwargs
         )
 
+        # transform the dataset
+        if self.dataset_transform is not None:
+            dataset = self.dataset_transform(
+                dataset,
+                openqa_config=self.openqa_config,
+                **{k: v for k, v in map_args.items() if k in ["num_proc", "batch_size"]},
+            )
+
+        # format the dataset
         if format is not None:
             dataset = self.set_format(dataset, format=format)
 
@@ -233,7 +254,6 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int,
         relevance_classifier: Optional[RelevanceClassifier],
         score_transform: Optional[ScoreTransform],
-        dataset_filter: Optional[DatasetFilter],
         sort_documents: bool,
         **map_kwargs,
     ) -> DatasetDict:
@@ -282,7 +302,7 @@ class OpenQaBuilder(DatasetBuilder):
                         # The search is applied to the flattened dataset,
                         # the right nesting level corresponds is always
                         # the one of the documents minus 1: {question : [doc_1, doc_2, ...]}
-                        level=self.document_nesting_level - 1,
+                        level=self._document_base_nesting_level - 1,
                     ),
                 ),
                 (
@@ -290,15 +310,15 @@ class OpenQaBuilder(DatasetBuilder):
                     FetchAndClassifyDocuments(
                         corpus_dataset=corpus,
                         classifier=relevance_classifier,
-                        level=self.document_nesting_level,
-                        axis=self.document_nesting_level,
+                        level=self._document_base_nesting_level,
+                        axis=self._document_base_nesting_level,
                         n=n_retrieved_documents,
                         # When the documents are nested by one level, only the
                         # gold answer is used to compute the match score. When
                         # the level == 2, the match score is computed using each
                         # answer option, therefore there is no need for extracitng
                         # the gold answer.
-                        extract_gold=self.document_nesting_level < 2,
+                        extract_gold=self._document_base_nesting_level < 2,
                     )
                     if relevance_classifier is not None
                     else None,
@@ -307,7 +327,7 @@ class OpenQaBuilder(DatasetBuilder):
                     "Transform scores",
                     ApplyAsFlatten(
                         score_transform,
-                        level=self.document_nesting_level - 1,
+                        level=self._document_base_nesting_level - 1,
                         input_filter=In(["document.retrieval_score", "document.match_score"]),
                         update=True,
                     )
@@ -316,7 +336,9 @@ class OpenQaBuilder(DatasetBuilder):
                 ),
                 (
                     "Sort documents",
-                    SortDocuments(level=self.document_nesting_level) if sort_documents else None,
+                    SortDocuments(level=self._document_base_nesting_level)
+                    if sort_documents
+                    else None,
                 ),
             ]
         )
@@ -349,19 +371,6 @@ class OpenQaBuilder(DatasetBuilder):
         # free-up GPU memory
         index.free_memory()
 
-        # filter the dataset
-        if dataset_filter is not None:
-            original_size = {k: len(dset) for k, dset in dataset.items()}
-            dataset = DatasetDict(
-                {
-                    split: dset.filter(partial(dataset_filter, split=split), **map_kwargs)
-                    for split, dset in dataset.items()
-                }
-            )
-
-            # print the difference in length for each split
-            logger.info(format_size_difference(original_size, dataset))
-
         return dataset
 
     def flatten_dataset(
@@ -388,24 +397,26 @@ class OpenQaBuilder(DatasetBuilder):
             Sequential(
                 CollateField(
                     "document",
-                    level=self.document_nesting_level,
+                    level=self.openqa_config.document_nesting_level,
                     to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
                     id="collate-nested-document-attributes",
                 ),
             ),
-            self.dataset_builder._get_collate_pipe(),
+            self.dataset_builder._get_collate_pipe(
+                nesting_level=self.openqa_config.question_nesting_level
+            ),
         )
 
         # B. select documents (resample the field `document.row_idx`)
         select_documents = self.get_select_documents_pipe(
-            self.sampler, level=self.document_nesting_level
+            self.sampler, level=self.openqa_config.document_nesting_level
         )
 
         # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
         fetch_documents = FetchNestedDocuments(
             corpus_dataset=self.corpus_builder(columns=self.output_columns),
             collate_pipe=self.corpus_builder._get_collate_pipe(),
-            level=self.document_nesting_level,
+            level=self.openqa_config.document_nesting_level,
         )
 
         return BlockSequential(
@@ -438,12 +449,20 @@ class OpenQaBuilder(DatasetBuilder):
         **kwargs
         """
 
-        args = {"dataset_builder": self.dataset_builder, "tokenizer": self.tokenizer}
-        if self.dataset_builder.nesting_level == 0:
-            return format_row_flat_questions(row, **args, **kwargs)
-        elif self.dataset_builder.nesting_level == 1:
-            return format_row_nested_questions(
-                row, document_nesting_level=self.document_nesting_level, **args, **kwargs
+        format_question_fn = {0: format_row_flat_questions, 1: format_row_concatenated_questions}[
+            self.openqa_config.question_nesting_level
+        ]
+        _kwargs = {"format_question_fn": format_question_fn, "tokenizer": self.tokenizer}
+        if self.openqa_config.question_nesting_level == 0:
+            return format_row_flat_questions_with_docs(row, **_kwargs, **kwargs)
+        elif self.openqa_config.question_nesting_level == 1:
+            return format_row_nested_questions_with_docs(
+                row,
+                document_nesting_level=self.openqa_config.document_nesting_level,
+                **_kwargs,
+                **kwargs,
             )
         else:
-            raise ValueError(f"Unsupported nesting level: {self.dataset_builder.nesting_level}")
+            raise ValueError(
+                f"Unsupported nesting level: {self.openqa_config.question_nesting_level}"
+            )

@@ -13,7 +13,7 @@ defaults:
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
-  - override /datamodule/dataset_filter: none
+  - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
       - sequence_lengths
