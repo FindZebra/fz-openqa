@@ -129,10 +129,10 @@ class RelevanceClassifier(Pipe):
         score = float(len(matches))
         return score
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[float, List[str]]:
+    def classify_and_interpret(self, pair: Pair) -> (float, str):
         matches = self._get_matches(pair)
         score = float(len(matches))
-        return (score, matches)
+        return (score, ", ".join(matches))
 
     def preprocess(self, pairs: Iterable[Pair]) -> Iterable[Pair]:
         """Preprocessing allows transforming all the pairs,
@@ -203,7 +203,7 @@ class PartialMatch(RelevanceClassifier):
         else:
             return True
 
-    def classify_and_interpret(self, pair: Pair) -> Tuple[float, List[str]]:
+    def classify_and_interpret(self, pair: Pair) -> (float, str):
         doc_text = pair.document[f"{self.document_field}.text"]
         answer_text = pair.answer[f"{self.answer_field}.text"]
         if doc_text is None or answer_text is None:
@@ -232,7 +232,7 @@ class PartialMatch(RelevanceClassifier):
 
         score = sum(float(n) * len(tokens) for n, tokens in matches.items())
         matches = [m for n, tokens in matches.items() for m in tokens]
-
+        matches = ", ".join(matches)
         return (score, matches)
 
     def classify(self, pair: Pair) -> float:
