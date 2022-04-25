@@ -64,7 +64,7 @@ datamodule:
     remove_breaks: True
     remove_ref: false
     lowercase: True
-    remove_symbols: False
+    remove_symbols: True
     aggressive_cleaning: False
 
   # documents
@@ -100,12 +100,12 @@ datamodule:
       use_subset: false # todo: debug: remove
       passage_length: 200
       passage_stride: 200
-  index_builder:
-    query_field: question.metamap
+#  index_builder:
+#    query_field: question.metamap
 
 #logger: null
 #callbacks: null
 
 logger:
   wandb:
-    group: baseline-reader-sampling-metamap # name your experiment here
+    group: baseline-reader-sampling-wikipedia-v2 # name your experiment here
