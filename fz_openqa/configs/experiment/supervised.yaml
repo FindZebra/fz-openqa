@@ -1,0 +1,29 @@
+# @package _global_
+
+defaults:
+  - option_retriever
+  - override /datamodule/dataset_transform: flatten
+  - override /datamodule/sampler: supervised
+  - override /model/module/reader_head: none
+  - override /model/module/gradients: supervised
+  - override /callbacks:
+      - checkpoint
+      - lr_monitor
+      - progress_bar
+
+
+base:
+  target_metric: validation/retriever/Accuracy
+  device_batch_size: 4
+  eval_device_batch_size: 16
+
+model:
+  num_warmup_steps: 1_000
+  num_training_steps: 50_000
+  optimizer_params:
+    lr: 1e-4
+
+
+logger:
+  wandb:
+    group: supervised

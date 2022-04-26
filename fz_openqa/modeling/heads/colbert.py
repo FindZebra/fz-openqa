@@ -61,7 +61,7 @@ class ColbertHead(DprHead):
 
         # compute the aggregated score
         if self.compute_agg_score:
-            hd_flat = self._flatten_documents(hd, doc_ids)
+            hd_flat = self._flatten_documents(hd, doc_ids=doc_ids)
             hq_flat = hq.view(-1, *hq.shape[-2:])
             agg_retriever_score = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
             agg_retriever_score, _ = self._reduce_doc_vectors(agg_retriever_score, tau)
@@ -87,24 +87,57 @@ class ColbertHead(DprHead):
             scores = (log_p_dloc.exp() * values).sum(dim=(-2, -1))
 
         elif not self.across_batch:
+            bs = hq.shape[:-2]
+            if hq.shape[: len(bs)] != hd.shape[: len(bs)]:
+                raise ValueError(
+                    f"Question and documents don't share the same batch size:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}, bs={bs}"
+                )
+
+            if hq.shape[-1] != hd.shape[-1]:
+                raise ValueError(
+                    f"Question and documents don't share the same vector dimension:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+                )
+
+            # reshape
+            hq = hq.view(-1, *hq.shape[len(bs) :])
+            hd = hd.view(-1, *hd.shape[len(bs) :])
+
             # compute the basic Colbert scores
-            scores = einsum("bouh, bodvh -> boduv", hq, hd)
+            scores = einsum("buh, bdvh -> bduv", hq, hd)
 
             # sum over document dimension
             q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
 
             # sum over query dimension
             scores = q_scores.sum(-1)
+
+            # reshape
+            scores = scores.view(*bs, scores.shape[-1])
         else:
+            bs = hq.shape[:-2]
+            hq = hq.view(-1, *hq.shape[len(bs) :])
+
+            if hq.shape[-1] != hd.shape[-1]:
+                raise ValueError(
+                    f"Question and documents don't share the same vector dimension:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+                )
+
             # compute the Colbert scores for ALL documents within the batch
-            hd = self._flatten_documents(hd, doc_ids)
-            scores = einsum("bouh, mvh -> bomuv", hq, hd)
+            hd = self._flatten_documents(hd, doc_ids=doc_ids)
+
+            scores = einsum("buh, mvh -> bmuv", hq, hd)
 
             # sum over document dimension
             q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
 
             # sum over query dimension
             scores = q_scores.sum(-1)
+
+            # reshape
+            scores = scores.view(*bs, scores.shape[-1])
 
         # aggregate document loc probs over q
         log_nq = math.log(log_p_dloc.size(-2))

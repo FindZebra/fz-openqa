@@ -169,7 +169,9 @@ class DprHead(Head):
         if self.auto_scale and self.is_scaled < 1:
             score = self.set_scale(score)
 
-        return score + self.offset, diagnostics
+        diagnostics["score"] = score + self.offset
+
+        return diagnostics
 
     def score(
         self,
@@ -179,13 +181,49 @@ class DprHead(Head):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> (Tensor, Dict):
+    ) -> Dict:
         diagnostics = {}
         if not self.across_batch:
-            return einsum("boh, bodh -> bod", hq, hd), diagnostics
+            bs = hq.shape[:-1]
+            vdim = hq.shape[-1]
+            n_docs = hd.shape[-2]
+            if hq.shape[:-1] != hd.shape[:-2]:
+                raise ValueError(
+                    f"Question and documents don't share the same batch size:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+                )
+
+            if hq.shape[-1] != hd.shape[-1]:
+                raise ValueError(
+                    f"Question and documents don't share the same vector dimension:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+                )
+
+            # reshape (flatten)
+            hq = hq.view(-1, vdim)
+            hd = hd.view(-1, n_docs, vdim)
+
+            # compute the score
+            scores = einsum("bh, bdh -> bd", hq, hd)
+
+            # reshape and return
+            scores = scores.view(*bs, n_docs)
+            return scores, diagnostics
         else:
-            hd = self._flatten_documents(hd, doc_ids)
-            return einsum("boh, mh -> bom", hq, hd), diagnostics
+            # flatten the documents (total_number_of_unique_docs, vdim)
+            hd = self._flatten_documents(hd, doc_ids=doc_ids)
+            bs = hq.shape[:-1]
+            n_docs = hd.shape[-2]
+
+            if hq.shape[-1] != hd.shape[-1]:
+                raise ValueError(
+                    f"Question and documents don't share the same vector dimension:"
+                    f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+                )
+
+            scores = einsum("bh, mh -> bm", hq, hd)
+            scores = scores.view(*bs, n_docs)
+            return scores, diagnostics
 
     def _preprocess(
         self,
@@ -211,11 +249,12 @@ class DprHead(Head):
         return cls_repr
 
     @staticmethod
-    def _flatten_documents(hd: Tensor, doc_ids=None) -> Tensor:
+    def _flatten_documents(hd: Tensor, *, doc_ids) -> Tensor:
         if doc_ids is None:
             raise ValueError("doc_ids is required to compute the score across the batch")
-        hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
-        doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
+        feature_dimensions = len(doc_ids.shape)
+        hd = hd.view(-1, *hd.shape[feature_dimensions:])
+        doc_ids = doc_ids.view(-1)
         udoc_ids, uids = unique_with_indices(doc_ids)
         hd = hd[uids]
         return hd

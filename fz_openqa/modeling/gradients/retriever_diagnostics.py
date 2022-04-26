@@ -13,7 +13,7 @@ def retriever_diagnostics(
     retrieval_score: Optional[Tensor],
     retrieval_rank: Optional[Tensor],
     match_score: Optional[Tensor] = None,
-    document_ids: Optional[Tensor] = None,
+    doc_ids: Optional[Tensor] = None,
     reader_score: Optional[Tensor] = None,
     retriever_agg_score: Optional[Tensor] = None,
     retriever_log_p_dloc: Optional[Tensor] = None,
@@ -42,7 +42,7 @@ def retriever_diagnostics(
         output[f"retriever/arg_cdf_{int(100 * p)}"] = arg_cdf_90.float().mean()
 
     # entropy `H(p(D | q, A))`
-    retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=(1, 2))
+    retriever_entropy = -(retriever_probs * retriever_log_probs).sum(dim=-1)
     output["retriever/entropy"] = retriever_entropy.mean()
 
     # entropy H(p(d))
@@ -67,7 +67,7 @@ def retriever_diagnostics(
 
         # `KL( p(D|q, A) || r(D|q, A) )`
         kl_div = retriever_probs * (retriever_log_probs - retrieval_log_probs)
-        kl_div = kl_div.sum(dim=(1, 2))
+        kl_div = kl_div.sum(dim=-1)
         output["retriever/kl_div"] = kl_div.mean()
 
     # retrieval rank info
@@ -90,18 +90,18 @@ def retriever_diagnostics(
     if match_score is not None:
         match_logits = (match_score > 0).float().log_softmax(dim=-1)
         kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
-        kl_relevance = kl_relevance.sum(dim=(1, 2))
+        kl_relevance = kl_relevance.sum(dim=-1)
         output["retriever/kl_relevance"] = kl_relevance.mean()
 
     # diversity of the retrieved documents
-    if document_ids is not None:
-        unique_ids = document_ids.view(-1).unique()
+    if doc_ids is not None:
+        unique_ids = doc_ids.view(-1).unique()
         output["retrieval/n_unique_docs"] = unique_ids.size(0)
-        prop_unique_docs = unique_ids.size(0) / math.prod(document_ids.shape)
+        prop_unique_docs = unique_ids.size(0) / math.prod(doc_ids.shape)
         output["retrieval/prop_unique_docs"] = prop_unique_docs
 
-        output["retriever/max-doc-id"] = document_ids.max()
-        output["retriever/min-doc-id"] = document_ids.min()
+        output["retriever/max-doc-id"] = doc_ids.max()
+        output["retriever/min-doc-id"] = doc_ids.min()
 
     # reader score diagnostics
     if reader_score is not None:

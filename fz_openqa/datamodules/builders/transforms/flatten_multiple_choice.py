@@ -14,10 +14,15 @@ from .base import OpenQaTransform
 
 class FlattenMultipleChoice(OpenQaTransform):
     def __init__(
-        self, filter_unmatched: bool = True, match_score_key: str = "document.match_score"
+        self,
+        filter_unmatched: bool = True,
+        match_score_key: str = "document.match_score",
+        max_positives: int = None,
     ):
         if filter_unmatched:
-            self.dataset_filter = SupervisedDatasetFilter(key=match_score_key)
+            self.dataset_filter = SupervisedDatasetFilter(
+                key=match_score_key, max_positives=max_positives
+            )
         else:
             self.dataset_filter = None
 

@@ -73,7 +73,7 @@ class Head(nn.Module, ABC):
         d_mask: Optional[Tensor] = None,
         batch: Dict[str, Tensor] = None,
         **kwargs,
-    ) -> (Tensor, Dict):
+    ) -> Dict:
         """
         Compute the score for each pair `f([q_j; a_j], d_jk)`.
 
@@ -94,7 +94,7 @@ class Head(nn.Module, ABC):
         Returns
         -------
         Tensor
-            Scores of shape [bs, n_opts, n_docs]
+            Dict, containing the scores of shape [bs, n_opts, n_docs]
         """
         raise NotImplementedError
 

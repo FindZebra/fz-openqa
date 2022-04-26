@@ -56,12 +56,14 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
+        "train/retriever/Accuracy",
+        "validation/retriever/Accuracy",
     ]
 
     def __init__(
         self,
         *args,
-        reader_head: Head | DictConfig,
+        reader_head: None | Head | DictConfig,
         retriever_head: Head | DictConfig,
         mask_punctuation: bool = False,
         max_batch_size: Optional[int] = None,
@@ -72,8 +74,8 @@ class OptionRetriever(Module):
         super().__init__(*args, **kwargs)
 
         # register the heads
-        self.reader_head = maybe_instantiate(reader_head)
-        self.retriever_head = maybe_instantiate(retriever_head)
+        self.reader_head: Optional[Head] = maybe_instantiate(reader_head)
+        self.retriever_head: Head = maybe_instantiate(retriever_head)
 
         # parameters
         self.max_batch_size = max_batch_size
@@ -246,7 +248,7 @@ class OptionRetriever(Module):
         pprint_batch(batch, "Option retriever::Input::batch", silent=silent)
 
         # initialize output dict
-        step_output = self._init_step_output()
+        step_output = {}
 
         # apply initial transformations to the data
         self._format_input_data(batch)
@@ -259,6 +261,7 @@ class OptionRetriever(Module):
         pprint_batch(features, "Option retriever::BERT+heads::features", silent=silent)
 
         # compute the scores using the heads
+        head_meta = {}
         head_kwargs = {
             "q_mask": self.get_mask(batch, "question"),
             "d_mask": self.get_mask(batch, "document"),
@@ -266,56 +269,46 @@ class OptionRetriever(Module):
             "batch": batch,
             **kwargs,
         }
-        reader_score, reader_dgs = self.reader_head(
-            hd=features[self._get_feature_name(field="document", head=None)],
-            hq=features[self._get_feature_name(field="question", head=None)],
-            **head_kwargs,
-        )
-        retriever_score, retriever_dgs = self.retriever_head(
-            hd=features[self._get_feature_name(field="document", head=None)],
-            hq=features[self._get_feature_name(field="question", head=None)],
-            **head_kwargs,
-        )
+        if self.reader_head is not None:
+            reader_meta = self.reader_head(
+                hd=features[self._get_feature_name(field="document", head=None)],
+                hq=features[self._get_feature_name(field="question", head=None)],
+                **head_kwargs,
+            )
+            head_meta.update({f"reader_{k}": v for k, v in reader_meta.items()})
+        if self.retriever_head is not None:
+            retriever_meta = self.retriever_head(
+                hd=features[self._get_feature_name(field="document", head=None)],
+                hq=features[self._get_feature_name(field="question", head=None)],
+                **head_kwargs,
+            )
+            head_meta.update({f"retriever_{k}": v for k, v in retriever_meta.items()})
 
-        # rename head meta
-        head_meta = {
-            **{f"reader_{k}": v for k, v in reader_dgs.items()},
-            **{f"retriever_{k}": v for k, v in retriever_dgs.items()},
-        }
-
-        # # retriever diagnostics
-        # diagnostics.update(
-        #     self._retriever_diagnostics(
-        #         retriever_score,
-        #         batch.get("document.retrieval_score", None),
-        #         batch.get("document.retrieval_rank", None),
-        #         match_score=batch.get("document.match_score", None),
-        #         document_ids=batch.get("document.row_idx", None),
-        #         reader_score=reader_score,
-        #         output=step_output,
-        #         **retriever_dgs,
-        #     )
-        # )
+        pprint_batch(head_meta, "Option retriever::heads::output", silent=silent)
 
         # compute the gradients
         step_output.update(
             self.estimator.step(
-                reader_score=reader_score,
-                retriever_score=retriever_score,
                 targets=batch.get("answer.target", None),
                 retrieval_score=batch.get("document.retrieval_score", None),
+                retrieval_rank=batch.get("document.retrieval_rank", None),
                 retrieval_log_weight=batch.get("document.retrieval_log_weight", None),
+                match_score=batch.get("document.match_score", None),
+                doc_ids=batch.get("document.row_idx", None),
                 **head_meta,
                 **kwargs,
             )
         )
 
+        pprint_batch(features, "Option retriever::step::output", silent=silent)
         return step_output
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
         Gather losses and logits from all devices and return
         """
+        # add the head diagnostics
+        output.update(self._get_heads_diagnostics())
 
         # process with the estimator
         output.update(self.estimator.step_end(**output))
@@ -329,16 +322,18 @@ class OptionRetriever(Module):
 
         return output
 
-    def _format_input_data(self, batch):
+    @staticmethod
+    def _format_input_data(batch):
         _key = "document.retrieval_score"
         batch[_key] = batch[_key].clamp(min=-1e3, max=1e6)
 
-    def _init_step_output(self):
-        step_output = {
-            "reader/temperature": self.reader_head.temperature.detach(),
-            "retriever/temperature": self.retriever_head.temperature.detach(),
-        }
-        return step_output
+    def _get_heads_diagnostics(self):
+        diagnostics = {}
+        if self.reader_head is not None:
+            diagnostics["reader/temperature"] = self.reader_head.temperature.detach()
+        if self.retriever_head is not None:
+            diagnostics["retriever/temperature"] = self.retriever_head.temperature.detach()
+        return diagnostics
 
     @staticmethod
     def _expand_docs_to_options(x: Tensor, doc_target_shape: Optional[torch.Size]) -> Tensor:
@@ -354,6 +349,8 @@ class OptionRetriever(Module):
     @torch.no_grad()
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
+
+        # log the reader accuracy
         reader_logits = output.get("_reader_logits_", None)
         reader_targets = output.get("_reader_targets_", None)
         retriever_reading_logits = output.get("_retriever_reading_logits_", None)
@@ -365,11 +362,12 @@ class OptionRetriever(Module):
                     split, retriever_reading_logits, reader_targets
                 )
 
-        retrieval_logits, retrieval_targets = (
-            output.get(k, None) for k in ("_retriever_logits_", "_retriever_targets_")
-        )
-        if retrieval_logits is not None and retrieval_logits.numel() > 0:
-            self.retriever_metrics.update(split, retrieval_logits, retrieval_targets)
+        # lof the retriever accuracy
+        retriever_logits = output.get("_retriever_logits_", None)
+        retriever_targets = output.get("_retriever_targets_", None)
+        if retriever_logits is not None and retriever_logits.numel() > 0:
+            if retriever_targets is not None:
+                self.retriever_metrics.update(split, retriever_logits, retriever_targets)
 
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """

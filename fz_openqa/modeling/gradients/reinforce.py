@@ -49,9 +49,9 @@ class ReinforceGradients(Gradients):
     def __call__(
         self,
         *,
-        retriever_score: Tensor,
-        reader_score: Tensor,
-        targets: Tensor,
+        retriever_score: Tensor = None,
+        reader_score: Tensor = None,
+        targets: Tensor = None,
         retrieval_score: Optional[Tensor] = None,
         retrieval_log_weight: Optional[Tensor] = None,
         retriever_agg_score: Optional[Tensor] = None,
@@ -104,11 +104,9 @@ class ReinforceGradients(Gradients):
             retriever_score=retriever_score,
             retrieval_score=retrieval_score,
             reader_score=reader_score,
-            retrieval_rank=kwargs.get("document.retrieval_rank", None),
-            match_score=kwargs.get("document.match_score", None),
-            document_ids=kwargs.get("document.row_idx", None),
             retriever_agg_score=reader_score,
             retriever_log_p_dloc=retriever_log_p_dloc,
+            **kwargs,
         )
 
         # check inputs
@@ -116,6 +114,7 @@ class ReinforceGradients(Gradients):
         assert f_phi_ is not None
         assert f_psi_ is not None
         assert log_s_ is not None
+        assert targets is not None
 
         # reader likelihood `log p(a | d, q)`
         log_p_a__d_ = f_theta_.log_softmax(dim=1)

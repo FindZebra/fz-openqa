@@ -233,7 +233,6 @@ class Module(nn.Module, ABC):
 
         Implement `_step` for each sub-class.
         """
-        pprint_batch(batch, "Module: inpput.step")
         self._check_features(batch, self._required_eval_feature_names)
         return self._step(batch, **kwargs)
 
