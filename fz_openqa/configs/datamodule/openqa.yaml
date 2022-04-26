@@ -5,7 +5,7 @@ defaults:
   - index_builder: elasticsearch
   - relevance_classifier: partial_match
   - score_transform: multiply_by_relevance
-  - dataset_filter: none
+  - dataset_transform: none
   - sampler: random
   - transform: none
 

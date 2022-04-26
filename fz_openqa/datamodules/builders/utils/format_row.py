@@ -99,12 +99,12 @@ def format_row_flat_questions_with_docs(
 
     repr = format_question_fn(row, tokenizer=tokenizer, **kwargs)
     repr += get_separator("-") + "\n"
-    repr += f"* Documents: n={len(row['document.text'])}"
+    repr += f"* Documents: n={len(row['document.input_ids'])}"
     if "document.match_score" in row:
         repr += f", n_positive={sum(row['document.match_score'] > 0)}, "
         f"n_negative={sum(row['document.match_score'] == 0)}\n"
     repr += "\n"
-    for j in range(min(len(row["document.text"]), max_documents)):
+    for j in range(min(len(row["document.input_ids"]), max_documents)):
         repr += get_separator(".") + "\n"
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None

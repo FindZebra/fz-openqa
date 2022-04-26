@@ -1,0 +1,2 @@
+_target_: fz_openqa.datamodules.builders.transforms.FlattenMultipleChoice
+filter_unmatched: true
