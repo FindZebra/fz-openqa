@@ -23,6 +23,10 @@ model:
   optimizer_params:
     lr: 1e-4
 
+datamodule:
+  dset_name: medqa-us+medqa-tw
+  corpus_name: medqa+medwiki
+
 
 logger:
   wandb:
