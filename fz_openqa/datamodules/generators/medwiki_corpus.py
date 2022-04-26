@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 import datasets
+import rich
 
 TXT_PATTERN = r"^.*\.txt$"
 
@@ -27,6 +28,12 @@ _URLS = {
     "medqa_x_wiki_corpus_v1.zip",
     "v2": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
     "medqa_x_wiki_corpus_v2.zip",
+    "v3-us": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
+    "medqa_x_wiki_corpus_v3_us.zip",
+    "v3-tw": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
+    "medqa_x_wiki_corpus_v3_tw.zip",
+    "v3": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
+    "medqa_x_wiki_corpus_v3_us_tw.zip",
 }
 
 
@@ -37,11 +44,23 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
         MedWikipediaCorpusConfig(
             name="v1",
-            description="Subset of Wikipedia built for the US Medqa",
+            description="Subset of Wikipedia built for the US Medqa, 10 queries per option",
         ),
         MedWikipediaCorpusConfig(
             name="v2",
-            description="Subset of Wikipedia built for the US Medqa, smaller version",
+            description="Subset of Wikipedia built for the US Medqa, 5 queries per option",
+        ),
+        MedWikipediaCorpusConfig(
+            name="v3",
+            description="Subset of Wikipedia built for the US+TW Medqa, 10 queries per option",
+        ),
+        MedWikipediaCorpusConfig(
+            name="v3-us",
+            description="Subset of Wikipedia built for the US Medqa, 10 queries per option",
+        ),
+        MedWikipediaCorpusConfig(
+            name="v3-tw",
+            description="Subset of Wikipedia built for the TW Medqa, 10 queries per option",
         ),
     ]
     force = False
@@ -73,9 +92,6 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
         url = _URLS[self.config.name]
-        import rich
-
-        rich, print(f">> Downloading {url}")
         downloaded_file = dl_manager.download_and_extract(self._get_drive_url(url))
         if not Path(downloaded_file).is_dir():
             raise Exception(
@@ -91,10 +107,12 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, output_dir: str):
         # enter the subdirectory
+        files = list(Path(output_dir).iterdir())
+        rich.print(f">> Found {len(files)} files in {output_dir}: {files[:10]}")
+
+        # move in the subdirectory
         path = [
-            p
-            for p in Path(output_dir).iterdir()
-            if p.is_dir() and p.name.startswith("med_x_wikipedia_corpus_")
+            p for p in Path(output_dir).iterdir() if p.is_dir() and p.name.startswith("med_x_wiki")
         ][0]
 
         # list files
