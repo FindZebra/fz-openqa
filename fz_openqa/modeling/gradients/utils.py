@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Iterable
 from typing import List
 from typing import Optional
@@ -18,6 +19,9 @@ def batch_cartesian_product(
     ----------
     x
         tensor of shape (batch_size, n_vecs, n_dims, ...)
+    max_size
+        Maximum size of the resulting tensor,
+        if the output size is larger than this values, sample `max_size` permutations at random
     Returns
     -------
     Tensor
@@ -42,3 +46,13 @@ def batch_cartesian_product(
             _index = _index.expand(*index.shape, *dims)
             y = y.gather(dim=2, index=_index)
         yield y
+
+
+def kl_divergence(p_logits: Tensor, q_logits: Optional[Tensor] = None, dim: int = -1) -> Tensor:
+    log_p = p_logits.log_softmax(dim=dim)
+    N = log_p.size(dim)
+    if q_logits is None:
+        log_q = -torch.ones_like(log_p) * math.log(N)
+    else:
+        log_q = q_logits.log_softmax(dim=dim)
+    return (log_p.exp() * (log_p - log_q)).sum(dim=dim)
