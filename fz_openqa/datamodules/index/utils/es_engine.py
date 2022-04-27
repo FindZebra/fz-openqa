@@ -3,7 +3,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.client.indices import IndicesClient

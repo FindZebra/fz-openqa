@@ -4,17 +4,16 @@ from copy import deepcopy
 from typing import Dict
 from typing import Optional
 
-import einops
 import rich
 import torch
 import torch.nn.functional as F
 from torch import einsum
 from torch import nn
 from torch import Tensor
-from torch import unique
 
 from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.layers import BayesianLinear
+from fz_openqa.utils.metric_type import MetricType
 
 
 def unique_with_indices(x, dim=None):
@@ -191,9 +190,45 @@ class DprHead(Head):
 
         if shared_batch:
             hd = hd.view(-1, n_docs, vdim)
-            scores = einsum("bh, bdh -> bd", hq, hd)
+            if self.metric_type == MetricType.inner_product:
+                scores = einsum("bh, bdh -> bd", hq, hd)
+            elif self.metric_type == MetricType.euclidean:
+                scores = (
+                    -1
+                    * (
+                        hq[:, None, :]
+                        - hd[
+                            :,
+                            :,
+                            :,
+                        ]
+                    )
+                    .pow(2)
+                    .sum(-1)
+                    .pow(0.5)
+                )
+            else:
+                raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
         else:
-            scores = einsum("bh, dh -> bd", hq, hd)
+            if self.metric_type == MetricType.inner_product:
+                scores = einsum("bh, dh -> bd", hq, hd)
+            elif self.metric_type == MetricType.euclidean:
+                scores = (
+                    -1
+                    * (
+                        hq[:, None, :]
+                        - hd[
+                            None,
+                            :,
+                            :,
+                        ]
+                    )
+                    .pow(2)
+                    .sum(-1)
+                    .pow(0.5)
+                )
+            else:
+                raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
 
         # reshape and return
         scores = scores.view(*bs, n_docs)

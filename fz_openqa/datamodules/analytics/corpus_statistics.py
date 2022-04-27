@@ -5,7 +5,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import numpy as np
 from datasets import Dataset
 from datasets import Split
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import List
 from typing import Optional
 
-import pyarrow as pa
 from datasets import Dataset
 
 from fz_openqa.datamodules.index.base import Index

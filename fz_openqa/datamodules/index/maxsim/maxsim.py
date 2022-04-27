@@ -24,6 +24,7 @@ from fz_openqa.datamodules.index.maxsim.token_index import TokenIndex
 from fz_openqa.datamodules.index.maxsim.utils import get_unique_pids
 from fz_openqa.datamodules.index.maxsim.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
+from fz_openqa.utils.metric_type import MetricType
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
@@ -54,18 +55,21 @@ class MaxSim(torch.nn.Module):
         max_chunksize: Optional[int] = 10_000,
         max_queue_size: int = 5,
         deduplicate_pids: bool = True,
+        metric_type: MetricType = MetricType.inner_product,
     ):
         super(MaxSim, self).__init__()
         logger.info(f"Setting MaxSim with ranking devices: {ranking_devices}")
         logger.info(f"Setting MaxSim with faiss (tokens) devices: {faiss_devices}")
+        logger.info(f"Setting MaxSim with metric {metric_type}")
 
+        self.metric_type = metric_type
         self.deduplicate_pids = deduplicate_pids
         # init the token_index
         self.token_index = TokenIndex(token_index, faiss_devices)
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)
-        # Add -1
+        # Add `-1` : padding
         ones = torch.ones_like(emb2pid[..., -1:])
         emb2pid = torch.cat([emb2pid, -ones], dim=-1)
         self.register_buffer("emb2pid", emb2pid)
@@ -126,6 +130,7 @@ class MaxSim(torch.nn.Module):
                 vectors,
                 part,
                 max_chunksize=max_chunksize,
+                metric_type=self.metric_type,
                 id=idx,
                 device=devices[idx],
                 input_queue=self.ranking_input_queues[idx],
@@ -160,9 +165,12 @@ class MaxSim(torch.nn.Module):
         vectors: Tensor | TensorArrowTable,
         part: Tuple[int, int],
         max_chunksize: Optional[int] = None,
+        metric_type: MetricType = None,
         **kwargs,
     ):
-        ranker = MaxSimRanker(vectors, boundaries=part, max_chunksize=max_chunksize)
+        ranker = MaxSimRanker(
+            vectors, boundaries=part, max_chunksize=max_chunksize, metric_type=metric_type
+        )
         worker = MaxSimWorker(max_sim=ranker, **kwargs)
         return worker
 
@@ -218,7 +226,6 @@ class MaxSim(torch.nn.Module):
         faiss_time = time.time() - _time
 
         # retriever the pids from the token_ids, at this step, there are duplicated pids.
-        logger.info(f"emd2pid.device: {self.emb2pid.device}")
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
 
         # Deduplicate pids; this step is done on `device`, which is set by default on CPU.

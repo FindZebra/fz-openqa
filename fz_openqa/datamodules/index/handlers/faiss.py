@@ -13,6 +13,7 @@ from loguru import logger
 from torch import nn
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
+from fz_openqa.utils.metric_type import MetricType
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
@@ -77,9 +78,11 @@ class FaissHandler(IndexHandler):
         train_on_cpu: bool = False,
         faiss_train_size: int = None,
         shard_faiss: bool = False,
+        metric_type: MetricType = MetricType.inner_product,
         **kwargs,
     ):
         """build the index from the vectors."""
+        metric_type = MetricType(metric_type).name
         if isinstance(vectors, np.ndarray):
             vectors = torch.from_numpy(vectors)
 
@@ -97,6 +100,7 @@ class FaissHandler(IndexHandler):
             ("train_on_cpu", train_on_cpu),
             ("faiss_train_size", faiss_train_size),
             ("shard_faiss", shard_faiss),
+            ("metric_type", metric_type),
         ]:
             self.config[k] = v
             u += f", {k}={v}"
@@ -104,13 +108,17 @@ class FaissHandler(IndexHandler):
         # log config
         logger.info(u)
 
+        # faiss metric
+        faiss_metric = {
+            MetricType.inner_product.name: faiss.METRIC_INNER_PRODUCT,
+            MetricType.euclidean.name: faiss.METRIC_L2,
+        }[metric_type]
+
         # init the index
         if index_factory == "torch":
             self._index = TorchIndex()
         else:
-            self._index = faiss.index_factory(
-                self.config["dimension"], index_factory, faiss.METRIC_INNER_PRODUCT
-            )
+            self._index = faiss.index_factory(self.config["dimension"], index_factory, faiss_metric)
 
         # set `nprobe`
         self._index.nprobe = self.config["nprobe"]

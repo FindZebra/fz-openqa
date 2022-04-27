@@ -7,7 +7,6 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
 import torch
 from datasets import Split
 from loguru import logger

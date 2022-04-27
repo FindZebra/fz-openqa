@@ -4,7 +4,6 @@ from typing import List
 from typing import Union
 
 import wikipedia
-from wikipedia.exceptions import PageError
 
 from fz_openqa.utils.datastruct import Batch
 

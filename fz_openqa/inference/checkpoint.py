@@ -3,7 +3,6 @@ from typing import Optional
 from typing import Union
 
 import datasets
-import rich
 import torch
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
@@ -16,7 +15,6 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
-from fz_openqa.utils.json_struct import apply_to_json_struct
 
 
 def get_drive_url(url):

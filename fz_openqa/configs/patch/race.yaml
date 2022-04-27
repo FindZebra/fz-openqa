@@ -17,7 +17,7 @@ trainer:
   precision: 16
 
 model:
-  hidden_size: 128
+  metric_siz: 128
   module:
     split_bert_layers: 2
 

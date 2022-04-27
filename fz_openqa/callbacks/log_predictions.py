@@ -13,7 +13,6 @@ from transformers import PreTrainedTokenizerFast
 
 import wandb
 
-
 CORRECT_LABEL = "✅"
 INCORRECT_LABEL = "❌"
 
