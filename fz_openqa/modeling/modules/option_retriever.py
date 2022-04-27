@@ -271,15 +271,15 @@ class OptionRetriever(Module):
         """
         pprint_batch(batch, "Option retriever::Input::batch", silent=silent)
 
+        # apply initial transformations to the data
+        self._format_input_data(batch)
+
         if self.share_documents_across_batch:
             batch = self._merge_unique_documents(batch)
             pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
 
         # initialize output dict
         step_output = {}
-
-        # apply initial transformations to the data
-        self._format_input_data(batch)
 
         # process the batch using BERT
         max_batch_size_eval = -1 if self.training else self.max_batch_size

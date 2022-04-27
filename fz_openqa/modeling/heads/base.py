@@ -13,6 +13,7 @@ from transformers.models.bert.modeling_bert import BertEncoder
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 
 from fz_openqa.modeling.modules.utils.bert import instantiate_bert_model_with_config
+from fz_openqa.utils.metric_type import MetricType
 
 
 class Head(nn.Module, ABC):
@@ -24,6 +25,7 @@ class Head(nn.Module, ABC):
         bert: DictConfig | BertPreTrainedModel,
         output_size: int,
         split_bert_layers: int = 0,
+        metric_type: MetricType = MetricType.inner_product,
         id: str = "base",
         **kwargs,
     ):
@@ -32,6 +34,7 @@ class Head(nn.Module, ABC):
         self.register_buffer("_offset", torch.tensor(0.0))
         self.max_seq_length = bert.config.max_length
         self.id = id
+        self.metric_type = MetricType(metric_type)
 
         # instantiate bert
         bert = instantiate_bert_model_with_config(bert)

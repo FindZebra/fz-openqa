@@ -69,7 +69,7 @@ def retriever_diagnostics(
 
     # retrieval rank info
     if retrieval_rank is not None:
-        if retriever_probs.shape == retrieval_rank:
+        if retriever_probs.shape == retrieval_rank.shape:
             # retrieval rank weighted by the probability of the retrieved document
             weighted_rank = retriever_probs * retrieval_rank
             output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()

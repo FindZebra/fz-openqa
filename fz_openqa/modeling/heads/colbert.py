@@ -2,6 +2,7 @@ import math
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from loguru import logger
@@ -11,6 +12,7 @@ from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.heads.dpr import DprHead
 from fz_openqa.modeling.modules.utils.utils import gen_preceding_mask
+from fz_openqa.utils.metric_type import MetricType
 
 
 class ColbertHead(DprHead):
@@ -42,7 +44,8 @@ class ColbertHead(DprHead):
             f"use_mask={self.use_mask}, "
             f"use_answer_mask={self.use_answer_mask}, "
             f"soft_score={self.use_soft_score}, "
-            f"compute_agg_score={self.compute_agg_score}"
+            f"compute_agg_score={self.compute_agg_score}, "
+            f"metric_type={self.metric_type}"
         )
 
     def score(
@@ -86,20 +89,61 @@ class ColbertHead(DprHead):
             bs = hq.shape[:-2]
             shared_batch = self._is_shared_batch_dims(hd=hd, hq=hq, bs=bs, expected_hd_dim=3)
 
-            # reshape
+            # reshape `hq` and `hd`
             hq = hq.view(-1, *hq.shape[len(bs) :])
             if shared_batch:
                 hd = hd.view(-1, *hd.shape[len(bs) :])
+
+            # infer the masks
+            dmask_zero = hd.abs().sum(-1) == 0
+            qmask_zero = hq.abs().sum(-1) == 0
+
+            # compute the token scores
+            if shared_batch:
                 # compute the token-level Colbert scores
-                scores = einsum("buh, bdvh -> bduv", hq, hd)
+                if self.metric_type == MetricType.inner_product:
+                    scores = einsum("buh, bdvh -> bduv", hq, hd)
+                elif self.metric_type == MetricType.euclidean:
+                    _hq = hq[:, None, :, None, :]
+                    _hd = hd[:, :, None, :, :]
+                    scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
+                else:
+                    raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
+
+                # expand the document masks
+                dmask_zero = dmask_zero[:, :, None, :]
             else:
-                scores = einsum("buh, dvh -> bduv", hq, hd)
+                if self.metric_type == MetricType.inner_product:
+                    scores = einsum("buh, dvh -> bduv", hq, hd)
+                elif self.metric_type == MetricType.euclidean:
+                    _hq = hq[:, None, :, None, :]
+                    _hd = hd[None, :, None, :, :]
+                    scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
+                else:
+                    raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
 
-            # sum over document dimension
-            q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
+                # expand the document masks
+                dmask_zero = dmask_zero[None, :, None, :]
 
-            # sum over query dimension
-            scores = q_scores.sum(-1)
+            # mask the document vectors
+            rich.print(f">> scores: {scores.shape}, dmask_zero: {dmask_zero.shape}")
+            rich.print(f">>> D.mask : {dmask_zero[0, 0]}")
+            scores = scores.masked_fill(dmask_zero, -torch.inf)
+
+            rich.print(f">> D.scores: {scores[0, 0]}")
+
+            # sum over document tokens
+            scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
+
+            # apply the masking to the query tokens
+            qmask_zero = qmask_zero[:, None, :]
+            rich.print(f">> scores: {scores.shape}, qmask_zero: {qmask_zero.shape}")
+            scores = scores.masked_fill(qmask_zero, 0)
+
+            rich.print(f">> Q.scores: {scores[0, 0]}")
+
+            # sum over the query tokens
+            scores = scores.sum(-1)
 
             # reshape
             scores = scores.view(*bs, scores.shape[-1])
@@ -111,21 +155,20 @@ class ColbertHead(DprHead):
 
         return scores, diagnostics
 
-    def _reduce_doc_vectors(self, scores, tau):
+    def _reduce_doc_vectors(self, scores, tau, dim=-1):
         # attention_scores
         attn_scores = scores.clone()
-        attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e3)
-        log_attn_scores = attn_scores.log_softmax(dim=-1)
+        log_attn_scores = attn_scores.log_softmax(dim=dim)
 
         # sample locations and reduce over `document` dimension
         if tau is None:
-            q_scores, _ = scores.max(dim=-1)
+            q_scores = scores.max(dim=dim).values
         else:
             tau_ = tau if tau > 0 else 1.0
             q_locs = torch.nn.functional.gumbel_softmax(
-                log_attn_scores, tau=tau_, hard=(tau <= 0), dim=-1
+                log_attn_scores, tau=tau_, hard=(tau <= 0), dim=dim
             )
-            q_scores = (q_locs * scores).sum(dim=-1)
+            q_scores = (q_locs * scores).sum(dim=dim)
         return q_scores, log_attn_scores
 
     def _preprocess(
@@ -152,6 +195,8 @@ class ColbertHead(DprHead):
                 last_hidden_state = torch.cat([h_a, h_v], dim=-1)
 
         if self.use_mask and mask is not None:
+            # by convention: set the vectors to `zero` for masked token.
+            # Subsequent code infer vectors that are "exactly" zero as being padded
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
             # last_hidden_state = last_hidden_state / mask.sum(1, keepdim=True)
 

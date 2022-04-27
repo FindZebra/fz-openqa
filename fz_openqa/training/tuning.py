@@ -93,7 +93,7 @@ if __name__ == "__main__":
         "trainer.checkpoint_callback": True,
         "callbacks": "default",
         "experiment": "sandbox",
-        "model.head.hidden_size": 32,
+        "model.head.metric_siz": 32,
         "work_dir": "/Users/valv/Documents/Research/code/_main/fz-ner/mutliruns/",
         "cache_dir": "/Users/valv/Documents/Research/code/_main/fz-ner/cache/",
     }

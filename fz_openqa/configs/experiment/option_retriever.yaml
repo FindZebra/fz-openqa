@@ -44,10 +44,12 @@ trainer:
   precision: 32
 
 model:
+  metric_size: 32
+  metric_type: inner_product
+
   ema_decay: null
   num_warmup_steps: 5_000 # Colbert uses no warmup
   num_training_steps: 100_000 # TODO !!
-  hidden_size: 32
   bert:
     config:
       hidden_dropout_prob: 0.1
@@ -81,10 +83,11 @@ model:
     max_batch_size: 200
     share_documents_across_batch: false
     retriever_head:
+      output_size: ${model.metric_size}
+      metric_type: ${model.metric_type}
       id: retriever
       use_soft_score: false
       compute_agg_score: true
-      output_size: ${model.hidden_size}
       normalize: true
       use_mask: true
       is_scaled: true
@@ -96,9 +99,10 @@ model:
       share_parameters: true
       bias: false
     reader_head:
+      output_size: ${model.metric_size}
+      metric_type: ${model.metric_type}
       id: reader
       use_soft_score: true
-      output_size: ${model.hidden_size}
       use_mask: true
       normalize: false
       is_scaled: true
@@ -195,6 +199,7 @@ datamodule:
     n_ranking_workers: ${datamodule.num_workers}
     nprobe: 32
     shard_faiss: false
+    metric_type: ${model.metric_type}
     loader_kwargs:
       batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
       num_workers: ${datamodule.num_workers}
