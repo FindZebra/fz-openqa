@@ -324,6 +324,7 @@ class OptionRetriever(Module):
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
                 raw_doc_ids=batch.get("_document.row_idx", None),
+                share_documents_across_batch=self.share_documents_across_batch,
                 **head_meta,
                 **kwargs,
             )

@@ -17,6 +17,7 @@ def retriever_diagnostics(
     reader_score: Optional[Tensor] = None,
     retriever_agg_score: Optional[Tensor] = None,
     retriever_log_p_dloc: Optional[Tensor] = None,
+    share_documents_across_batch: bool = False,
     **kwargs,
 ) -> Dict:
     """
@@ -69,7 +70,7 @@ def retriever_diagnostics(
 
     # retrieval rank info
     if retrieval_rank is not None:
-        if retriever_probs.shape == retrieval_rank.shape:
+        if not share_documents_across_batch:
             # retrieval rank weighted by the probability of the retrieved document
             weighted_rank = retriever_probs * retrieval_rank
             output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
@@ -85,7 +86,7 @@ def retriever_diagnostics(
         output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
 
     # match score diagnostics
-    if match_score is not None and match_score.shape == retriever_log_probs.shape:
+    if match_score is not None and not share_documents_across_batch:
         match_logits = (match_score > 0).float().log_softmax(dim=-1)
         kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
         kl_relevance = kl_relevance.sum(dim=-1)
