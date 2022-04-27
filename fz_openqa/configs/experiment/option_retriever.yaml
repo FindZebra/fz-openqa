@@ -45,7 +45,7 @@ trainer:
 
 model:
   metric_size: 32
-  metric_type: inner_product
+  metric_type: euclidean
 
   ema_decay: null
   num_warmup_steps: 5_000 # Colbert uses no warmup
@@ -73,8 +73,8 @@ model:
     retriever_kl_weight:
       mode: cosine
       num_steps: 20_000
-      initial_value: 0.1
-      final_value: 1e-5
+      initial_value: 1e-1
+      final_value: 1e-2
   module:
     mask_punctuation: false
     split_bert_layers: 0
@@ -88,7 +88,7 @@ model:
       id: retriever
       use_soft_score: false
       compute_agg_score: true
-      normalize: true
+      normalize: false
       use_mask: true
       is_scaled: true
       use_answer_mask: false
