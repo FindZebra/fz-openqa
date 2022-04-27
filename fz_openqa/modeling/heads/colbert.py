@@ -126,21 +126,14 @@ class ColbertHead(DprHead):
                 dmask_zero = dmask_zero[None, :, None, :]
 
             # mask the document vectors
-            rich.print(f">> scores: {scores.shape}, dmask_zero: {dmask_zero.shape}")
-            rich.print(f">>> D.mask : {dmask_zero[0, 0]}")
             scores = scores.masked_fill(dmask_zero, -torch.inf)
-
-            rich.print(f">> D.scores: {scores[0, 0]}")
 
             # sum over document tokens
             scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
 
             # apply the masking to the query tokens
             qmask_zero = qmask_zero[:, None, :]
-            rich.print(f">> scores: {scores.shape}, qmask_zero: {qmask_zero.shape}")
             scores = scores.masked_fill(qmask_zero, 0)
-
-            rich.print(f">> Q.scores: {scores[0, 0]}")
 
             # sum over the query tokens
             scores = scores.sum(-1)
@@ -196,7 +189,7 @@ class ColbertHead(DprHead):
 
         if self.use_mask and mask is not None:
             # by convention: set the vectors to `zero` for masked token.
-            # Subsequent code infer vectors that are "exactly" zero as being padded
+            # Subsequent code infer vectors that are *exactly* zero as being padded
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
             # last_hidden_state = last_hidden_state / mask.sum(1, keepdim=True)
 

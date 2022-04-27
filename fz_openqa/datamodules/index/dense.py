@@ -34,6 +34,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.metric_type import MetricType
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
@@ -107,6 +108,7 @@ class DenseIndex(Index):
         progress_bar: bool = False,
         keep_faiss_on_cpu: bool = False,
         train_faiss_on_cpu: bool = False,
+        metric_type: MetricType = MetricType.inner_product,
         **kwargs,
     ):
         """
@@ -149,6 +151,7 @@ class DenseIndex(Index):
         self.trainer = trainer
         self.keep_faiss_on_cpu = keep_faiss_on_cpu
         self.train_faiss_on_cpu = train_faiss_on_cpu
+        self.metric_type = metric_type
 
         # column names
         self.model_output_keys = model_output_keys
@@ -209,6 +212,7 @@ class DenseIndex(Index):
             nprobe=nprobe,
             faiss_train_size=faiss_train_size,
             shard_faiss=shard_faiss,
+            metric_type=self.metric_type,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
 
