@@ -31,7 +31,6 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
-from fz_openqa.utils.pretty import pprint_batch
 
 
 def is_feature_name(x):

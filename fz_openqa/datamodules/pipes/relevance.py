@@ -1,6 +1,4 @@
-import math
 import re
-import string
 from dataclasses import dataclass
 from functools import partial
 from itertools import zip_longest
@@ -11,11 +9,9 @@ from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Sequence
-from typing import Tuple
 
 import nltk
 import numpy as np
-import rich
 import spacy
 from scispacy.linking import EntityLinker  # type: ignore
 from scispacy.linking_utils import Entity

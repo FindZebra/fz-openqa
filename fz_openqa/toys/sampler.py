@@ -2,7 +2,6 @@ from collections import defaultdict
 from collections import namedtuple
 from typing import Dict
 
-import rich
 import torch
 from torch.utils.data import Dataset
 

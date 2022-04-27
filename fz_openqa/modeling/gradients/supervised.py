@@ -1,16 +1,12 @@
 import math
 
-import rich
 import torch
 from loguru import logger
 from torch import Tensor
-from torch.nn import functional as F
 
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
-from fz_openqa.modeling.heads.dpr import unique_with_indices
 from fz_openqa.utils.functional import batch_reduce
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class SupervisedGradients(Gradients):

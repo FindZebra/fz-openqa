@@ -5,7 +5,6 @@ from abc import abstractmethod
 from typing import Dict
 from typing import Optional
 
-import rich
 import torch
 from omegaconf import DictConfig
 from torch import nn

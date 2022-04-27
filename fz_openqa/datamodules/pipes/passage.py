@@ -7,9 +7,6 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import rich
-
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
