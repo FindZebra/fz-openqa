@@ -13,7 +13,7 @@ defaults:
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
-  - override /datamodule/dataset_filter: none
+  - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
       - retriever_accuracy
       - sequence_lengths
@@ -30,33 +30,18 @@ base:
   seed: null # TODO: remove
   target_metric: validation/reader/Accuracy
   target_mode: max
-  is_search: false
   exp_info: "--"
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
   infer_batch_mul: 100
-  n_devices: ${int_max:1,${trainer.gpus}}
-  step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
-  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
-  sharing_strategy: file_system
-  git_hash: ${git_hash:}
-  git_hash_short: ${git_hash_short:}
 
 trainer:
-  gpus: ${n_gpus:}
-  strategy: dp
-  min_epochs: 1
-  max_epochs: 1_000
-  gradient_clip_val: 2.0 # todo: changed from 0.5
+  max_epochs: 10
+  gradient_clip_val: 2.0
   accumulate_grad_batches: ${base.accumulate_grad_batches}
-#    _target_: fz_openqa.utils.config.IntDict
-#    "0": ${int_mul:${base.accumulate_grad_batches},1}
-#    "60": ${int_mul:${base.accumulate_grad_batches},2}
-#    "120": ${int_mul:${base.accumulate_grad_batches},3}
   val_check_interval: 1.0
   precision: 32
-  # track_grad_norm: 2
 
 model:
   ema_decay: null
@@ -94,6 +79,7 @@ model:
     resample_k: null
     alpha: 0
     max_batch_size: 200
+    share_documents_across_batch: false
     retriever_head:
       id: retriever
       use_soft_score: false
@@ -163,19 +149,6 @@ datamodule:
   # documents: retrieval & sampling
   n_retrieved_documents: 300
   n_documents: 10
-
-  # tag documents as positive or negative
-  #  relevance_classifier:
-  #    interpretable: false
-
-
-#  # transform the score based on the relevance classifier
-#  score_transform:
-#    factor: 1.0
-#    normalize: false
-#    exponentiate: false
-#    max_score: 1.0
-#    temperature: 1.0
 
   # document sampler
   sampler:

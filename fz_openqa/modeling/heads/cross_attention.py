@@ -54,9 +54,9 @@ class CrossAttentionHead(Head):
 
         # compute the logits
         h_dq_cls = h_dq[..., 0, :]
-        score = self.projection(h_dq_cls).squeeze(-1)
+        diagnostics["score"] = self.projection(h_dq_cls).squeeze(-1)
 
-        return score, diagnostics
+        return diagnostics
 
     def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs

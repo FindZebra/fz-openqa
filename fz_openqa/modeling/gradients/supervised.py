@@ -1,43 +1,70 @@
+import math
+
+import rich
 import torch
+from loguru import logger
 from torch import Tensor
 from torch.nn import functional as F
 
 from fz_openqa.modeling.gradients.base import Gradients
+from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
+from fz_openqa.modeling.heads.dpr import unique_with_indices
+from fz_openqa.utils.functional import batch_reduce
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class SupervisedGradients(Gradients):
-    def __call__(self, partial_score: Tensor, match_score: Tensor, **kwargs):
-        """
-        Compute the supervised retrieval loss
-        # todo: check loss, can we keep it without using the mask
-        # todo: figure out how to compute the targets and logits for the metrics
-        """
+    def __call__(
+        self,
+        *,
+        retriever_score: Tensor,
+        match_score: Tensor,
+        doc_ids: Tensor,
+        raw_doc_ids: Tensor = None,
+        **kwargs
+    ):
 
-        pos_docs = match_score > 0
-        loss_mask = pos_docs.sum(-1) > 0
-        logits = partial_score[loss_mask]
-        pos_docs = pos_docs[loss_mask].float()
+        # check `match_score`: there is one and only one positive document,
+        # and this document is placed at index 0
+        if (match_score[..., :, 0] == 0).any():
+            raise ValueError("First documents must have relevance > 0")
+        if (match_score[..., :, 1:] > 0).any():
+            logger.warning("Non-first documents must have relevance == 0")
 
-        if logits.numel() > 0:
-            n_total = len(pos_docs)
-            n_pos = pos_docs.sum()
-            loss = -(pos_docs * F.log_softmax(logits, dim=-1) / pos_docs.sum(dim=-1, keepdims=True))
-            loss = loss.sum(-1)
+        # run diagnostics
+        diagnostics = retriever_diagnostics(
+            retriever_score=retriever_score, match_score=match_score, doc_ids=doc_ids, **kwargs
+        )
 
+        # infer the document targets
+        if raw_doc_ids is None:
+            # if `raw_doc_ids` is None, then the documents have not been flattened,
+            # the target is expected to be the first document, which is checked with `match_score`
+            retriever_targets = torch.zeros_like(retriever_score[..., 0], dtype=torch.long)
         else:
-            n_total = n_pos = 0
-            loss = torch.tensor(0.0, dtype=partial_score.dtype, device=partial_score.device)
+            # if `raw_doc_ids` is provided, then the documents have been flattened,
+            # in that case we retrieved the document ranked 0 in the
+            # original ids (`raw_doc_ids`) in the `doc_ids` Tensor
+            target_ids = raw_doc_ids[..., :1]
+            retriever_targets = (target_ids - doc_ids.unsqueeze(0)).abs().argmin(dim=-1)
 
-        # compute logits and targets for the metrics
-        match_score = match_score[loss_mask]
-        ids = torch.argsort(match_score, dim=-1, descending=True)
-        targets = torch.zeros((logits.shape[0],), dtype=torch.long, device=logits.device)
-        logits = logits.gather(index=ids, dim=-1)
+            # pad the `retriever_score` to the max. possible values
+            # (total number of docs if they were all unique)
+            # this is required for `DataParallel`, to reduce the `_retriever_logits_`
+            # and ensure they have the same dimension on all devices
+            pad_dim = math.prod(raw_doc_ids.shape)
+            if retriever_score.shape[-1] < pad_dim:
+                n_pad = pad_dim - retriever_score.shape[-1]
+                pad = -torch.inf + torch.zeros_like(retriever_score[..., :1]).expand(
+                    *retriever_score.shape[:-1], n_pad
+                )
+                retriever_score = torch.cat([retriever_score, pad], dim=-1)
 
-        return {
-            "retriever/loss": loss,
-            "_retriever_logits_": logits,
-            "_retriever_targets_": targets,
-            "retriever/n_options": n_total,
-            "retriever/n_positive": n_pos,
-        }
+        retriever_logits = retriever_score.log_softmax(dim=-1)
+        loss = -retriever_logits.gather(dim=-1, index=retriever_targets.unsqueeze(-1))
+        loss = batch_reduce(loss, op=torch.mean)
+
+        diagnostics["loss"] = loss
+        diagnostics["_retriever_targets_"] = retriever_targets.detach()
+        diagnostics["_retriever_logits_"] = retriever_logits.detach()
+        return diagnostics

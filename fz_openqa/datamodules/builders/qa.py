@@ -4,7 +4,6 @@ from typing import Dict
 from typing import Optional
 
 import dill  # type: ignore
-import rich
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets.arrow_dataset import concatenate_datasets
@@ -21,6 +20,8 @@ from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
+from .utils.format_row import format_row_concatenated_questions
+from .utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
@@ -35,8 +36,6 @@ from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pretty_decode
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
@@ -232,7 +231,7 @@ class QaBuilder(HfDatasetBuilder):
             query_expansion_pipe,
         )
 
-    def _get_collate_pipe(self):
+    def _get_collate_pipe(self, nesting_level=None):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
@@ -267,49 +266,7 @@ class QaBuilder(HfDatasetBuilder):
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        """Decode and print one row from the batch
-
-        Parameters
-        ----------
-        **kwargs
-        """
-        decode_kwargs = {
-            "skip_special_tokens": False,
-            "tokenizer": self.tokenizer,
-        }
-        u = "* Question:"
-        u += (
-            pretty_decode(
-                row["question.input_ids"],
-                **decode_kwargs,
-                style="deep_sky_blue3",
-            )
-            + "\n"
-        )
-
-        u += get_separator("-") + "\n"
-        u += "* Answer Choices:" + "\n"
-        idx = row["answer.target"]
-        for i, an in enumerate(row["answer.input_ids"]):
-            an_style = "green" if idx == i else "white"
-            line = (
-                f"   - ({'x' if idx == i else ' '}) "
-                f"{pretty_decode(an, **decode_kwargs, only_text=True, style=an_style)}\n"
-            )
-            u += line
-
-        if "document.input_ids" in row:
-            u += "* Document:" + "\n"
-            u += (
-                pretty_decode(
-                    row["document.input_ids"],
-                    **decode_kwargs,
-                    style="white",
-                )
-                + "\n"
-            )
-
-        return u
+        return format_row_flat_questions(row, tokenizer=self.tokenizer, **kwargs)
 
 
 class ConcatQaBuilder(QaBuilder):
@@ -428,7 +385,7 @@ class ConcatQaBuilder(QaBuilder):
             query_expansion_pipe,
         )
 
-    def _get_collate_pipe(self):
+    def _get_collate_pipe(self, nesting_level=1):
         # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
@@ -448,34 +405,11 @@ class ConcatQaBuilder(QaBuilder):
             CollateField(
                 "question",
                 tokenizer=self.tokenizer,
-                level=1,
+                level=nesting_level,
                 include_only=["input_ids", "attention_mask"],
                 id="pad-nested-question-tokens",
             ),
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        """Decode and print one row from the batch
-
-        Parameters
-        ----------
-        **kwargs
-        """
-        decode_kwargs = {
-            "skip_special_tokens": False,
-            "tokenizer": self.tokenizer,
-        }
-        repr = f"Question #{row.get('question.idx', None)}\n"
-
-        repr += get_separator("-") + "\n"
-        repr += "* Question-answer:" + "\n"
-        idx = row["answer.target"]
-        for i, an in enumerate(row["question.input_ids"]):
-            an_style = "green" if idx == i else "white"
-            line = (
-                f"   - ({'x' if idx == i else ' '}) "
-                f"{pretty_decode(an, **decode_kwargs, only_text=False, style=an_style)}\n"
-            )
-            repr += line
-
-        return repr
+        return format_row_concatenated_questions(row, tokenizer=self.tokenizer, **kwargs)

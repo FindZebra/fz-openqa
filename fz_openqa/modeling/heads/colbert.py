@@ -61,7 +61,7 @@ class ColbertHead(DprHead):
 
         # compute the aggregated score
         if self.compute_agg_score:
-            hd_flat = self._flatten_documents(hd, doc_ids)
+            hd_flat, _ = self._flatten_documents(hd, doc_ids=doc_ids)
             hq_flat = hq.view(-1, *hq.shape[-2:])
             agg_retriever_score = einsum("buh, mvh -> bmuv", hq_flat, hd_flat)
             agg_retriever_score, _ = self._reduce_doc_vectors(agg_retriever_score, tau)
@@ -70,9 +70,6 @@ class ColbertHead(DprHead):
 
         # compute the score using self-attention
         if self.use_soft_score:
-            if self.across_batch:
-                raise NotImplementedError("soft_score across_batch not implemented")
-
             # split hq and hd
             hq_a, hq_v = hq.chunk(2, dim=-1)
             hd_a, hd_v = hd.chunk(2, dim=-1)
@@ -86,25 +83,27 @@ class ColbertHead(DprHead):
             values = einsum("bouh, bodvh -> boduv", hq_v, hd_v)
             scores = (log_p_dloc.exp() * values).sum(dim=(-2, -1))
 
-        elif not self.across_batch:
-            # compute the basic Colbert scores
-            scores = einsum("bouh, bodvh -> boduv", hq, hd)
-
-            # sum over document dimension
-            q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
-
-            # sum over query dimension
-            scores = q_scores.sum(-1)
         else:
-            # compute the Colbert scores for ALL documents within the batch
-            hd = self._flatten_documents(hd, doc_ids)
-            scores = einsum("bouh, mvh -> bomuv", hq, hd)
+            bs = hq.shape[:-2]
+            shared_batch = self._is_shared_batch_dims(hd=hd, hq=hq, bs=bs, expected_hd_dim=3)
+
+            # reshape
+            hq = hq.view(-1, *hq.shape[len(bs) :])
+            if shared_batch:
+                hd = hd.view(-1, *hd.shape[len(bs) :])
+                # compute the token-level Colbert scores
+                scores = einsum("buh, bdvh -> bduv", hq, hd)
+            else:
+                scores = einsum("buh, dvh -> bduv", hq, hd)
 
             # sum over document dimension
             q_scores, log_p_dloc = self._reduce_doc_vectors(scores, tau)
 
             # sum over query dimension
             scores = q_scores.sum(-1)
+
+            # reshape
+            scores = scores.view(*bs, scores.shape[-1])
 
         # aggregate document loc probs over q
         log_nq = math.log(log_p_dloc.size(-2))

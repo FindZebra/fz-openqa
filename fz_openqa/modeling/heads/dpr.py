@@ -46,7 +46,6 @@ class DprHead(Head):
     def __init__(
         self,
         *,
-        across_batch: bool = False,
         normalize: bool = False,
         bias: bool = True,
         share_parameters: bool = False,
@@ -59,7 +58,6 @@ class DprHead(Head):
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
-        self.across_batch = across_batch
         self.bias = bias
         self.scale_init = scale
         self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
@@ -169,7 +167,9 @@ class DprHead(Head):
         if self.auto_scale and self.is_scaled < 1:
             score = self.set_scale(score)
 
-        return score + self.offset, diagnostics
+        diagnostics["score"] = score + self.offset
+
+        return diagnostics
 
     def score(
         self,
@@ -179,13 +179,25 @@ class DprHead(Head):
         doc_ids: Optional[Tensor] = None,
         mask: Optional[Tensor] = None,
         **kwargs,
-    ) -> (Tensor, Dict):
+    ) -> Dict:
         diagnostics = {}
-        if not self.across_batch:
-            return einsum("boh, bodh -> bod", hq, hd), diagnostics
+        vdim = hq.shape[-1]
+        n_docs = hd.shape[-2]
+        bs = hq.shape[:-1]
+        shared_batch = self._is_shared_batch_dims(hd=hd, hq=hq, bs=bs, expected_hd_dim=2)
+
+        # reshape (flatten)
+        hq = hq.view(-1, vdim)
+
+        if shared_batch:
+            hd = hd.view(-1, n_docs, vdim)
+            scores = einsum("bh, bdh -> bd", hq, hd)
         else:
-            hd = self._flatten_documents(hd, doc_ids)
-            return einsum("boh, mh -> bom", hq, hd), diagnostics
+            scores = einsum("bh, dh -> bd", hq, hd)
+
+        # reshape and return
+        scores = scores.view(*bs, n_docs)
+        return scores, diagnostics
 
     def _preprocess(
         self,
@@ -211,11 +223,30 @@ class DprHead(Head):
         return cls_repr
 
     @staticmethod
-    def _flatten_documents(hd: Tensor, doc_ids=None) -> Tensor:
+    def _flatten_documents(hd: Tensor, *, doc_ids) -> (Tensor, Tensor):
         if doc_ids is None:
             raise ValueError("doc_ids is required to compute the score across the batch")
-        hd = einops.rearrange(hd, "bs opts docs ... -> (bs opts docs) ...")
-        doc_ids = einops.rearrange(doc_ids, "bs opts docs -> (bs opts docs)")
+        feature_dimensions = len(doc_ids.shape)
+        hd = hd.view(-1, *hd.shape[feature_dimensions:])
+        doc_ids = doc_ids.view(-1)
         udoc_ids, uids = unique_with_indices(doc_ids)
         hd = hd[uids]
-        return hd
+        return hd, udoc_ids
+
+    def _is_shared_batch_dims(self, *, hd, hq, bs, expected_hd_dim):
+        if hq.shape[: len(bs)] == hd.shape[: len(bs)]:
+            shared_batch = True
+        else:
+            if not len(hd.shape) == expected_hd_dim:
+                raise ValueError(
+                    f"hd: {hd.shape} and hq: {hq.shape} do not share the same batch size: {bs}. "
+                    f"In that case, the dimension of hd should be {expected_hd_dim} "
+                    f"(found {len(hd.shape)})."
+                )
+            shared_batch = False
+        if hq.shape[-1] != hd.shape[-1]:
+            raise ValueError(
+                f"Question and documents don't share the same vector dimension:"
+                f"Found: hq.shape={hq.shape}, hd.shape={hd.shape}"
+            )
+        return shared_batch

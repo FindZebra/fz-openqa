@@ -131,11 +131,7 @@ class FetchDocuments(Pipe):
         # fetch documents
         for i in range(0, len(indexes), max_chunk_size):
             index_i = indexes[i : i + max_chunk_size]
-            # this line crashes in multiprocessing with `datasets===1.18.3`
-            table = self.corpus_dataset.select(index_i, keep_in_memory=True)
-            batch: Batch = table[None:None]
-            if isinstance(batch, pa.Table):
-                batch = batch.to_pydict()
+            batch = self.corpus_dataset[index_i]
             if rows is None:
                 rows = batch
             else:

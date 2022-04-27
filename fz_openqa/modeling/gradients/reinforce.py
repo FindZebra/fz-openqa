@@ -11,18 +11,10 @@ from torch import Tensor
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.base import Space
+from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
+from fz_openqa.modeling.gradients.utils import kl_divergence
 from fz_openqa.utils.functional import batch_reduce
-
-
-def kl_divergence(p_logits: Tensor, q_logits: Optional[Tensor] = None, dim: int = -1) -> Tensor:
-    log_p = p_logits.log_softmax(dim=dim)
-    N = log_p.size(dim)
-    if q_logits is None:
-        log_q = -torch.ones_like(log_p) * math.log(N)
-    else:
-        log_q = q_logits.log_softmax(dim=dim)
-    return (log_p.exp() * (log_p - log_q)).sum(dim=dim)
 
 
 class ReinforceGradients(Gradients):
@@ -57,9 +49,9 @@ class ReinforceGradients(Gradients):
     def __call__(
         self,
         *,
-        retriever_score: Tensor,
-        reader_score: Tensor,
-        targets: Tensor,
+        retriever_score: Tensor = None,
+        reader_score: Tensor = None,
+        targets: Tensor = None,
         retrieval_score: Optional[Tensor] = None,
         retrieval_log_weight: Optional[Tensor] = None,
         retriever_agg_score: Optional[Tensor] = None,
@@ -101,17 +93,28 @@ class ReinforceGradients(Gradients):
         maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
+        # rename input variables
         f_theta_ = reader_score
         f_phi_ = retriever_score
         f_psi_ = retrieval_score
         log_s_ = retrieval_log_weight
-        diagnostics = {}
+
+        # run diagnostics
+        diagnostics = retriever_diagnostics(
+            retriever_score=retriever_score,
+            retrieval_score=retrieval_score,
+            reader_score=reader_score,
+            retriever_agg_score=reader_score,
+            retriever_log_p_dloc=retriever_log_p_dloc,
+            **kwargs,
+        )
 
         # check inputs
         assert f_theta_ is not None
         assert f_phi_ is not None
         assert f_psi_ is not None
         assert log_s_ is not None
+        assert targets is not None
 
         # reader likelihood `log p(a | d, q)`
         log_p_a__d_ = f_theta_.log_softmax(dim=1)

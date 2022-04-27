@@ -8,7 +8,7 @@ defaults:
   - override /datamodule/index_builder: elasticsearch
   - override /datamodule/sampler: boost_positives
   - override /datamodule/transform: none
-  - override /datamodule/dataset_filter: supervised
+  - override /datamodule/dataset_filter: supervised.yaml
   - override /datamodule/builder/analytics:
       - retriever_accuracy
   - override /logger: wandb

@@ -8,7 +8,7 @@ index_builder: ${datamodule.index_builder}
 transform: ${datamodule.transform}
 relevance_classifier: ${datamodule.relevance_classifier}
 score_transform: ${datamodule.score_transform}
-dataset_filter: ${datamodule.dataset_filter}
+dataset_transform: ${datamodule.dataset_transform}
 sampler: ${datamodule.sampler}
 n_retrieved_documents: ${datamodule.n_retrieved_documents}
 output_columns: ${datamodule.output_columns}

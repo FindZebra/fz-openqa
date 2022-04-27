@@ -1,3 +1,5 @@
+import dataclasses
+
 from datasets import Dataset
 from datasets import DatasetDict
 
@@ -19,3 +21,9 @@ class OpenQaDataset(DatasetDict):
         u += f" - corpus={self.corpus}\n"
         u += f" - index={self.index}\n"
         return u
+
+
+@dataclasses.dataclass
+class OpenQaConfig:
+    question_nesting_level: int
+    document_nesting_level: int
