@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from typing import Tuple
 
+import rich
 import torch
 from loguru import logger
 from torch import LongTensor
@@ -96,12 +97,20 @@ class MaxSimRanker(nn.Module):
     def _score(pids: LongTensor, q_vectors: Tensor, vectors: Tensor):
         d_vectors = vectors[pids]
 
-        # apply max sim to the retrieved vectors
-        scores = torch.einsum("bqh, bkdh -> bkqd", q_vectors, d_vectors)
+        # build the query mask: queries tokens with all vectors
+        # dimensions *exactly* equal to zero are considered to be padded
+        qmask_zero = q_vectors.abs().sum(-1) == 0
+
+        # apply max sim to the retrieved vectors, apply the mask
+        scores = torch.einsum("bqh, bkdh -> bqkd", q_vectors, d_vectors)
         # max. over the documents tokens, for each query token
         scores = scores.max(axis=-1).values
+        # apply the mask to the query tokens
+        rich.print(scores[0])
+        scores[qmask_zero, :] = 0
+        # rich.print(f">> scores: {scores[0]}")
         # avg over all query tokens (length dimension)
-        scores = scores.sum(axis=-1)
+        scores = scores.sum(axis=1)
         # set the score to -inf for the negative pids
         scores[pids < 0] = -torch.inf
 

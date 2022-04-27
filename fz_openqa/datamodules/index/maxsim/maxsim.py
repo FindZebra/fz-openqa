@@ -65,7 +65,7 @@ class MaxSim(torch.nn.Module):
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)
-        # Add -1
+        # Add `-1` : padding
         ones = torch.ones_like(emb2pid[..., -1:])
         emb2pid = torch.cat([emb2pid, -ones], dim=-1)
         self.register_buffer("emb2pid", emb2pid)
@@ -218,7 +218,6 @@ class MaxSim(torch.nn.Module):
         faiss_time = time.time() - _time
 
         # retriever the pids from the token_ids, at this step, there are duplicated pids.
-        logger.info(f"emd2pid.device: {self.emb2pid.device}")
         pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
 
         # Deduplicate pids; this step is done on `device`, which is set by default on CPU.
