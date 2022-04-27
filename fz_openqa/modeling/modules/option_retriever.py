@@ -333,7 +333,11 @@ class OptionRetriever(Module):
             )
         )
 
-        pprint_batch(features, "Option retriever::step::output", silent=silent)
+        pprint_batch(step_output, "Option retriever::step::output", silent=silent)
+        cols_to_drop = {}
+        for key in cols_to_drop:
+            step_output.pop(key, None)
+
         return step_output
 
     def _reduce_step_output(self, output: Batch) -> Batch:

@@ -1,3 +1,5 @@
+import math
+
 import rich
 import torch
 from loguru import logger
@@ -7,6 +9,7 @@ from torch.nn import functional as F
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.heads.dpr import unique_with_indices
+from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.pretty import pprint_batch
 
 
@@ -45,8 +48,21 @@ class SupervisedGradients(Gradients):
             target_ids = raw_doc_ids[..., :1]
             retriever_targets = (target_ids - doc_ids.unsqueeze(0)).abs().argmin(dim=-1)
 
+            # pad the `retriever_score` to the max. possible values
+            # (total number of docs if they were all unique)
+            # this is required for `DataParallel`, to reduce the `_retriever_logits_`
+            # and ensure they have the same dimension on all devices
+            pad_dim = math.prod(raw_doc_ids.shape)
+            if retriever_score.shape[-1] < pad_dim:
+                n_pad = pad_dim - retriever_score.shape[-1]
+                pad = -torch.inf + torch.zeros_like(retriever_score[..., :1]).expand(
+                    *retriever_score.shape[:-1], n_pad
+                )
+                retriever_score = torch.cat([retriever_score, pad], dim=-1)
+
         retriever_logits = retriever_score.log_softmax(dim=-1)
         loss = -retriever_logits.gather(dim=-1, index=retriever_targets.unsqueeze(-1))
+        loss = batch_reduce(loss, op=torch.mean)
 
         diagnostics["loss"] = loss
         diagnostics["_retriever_targets_"] = retriever_targets.detach()

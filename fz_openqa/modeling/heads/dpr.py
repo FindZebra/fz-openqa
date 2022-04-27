@@ -234,7 +234,7 @@ class DprHead(Head):
         return hd, udoc_ids
 
     def _is_shared_batch_dims(self, *, hd, hq, bs, expected_hd_dim):
-        if hq.shape[: len(bs)] != hd.shape[: len(bs)]:
+        if hq.shape[: len(bs)] == hd.shape[: len(bs)]:
             shared_batch = True
         else:
             if not len(hd.shape) == expected_hd_dim:
