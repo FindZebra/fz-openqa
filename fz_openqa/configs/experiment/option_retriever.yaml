@@ -37,7 +37,7 @@ base:
   infer_batch_mul: 100
 
 trainer:
-  max_epochs: 10
+  max_epochs: 10000
   gradient_clip_val: 2.0
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   val_check_interval: 1.0
