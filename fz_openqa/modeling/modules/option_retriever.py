@@ -16,6 +16,7 @@ from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
+from ..heads.dpr import unique_with_indices
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.gradients import Gradients
@@ -68,6 +69,7 @@ class OptionRetriever(Module):
         mask_punctuation: bool = False,
         max_batch_size: Optional[int] = None,
         gradients: Gradients | DictConfig = ReinforceGradients(),
+        share_documents_across_batch: bool = False,
         **kwargs,
     ):
 
@@ -79,6 +81,7 @@ class OptionRetriever(Module):
 
         # parameters
         self.max_batch_size = max_batch_size
+        self.share_documents_across_batch = share_documents_across_batch
 
         # init the estimator
         self.estimator = maybe_instantiate(gradients)
@@ -241,11 +244,40 @@ class OptionRetriever(Module):
         h = h.view(*original_shape[:-1], *h.shape[1:])
         return h
 
+    def _merge_unique_documents(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        merge all documents in the batch (*bs, n_docs, *) -> (n_unique_docs, *)
+        """
+        try:
+            doc_ids = batch["document.row_idx"]
+        except KeyError as e:
+            raise KeyError("Merging documents requires `document.row_idx`.") from e
+
+        batch["_document.row_idx"] = doc_ids
+        batch_size = doc_ids.shape
+        doc_ids = doc_ids.view(-1)
+        udoc_ids, uids = unique_with_indices(doc_ids)
+        keys_to_merge = {"document.input_ids", "document.attention_mask", "document.row_idx"}
+        for key in keys_to_merge & set(batch.keys()):
+            feature = batch[key]
+            feature = feature.view(-1, *feature.shape[len(batch_size) :])
+            feature = feature[uids]
+            batch[key] = feature
+
+        # save the original ids inverse ids
+        batch.update({"_document.row_idx": doc_ids.view(*batch_size), "_document.inv_ids": uids})
+
+        return batch
+
     def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
         """
         Compute the forward pass for the question and the documents.
         """
         pprint_batch(batch, "Option retriever::Input::batch", silent=silent)
+
+        if self.share_documents_across_batch:
+            batch = self._merge_unique_documents(batch)
+            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
 
         # initialize output dict
         step_output = {}
@@ -295,6 +327,7 @@ class OptionRetriever(Module):
                 retrieval_log_weight=batch.get("document.retrieval_log_weight", None),
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
+                raw_doc_ids=batch.get("_document.row_idx", None),
                 **head_meta,
                 **kwargs,
             )

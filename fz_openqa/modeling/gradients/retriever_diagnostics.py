@@ -58,11 +58,8 @@ def retriever_diagnostics(
         output["retriever/maxsim_entropy"] = H_retriever_agg.mean()
 
     # KL (retriever || U)
-    if retrieval_score is not None:
+    if retrieval_score is not None and retriever_log_probs.shape == retrieval_score.shape:
         #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
-        M = retrieval_score.max(dim=-1, keepdim=True).values
-        retrieval_score = retrieval_score - M
-        retrieval_score = retrieval_score.clip(min=-1e6)
         retrieval_log_probs = retrieval_score.log_softmax(dim=-1)
 
         # `KL( p(D|q, A) || r(D|q, A) )`
@@ -72,14 +69,15 @@ def retriever_diagnostics(
 
     # retrieval rank info
     if retrieval_rank is not None:
-        # retrieval rank weighted by the probability of the retrieved document
-        weighted_rank = retriever_probs * retrieval_rank
-        output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
+        if retriever_probs.shape == retrieval_rank:
+            # retrieval rank weighted by the probability of the retrieved document
+            weighted_rank = retriever_probs * retrieval_rank
+            output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
 
-        # rank of the most likely document
-        top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
-        top_rank = retrieval_rank.gather(dim=-1, index=top_idx)
-        output["retriever/top_rank"] = top_rank.float().mean()
+            # rank of the most likely document
+            top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
+            top_rank = retrieval_rank.gather(dim=-1, index=top_idx)
+            output["retriever/top_rank"] = top_rank.float().mean()
 
         # min-max of the retrieval rank
         output["retrieval/n_samples"] = retrieval_rank.size(-1)
@@ -87,7 +85,7 @@ def retriever_diagnostics(
         output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
 
     # match score diagnostics
-    if match_score is not None:
+    if match_score is not None and match_score.shape == retriever_log_probs.shape:
         match_logits = (match_score > 0).float().log_softmax(dim=-1)
         kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
         kl_relevance = kl_relevance.sum(dim=-1)

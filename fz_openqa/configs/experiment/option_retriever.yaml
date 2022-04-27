@@ -79,6 +79,7 @@ model:
     resample_k: null
     alpha: 0
     max_batch_size: 200
+    share_documents_across_batch: false
     retriever_head:
       id: retriever
       use_soft_score: false

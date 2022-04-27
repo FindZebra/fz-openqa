@@ -22,6 +22,8 @@ model:
   num_training_steps: 50_000
   optimizer_params:
     lr: 1e-4
+  module:
+    share_documents_across_batch: true
 
 datamodule:
   dset_name: medqa-us+medqa-tw
