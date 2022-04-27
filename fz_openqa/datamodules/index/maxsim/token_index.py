@@ -5,6 +5,7 @@ from typing import List
 from typing import Optional
 
 import numpy as np
+import rich
 import torch
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
@@ -53,7 +54,7 @@ class TokenIndex(object):
     def process_data(self, data):
         # rich.print(f"> {type(self).__name__}(id={self.id})")
         assert isinstance(data, FaissInput)
-        token_ids = TokenIndex._query_to_embedding_ids(
+        token_ids = TokenIndex._query_to_token_ids(
             data.q_vectors, data.p, index=self.index, doc_ids=data.doc_ids
         )
         return token_ids
@@ -68,7 +69,7 @@ class TokenIndex(object):
 
     @staticmethod
     @torch.no_grad()
-    def _query_to_embedding_ids(
+    def _query_to_token_ids(
         Q: torch.Tensor,
         faiss_depth: int,
         *,
@@ -81,15 +82,24 @@ class TokenIndex(object):
         num_queries, embeddings_per_query, dim = Q.shape
         Q = Q.view(-1, dim)
 
+        # build the mask: queries with all vectors dimensions equal
+        # to zero are considered to be padded
+        zero_mask = Q.abs().sum(dim=-1) == 0
+
         # expand doc_ids
         if doc_ids is not None:
             doc_ids = [[i] * embeddings_per_query for i in doc_ids]
             doc_ids = [item for sublist in doc_ids for item in sublist]
 
-        _, embedding_ids = index(Q.to(torch.float32), k=faiss_depth, doc_ids=doc_ids)
+        _, token_ids = index(Q.to(torch.float32), k=faiss_depth, doc_ids=doc_ids)
 
         # cast ids to Tensor and reshape as [bs, *]
-        if isinstance(embedding_ids, np.ndarray):
-            embedding_ids = torch.from_numpy(embedding_ids)
-        embedding_ids = embedding_ids.view(num_queries, -1)
-        return embedding_ids.to(Q.device)
+        if isinstance(token_ids, np.ndarray):
+            token_ids = torch.from_numpy(token_ids)
+
+        # apply the mask
+        token_ids[zero_mask, :] = -1
+
+        # reshape
+        token_ids = token_ids.view(num_queries, -1)
+        return token_ids.to(Q.device)

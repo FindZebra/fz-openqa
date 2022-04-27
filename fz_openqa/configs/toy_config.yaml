@@ -24,7 +24,7 @@ gamma: 1.
 sampler: priority
 temperature: 100.
 max_baseline_samples: 3
-hidden_size: 128
+metric_size: 128
 output_size: 64
 share_backbone: false
 estimator: reinforce_a2

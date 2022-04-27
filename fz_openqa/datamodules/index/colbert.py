@@ -143,6 +143,7 @@ class ColbertIndex(DenseIndex):
             ranking_devices=maxsim_devices,
             faiss_devices=faiss_devices,
             max_chunksize=self.maxsim_chunksize,
+            metric_type=self.metric_type,
         )
         self._max_sim.cuda()
 

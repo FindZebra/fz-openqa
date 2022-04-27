@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from typing import Iterable
-from typing import List
 from typing import Optional
 
 import torch

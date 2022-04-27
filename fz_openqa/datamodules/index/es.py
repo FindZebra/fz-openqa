@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import warnings
 from pathlib import Path
 from typing import Dict
@@ -12,7 +11,6 @@ from loguru import logger
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from ...utils.pretty import pprint_batch
 from ..utils.dataset import keep_only_columns
 from .base import Index
 from .base import IndexMode

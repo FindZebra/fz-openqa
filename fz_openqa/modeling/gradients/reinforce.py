@@ -162,10 +162,13 @@ class ReinforceGradients(Gradients):
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
         # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever.mean()
-        log_nq = math.log(retriever_agg_score.size(0))
-        log_p_d = (retriever_agg_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
-        kl_agg_retriever = kl_divergence(log_p_d, dim=-1)
-        diagnostics["retriever/kl_agg_uniform"] = kl_agg_retriever.mean()
+        if retriever_agg_score is not None:
+            log_nq = math.log(retriever_agg_score.size(0))
+            log_p_d = (retriever_agg_score.log_softmax(dim=-1) - log_nq).logsumexp(dim=0)
+            kl_agg_retriever = kl_divergence(log_p_d, dim=-1)
+            diagnostics["retriever/kl_agg_uniform"] = kl_agg_retriever.mean()
+        else:
+            kl_agg_retriever = 0
         if retriever_log_p_dloc is not None:
             kl_maxsim_retriever = kl_divergence(retriever_log_p_dloc, dim=-1)
             kl_maxsim_retriever = batch_reduce(kl_maxsim_retriever, op=torch.mean)
