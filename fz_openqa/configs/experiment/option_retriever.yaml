@@ -44,37 +44,43 @@ trainer:
   precision: 32
 
 model:
+  # global model configuration
   metric_size: 32
   metric_type: inner_product
+  num_warmup_steps: 20_000
 
-  ema_decay: null
-  num_warmup_steps: 5_000 # Colbert uses no warmup
-  num_training_steps: 100_000 # TODO !!
+  # bert configuration
   bert:
     config:
       hidden_dropout_prob: 0.1
       attention_probs_dropout_prob: 0.1
 
+  # optimizer configuration
+  ema_decay: null
+  num_lr_warmup_steps: 5_000 # Colbert uses no warmup
+  num_training_steps: 100_000 # TODO !!
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
+
+  # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
+    reader_kl_weight: 0.8
+    retriever_kl_weight: 1e-2
+    alpha:
+      mode: cosine
+      num_steps: ${model.num_warmup_steps}
+      initial_value: 0.0
+      final_value: 1.0
     tau: null
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
-    gamma: 1
-    question_mask: 1
-    alpha: 0
-    reader_kl_weight: 0.5
-    agg_retriever_kl_weight: 0
-    retriever_kl_weight:
-      mode: cosine
-      num_steps: 20_000
-      initial_value: 1e-1
-      final_value: 1e-2
+    gg_retriever_kl_weight: 0
+
+  # Module definition
   module:
     mask_punctuation: false
     split_bert_layers: 0
@@ -89,13 +95,7 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      use_mask: true
-      is_scaled: true
-      use_answer_mask: false
-      bayesian: false
-      learn_scale: false
-      scale: 1.
-      scale_init: 0.1
+      scale_init: 1.0
       share_parameters: true
       bias: false
     reader_head:
@@ -103,13 +103,8 @@ model:
       metric_type: ${model.metric_type}
       id: reader
       use_soft_score: true
-      use_mask: true
       normalize: false
-      is_scaled: true
-      bayesian: false
-      learn_scale: false
-      scale: 1.
-      scale_init: 0.1
+      scale_init: 1.0
       share_parameters: true
       bias: false
     gradients:
@@ -151,7 +146,7 @@ datamodule:
     - document.retrieval_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 300
+  n_retrieved_documents: 100
   n_documents: 10
 
   # document sampler
