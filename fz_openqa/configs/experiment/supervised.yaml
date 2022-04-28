@@ -34,6 +34,9 @@ datamodule:
   dset_name: medqa-us+medqa-tw
   corpus_name: medwiki+medqa
 
+  # dataloader
+  drop_last: true # required with `share_documents_across_batch`
+
 
 logger:
   wandb:

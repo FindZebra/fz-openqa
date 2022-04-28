@@ -29,7 +29,11 @@ class SupervisedGradients(Gradients):
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
-            retriever_score=retriever_score, match_score=match_score, doc_ids=doc_ids, **kwargs
+            retriever_score=retriever_score,
+            match_score=match_score,
+            doc_ids=doc_ids,
+            raw_doc_ids=raw_doc_ids,
+            **kwargs
         )
 
         # infer the document targets

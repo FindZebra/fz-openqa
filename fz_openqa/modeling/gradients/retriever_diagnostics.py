@@ -14,6 +14,7 @@ def retriever_diagnostics(
     retrieval_rank: Optional[Tensor],
     match_score: Optional[Tensor] = None,
     doc_ids: Optional[Tensor] = None,
+    raw_doc_ids: Optional[Tensor] = None,
     reader_score: Optional[Tensor] = None,
     retriever_agg_score: Optional[Tensor] = None,
     retriever_log_p_dloc: Optional[Tensor] = None,
@@ -59,7 +60,7 @@ def retriever_diagnostics(
         output["retriever/maxsim_entropy"] = H_retriever_agg.mean()
 
     # KL (retriever || U)
-    if retrieval_score is not None and retriever_log_probs.shape == retrieval_score.shape:
+    if retrieval_score is not None and not share_documents_across_batch:
         #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
         retrieval_log_probs = retrieval_score.log_softmax(dim=-1)
 
@@ -94,9 +95,13 @@ def retriever_diagnostics(
 
     # diversity of the retrieved documents
     if doc_ids is not None:
+        if raw_doc_ids is None:
+            total_ids = math.prod(doc_ids.shape)
+        else:
+            total_ids = math.prod(raw_doc_ids.shape)
         unique_ids = doc_ids.view(-1).unique()
         output["retrieval/n_unique_docs"] = unique_ids.size(0)
-        prop_unique_docs = unique_ids.size(0) / math.prod(doc_ids.shape)
+        prop_unique_docs = unique_ids.size(0) / total_ids
         output["retrieval/prop_unique_docs"] = prop_unique_docs
 
         output["retriever/max-doc-id"] = doc_ids.max()
