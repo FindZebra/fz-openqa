@@ -88,7 +88,7 @@ model:
       id: retriever
       use_soft_score: false
       compute_agg_score: true
-      normalize: false
+      normalize: true
       use_mask: true
       is_scaled: true
       use_answer_mask: false

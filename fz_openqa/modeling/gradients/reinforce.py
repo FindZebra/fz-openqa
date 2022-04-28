@@ -6,6 +6,7 @@ from typing import Optional
 import einops
 import rich
 import torch
+from loguru import logger
 from torch import Tensor
 
 from fz_openqa.datamodules.index.utils.io import log_mem_size
@@ -39,7 +40,7 @@ class ReinforceGradients(Gradients):
         self.expr = expr
         self.gamma = gamma
 
-        rich.print(
+        logger.info(
             f"{self.__class__.__name__}: "
             f"use_baseline={self.use_baseline}, "
             f"expr={self.expr}, "

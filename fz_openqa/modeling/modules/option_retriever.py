@@ -64,10 +64,12 @@ class OptionRetriever(Module):
         retriever_head: Head | DictConfig,
         mask_punctuation: bool = False,
         max_batch_size: Optional[int] = None,
-        gradients: Gradients | DictConfig = ReinforceGradients(),
+        gradients: Gradients | DictConfig = None,
         share_documents_across_batch: bool = False,
         **kwargs,
     ):
+        if gradients is None:
+            gradients = ReinforceGradients()
 
         super().__init__(*args, **kwargs)
 

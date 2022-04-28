@@ -12,6 +12,9 @@ defaults:
       - progress_bar
 
 
+trainer:
+  max_epochs: 20
+
 base:
   target_metric: validation/retriever/Accuracy
   device_batch_size: 4
@@ -21,11 +24,12 @@ model:
   num_warmup_steps: 1_000
   num_training_steps: 50_000
   optimizer_params:
-    lr: 1e-4
+    lr: 1e-5
   module:
     share_documents_across_batch: true
 
 datamodule:
+  dataset_update: null
   dset_name: medqa-us+medqa-tw
   corpus_name: medwiki+medqa
 
