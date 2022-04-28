@@ -17,7 +17,7 @@ datamodule:
   eval_batch_size: 8
   num_workers: 4
   dataset_update:
-    freq: 10
+    freq: 1_000
 
   # dataset
   builder:

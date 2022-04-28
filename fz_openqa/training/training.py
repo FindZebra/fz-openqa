@@ -157,7 +157,7 @@ def train(config: DictConfig) -> Optional[float]:
         dataset_update_freq = dataset_update["freq"]
         log.info(
             f"Starting training with dataset updates "
-            f"(max_epochs={trainer.max_epochs}, dataset_update_freq={dataset_update_freq}).."
+            f"(max_steps={trainer.max_steps}, freq={dataset_update_freq} steps).."
         )
         train_with_dataset_updates(
             datamodule,
@@ -166,11 +166,10 @@ def train(config: DictConfig) -> Optional[float]:
             update_freq=dataset_update_freq,
             test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
-            index_first_epoch=dataset_update.get("index_first_epoch", False),
             **dataset_update.get("builder_args", {}),
         )
     else:
-        log.info(f"Starting training (max_epochs={trainer.max_epochs})..")
+        log.info(f"Starting training (max_steps={trainer.max_steps})..")
         trainer.fit(model=model, datamodule=datamodule)
 
     # Evaluate Module on test set after training
@@ -301,21 +300,21 @@ def train_with_dataset_updates(
     trainer: Trainer,
     update_freq: int,
     reset_optimizer: bool = False,
-    index_first_epoch: bool = False,
     test_every_update: bool = True,
     load_best_model: bool = False,
+    index_on_first_step: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
-    max_epochs = trainer.max_epochs
-    trainer.fit_loop.max_epochs = min(update_freq, max_epochs)
+    max_steps = trainer.max_steps
+    trainer.fit_loop.max_steps = min(update_freq, max_steps)
     dataset_iter = 0
     trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
-    while trainer.current_epoch < max_epochs:
+    while trainer.global_step < max_steps:
 
         # update the dataset
         try:
-            if index_first_epoch or trainer.current_epoch > 0:
+            if trainer.global_step > 0 or index_on_first_step:
                 dataset_iter += 1
                 update_dataset(
                     datamodule,
@@ -336,7 +335,7 @@ def train_with_dataset_updates(
         try:
             log.info(
                 f"Starting training for "
-                f"{trainer.fit_loop.max_epochs - trainer.current_epoch} epochs"
+                f"{trainer.fit_loop.max_steps - trainer.global_step} steps"
                 f" (update={dataset_iter}).."
             )
             trainer.fit(
@@ -344,25 +343,18 @@ def train_with_dataset_updates(
                 train_dataloaders=datamodule.train_dataloader(),
                 val_dataloaders=datamodule.val_dataloader(),
             )
-            log.info(f"Epoch {trainer.current_epoch} completed.")
+            log.info(f"Step {trainer.global_step} completed, epoch {trainer.current_epoch}.")
 
-            # increment the epoch counter by one, seems to be missing in the original code
-            try:
-                # todo: handle for pytorch_lightning > 1.5.10
-                trainer.fit_loop.current_epoch += 1
-            except Exception as e:
-                log.warning(f"Failed to increment epoch counter: {e}")
-            if trainer.current_epoch > max_epochs:
+            if trainer.max_steps > max_steps:
                 break
             if trainer.state.status == TrainerStatus.INTERRUPTED:
                 log.info(
-                    f"Training interrupted. "
-                    f"Epochs remaining: {max_epochs - trainer.current_epoch}"
+                    f"Training interrupted. " f"Steps remaining: {max_steps - trainer.global_step}"
                 )
                 break
 
             # update trainer parameters
-            trainer.fit_loop.max_epochs += update_freq
+            trainer.fit_loop.max_steps += update_freq
             trainer.num_sanity_val_steps = 0
 
             # get optimizer state and store it into the model, so it can be
