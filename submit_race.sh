@@ -22,7 +22,8 @@ then
 fi
 
 # run the model
-run.py +experiment=option_retriever +environ=diku +patch=race  \
+poetry run pythono run.py \
+  +experiment=option_retriever +environ=diku +patch=race \
   base.device_batch_size=4 \
   base.eval_device_batch_size=8 \
   base.infer_batch_mul=2 \
