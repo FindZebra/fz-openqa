@@ -14,6 +14,7 @@ defaults:
 
 trainer:
   max_epochs: 20
+  val_check_interval: 0.5
 
 base:
   target_metric: validation/retriever/Accuracy
