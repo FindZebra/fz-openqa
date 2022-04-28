@@ -46,11 +46,11 @@ class DprHead(Head):
         self,
         *,
         normalize: bool = False,
-        bias: bool = True,
-        share_parameters: bool = False,
+        bias: bool = False,
+        share_parameters: bool = True,
         bayesian: bool = False,
         learn_scale: bool = False,
-        scale: float = 1.0,
+        target_scale_init: float = 1.0,
         auto_scale: bool = False,
         is_scaled: bool = False,
         scale_init: float = 1.0,
@@ -58,7 +58,7 @@ class DprHead(Head):
     ):
         super(DprHead, self).__init__(**kwargs)
         self.bias = bias
-        self.scale_init = scale
+        self.target_scale_init = target_scale_init
         self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
         self.auto_scale = auto_scale
 
@@ -114,7 +114,7 @@ class DprHead(Head):
         return self.scale_value.pow(-1)
 
     def set_scale(self, scores: Tensor):
-        self._scale.data = self.scale_init * scores.std().detach().pow(-1) * self._scale.data
+        self._scale.data = self.target_scale_init * scores.std().detach().pow(-1) * self._scale.data
         self._offset.data = -scores.mean().detach() * self._scale.data
         self.is_scaled.data += 1
 

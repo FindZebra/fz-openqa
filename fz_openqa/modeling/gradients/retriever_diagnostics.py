@@ -19,6 +19,7 @@ def retriever_diagnostics(
     retriever_agg_score: Optional[Tensor] = None,
     retriever_log_p_dloc: Optional[Tensor] = None,
     share_documents_across_batch: bool = False,
+    alpha: float = None,
     **kwargs,
 ) -> Dict:
     """
@@ -69,6 +70,15 @@ def retriever_diagnostics(
         kl_div = kl_div.sum(dim=-1)
         output["retriever/kl_div"] = kl_div.mean()
 
+        # entropy `H(p(D | q, A))`
+        retrieval_entropy = -(retrieval_log_probs.exp() * retrieval_log_probs).sum(dim=-1)
+        output["retrieval/entropy"] = retrieval_entropy.mean()
+
+        if alpha is not None:
+            reg_log_probs = alpha * retriever_log_probs + (1 - alpha) * retrieval_log_probs
+            reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
+            output["retrieval/entropy_reg"] = reg_entropy.mean()
+
     # retrieval rank info
     if retrieval_rank is not None:
         if not share_documents_across_batch:
@@ -104,8 +114,9 @@ def retriever_diagnostics(
         prop_unique_docs = unique_ids.size(0) / total_ids
         output["retrieval/prop_unique_docs"] = prop_unique_docs
 
-        output["retriever/max-doc-id"] = doc_ids.max()
-        output["retriever/min-doc-id"] = doc_ids.min()
+        # ddoc ids
+        output["retrieval/max-doc-id"] = doc_ids.max()
+        output["retreival/min-doc-id"] = doc_ids.min()
 
     # reader score diagnostics
     if reader_score is not None:

@@ -21,7 +21,7 @@ class ColbertHead(DprHead):
     def __init__(
         self,
         *,
-        use_mask: bool = False,
+        use_mask: bool = True,
         use_answer_mask=False,
         use_soft_score: bool = False,
         compute_agg_score: bool = False,

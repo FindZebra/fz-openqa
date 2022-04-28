@@ -26,7 +26,7 @@ datamodule:
 
   # dataset updates
   dataset_update:
-    freq: 1
+    freq: 10_000
     reset_optimizer: true
     test_every_update: false
     builder_args:

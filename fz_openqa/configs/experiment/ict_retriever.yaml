@@ -21,7 +21,6 @@ trainer:
   gpus: 8
   strategy: dp
   min_epochs: 1
-  max_epochs: 200
   accumulate_grad_batches: 2
   val_check_interval: 0.3
   # reload_dataloaders_every_n_epochs: 1

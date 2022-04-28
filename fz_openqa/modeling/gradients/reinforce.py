@@ -28,7 +28,6 @@ class ReinforceGradients(Gradients):
         space: Space = Space.EXP,
         max_baseline_samples: int = 3,
         expr: str = "B",
-        gamma: float = 1.0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -38,13 +37,9 @@ class ReinforceGradients(Gradients):
         self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
         self.expr = expr
-        self.gamma = gamma
 
         logger.info(
-            f"{self.__class__.__name__}: "
-            f"use_baseline={self.use_baseline}, "
-            f"expr={self.expr}, "
-            f"gamma={self.gamma}"
+            f"{self.__class__.__name__}: " f"use_baseline={self.use_baseline}, " f"expr={self.expr}"
         )
 
     def __call__(
@@ -87,7 +82,7 @@ class ReinforceGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
-        gamma = kwargs.get("gamma", self.gamma)
+        alpha = kwargs.get("alpha", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
         agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
@@ -124,11 +119,14 @@ class ReinforceGradients(Gradients):
         log_zeta_ = f_phi_ - f_psi_
 
         # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
-        log_zeta_hat_ = log_zeta_ + log_p_a__d_
+        log_zeta_hat_ = alpha * log_zeta_ + log_p_a__d_
 
         # importance weights
-        log_w_ = (log_s_ + log_zeta_).log_softmax(dim=-1).detach()
-        log_w_hat_ = (log_s_ + log_zeta_hat_).log_softmax(dim=-1).detach()
+        _normalizer = alpha * (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
+        log_w_ = (log_s_ + alpha * log_zeta_) - _normalizer
+        log_w_ = log_w_.detach()
+        log_w_hat_ = (log_s_ + log_zeta_hat_).log_softmax(dim=-1)
+        log_w_hat_ = log_w_hat_.detach()
 
         # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
         # log_p_d__a_ = f_phi - (log_w_ * f_phi).logsumexp(dim=-1, keepdim=True)
@@ -204,14 +202,14 @@ class ReinforceGradients(Gradients):
 
         # compute the gradient estimate
         if self.expr == "A":
-            h = log_p_ast_d + gamma * log_p_D__A
+            h = log_p_ast_d + alpha * log_p_D__A
             score = (log_W - log_p_ast.unsqueeze(-1) + log_p_ast_d).exp()
             if log_b is not None:
                 score = score - (log_W - log_p_ast.unsqueeze(-1) + log_b).exp()
             loss = -1 * (score.detach() * h).sum(-1)
 
         elif self.expr == "A2":
-            h = log_p_ast_d + gamma * log_p_D__A
+            h = log_p_ast_d + alpha * log_p_D__A
             score = (log_W_hat).exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
@@ -226,7 +224,7 @@ class ReinforceGradients(Gradients):
                 retriever_loss = (weight.detach() * log_p_D__A.sum(1)).sum(-1)
             else:
                 retriever_loss = 0
-            loss = -(reader_loss + gamma * retriever_loss)
+            loss = -(reader_loss + alpha * retriever_loss)
 
         elif self.expr == "C":
             if log_b is None:
@@ -235,7 +233,7 @@ class ReinforceGradients(Gradients):
             retriever_weight = log_W.exp() * (log_p_ast_d - log_b)
             reader_loss = (reader_weight.detach() * log_p_ast_d).sum(-1)
             retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
-            loss = -(reader_loss + gamma * retriever_loss)
+            loss = -(reader_loss + alpha * retriever_loss)
         else:
             raise ValueError(f"expr must be either A, B or C, got {self.expr}")
 
