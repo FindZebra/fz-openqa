@@ -78,6 +78,7 @@ class ColbertHead(DprHead):
 
             # attention model
             attn_scores = einsum("bouh, bodvh -> boduv", hq_a, hd_a)
+            attn_scores = attn_scores.mul(1.0 / hq_a.shape[-1])
             attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e3)
             log_p_dloc = attn_scores.log_softmax(dim=-1)
 

@@ -62,7 +62,7 @@ model:
   num_training_steps: 100_000 # TODO !!
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 3e-6
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -70,12 +70,12 @@ model:
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
     reader_kl_weight: 0.5
-    retriever_kl_weight: 1e-2
-    alpha:
+    alpha: 0
+    retriever_kl_weight:
       mode: cosine
       num_steps: ${model.num_warmup_steps}
-      initial_value: 0.0
-      final_value: 1.0
+      initial_value: 1e-1
+      final_value: 1e-2
     tau: null
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
@@ -96,7 +96,7 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      scale_init: 0.1
+      scale_init: 1.0
       share_parameters: true
       bias: false
     reader_head:
@@ -105,7 +105,7 @@ model:
       id: reader
       use_soft_score: true
       normalize: false
-      scale_init: 0.1
+      scale_init: 1.0
       share_parameters: true
       bias: false
     gradients:
@@ -179,8 +179,8 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 5. # todo !!!
-    auxiliary_weight: 5. # todo: 10
+    es_temperature: 10. # todo !!!
+    auxiliary_weight: 4. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
     p: 2048
     dtype: float16

@@ -89,11 +89,9 @@ class VizMaxsimCallback(Callback):
         # make the output dir for that step
         output_dir = self.logdir / f"step-{trainer.global_step}"
         output_dir.mkdir(exist_ok=True, parents=True)
+        self._format_and_log_maxsim(batch, output, output_dir)
 
-        self._display_outputs(batch, output, output_dir)
-        logger.info(f"Written {type(self).__name__} output to: {output_dir.absolute()}")
-
-    def _display_outputs(self, batch, output, output_dir):
+    def _format_and_log_maxsim(self, batch, output, output_dir):
         with open(output_dir / "outputs.txt", "w") as f:
             logger.info(f"Writing to: {output_dir.absolute()}")
             H_MAX = 350
