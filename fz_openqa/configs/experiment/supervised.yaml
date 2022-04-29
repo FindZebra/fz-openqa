@@ -14,7 +14,7 @@ defaults:
 
 trainer:
   max_steps: 10_000
-  val_check_interval: 500
+  val_check_interval: 0.5
 
 base:
   target_metric: validation/retriever/Accuracy
@@ -30,10 +30,15 @@ model:
   module:
     share_documents_across_batch: true
 
+  parameters:
+    alpha: 0
+    retriever_kl_weight: 0
+
 datamodule:
   dataset_update: null
   dset_name: medqa-us+medqa-tw
   corpus_name: medwiki+medqa
+  n_retrieved_documents: 300
 
   # dataloader
   drop_last: true # required with `share_documents_across_batch`
