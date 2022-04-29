@@ -25,6 +25,7 @@ defaults:
       - lr_monitor
       - log_predictions
       - progress_bar
+      - viz_maxsim
 
 base:
   seed: null # TODO: remove
@@ -136,6 +137,7 @@ datamodule:
   num_proc: 8
   output_columns:
     - answer.target
+    - question.row_idx
     - question.input_ids
     - question.attention_mask
     - document.input_ids

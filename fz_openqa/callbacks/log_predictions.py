@@ -50,7 +50,7 @@ class LogPredictions(Callback):
         log_dir: str,
         verbose: bool = True,
         n_samples: int = 10,
-        spacy_model: Optional[str] = "en_core_sci_md",
+        spacy_model: Optional[str] = None,
     ):
         super(LogPredictions, self).__init__()
         self.tokenizer = tokenizer
@@ -148,7 +148,7 @@ class LogPredictions(Callback):
             html += '</div">\n'
 
         try:
-            name = "predictions"
+            name = "predictions/htm"
             wandb.log({name: wandb.Html(html, inject=False)}, commit=False)
         except Exception as e:
             logger.warning(f"Could not log to wandb: {e}")
