@@ -242,7 +242,7 @@ class OptionRetriever(Module):
         h = h.view(*original_shape[:-1], *h.shape[1:])
         return h
 
-    def _merge_unique_documents(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+    def _merge_unique_documents(self, batch: Dict[str, Any]) -> (Dict[str, Any], Dict[str, Any]):
         """
         merge all documents in the batch (*bs, n_docs, *) -> (n_unique_docs, *)
         """
@@ -254,7 +254,7 @@ class OptionRetriever(Module):
         batch["_document.row_idx"] = doc_ids
         batch_size = doc_ids.shape
         doc_ids = doc_ids.view(-1)
-        udoc_ids, uids = unique_with_indices(doc_ids)
+        udoc_ids, uids, _ = unique_with_indices(doc_ids)
         keys_to_merge = {"document.input_ids", "document.attention_mask", "document.row_idx"}
         for key in keys_to_merge & set(batch.keys()):
             feature = batch[key]
@@ -263,9 +263,9 @@ class OptionRetriever(Module):
             batch[key] = feature
 
         # save the original ids inverse ids
-        batch.update({"_document.row_idx": doc_ids.view(*batch_size), "_document.inv_ids": uids})
+        meta = {"_document.row_idx_": doc_ids.view(*batch_size), "_document.inv_ids_": uids}
 
-        return batch
+        return batch, meta
 
     def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
         """
@@ -276,12 +276,13 @@ class OptionRetriever(Module):
         # apply initial transformations to the data
         self._format_input_data(batch)
 
-        if self.share_documents_across_batch:
-            batch = self._merge_unique_documents(batch)
-            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
-
         # initialize output dict
         step_output = {}
+
+        if self.share_documents_across_batch:
+            batch, meta = self._merge_unique_documents(batch)
+            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
+            step_output.update(meta)
 
         # process the batch using BERT
         max_batch_size_eval = -1 if self.training else self.max_batch_size
@@ -325,7 +326,7 @@ class OptionRetriever(Module):
                 retrieval_log_weight=batch.get("document.retrieval_log_weight", None),
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
-                raw_doc_ids=batch.get("_document.row_idx", None),
+                raw_doc_ids=step_output.get("_document.row_idx_", None),
                 share_documents_across_batch=self.share_documents_across_batch,
                 **head_meta,
                 **kwargs,

@@ -3,8 +3,8 @@ import torch
 from loguru import logger
 from torch import Tensor
 
-from fz_openqa.modeling.gradients import SupervisedGradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
+from fz_openqa.modeling.gradients.supervised import SupervisedGradients
 from fz_openqa.modeling.gradients.utils import kl_divergence
 from fz_openqa.utils.functional import batch_reduce
 

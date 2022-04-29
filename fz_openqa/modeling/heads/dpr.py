@@ -36,7 +36,7 @@ def unique_with_indices(x, dim=None):
     uids, inverse = torch.unique(x, sorted=True, return_inverse=True, dim=dim)
     perm = torch.arange(inverse.size(0), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([0]), perm.flip([0])
-    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm)
+    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm), inverse
 
 
 class DprHead(Head):
@@ -264,7 +264,7 @@ class DprHead(Head):
         feature_dimensions = len(doc_ids.shape)
         hd = hd.view(-1, *hd.shape[feature_dimensions:])
         doc_ids = doc_ids.view(-1)
-        udoc_ids, uids = unique_with_indices(doc_ids)
+        udoc_ids, uids, _ = unique_with_indices(doc_ids)
         hd = hd[uids]
         return hd, udoc_ids
 
