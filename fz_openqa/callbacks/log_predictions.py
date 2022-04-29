@@ -7,11 +7,13 @@ import spacy
 from loguru import logger
 from pip._internal import main as pipmain
 from pytorch_lightning.callbacks import Callback
+from pytorch_lightning.utilities import rank_zero_only
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
 
 import wandb
+from fz_openqa.utils.exceptions import catch_exception_as_warning
 
 CORRECT_LABEL = "✅"
 INCORRECT_LABEL = "❌"
@@ -104,6 +106,8 @@ class LogPredictions(Callback):
 
         return html + "\n"
 
+    @catch_exception_as_warning
+    @rank_zero_only
     def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         if len(self.data) > self.n_samples:
             self.data = np.random.choice(self.data, self.n_samples, replace=False)

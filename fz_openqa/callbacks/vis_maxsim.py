@@ -18,17 +18,8 @@ import wandb
 from fz_openqa.modeling import Model
 from fz_openqa.modeling.heads import ColbertHead
 from fz_openqa.modeling.modules import OptionRetriever
+from fz_openqa.utils.exceptions import catch_exception_as_warning
 from fz_openqa.utils.pretty import pretty_decode
-
-
-def catch_exception_as_warning(f):
-    def wrapper(*args, **kw):
-        try:
-            return f(*args, **kw)
-        except Exception as exc:
-            logger.warning(exc)
-
-    return wrapper
 
 
 class VizMaxsimCallback(Callback):
@@ -93,7 +84,6 @@ class VizMaxsimCallback(Callback):
 
     def _format_and_log_maxsim(self, batch, output, output_dir):
         with open(output_dir / "outputs.txt", "w") as f:
-            logger.info(f"Writing to: {output_dir.absolute()}")
             H_MAX = 350
             W_MAX = 200
             SIZE_TOKEN_H = 0.12
