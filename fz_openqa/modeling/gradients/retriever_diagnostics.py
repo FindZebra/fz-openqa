@@ -77,7 +77,7 @@ def retriever_diagnostics(
         if alpha is not None:
             reg_log_probs = alpha * retriever_log_probs + (1 - alpha) * retrieval_log_probs
             reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
-            output["retrieval/entropy_reg"] = reg_entropy.mean()
+            output["retriever/entropy_alpha"] = reg_entropy.mean()
 
     # retrieval rank info
     if retrieval_rank is not None:
@@ -116,7 +116,7 @@ def retriever_diagnostics(
 
         # ddoc ids
         output["retrieval/max-doc-id"] = doc_ids.max()
-        output["retreival/min-doc-id"] = doc_ids.min()
+        output["retrieval/min-doc-id"] = doc_ids.min()
 
     # reader score diagnostics
     if reader_score is not None:

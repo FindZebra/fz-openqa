@@ -1,0 +1,4 @@
+viz_maxsim:
+  _target_: fz_openqa.callbacks.VizMaxsimCallback
+  log_dir: ${getcwd:}/viz-maxsim/
+  tokenizer: ${datamodule.tokenizer}
