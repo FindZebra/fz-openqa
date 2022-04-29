@@ -15,7 +15,9 @@ trainer:
   val_check_interval: 0.5
 
 model:
-  metric_siz: 128
+  num_warmup_steps: 20_000
+  metric_size: 128
+  num_lr_warmup_steps: 1_000
   module:
     split_bert_layers: 0
 
@@ -31,7 +33,7 @@ datamodule:
 
   # dataset updates
   dataset_update:
-    freq: 20_000
+    freq: ${model.num_warmup_steps}
 
   builder:
     # update the builder parameters to use the quality builder

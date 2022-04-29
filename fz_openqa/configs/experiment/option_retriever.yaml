@@ -68,7 +68,7 @@ model:
 
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
-    reader_kl_weight: 0.8
+    reader_kl_weight: 0.5
     retriever_kl_weight: 1e-2
     alpha:
       mode: cosine
@@ -78,7 +78,7 @@ model:
     tau: null
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
-    gg_retriever_kl_weight: 0
+    agg_retriever_kl_weight: 0
 
   # Module definition
   module:
@@ -95,7 +95,7 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      scale_init: 1.0
+      scale_init: 0.1
       share_parameters: true
       bias: false
     reader_head:
@@ -104,7 +104,7 @@ model:
       id: reader
       use_soft_score: true
       normalize: false
-      scale_init: 1.0
+      scale_init: 0.1
       share_parameters: true
       bias: false
     gradients:

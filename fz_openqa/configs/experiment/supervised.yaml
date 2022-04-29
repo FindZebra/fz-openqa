@@ -14,7 +14,7 @@ defaults:
 
 trainer:
   max_steps: 10_000
-  val_check_interval: 0.5
+  val_check_interval: 500
 
 base:
   target_metric: validation/retriever/Accuracy
@@ -22,7 +22,8 @@ base:
   eval_device_batch_size: 16
 
 model:
-  num_warmup_steps: 1_000
+  num_warmup_steps: 5_000
+  num_lr_warmup_steps: 1_000
   num_training_steps: 50_000
   optimizer_params:
     lr: 1e-5
