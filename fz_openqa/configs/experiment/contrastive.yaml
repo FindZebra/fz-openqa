@@ -1,0 +1,23 @@
+# @package _global_
+
+defaults:
+  - option_retriever
+  - override /model/module/reader_head: none
+  - override /model/module/gradients: contrastive
+
+model:
+  module:
+    share_documents_across_batch: true
+
+  parameters:
+    alpha: 0
+    reader_kl_weight: 0.5
+    retriever_kl_weight: 1e-2
+
+datamodule:
+  n_retrieved_documents: 100
+  index_builder:
+    p: 256
+
+  # dataloader
+  drop_last: true # required with `share_documents_across_batch`
