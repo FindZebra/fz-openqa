@@ -118,7 +118,7 @@ class DprHead(Head):
         self._offset.data = -scores.mean().detach() * self._scale.data
         self.is_scaled.data += 1
 
-        scores = self.scale(scores)
+        scores = self.scale_sqrt(scores)
         rich.print(
             f"> standardized | out.mean={scores.mean():.3f}, "
             f"out.std={scores.std():.3f}, "
@@ -129,8 +129,8 @@ class DprHead(Head):
 
         return scores
 
-    def scale(self, hq: Tensor) -> Tensor:
-        hq = hq * self.scale_value
+    def scale_sqrt(self, hq: Tensor) -> Tensor:
+        hq = hq * self.scale_value ** 0.5
         return hq
 
     def forward(
@@ -193,40 +193,18 @@ class DprHead(Head):
             if self.metric_type == MetricType.inner_product:
                 scores = einsum("bh, bdh -> bd", hq, hd)
             elif self.metric_type == MetricType.euclidean:
-                scores = (
-                    -1
-                    * (
-                        hq[:, None, :]
-                        - hd[
-                            :,
-                            :,
-                            :,
-                        ]
-                    )
-                    .pow(2)
-                    .sum(-1)
-                    .pow(0.5)
-                )
+                _hq = hq[:, None, :]
+                _hd = hd[:, :, :]
+                scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
             else:
                 raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
         else:
             if self.metric_type == MetricType.inner_product:
                 scores = einsum("bh, dh -> bd", hq, hd)
             elif self.metric_type == MetricType.euclidean:
-                scores = (
-                    -1
-                    * (
-                        hq[:, None, :]
-                        - hd[
-                            None,
-                            :,
-                            :,
-                        ]
-                    )
-                    .pow(2)
-                    .sum(-1)
-                    .pow(0.5)
-                )
+                _hq = hq[:, None, :]
+                _hd = hd[None, :, :]
+                scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
             else:
                 raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
 
@@ -252,8 +230,7 @@ class DprHead(Head):
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
 
-        if head == "question":
-            cls_repr = self.scale(cls_repr)
+        cls_repr = self.scale_sqrt(cls_repr)
 
         return cls_repr
 

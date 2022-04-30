@@ -62,7 +62,7 @@ model:
   num_training_steps: 100_000 # TODO !!
   optimizer: adamw
   optimizer_params:
-    lr: 3e-6
+    lr: 1e-5
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -96,7 +96,7 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      scale_init: 1.0
+      scale_init: 0.1
       share_parameters: true
       bias: false
     reader_head:
@@ -105,7 +105,7 @@ model:
       id: reader
       use_soft_score: true
       normalize: false
-      scale_init: 1.0
+      scale_init: 0.1
       share_parameters: true
       bias: false
     gradients:
