@@ -24,9 +24,9 @@ fi
 
 # run the model
 poetry run python run.py +experiment=contrastive +environ=diku \
-  base.device_batch_size=2 \
-  base.infer_batch_mul=2 \
-  base.eval_device_batch_size=1 \
+  base.device_batch_size=1 \
+  base.infer_batch_mul=10 \
+  base.eval_device_batch_size=2 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   datamodule.builder.dataset_builder.max_length=350 \
