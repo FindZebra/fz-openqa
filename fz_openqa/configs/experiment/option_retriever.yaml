@@ -75,11 +75,7 @@ model:
       num_steps: ${model.num_warmup_steps}
       initial_value: 0
       final_value: 1
-    retrieval_kl_weight:
-      mode: cosine
-      num_steps: ${model.num_warmup_steps}
-      initial_value: 1e-1
-      final_value: 0
+    retrieval_kl_weight: 0
     retriever_kl_weight: 0
     tau: null
     maxim_retriever_kl_weight: null
