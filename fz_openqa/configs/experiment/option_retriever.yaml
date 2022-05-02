@@ -46,9 +46,9 @@ trainer:
 
 model:
   # global model configuration
-  metric_size: 32
+  metric_size: 64
   metric_type: inner_product
-  num_warmup_steps: 20_000
+  num_warmup_steps: 10_000
 
   # bert configuration
   bert:
@@ -70,12 +70,17 @@ model:
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
     reader_kl_weight: 0.5
-    alpha: 0
-    retriever_kl_weight:
+    alpha:
+      mode: cosine
+      num_steps: ${model.num_warmup_steps}
+      initial_value: 1
+      final_value: 0
+    retrieval_kl_weight:
       mode: cosine
       num_steps: ${model.num_warmup_steps}
       initial_value: 1e-1
-      final_value: 1e-2
+      final_value: 0
+    retriever_kl_weight: 0
     tau: null
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
@@ -185,7 +190,7 @@ datamodule:
     p: 2048
     dtype: float16
     max_chunksize: null
-    maxsim_chunksize: 16_000 # use 4_000 for metric_size 128
+    maxsim_chunksize: 8_000 # use 4_000 for metric_size 128
     persist_cache: false
     index_factory: IVF100k,PQ32x8
     handler: flat

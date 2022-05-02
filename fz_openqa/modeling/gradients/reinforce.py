@@ -85,6 +85,7 @@ class ReinforceGradients(Gradients):
         alpha = kwargs.get("alpha", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+        retrieval_kl_weight = kwargs.get("retrieval_kl_weight", None)
         agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
         maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
@@ -159,7 +160,7 @@ class ReinforceGradients(Gradients):
         kl_reader = kl_divergence(log_p_a, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader.mean()
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
-        # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
+        kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever.mean()
         if retriever_agg_score is not None:
             log_nq = math.log(retriever_agg_score.size(0))
@@ -242,6 +243,8 @@ class ReinforceGradients(Gradients):
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
+        if retrieval_kl_weight is not None:
+            loss = loss + retrieval_kl_weight * kl_retrieval
         if agg_retriever_kl_weight is not None:
             loss = loss + agg_retriever_kl_weight * kl_agg_retriever
         if maxsim_retriever_kl_weight is not None:
