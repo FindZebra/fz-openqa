@@ -73,7 +73,7 @@ model:
     alpha:
       mode: cosine
       num_steps: ${model.num_warmup_steps}
-      initial_value: 0
+      initial_value: 1e-2
       final_value: 1
     retrieval_kl_weight: 0
     retriever_kl_weight: 0
