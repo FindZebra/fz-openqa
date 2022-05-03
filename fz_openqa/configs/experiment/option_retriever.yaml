@@ -48,7 +48,7 @@ model:
   # global model configuration
   metric_size: 64
   metric_type: inner_product
-  num_warmup_steps: 10_000
+  num_warmup_steps: 5_000
 
   # bert configuration
   bert:
@@ -58,8 +58,8 @@ model:
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: 5_000 # Colbert uses no warmup
-  num_training_steps: 100_000 # TODO !!
+  num_lr_warmup_steps: 1_000 # Colbert uses no warmup
+  num_training_steps: 20_000 # TODO !!
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
@@ -117,8 +117,8 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: ${model.num_warmup_steps}
-    reset_optimizer: false # TODO !!
+    freq: ${int_mul:2,${model.num_warmup_steps}}
+    reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       relevance_classifier: null
@@ -183,7 +183,7 @@ datamodule:
     es_temperature: 10. # todo !!!
     auxiliary_weight: 4. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
-    p: 2048
+    p: 1024
     dtype: float16
     max_chunksize: null
     maxsim_chunksize: 8_000 # use 4_000 for metric_size 128
