@@ -27,6 +27,7 @@ class ContrastiveGradients(SupervisedGradients):
             )
 
         # parameters
+        gamma = kwargs.get("gamma", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
 
@@ -61,6 +62,7 @@ class ContrastiveGradients(SupervisedGradients):
         # reader model
         # replace padding (-inf) with zeros
         retriever_score = retriever_score.masked_fill(retriever_score < -1e-4, 0)
+        retriever_score = gamma * retriever_score
         reader_score = retriever_score.sum(dim=-1)
         log_p_a = reader_score.log_softmax(dim=-1)
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
