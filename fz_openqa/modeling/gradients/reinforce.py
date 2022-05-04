@@ -43,11 +43,11 @@ class ReinforceGradients(Gradients):
         )
 
     @staticmethod
-    def max_normalize(score: Tensor, ref_scores: Tensor) -> (Tensor, Tensor):
-        shape = ref_scores.shape
-        maxes = ref_scores.view(ref_scores.size(0), -1).max(dim=1).values.detach()
+    def max_normalize(score: Tensor) -> Tensor:
+        shape = score.shape
+        maxes = score.view(score.size(0), -1).max(dim=1).values.detach()
         maxes = maxes.view(shape[0], *([1] * (len(shape) - 1)))
-        return score - maxes, ref_scores - maxes
+        return score - maxes
 
     def __call__(
         self,
@@ -98,7 +98,9 @@ class ReinforceGradients(Gradients):
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
         # normalize the scores
-        retriever_score, retrieval_score = self.max_normalize(retriever_score, retrieval_score)
+        reader_score = self.max_normalize(reader_score)
+        retriever_score = self.max_normalize(retriever_score)
+        retrieval_score = self.max_normalize(retrieval_score)
 
         # rename input variables
         f_theta_ = reader_score
