@@ -113,7 +113,7 @@ class ReinforceGradients(Gradients):
             retriever_score=retriever_score,
             retrieval_score=retrieval_score,
             reader_score=reader_score,
-            retriever_agg_score=reader_score,
+            retriever_agg_score=retriever_agg_score,
             retriever_log_p_dloc=retriever_log_p_dloc,
             **kwargs,
         )
