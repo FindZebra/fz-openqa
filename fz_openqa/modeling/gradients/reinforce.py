@@ -125,6 +125,9 @@ class ReinforceGradients(Gradients):
         assert log_s_ is not None
         assert targets is not None
 
+        # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
+        f_phi_ = alpha * f_phi_ + (1 - alpha) * f_psi_
+
         # `log \zeta = f_\phi(d) - f_\psi(d)`
         log_zeta_ = f_phi_ - f_psi_
 
@@ -166,7 +169,8 @@ class ReinforceGradients(Gradients):
         # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
         log_Zeta = f_phi.sum(1) - f_psi.sum(1)
         log_S = log_s.sum(dim=1)
-        log_Zeta_hat = log_S + alpha * log_Zeta + log_p_ast_D
+        log_Zeta_hat = log_S + log_Zeta + log_p_ast_D
+        # `\hat{w} \propto S(D) \Zeta(D) p(a_st | Q, D)`
         log_W_hat = log_Zeta_hat.log_softmax(dim=-1)
         log_W_hat = log_W_hat.detach()
         self.ess_diagnostics(diagnostics, log_W, key="ess-posterior")
@@ -213,14 +217,14 @@ class ReinforceGradients(Gradients):
 
         # compute the gradient estimate
         if self.expr == "A":
-            h = log_p_ast_D + alpha * log_p_D__A
+            h = log_p_ast_D + log_p_D__A
             score = (log_W - log_p_ast.unsqueeze(-1) + log_p_ast_D).exp()
             if log_b is not None:
                 score = score - (log_W - log_p_ast.unsqueeze(-1) + log_b).exp()
             loss = -1 * (score.detach() * h).sum(-1)
 
         elif self.expr == "A2":
-            h = log_p_ast_D + alpha * log_p_D__A
+            h = log_p_ast_D + log_p_D__A
             score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
@@ -235,7 +239,7 @@ class ReinforceGradients(Gradients):
                 retriever_loss = (weight.detach() * log_p_D__A.sum(1)).sum(-1)
             else:
                 retriever_loss = 0
-            loss = -(reader_loss + alpha * retriever_loss)
+            loss = -(reader_loss + retriever_loss)
 
         elif self.expr == "C":
             if log_b is None:
@@ -244,7 +248,7 @@ class ReinforceGradients(Gradients):
             retriever_weight = log_W.exp() * (log_p_ast_D - log_b)
             reader_loss = (reader_weight.detach() * log_p_ast_D).sum(-1)
             retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
-            loss = -(reader_loss + alpha * retriever_loss)
+            loss = -(reader_loss + retriever_loss)
         else:
             raise ValueError(f"expr must be either A, B or C, got {self.expr}")
 
