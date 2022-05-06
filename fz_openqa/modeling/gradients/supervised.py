@@ -56,11 +56,11 @@ class SupervisedGradients(Gradients):
         loss = -retriever_logits.gather(dim=-1, index=retriever_targets.unsqueeze(-1))
         loss = batch_reduce(loss, op=torch.mean)
 
+        # add the relevance targets for the retriever
+        diagnostics.update(self._get_relevance_metrics(retriever_score, match_score))
+
         diagnostics["loss"] = loss
         diagnostics["_retriever_targets_"] = retriever_targets.view(-1).detach()
-        diagnostics["_retriever_logits_"] = (
-            retriever_logits.view(-1, retriever_logits.size(-1)).detach(),
-        )
         return diagnostics
 
     @staticmethod

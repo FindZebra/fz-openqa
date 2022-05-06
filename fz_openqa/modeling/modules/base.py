@@ -17,6 +17,9 @@ from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
 from torchmetrics.classification import Accuracy
+from torchmetrics.retrieval import RetrievalMRR
+from torchmetrics.retrieval import RetrievalPrecision
+from torchmetrics.retrieval import RetrievalRecall
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from transformers.models.bert.modeling_bert import BertEncoder
@@ -322,6 +325,7 @@ class Module(nn.Module, ABC):
         prefix: Optional[str] = None,
         metric_kwargs: Optional[Dict] = None,
         topk: Optional[List[Union[None, int]]] = None,
+        retrieval: bool = False,
     ) -> SplitMetrics:
         """
         Return the base metrics for the given prefix.
@@ -345,14 +349,26 @@ class Module(nn.Module, ABC):
         if topk is None:
             topk = [None]
 
-        def _name(k):
-            return f"top{k}_Accuracy" if k is not None else "Accuracy"
+        def _name(name, k):
+            return f"top{k}{name}" if k is not None else f"{name}"
 
+        if retrieval:
+            _metrics = {
+                **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
+                **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
+                **{_name("MRR", None): RetrievalMRR(**metric_kwargs)},
+            }
+        else:
+            _metrics = {_name("Accuracy", k): Accuracy(top_k=k, **metric_kwargs) for k in topk}
+
+        # Wrap the Metric as a `SafeMetricCollection` to avoid crashing
+        # when `k` is larger than the number of documents in the batch
         metrics = SafeMetricCollection(
-            {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in topk},
+            _metrics,
             prefix=prefix,
         )
 
+        # return a copy of each MetricCollection for each split
         return SplitMetrics(metrics)
 
     def _init_metrics(self, prefix: str):

@@ -53,8 +53,8 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
-        "train/retriever/Accuracy",
-        "validation/retriever/Accuracy",
+        "train/retrieval-metrics/top3_Precision",
+        "validation/retrieval-metrics/top3_Precision",
     ]
 
     def __init__(
@@ -103,8 +103,11 @@ class OptionRetriever(Module):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
         self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
+
         self.retriever_metrics = self._get_base_metrics(
-            prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
+            prefix=f"{prefix}retrieval-metrics/",
+            topk=[1, 3, 5, 10, 20, 50, 100],
+            retrieval=True,
         )
 
     def _init_total_logp_metrics(self, prefix):
@@ -399,9 +402,9 @@ class OptionRetriever(Module):
                     split, retriever_reading_logits, reader_targets
                 )
 
-        # lof the retriever accuracy
+        # log the retriever accuracy
         retriever_logits = output.get("_retriever_logits_", None)
-        retriever_targets = output.get("_retriever_targets_", None)
+        retriever_targets = output.get("_retriever_binary_targets_", None)
         if retriever_logits is not None and retriever_logits.numel() > 0:
             if retriever_targets is not None:
                 self.retriever_metrics.update(split, retriever_logits, retriever_targets)

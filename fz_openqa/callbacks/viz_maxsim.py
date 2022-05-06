@@ -188,8 +188,8 @@ class VizMaxsimCallback(Callback):
                         try:
                             wandb_img = wandb.Image(fig)
                             wandb.log({f"maxsim/heatmap-{uqid}-{j}-{udid}.png": wandb_img})
-                        except Exception as exc:
-                            logger.error(exc)
+                        except wandb.errors.Error as exc:
+                            logger.warning(exc)
                         plt.close()
 
     def _sample_batch(self, batch: Dict, n: int = None) -> Dict:

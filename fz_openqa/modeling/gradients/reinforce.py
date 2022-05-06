@@ -266,6 +266,11 @@ class ReinforceGradients(Gradients):
         if maxsim_reader_kl_weight is not None:
             loss = loss + maxsim_reader_kl_weight * kl_maxsim_reader
 
+        # add the relevance targets for the retriever
+        diagnostics.update(
+            self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
+        )
+
         return {
             "loss": loss,
             "reader/entropy": -(log_p_a.exp() * log_p_a).sum(dim=1).mean().detach(),

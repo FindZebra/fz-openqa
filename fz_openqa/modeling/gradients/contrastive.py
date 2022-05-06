@@ -88,6 +88,7 @@ class ContrastiveGradients(SupervisedGradients):
 
         # filter out the questions that are not matched with positive documents
         # this is only done to log the supervised retrieval diagnostics
+        # todo: use _retriever_binary_targets_
         if retriever_targets is not None:
             has_positive_documents = (match_score > 0).float().sum(-1) > 0
             has_positive_documents = has_positive_documents.view(-1)

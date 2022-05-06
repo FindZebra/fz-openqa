@@ -148,6 +148,9 @@ class InBatchGradients(Gradients):
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
 
+        # add the relevance targets for the retriever
+        diagnostics.update(self._get_relevance_metrics(kwargs.get("match_score", None)))
+
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),

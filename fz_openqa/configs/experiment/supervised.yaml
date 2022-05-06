@@ -36,12 +36,12 @@ model:
 
 datamodule:
   dataset_update: null
-  dset_name: medqa-us+medqa-tw
-  corpus_name: medwiki+medqa
+  # dset_name: medqa-us+medqa-tw
+  # corpus_name: medwiki+medqa
   n_retrieved_documents: 300
 
   # dataloader
-  drop_last: true # required with `share_documents_across_batch`
+  drop_last: ${model.module.share_documents_across_batch}
 
 
 logger:
