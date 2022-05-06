@@ -101,8 +101,14 @@ class CustomBertModel(BertModel):
             extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
                 attention_mask, input_shape, device
             )
+            import rich
+
+            rich.print(f"[green] ### extended_attention_mask: {extended_attention_mask}")
         else:
             extended_attention_mask = extended_attention_mask.to(device)
+            import rich
+
+            rich.print(f"[magenta] ### extended_attention_mask: {extended_attention_mask}")
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

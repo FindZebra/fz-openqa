@@ -31,6 +31,19 @@ from fz_openqa.utils.pretty import pprint_batch
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
 
 
+def make_conditional_mask(token_type_ids, dtype, device):
+    min_multiplier = -10000.0
+    mask = token_type_ids == 1
+    extend_attention_mask = torch.zeros(
+        *token_type_ids.shape, token_type_ids.shape[-1], dtype=dtype, device=device
+    )
+    extend_attention_mask = extend_attention_mask.masked_fill(mask[:, None, :], min_multiplier)
+    extend_attention_mask = extend_attention_mask.masked_fill(mask[:, :, None], 0)
+
+    # output format is [bs, n_heads, seq_len, seq_len]
+    return extend_attention_mask.unsqueeze(1)
+
+
 class OptionRetriever(Module):
     """
     A reader-retriever model for multiple-choice OpenQA.
@@ -67,6 +80,7 @@ class OptionRetriever(Module):
         max_batch_size: Optional[int] = None,
         gradients: Gradients | DictConfig = None,
         share_documents_across_batch: bool = False,
+        use_conditional_mask: bool = False,
         **kwargs,
     ):
         if gradients is None:
@@ -81,6 +95,7 @@ class OptionRetriever(Module):
         # parameters
         self.max_batch_size = max_batch_size
         self.share_documents_across_batch = share_documents_across_batch
+        self.use_conditional_mask = use_conditional_mask
 
         # init the estimator
         self.estimator = maybe_instantiate(gradients)
@@ -222,6 +237,8 @@ class OptionRetriever(Module):
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
 
+        # set the batch size allowed for one forward pass,
+        # if the batch size exceeds the limit, the model processes the data by chunk
         if max_batch_size is None:
             max_batch_size = self.max_batch_size
         elif max_batch_size < 0:
@@ -231,8 +248,27 @@ class OptionRetriever(Module):
         flat_batch = flatten_first_dims(
             batch,
             n_dims=len(original_shape) - 1,
-            keys=[f"{field}.input_ids", f"{field}.attention_mask"],
+            keys=[f"{field}.input_ids", f"{field}.attention_mask", f"{field}.token_type_ids"],
         )
+
+        # make the `extended_attention_mask`
+        if self.use_conditional_mask and field == "question":
+            token_id_key = f"{field}.token_type_ids"
+            if token_id_key not in flat_batch.keys():
+                raise ValueError(
+                    f"Key {token_id_key} must be provided when using "
+                    f"`use_conditional_mask=True`. "
+                    f"Found keys: {list(flat_batch.keys())}"
+                )
+            device = self.bert.device
+            conditional_mask = make_conditional_mask(
+                flat_batch[token_id_key], self.bert.dtype, device
+            )
+            bert_mask = self.bert.get_extended_attention_mask(
+                flat_batch[f"{field}.attention_mask"], None, device
+            )
+            extended_attention_mask = bert_mask + conditional_mask
+            flat_batch["question.extended_attention_mask"] = extended_attention_mask
 
         # process the document with the backbone
         h = self._backbone(
