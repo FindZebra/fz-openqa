@@ -157,9 +157,10 @@ def run(config: DictConfig) -> None:
     for epoch in range(num_epochs):
         train_accuracy = Accuracy().to(config.device)
         if epoch % config.update_freq == 0:
+            rich.print(f"> epoch={epoch}, indexing dataset..")
             with Status("Indexing dataset.."):
                 model.eval()
-                sampler.index(model if epoch > 0 else None)
+                sampler.index(model)
                 if logger is not None:
                     logger.log_metrics({"dataset_update/step": epoch}, step=global_step)
         evaluate(
