@@ -38,7 +38,7 @@ base:
   infer_batch_mul: 100
 
 trainer:
-  gradient_clip_val: 2.0
+  gradient_clip_val: 0.5 # 2.0 might be unstable
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   val_check_interval: 1.0
   precision: 32
@@ -84,7 +84,7 @@ model:
 
   # Module definition
   module:
-    mask_punctuation: false
+    mask_punctuation: true # MaxSim focuses too much on punctuation
     split_bert_layers: 0
     resample_k: null
     alpha: 0
@@ -121,7 +121,7 @@ datamodule:
     reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
-      relevance_classifier: null
+      # relevance_classifier: null
       score_transform: null
 
   # dataloader
