@@ -41,26 +41,20 @@ class ContrastiveGradients(SupervisedGradients):
             **kwargs
         )
 
-        if match_score is not None:
-            # infer the targets
-            retriever_targets = self._get_retriever_targets(
-                doc_ids=doc_ids,
-                raw_doc_ids=raw_doc_ids,
-                match_score=match_score,
-                share_documents_across_batch=share_documents_across_batch,
-                warn=False,
-            )
-        else:
-            retriever_targets = None
-
-        # possibly expand the logits, so they have the same shape
+        # possibly expand the logits and match_score, so they have the same shape
         # across multiple devices (DataParallel)
-        retriever_score = self._format_retriever_logits(
-            retriever_score=retriever_score,
+        retriever_score = self._expand_flattened_features(
+            features=retriever_score,
             raw_doc_ids=raw_doc_ids,
             share_documents_across_batch=share_documents_across_batch,
         )
-        retriever_logits = retriever_score.log_softmax(dim=-1)
+        if match_score is not None:
+            match_score = self._expand_flattened_features(
+                features=match_score,
+                raw_doc_ids=raw_doc_ids,
+                share_documents_across_batch=share_documents_across_batch,
+                pad_value=0,
+            )
 
         # reader model
         # replace padding (-inf) with zeros
@@ -86,18 +80,8 @@ class ContrastiveGradients(SupervisedGradients):
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
 
-        # filter out the questions that are not matched with positive documents
-        # this is only done to log the supervised retrieval diagnostics
-        if retriever_targets is not None:
-            has_positive_documents = (match_score > 0).float().sum(-1) > 0
-            has_positive_documents = has_positive_documents.view(-1)
-            has_positive_documents = has_positive_documents.nonzero(as_tuple=True)[0]
-            retriever_targets = retriever_targets.view(-1).detach()
-            retriever_logits = retriever_logits.view(-1, retriever_logits.size(-1)).detach()
-            retriever_targets = retriever_targets[has_positive_documents]
-            retriever_logits = retriever_logits[has_positive_documents]
-            diagnostics["_retriever_targets_"] = retriever_targets
-            diagnostics["_retriever_logits_"] = retriever_logits
+        # add the relevance targets for the retriever
+        diagnostics.update(self._get_relevance_metrics(retriever_score, match_score))
 
         # diagnostics
         diagnostics.update(

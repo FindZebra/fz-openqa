@@ -75,7 +75,7 @@ model:
       num_steps: ${model.num_warmup_steps}
       initial_value: 1e-2
       final_value: 1
-    retrieval_kl_weight: 0
+    proposal_kl_weight: 0
     retriever_kl_weight: 0
     tau: null
     maxim_retriever_kl_weight: null
@@ -145,8 +145,8 @@ datamodule:
     - document.attention_mask
     - document.row_idx
     - document.match_score
-    - document.retrieval_score
-    - document.retrieval_rank
+    - document.proposal_score
+    - document.proposal_rank
 
   # documents: retrieval & sampling
   n_retrieved_documents: 100

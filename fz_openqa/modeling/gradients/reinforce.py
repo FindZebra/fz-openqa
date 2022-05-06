@@ -55,8 +55,8 @@ class ReinforceGradients(Gradients):
         retriever_score: Tensor = None,
         reader_score: Tensor = None,
         targets: Tensor = None,
-        retrieval_score: Optional[Tensor] = None,
-        retrieval_log_weight: Optional[Tensor] = None,
+        proposal_score: Optional[Tensor] = None,
+        proposal_log_weight: Optional[Tensor] = None,
         retriever_agg_score: Optional[Tensor] = None,
         retriever_log_p_dloc: Optional[Tensor] = None,
         reader_log_p_dloc: Optional[Tensor] = None,
@@ -78,9 +78,9 @@ class ReinforceGradients(Gradients):
             f_\theta(d,q): shape [bs, n_opts, n_docs]
         targets
             a_\star: shape [bs]
-        retrieval_score
+        proposal_score
             f_\psi(d,q): shape [bs, n_opts, n_docs]
-        retrieval_log_weight
+        proposal_log_weight
             log s(d,q): shape [bs, n_opts, n_docs]
 
         Returns
@@ -92,7 +92,7 @@ class ReinforceGradients(Gradients):
         alpha = kwargs.get("alpha", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
-        retrieval_kl_weight = kwargs.get("retrieval_kl_weight", None)
+        proposal_kl_weight = kwargs.get("proposal_kl_weight", None)
         agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
         maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
@@ -100,18 +100,18 @@ class ReinforceGradients(Gradients):
         # normalize the scores
         reader_score = self.max_normalize(reader_score)
         retriever_score = self.max_normalize(retriever_score)
-        retrieval_score = self.max_normalize(retrieval_score)
+        proposal_score = self.max_normalize(proposal_score)
 
         # rename input variables
         f_theta_ = reader_score
         f_phi_ = retriever_score
-        f_psi_ = retrieval_score
-        log_s_ = retrieval_log_weight
+        f_psi_ = proposal_score
+        log_s_ = proposal_log_weight
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
             retriever_score=retriever_score,
-            retrieval_score=retrieval_score,
+            proposal_score=proposal_score,
             reader_score=reader_score,
             retriever_agg_score=retriever_agg_score,
             retriever_log_p_dloc=retriever_log_p_dloc,
@@ -257,14 +257,19 @@ class ReinforceGradients(Gradients):
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
-        if retrieval_kl_weight is not None:
-            loss = loss + retrieval_kl_weight * kl_retrieval
+        if proposal_kl_weight is not None:
+            loss = loss + proposal_kl_weight * kl_retrieval
         if agg_retriever_kl_weight is not None:
             loss = loss + agg_retriever_kl_weight * kl_agg_retriever
         if maxsim_retriever_kl_weight is not None:
             loss = loss + maxsim_retriever_kl_weight * kl_maxsim_retriever
         if maxsim_reader_kl_weight is not None:
             loss = loss + maxsim_reader_kl_weight * kl_maxsim_reader
+
+        # add the relevance targets for the retriever
+        diagnostics.update(
+            self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
+        )
 
         return {
             "loss": loss,

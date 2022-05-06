@@ -16,7 +16,12 @@ from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
+from torchmetrics import RetrievalFallOut
+from torchmetrics import RetrievalHitRate
 from torchmetrics.classification import Accuracy
+from torchmetrics.retrieval import RetrievalMRR
+from torchmetrics.retrieval import RetrievalPrecision
+from torchmetrics.retrieval import RetrievalRecall
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from transformers.models.bert.modeling_bert import BertEncoder
@@ -105,7 +110,7 @@ class Module(nn.Module, ABC):
 
         # select the keys with prefix
         if prefix is not None:
-            batch = self._select(prefix, batch)
+            batch = self._select_field(prefix, batch)
 
         if batch["input_ids"].shape[1] > self.max_length:
             warnings.warn(
@@ -322,6 +327,7 @@ class Module(nn.Module, ABC):
         prefix: Optional[str] = None,
         metric_kwargs: Optional[Dict] = None,
         topk: Optional[List[Union[None, int]]] = None,
+        retrieval: bool = False,
     ) -> SplitMetrics:
         """
         Return the base metrics for the given prefix.
@@ -345,14 +351,29 @@ class Module(nn.Module, ABC):
         if topk is None:
             topk = [None]
 
-        def _name(k):
-            return f"top{k}_Accuracy" if k is not None else "Accuracy"
+        def _name(name, k):
+            return f"{name}@{k}" if k is not None else f"{name}"
 
+        if retrieval:
+            metric_kwargs["empty_target_action"] = "skip"
+            _metrics = {
+                **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
+                **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
+                # **{_name("FallOut", k): RetrievalFallOut(k=k, **metric_kwargs) for k in topk},
+                # **{_name("HitRate", k): RetrievalHitRate(k=k, **metric_kwargs) for k in topk},
+                **{_name("MRR", None): RetrievalMRR(**metric_kwargs)},
+            }
+        else:
+            _metrics = {_name("Accuracy", k): Accuracy(top_k=k, **metric_kwargs) for k in topk}
+
+        # Wrap the Metric as a `SafeMetricCollection` to avoid crashing
+        # when `k` is larger than the number of documents in the batch
         metrics = SafeMetricCollection(
-            {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in topk},
+            _metrics,
             prefix=prefix,
         )
 
+        # return a copy of each MetricCollection for each split
         return SplitMetrics(metrics)
 
     def _init_metrics(self, prefix: str):
@@ -364,7 +385,7 @@ class Module(nn.Module, ABC):
         return {k: v for k, v in output.items() if not is_feature_name(k)}
 
     @staticmethod
-    def _select(prefix: str, batch: Batch) -> Batch:
+    def _select_field(prefix: str, batch: Batch) -> Batch:
         """Select attributes with prefix `prefix` from the `batch`"""
         prefix = f"{prefix}."
         return {k.replace(prefix, ""): v for k, v in batch.items() if str(k).startswith(prefix)}

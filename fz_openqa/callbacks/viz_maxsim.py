@@ -93,7 +93,7 @@ class VizMaxsimCallback(Callback):
             q_input_ids = batch.get("question.input_ids")
             qids = batch.get("question.row_idx")
             dids = batch.get("document.row_idx")
-            retrieval_score = batch.get("document.retrieval_score")
+            proposal_score = batch.get("document.proposal_score")
             hq = output.get("_hq_")
             hd = output.get("_hd_")
             qmask = hq.abs().sum(-1) == 0
@@ -113,7 +113,7 @@ class VizMaxsimCallback(Callback):
                 for j in js[: self.max_options]:
                     d_input_ids_i = d_input_ids[i][j]
                     q_input_ids_i = q_input_ids[i][j]
-                    retrieval_score_i = retrieval_score[i][j]
+                    proposal_score_i = proposal_score[i][j]
                     q_input_ids_i_ = [int(q.item()) for q in q_input_ids_i]
 
                     if int(self.tokenizer.pad_token_id) in q_input_ids_i_:
@@ -128,10 +128,10 @@ class VizMaxsimCallback(Callback):
 
                     for k in range(self.max_document):
                         # hd_ik = hd_i[k]
-                        retrieval_score_ik = retrieval_score_i[k]
+                        proposal_score_ik = proposal_score_i[k]
                         scores_ik = scores_i[k, :q_padding_idx, :]
                         d_input_ids_ik = d_input_ids_i[k]
-                        msg = f" Document {i + 1}-{j + 1}-{k + 1} : score={retrieval_score_ik:.2f} "
+                        msg = f" Document {i + 1}-{j + 1}-{k + 1} : score={proposal_score_ik:.2f} "
                         u = pretty_decode(d_input_ids_ik, tokenizer=self.tokenizer, style="white")
                         f.write(f"{msg}\n{u}\n")
 
@@ -188,8 +188,8 @@ class VizMaxsimCallback(Callback):
                         try:
                             wandb_img = wandb.Image(fig)
                             wandb.log({f"maxsim/heatmap-{uqid}-{j}-{udid}.png": wandb_img})
-                        except Exception as exc:
-                            logger.error(exc)
+                        except wandb.errors.Error as exc:
+                            logger.warning(exc)
                         plt.close()
 
     def _sample_batch(self, batch: Dict, n: int = None) -> Dict:

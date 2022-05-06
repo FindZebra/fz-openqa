@@ -16,7 +16,7 @@
 [[find in source code]](blob/master/examples/medqa_retriever.py#L77)
 
 ```python
-def randargmax(retrieval_scores: np.array) -> np.array:
+def randargmax(proposal_scores: np.array) -> np.array:
 ```
 
 a random tie-breaking argmax

@@ -22,4 +22,4 @@ datamodule:
     p: 256
 
   # dataloader
-  drop_last: true # required with `share_documents_across_batch`
+  drop_last: ${model.module.share_documents_across_batch}

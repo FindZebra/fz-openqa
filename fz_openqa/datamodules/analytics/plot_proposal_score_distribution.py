@@ -20,7 +20,7 @@ from .base import Analytic
 class PlotScoreDistributions(Analytic):
     """Plot the distribution of retrieval scores for matched documents"""
 
-    requires_columns = ["document.retrieval_score", "document.match_score"]
+    requires_columns = ["document.proposal_score", "document.match_score"]
     output_file_name = "score_distribution_plot.html"
 
     def process_dataset_split(
@@ -29,7 +29,7 @@ class PlotScoreDistributions(Analytic):
         """
         Report a specific split of the dataset.
         """
-        n_scores = dset["document.retrieval_score"]
+        n_scores = dset["document.proposal_score"]
         n_pos = dset["document.match_score"]
         pos_scores = [y[0].item() for x, y in zip(n_pos, n_scores) if sum(x) > 0]
         neg_scores = [y[1:].tolist() for x, y in zip(n_pos, n_scores) if sum(x) > 0]

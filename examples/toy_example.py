@@ -196,8 +196,8 @@ def run(config: DictConfig) -> None:
                 reader_score=output["reader_score"],
                 retriever_score=output["retriever_score"],
                 targets=batch["target"],
-                retrieval_score=batch["retrieval_score"],
-                retrieval_log_weight=batch["retrieval_log_weight"],
+                proposal_score=batch["proposal_score"],
+                proposal_log_weight=batch["proposal_log_weight"],
                 **parameters(),
             )
 
@@ -356,8 +356,8 @@ def evaluate(
             reader_score=output["reader_score"],
             retriever_score=output["retriever_score"],
             targets=batch["target"],
-            retrieval_score=batch["retrieval_score"],
-            retrieval_log_weight=batch["retrieval_log_weight"],
+            proposal_score=batch["proposal_score"],
+            proposal_log_weight=batch["proposal_log_weight"],
         )
 
         # update accuracy

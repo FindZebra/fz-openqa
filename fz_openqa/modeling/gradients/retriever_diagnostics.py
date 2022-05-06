@@ -10,8 +10,8 @@ from torch import Tensor
 def retriever_diagnostics(
     *,
     retriever_score: Tensor,
-    retrieval_score: Optional[Tensor],
-    retrieval_rank: Optional[Tensor] = None,
+    proposal_score: Optional[Tensor],
+    proposal_rank: Optional[Tensor] = None,
     match_score: Optional[Tensor] = None,
     doc_ids: Optional[Tensor] = None,
     raw_doc_ids: Optional[Tensor] = None,
@@ -26,7 +26,7 @@ def retriever_diagnostics(
     Compute diagnostics for the rank of the retrieved documents.
 
     NB: `retriever_probs` corresponds to the probs of the trained model whereas
-    `retrieval_*` correspond to the probs of the model used for indexing.
+    `proposal_*` correspond to the probs of the model used for indexing.
     """
     output = {}
 
@@ -61,47 +61,41 @@ def retriever_diagnostics(
         output["retriever/maxsim_entropy"] = H_retriever_agg.mean()
 
     # KL (retriever || U)
-    if retrieval_score is not None and not share_documents_across_batch:
-        #  truncate `retrieval_scores` to avoid `NaN` and compute `log r(D | q, A)`
-        retrieval_log_probs = retrieval_score.log_softmax(dim=-1)
-
-        # `KL( p(D|q, A) || r(D|q, A) )`
-        kl_div = retriever_probs * (retriever_log_probs - retrieval_log_probs)
-        kl_div = kl_div.sum(dim=-1)
-        output["retriever/kl_div"] = kl_div.mean()
+    if proposal_score is not None:
+        #  truncate `proposal_scores` to avoid `NaN` and compute `log r(D | q, A)`
+        proposal_log_probs = proposal_score.log_softmax(dim=-1)
 
         # entropy `H(p(D | q, A))`
-        retrieval_entropy = -(retrieval_log_probs.exp() * retrieval_log_probs).sum(dim=-1)
-        output["retrieval/entropy"] = retrieval_entropy.mean()
+        proposal_entropy = -(proposal_log_probs.exp() * proposal_log_probs).sum(dim=-1)
+        output["proposal/entropy"] = proposal_entropy.mean()
 
-        if alpha is not None:
-            reg_log_probs = alpha * retriever_log_probs + (1 - alpha) * retrieval_log_probs
-            reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
-            output["retriever/entropy_alpha"] = reg_entropy.mean()
+        if not share_documents_across_batch:
+            # `KL( p(D|q, A) || r(D|q, A) )`
+            kl_div = retriever_probs * (retriever_log_probs - proposal_log_probs)
+            kl_div = kl_div.sum(dim=-1)
+            output["retriever/kl_div"] = kl_div.mean()
+
+            if alpha is not None:
+                reg_log_probs = alpha * retriever_log_probs + (1 - alpha) * proposal_log_probs
+                reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
+                output["retriever/entropy_alpha"] = reg_entropy.mean()
 
     # retrieval rank info
-    if retrieval_rank is not None:
+    if proposal_rank is not None:
         if not share_documents_across_batch:
             # retrieval rank weighted by the probability of the retrieved document
-            weighted_rank = retriever_probs * retrieval_rank
-            output["retriever/weighted_rank"] = weighted_rank.sum(-1).mean()
+            weighted_rank = retriever_probs * proposal_rank
+            output["retriever/weighted_proposal_rank"] = weighted_rank.sum(-1).mean()
 
             # rank of the most likely document
             top_idx = retriever_probs.argmax(dim=-1).unsqueeze(-1)
-            top_rank = retrieval_rank.gather(dim=-1, index=top_idx)
-            output["retriever/top_rank"] = top_rank.float().mean()
+            top_rank = proposal_rank.gather(dim=-1, index=top_idx)
+            output["retriever/top_proposal_rank"] = top_rank.float().mean()
 
         # min-max of the retrieval rank
-        output["retrieval/n_samples"] = retrieval_rank.size(-1)
-        output["retrieval/max_sampled_rank"] = retrieval_rank.max().float()
-        output["retrieval/min_sampled_rank"] = retrieval_rank.min().float()
-
-    # match score diagnostics
-    if match_score is not None and not share_documents_across_batch:
-        match_logits = (match_score > 0).float().log_softmax(dim=-1)
-        kl_relevance = retriever_probs * (retriever_log_probs - match_logits)
-        kl_relevance = kl_relevance.sum(dim=-1)
-        output["retriever/kl_relevance"] = kl_relevance.mean()
+        output["proposal/n_samples"] = proposal_rank.size(-1)
+        output["proposal/max_sampled_rank"] = proposal_rank.max().float()
+        output["proposal/min_sampled_rank"] = proposal_rank.min().float()
 
     # diversity of the retrieved documents
     if doc_ids is not None:
@@ -110,13 +104,13 @@ def retriever_diagnostics(
         else:
             total_ids = math.prod(raw_doc_ids.shape)
         unique_ids = doc_ids.view(-1).unique()
-        output["retrieval/n_unique_docs"] = unique_ids.size(0)
+        output["proposal/n_unique_docs"] = unique_ids.size(0)
         prop_unique_docs = unique_ids.size(0) / total_ids
-        output["retrieval/prop_unique_docs"] = prop_unique_docs
+        output["proposal/prop_unique_docs"] = prop_unique_docs
 
         # ddoc ids
-        output["retrieval/max-doc-id"] = doc_ids.max()
-        output["retrieval/min-doc-id"] = doc_ids.min()
+        output["proposal/max-doc-id"] = doc_ids.max()
+        output["proposal/min-doc-id"] = doc_ids.min()
 
     # reader score diagnostics
     if reader_score is not None:

@@ -67,7 +67,7 @@ class QaBuilder(HfDatasetBuilder):
         "answer.attention_mask",
         "answer.target",
         "document.match_score",
-        "document.retrieval_score",
+        "document.proposal_score",
     ]
 
     # number of data points per subset train/val/test
@@ -283,7 +283,7 @@ class ConcatQaBuilder(QaBuilder):
         "question.document_idx",
         "answer.target",
         "document.match_score",
-        "document.retrieval_score",
+        "document.proposal_score",
     ]
 
     # output columns

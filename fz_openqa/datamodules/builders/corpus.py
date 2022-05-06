@@ -347,7 +347,7 @@ class CorpusBuilder(HfDatasetBuilder):
                 "document.idx",
                 "document.uid",
                 "document.passage_idx",
-                "document.retrieval_score",
+                "document.proposal_score",
             ]
         )
 

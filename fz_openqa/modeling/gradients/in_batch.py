@@ -100,7 +100,7 @@ class InBatchGradients(Gradients):
         retriever_score: Tensor,
         reader_score: Tensor,
         targets: Tensor,
-        retrieval_score: Optional[Tensor] = None,
+        proposal_score: Optional[Tensor] = None,
         **kwargs,
     ):
 
@@ -123,14 +123,14 @@ class InBatchGradients(Gradients):
             targets=targets,
             reader_score=reader_score,
             retriever_score=retriever_score,
-            retrieval_score=retrieval_score,
+            proposal_score=proposal_score,
         )
 
         # run diagnostics
         diagnostics.update(
             retriever_diagnostics(
                 retriever_score=retriever_score,
-                retrieval_score=retrieval_score,
+                proposal_score=proposal_score,
                 reader_score=reader_score,
                 **kwargs,
             )
@@ -147,6 +147,9 @@ class InBatchGradients(Gradients):
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
+
+        # add the relevance targets for the retriever
+        diagnostics.update(self._get_relevance_metrics(kwargs.get("match_score", None)))
 
         return {
             "loss": loss,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 from copy import deepcopy
 from typing import Any
 from typing import Dict
@@ -14,13 +15,19 @@ from torch import Tensor
 from torchmetrics import Accuracy
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
+from torchmetrics.retrieval import RetrievalMetric
 
 from fz_openqa.utils.datastruct import Batch
 
 
-def is_computable(m: Metric):
+def is_computable(m: Metric | nn.Module):
     """check if one can call .compute() on metric"""
-    return not isinstance(m, Accuracy) or m.mode is not None
+    if isinstance(m, Accuracy):
+        return m.mode is not None
+    elif isinstance(m, RetrievalMetric):
+        return len(m.indexes) > 0
+    else:
+        return True
 
 
 class SplitMetrics(nn.Module):
@@ -77,25 +84,48 @@ class SplitMetrics(nn.Module):
 
 class SafeMetricCollection(MetricCollection):
     """
-    A safe implementation of MetricCollection, so top-k accuracy  won't
-    raise an error if the batch size is too small.
+    A safe implementation of MetricCollection handling multiple failues:
+        1. top-k accuracy  won't raise an error if the batch size is too small.
+        2. automatically fills the `index` attribute for `RetrievalMetric`
     """
 
     def update(self, *args: Any, **kwargs: Any) -> None:
+        args = list(args)
         for _, m in self.items(keep_base=True):
-            preds, targets = args
-            if isinstance(m, Accuracy) and m.top_k is not None and preds.shape[-1] <= m.top_k:
-                pass
-            else:
-                m_kwargs = m._filter_kwargs(**kwargs)
-                m.update(preds, targets, **m_kwargs)
+            m_args = copy(args)
+
+            # handle Accuracy
+            if isinstance(m, Accuracy):
+                # skip metric if n_documents <= k
+                preds, targets, *_ = m_args
+                if m.top_k is not None and preds.shape[-1] <= m.top_k:
+                    continue
+
+            # handle Retrieval Metrics
+            elif isinstance(m, RetrievalMetric):
+                # skip metric if n_documents <= k
+                if hasattr(m, "k"):
+                    preds, targets, *_ = m_args
+                    if m.k is not None and preds.shape[-1] <= m.k:
+                        continue
+
+                # automatically create the index if needed
+                if len(m_args) < 3:
+                    preds, targets = m_args
+                    start_index = 1 + max(i.max() for i in m.indexes) if len(m.indexes) else 0
+                    indexes = torch.arange(
+                        start_index, len(preds) + start_index, device=preds.device
+                    )
+                    indexes = indexes.view(indexes.size(0), *(1 for _ in preds.shape[1:]))
+                    indexes = indexes.expand_as(preds)
+                    m_args = [preds, targets, indexes]
+
+            # finally update the metric
+            m_kwargs = m._filter_kwargs(**kwargs)
+            m.update(*m_args, **m_kwargs)
 
     def compute(self) -> Dict[str, Any]:
-        return {
-            k: m.compute()
-            for k, m in self.items()
-            if not isinstance(m, Accuracy) or m.mode is not None
-        }
+        return {k: m.compute() for k, m in self.items() if is_computable(m)}
 
 
 class NestedMetricCollections(MetricCollection):

@@ -103,7 +103,7 @@ class SearchCorpus(Pipe):
         k: Optional[int] = None,
         model: Optional[Union[Callable, torch.nn.Module]] = None,
         index_output_key: str = 'document.row_idx',
-        score_output_key: str = 'document.retrieval_score',
+        score_output_key: str = 'document.proposal_score',
         analyzed_output_key: str = 'document.analyzed_tokens',
         **kwargs,
     ):

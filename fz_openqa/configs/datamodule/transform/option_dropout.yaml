@@ -6,8 +6,8 @@ keys:
   - question.attention_mask
   - document.input_ids
   - document.attention_mask
-  - document.retrieval_score
-  - document.retrieval_rank
+  - document.proposal_score
+  - document.proposal_rank
   - document.match_score
   - document.row_idx
 update: true

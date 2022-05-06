@@ -177,7 +177,7 @@ for idx in range(3):
         match_on = eg.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
         rich.print(
-            f" |-* document #{1 + j}, score={eg['document.retrieval_score'][j]:.2f}, "
+            f" |-* document #{1 + j}, score={eg['document.proposal_score'][j]:.2f}, "
             f"match_score={eg['document.match_score'][j]}, match_on={match_on}"
         )
         txt = eg["document.text"][j].replace("\n", "")

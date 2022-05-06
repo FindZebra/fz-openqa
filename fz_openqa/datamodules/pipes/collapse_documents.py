@@ -36,7 +36,7 @@ class SqueezeDocuments(Pipe):
         field: str = "document",
         id_key: str = "row_idx",
         keys: List[str] = None,
-        score_key: str = "retrieval_score",
+        score_key: str = "proposal_score",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -64,7 +64,7 @@ class CollapseDocuments(Pipe):
         field: str = "document",
         id_key: str = "row_idx",
         keys: List[str] = None,
-        score_key: str = "retrieval_score",
+        score_key: str = "proposal_score",
         **kwargs,
     ):
         super().__init__(**kwargs)

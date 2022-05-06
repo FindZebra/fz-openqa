@@ -92,7 +92,7 @@ class LogPredictions(Callback):
             "question.input_ids",
             "document.input_ids",
             "answer.target",
-            "document.retrieval_score",
+            "document.proposal_score",
         ]
         preds_keys = [
             "_reader_logits_",
@@ -140,7 +140,7 @@ class LogPredictions(Callback):
             html += '<div tag="Question" style="font-size:12px">\n'
             html += f"<h2>Q #{k}</h2>\n"
             probs = row["_reader_logits_"].softmax(-1)
-            retrieval_scores = row["document.retrieval_score"]
+            proposal_scores = row["document.proposal_score"]
             target = row["answer.target"]
             doc_input_ids = row["document.input_ids"]
 
@@ -165,9 +165,9 @@ class LogPredictions(Callback):
                     html += '<div tag="document" class="column">\n'
                     try:
                         # cannot be retrieved when setting `share_documents_across_batch`
-                        retrieval_score_ = f"{retrieval_scores[i, j]:.2f}"
+                        proposal_score_ = f"{proposal_scores[i, j]:.2f}"
                     except IndexError:
-                        retrieval_score_ = "--"
+                        proposal_score_ = "--"
 
                     try:
                         # cannot be retrieved when using `ContrastiveGradients`
@@ -178,7 +178,7 @@ class LogPredictions(Callback):
                     html += (
                         f"<h4>Doc #{_j}, "
                         f"retriever_prob={doc_probs[j]:.2f}, "
-                        f"retrieval_score={retrieval_score_}, "
+                        f"proposal_score={proposal_score_}, "
                         f"reader_score={reader_score_}, "
                         f"</h4>\n"
                     )

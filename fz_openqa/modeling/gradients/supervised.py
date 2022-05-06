@@ -36,48 +36,44 @@ class SupervisedGradients(Gradients):
             **kwargs,
         )
 
-        # infer the targets
-        retriever_targets = self._get_retriever_targets(
-            doc_ids=doc_ids,
+        # possibly expand the logits and match_score, so they have the same shape
+        # across multiple devices (DataParallel)
+        retriever_score = self._expand_flattened_features(
+            features=retriever_score,
             raw_doc_ids=raw_doc_ids,
-            match_score=match_score,
             share_documents_across_batch=share_documents_across_batch,
         )
+        if match_score is not None:
+            match_score = self._expand_flattened_features(
+                features=match_score,
+                raw_doc_ids=raw_doc_ids,
+                share_documents_across_batch=share_documents_across_batch,
+                pad_value=0,
+            )
+        if retriever_score.shape != match_score.shape:
+            raise ValueError(
+                f"`retriever_score` and `match_score` must have the same shape. "
+                f"Found: {retriever_score.shape} != {match_score.shape}."
+            )
 
-        # possibly expand the logits, so they have the same shape
-        # across multiple devices in DataParallel
-        retriever_score = self._format_retriever_logits(
-            retriever_score=retriever_score,
-            raw_doc_ids=raw_doc_ids,
-            share_documents_across_batch=share_documents_across_batch,
-        )
+        # infer the targets
+        retriever_targets = self._get_retriever_targets(match_score=match_score)
 
         retriever_logits = retriever_score.log_softmax(dim=-1)
         loss = -retriever_logits.gather(dim=-1, index=retriever_targets.unsqueeze(-1))
         loss = batch_reduce(loss, op=torch.mean)
 
+        # add the relevance targets for the retriever
+        diagnostics.update(self._get_relevance_metrics(retriever_score, match_score))
+
         diagnostics["loss"] = loss
         diagnostics["_retriever_targets_"] = retriever_targets.view(-1).detach()
-        diagnostics["_retriever_logits_"] = (
-            retriever_logits.view(-1, retriever_logits.size(-1)).detach(),
-        )
         return diagnostics
 
     @staticmethod
-    def _get_retriever_targets(
-        *, match_score, doc_ids, raw_doc_ids, share_documents_across_batch, warn: bool = True
-    ):
-
-        if raw_doc_ids is not None and not raw_doc_ids.shape == match_score.shape:
-            # the relevance tensor must always be provided in its non-flattened form
-            raise ValueError(
-                "`match_score` and `raw_doc_ids` must be provided in their"
-                "non-flattened form and therefore must both have the same shape. "
-                f"Found: match_score: {match_score.shape}, raw_doc_ids: {raw_doc_ids}"
-            )
-
+    def _get_retriever_targets(*, match_score, warn: bool = True):
         # infer the binary relevance tensor from the `match_score` tensor
-        relevance = (match_score > 0).float()
+        relevance = (match_score.float() > 0).float()
 
         # check `match_score`: there is one and only one positive document,
         # and this document is placed at index 0
@@ -88,7 +84,7 @@ class SupervisedGradients(Gradients):
                 f"Some questions are not paired with `positive` "
                 f"documents (n={n}/{k}, p={n/k:.2%})"
             )
-        if warn and (match_score[..., :, 1:] > 0).any():
+        if warn and (relevance.sum(-1) > 1).any():
             n = (relevance.sum(-1) > 1).float().sum()
             k = relevance[..., 0].numel()
             logger.warning(
@@ -99,27 +95,23 @@ class SupervisedGradients(Gradients):
         # infer the retriever targets from the relevance tensor
         retriever_targets = relevance.argmax(dim=-1)
 
-        if share_documents_across_batch:
-            # if the documents have been flattened, convert the position of the
-            # targets given in the non-flat version to the flat version
-            target_ids = raw_doc_ids.gather(dim=-1, index=retriever_targets.unsqueeze(-1))
-            retriever_targets = (target_ids - doc_ids.unsqueeze(0)).abs().argmin(dim=-1)
-
         return retriever_targets
 
     @staticmethod
-    def _format_retriever_logits(*, retriever_score, raw_doc_ids, share_documents_across_batch):
+    def _expand_flattened_features(
+        *, features, raw_doc_ids, share_documents_across_batch, pad_value=-torch.inf
+    ):
         if share_documents_across_batch:
             # pad the `retriever_score` to the max. possible values
             # (total number of docs if they were all unique)
             # this is required for `DataParallel`, to reduce the `_retriever_logits_`
             # and ensure they have the same dimension on all devices
             pad_dim = math.prod(raw_doc_ids.shape)
-            if retriever_score.shape[-1] < pad_dim:
-                n_pad = pad_dim - retriever_score.shape[-1]
-                pad = -torch.inf + torch.zeros_like(retriever_score[..., :1]).expand(
-                    *retriever_score.shape[:-1], n_pad
+            if features.shape[-1] < pad_dim:
+                n_pad = pad_dim - features.shape[-1]
+                pad = pad_value + torch.zeros_like(features[..., :1]).expand(
+                    *features.shape[:-1], n_pad
                 )
-                retriever_score = torch.cat([retriever_score, pad], dim=-1)
+                features = torch.cat([features, pad], dim=-1)
 
-        return retriever_score
+        return features
