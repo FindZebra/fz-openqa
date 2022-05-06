@@ -16,6 +16,8 @@ from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
+from torchmetrics import RetrievalFallOut
+from torchmetrics import RetrievalHitRate
 from torchmetrics.classification import Accuracy
 from torchmetrics.retrieval import RetrievalMRR
 from torchmetrics.retrieval import RetrievalPrecision
@@ -357,6 +359,8 @@ class Module(nn.Module, ABC):
             _metrics = {
                 **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
                 **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
+                # **{_name("FallOut", k): RetrievalFallOut(k=k, **metric_kwargs) for k in topk},
+                # **{_name("HitRate", k): RetrievalHitRate(k=k, **metric_kwargs) for k in topk},
                 **{_name("MRR", None): RetrievalMRR(**metric_kwargs)},
             }
         else:
