@@ -15,8 +15,8 @@ class ContrastiveGradients(SupervisedGradients):
         *,
         targets: Tensor,
         retriever_score: Tensor,
-        doc_ids: Tensor,
-        share_documents_across_batch: bool,
+        doc_ids: Tensor = None,
+        share_documents_across_batch: bool = False,
         match_score: Tensor = None,
         raw_doc_ids: Tensor = None,
         **kwargs
@@ -41,14 +41,17 @@ class ContrastiveGradients(SupervisedGradients):
             **kwargs
         )
 
-        # infer the targets
-        retriever_targets = self._get_retriever_targets(
-            doc_ids=doc_ids,
-            raw_doc_ids=raw_doc_ids,
-            match_score=match_score,
-            share_documents_across_batch=share_documents_across_batch,
-            warn=False,
-        )
+        if match_score is not None:
+            # infer the targets
+            retriever_targets = self._get_retriever_targets(
+                doc_ids=doc_ids,
+                raw_doc_ids=raw_doc_ids,
+                match_score=match_score,
+                share_documents_across_batch=share_documents_across_batch,
+                warn=False,
+            )
+        else:
+            retriever_targets = None
 
         # possibly expand the logits, so they have the same shape
         # across multiple devices (DataParallel)
@@ -85,13 +88,16 @@ class ContrastiveGradients(SupervisedGradients):
 
         # filter out the questions that are not matched with positive documents
         # this is only done to log the supervised retrieval diagnostics
-        has_positive_documents = (match_score > 0).float().sum(-1) > 0
-        has_positive_documents = has_positive_documents.view(-1)
-        has_positive_documents = has_positive_documents.nonzero(as_tuple=True)[0]
-        retriever_targets = retriever_targets.view(-1).detach()
-        retriever_logits = retriever_logits.view(-1, retriever_logits.size(-1)).detach()
-        retriever_targets = retriever_targets[has_positive_documents]
-        retriever_logits = retriever_logits[has_positive_documents]
+        if retriever_targets is not None:
+            has_positive_documents = (match_score > 0).float().sum(-1) > 0
+            has_positive_documents = has_positive_documents.view(-1)
+            has_positive_documents = has_positive_documents.nonzero(as_tuple=True)[0]
+            retriever_targets = retriever_targets.view(-1).detach()
+            retriever_logits = retriever_logits.view(-1, retriever_logits.size(-1)).detach()
+            retriever_targets = retriever_targets[has_positive_documents]
+            retriever_logits = retriever_logits[has_positive_documents]
+            diagnostics["_retriever_targets_"] = retriever_targets
+            diagnostics["_retriever_logits_"] = retriever_logits
 
         # diagnostics
         diagnostics.update(
@@ -103,8 +109,6 @@ class ContrastiveGradients(SupervisedGradients):
                 "_reader_scores_": reader_score.detach(),
                 "_reader_targets_": targets.detach(),
                 "_retriever_scores_": retriever_score.detach(),
-                "_retriever_targets_": retriever_targets,
-                "_retriever_logits_": retriever_logits,
             }
         )
         return diagnostics

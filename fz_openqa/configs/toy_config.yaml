@@ -7,27 +7,38 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-version: 22
+version: 34
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
 seed: null
 wandb: true
+wandb_name: null
 device: cpu
 num_epochs: 20
 batch_size: 64
 num_workers: 2
 pin_memory: true
 max_chunksize: 1024
-n_samples: 10
-gamma: 1.
+n_samples: 20
 sampler: priority
-temperature: 100.
+update_freq: 5
+temperature: 10.
 max_baseline_samples: 3
-metric_size: 128
-output_size: 64
+hidden_size: 128
+output_size: 32
 share_backbone: false
 estimator: reinforce_a2
 use_baseline: false
 noise_level: 0
 labels: [ 1, 7, 5, 9 ]
+
+
+parameters:
+  reader_kl_weight: 0
+  retriever_kl_weight: 0
+  alpha:
+    mode: cosine
+    num_steps: 1000
+    initial_value: 0
+    final_value: 1
