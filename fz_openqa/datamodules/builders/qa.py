@@ -11,6 +11,7 @@ from loguru import logger
 
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
+from ..pipes.answer_options import InferTokenTypeIds
 from ..pipes.control.condition import In
 from ..pipes.min_length import MinLength
 from ..pipes.nesting import ApplyAsFlatten
@@ -383,6 +384,24 @@ class ConcatQaBuilder(QaBuilder):
                 shape=[-1, self.n_options],
             ),
             query_expansion_pipe,
+            ApplyAsFlatten(
+                InferTokenTypeIds(
+                    field="question",
+                    tokenizer=self.tokenizer,
+                    symbol_map=[
+                        [
+                            self.tokenizer.cls_token,
+                            self.tokenizer.cls_token,
+                            QUERY_TOKEN,
+                        ],
+                        [ANS_TOKEN],
+                    ],
+                    update=True,
+                ),
+                level=1,
+                input_filter=In(["question.input_ids"]),
+                update=True,
+            ),
         )
 
     def _get_collate_pipe(self, nesting_level=1):
@@ -390,7 +409,7 @@ class ConcatQaBuilder(QaBuilder):
         return Parallel(
             CollateField(
                 "question",
-                exclude=["input_ids", "attention_mask"],
+                exclude=["input_ids", "attention_mask", "token_type_ids"],
                 to_tensor=["document_idx"],
                 level=0,
                 id="collate-questions",
@@ -406,7 +425,7 @@ class ConcatQaBuilder(QaBuilder):
                 "question",
                 tokenizer=self.tokenizer,
                 level=nesting_level,
-                include_only=["input_ids", "attention_mask"],
+                include_only=["input_ids", "offset_mapping", "attention_mask", "token_type_ids"],
                 id="pad-nested-question-tokens",
             ),
         )
