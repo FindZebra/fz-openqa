@@ -5,6 +5,7 @@ from typing import Any
 from typing import Dict
 
 import pytorch_lightning as pl
+import rich
 import seaborn as sns
 import torch
 from loguru import logger
@@ -95,7 +96,15 @@ class VizMaxsimCallback(Callback):
             retrieval_score = batch.get("document.retrieval_score")
             hq = output.get("_hq_")
             hd = output.get("_hd_")
+            qmask = hq.abs().sum(-1) == 0
+            dmask = hd.abs().sum(-1) == 0
             scores = torch.einsum("bmqh,bmkdh->bmkqd", hq, hd)
+            MIN_SCORE = scores.min() - 0.2 * (scores.max() - scores.min())
+            MAX_SCORE = scores.max() + 0.2 * (scores.max() - scores.min())
+            qmask = qmask[:, :, None, :, None]
+            scores = scores.masked_fill(qmask, 0)
+            dmask = dmask[:, :, :, None, :]
+            scores = scores.masked_fill(dmask, MIN_SCORE)
             targets = batch.get("answer.target")
             for i in range(min(self.max_questions, len(hq))):
                 js = list(range(len(d_input_ids[i])))
@@ -128,11 +137,11 @@ class VizMaxsimCallback(Callback):
 
                         # visualize the scores
                         q_tokens = [
-                            self.tokenizer.decode(t, skip_special_tokens=True)
+                            self.tokenizer.decode(t, skip_special_tokens=False)
                             for t in q_input_ids_i
                         ]
                         d_tokens = [
-                            self.tokenizer.decode(t, skip_special_tokens=True)
+                            self.tokenizer.decode(t, skip_special_tokens=False)
                             for t in d_input_ids_ik
                         ]
 
@@ -150,22 +159,19 @@ class VizMaxsimCallback(Callback):
                         udid = dids[i, j, k]
 
                         # highlight the max score
-                        a = y.min().item()
-                        b = y.max().item()
-                        y_max = 0.2 * (b - a) + b
-                        y_min = -0.2 * (b - a) + a
+
                         yms = torch.zeros_like(y[:, 0])
                         for u in range(y.shape[0]):
                             ym_u = y[u].max().item()
                             yms[u] = ym_u
                             for v in range(y.shape[1]):
                                 if y[u, v] >= ym_u:
-                                    y[u, v] = y_max
+                                    y[u, v] = MAX_SCORE
 
                         # Append the column of query token scores: max_j s_ij
                         d_tokens = ["[MAX]", ""] + d_tokens
                         yms = yms.unsqueeze(1)
-                        y = torch.cat([yms, y_min * torch.ones_like(yms), y], dim=1)
+                        y = torch.cat([yms, MIN_SCORE * torch.ones_like(yms), y], dim=1)
 
                         # heatmap
                         fig = plt.figure(
@@ -175,6 +181,8 @@ class VizMaxsimCallback(Callback):
                             y,
                             xticklabels=d_tokens,
                             yticklabels=q_tokens,
+                            vmin=MIN_SCORE,
+                            vmax=MAX_SCORE,
                         )
                         plt.savefig(output_dir / f"heatmap-{uqid}-{j}-{udid}.png")
                         try:
