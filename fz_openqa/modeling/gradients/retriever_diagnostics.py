@@ -11,7 +11,7 @@ def retriever_diagnostics(
     *,
     retriever_score: Tensor,
     retrieval_score: Optional[Tensor],
-    retrieval_rank: Optional[Tensor],
+    retrieval_rank: Optional[Tensor] = None,
     match_score: Optional[Tensor] = None,
     doc_ids: Optional[Tensor] = None,
     raw_doc_ids: Optional[Tensor] = None,

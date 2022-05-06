@@ -151,6 +151,7 @@ class InBatchGradients(Gradients):
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),
+            "reader/entropy": -(q.logp_a.exp() * q.logp_a).sum(dim=1).mean().detach(),
             "_reader_scores_": reader_score.detach(),
             "_reader_logits_": q.logp_a.detach(),
             "_reader_targets_": targets.detach(),

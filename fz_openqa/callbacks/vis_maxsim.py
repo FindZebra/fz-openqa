@@ -16,8 +16,8 @@ from pytorch_lightning.utilities import rank_zero_only
 from transformers import PreTrainedTokenizerFast
 
 import wandb
-from fz_openqa.modeling import Model
 from fz_openqa.modeling.heads import ColbertHead
+from fz_openqa.modeling.model import Model
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.utils.exceptions import catch_exception_as_warning
 from fz_openqa.utils.pretty import pretty_decode
