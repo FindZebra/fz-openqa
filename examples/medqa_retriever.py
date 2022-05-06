@@ -74,9 +74,9 @@ pipe = Sequential(concat_pipe, select_fields, flatten_and_search, update=True)
 printer = PrintBatch()
 
 
-def randargmax(retrieval_scores: np.array) -> np.array:
+def randargmax(proposal_scores: np.array) -> np.array:
     """a random tie-breaking argmax"""
-    return np.random.choice(np.flatnonzero(retrieval_scores == retrieval_scores.max()))
+    return np.random.choice(np.flatnonzero(proposal_scores == proposal_scores.max()))
 
 
 total = len(dm.dataset["train"]) + len(dm.dataset["validation"]) + len(dm.dataset["test"])
@@ -89,18 +89,18 @@ for batch in track(dm.train_dataloader(), description="Iterating through the dat
     # 1 do a pipe to concat question + answer option
     batch = pipe(batch)
 
-    for question in batch["document.retrieval_score"]:
+    for question in batch["document.proposal_score"]:
         sums = np.sum(question, axis=1)
         if np.all(sums == sums[0]):
             equals += 1
 
     predictions = [
-        np.argmax(np.sum(question, axis=1)) for question in batch["document.retrieval_score"]
+        np.argmax(np.sum(question, axis=1)) for question in batch["document.proposal_score"]
     ]
 
     # predictions =[
     #    randargmax(np.sum(question, axis=1)
-    #              ) for question in batch['document.retrieval_score']
+    #              ) for question in batch['document.proposal_score']
     # ]
 
     # print(predictions)

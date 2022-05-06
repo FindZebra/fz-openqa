@@ -180,7 +180,7 @@ class TestOptionRetriever(TestModel):
 
     @unittest.skip("TODO")
     def test_compute_score(self):
-        """test the `_compute_score` method. Make sure that retrieval score
+        """test the `_compute_score` method. Make sure that proposal score
         match the targets `document.match_score`"""
         batch = self.batch
         output = self.model.forward(batch)
@@ -224,7 +224,7 @@ class TestOptionRetriever(TestModel):
             for param in model.parameters():
                 param.add_(torch.randn(param.size()) * 0.1)
 
-        # compute the retrieval_score using `InBatchGradients
+        # compute the proposal_score using `InBatchGradients
         with torch.no_grad():
             _estimator = model.estimator
             model.estimator = InBatchGradients()
@@ -234,7 +234,7 @@ class TestOptionRetriever(TestModel):
             doc_logits.zero_()
             # doc_logits /= 10
             # doc_logits = doc_logits + torch.randn_like(doc_logits)
-            ref_batch['document.retrieval_score'] = doc_logits
+            ref_batch['document.proposal_score'] = doc_logits
             self.evaluate(model, ref_batch, doc_targets, doc_logits, VERBOSE)
 
         # optimize the model
@@ -265,7 +265,7 @@ class TestOptionRetriever(TestModel):
 
     def evaluate(self, model, ref_batch, doc_targets, doc_logits, VERBOSE, test=False):
         batch = deepcopy(ref_batch)
-        batch[f"document.retrieval_log_weight"] = torch.zeros_like(doc_logits)
+        batch[f"document.proposal_log_weight"] = torch.zeros_like(doc_logits)
         targets = batch['answer.target']
         output = model.evaluate(batch)
         probs = output['_reader_logits_'].detach().exponentiate()

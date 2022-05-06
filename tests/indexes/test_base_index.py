@@ -82,7 +82,7 @@ class TestIndex(TestCase, ABC):
             CollateTokens(tokenizer=self.tokenizer, prefix='document.'))
 
         # define targets
-        self.retrieval_targets = [0, 4]
+        self.proposal_targets = [0, 4]
 
     def _init_index(self) -> Index:
         """Init the index."""
@@ -132,7 +132,7 @@ class TestIndex(TestCase, ABC):
             self.assertEqual(d.shape, expected_shape)
 
         # check the top-1 scores
-        for target, scores, idx in zip(self.retrieval_targets, data['score'], data['index']):
+        for target, scores, idx in zip(self.proposal_targets, data['score'], data['index']):
             pred = np.argmax(scores, axis=-1)
             msg = f"top retrieved document is expected to be {target}, but is {idx[pred]}."
             self.assertEqual(target, idx[pred], msg)

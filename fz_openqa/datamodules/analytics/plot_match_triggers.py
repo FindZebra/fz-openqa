@@ -23,7 +23,7 @@ from fz_openqa.utils.pretty import get_separator
 class PlotTopMatchTriggers(Analytic):
     """ Plot the top 20 triggers for matched documents"""
 
-    requires_columns = ["document.retrieval_score", "document.match_score"]
+    requires_columns = ["document.proposal_score", "document.match_score"]
     output_file_name = "top_match_triggers.html"
 
     def __init__(self, *args, topn: int = 100, **kwargs):

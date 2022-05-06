@@ -100,7 +100,7 @@ class InBatchGradients(Gradients):
         retriever_score: Tensor,
         reader_score: Tensor,
         targets: Tensor,
-        retrieval_score: Optional[Tensor] = None,
+        proposal_score: Optional[Tensor] = None,
         **kwargs,
     ):
 
@@ -123,14 +123,14 @@ class InBatchGradients(Gradients):
             targets=targets,
             reader_score=reader_score,
             retriever_score=retriever_score,
-            retrieval_score=retrieval_score,
+            proposal_score=proposal_score,
         )
 
         # run diagnostics
         diagnostics.update(
             retriever_diagnostics(
                 retriever_score=retriever_score,
-                retrieval_score=retrieval_score,
+                proposal_score=proposal_score,
                 reader_score=reader_score,
                 **kwargs,
             )

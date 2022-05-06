@@ -53,8 +53,8 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
-        "train/retrieval-metrics/top3_Precision",
-        "validation/retrieval-metrics/top3_Precision",
+        "train/retrieval/top3_Precision",
+        "validation/retrieval/top3_Precision",
     ]
 
     def __init__(
@@ -105,7 +105,7 @@ class OptionRetriever(Module):
         self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
 
         self.retriever_metrics = self._get_base_metrics(
-            prefix=f"{prefix}retrieval-metrics/",
+            prefix=f"{prefix}retrieval/",
             topk=[1, 3, 5, 10, 20, 50, 100],
             retrieval=True,
         )
@@ -324,9 +324,9 @@ class OptionRetriever(Module):
         step_output.update(
             self.estimator.step(
                 targets=batch.get("answer.target", None),
-                retrieval_score=batch.get("document.retrieval_score", None),
-                retrieval_rank=batch.get("document.retrieval_rank", None),
-                retrieval_log_weight=batch.get("document.retrieval_log_weight", None),
+                proposal_score=batch.get("document.proposal_score", None),
+                proposal_rank=batch.get("document.proposal_rank", None),
+                proposal_log_weight=batch.get("document.proposal_log_weight", None),
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
                 raw_doc_ids=step_output.get("_document.row_idx_", None),
@@ -364,7 +364,7 @@ class OptionRetriever(Module):
 
     @staticmethod
     def _format_input_data(batch):
-        _key = "document.retrieval_score"
+        _key = "document.proposal_score"
         batch[_key] = batch[_key].clamp(min=-1e3, max=1e6)
 
     def _get_heads_diagnostics(self):

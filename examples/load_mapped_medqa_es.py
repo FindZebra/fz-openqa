@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent.as_posix()))
 
 import fz_openqa
 from fz_openqa import configs
-from fz_openqa.datamodules.analytics.plot_retrieval_score_distribution import PlotScoreDistributions
+from fz_openqa.datamodules.analytics.plot_proposal_score_distribution import PlotScoreDistributions
 from fz_openqa.datamodules.builders import OpenQaBuilder, CorpusBuilder
 from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule

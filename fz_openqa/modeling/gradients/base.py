@@ -31,8 +31,8 @@ class Gradients(nn.Module):
         logits = retriever_scores.log_softmax(dim=-1)
         diagnostics["_retriever_binary_targets_"] = targets
         diagnostics["_retriever_logits_"] = logits
-        diagnostics["retrieval-metrics/n_total"] = torch.ones_like(targets.float()).sum(-1)
-        diagnostics["retrieval-metrics/n_positive"] = targets.float().sum(-1)
+        diagnostics["retrieval/n_total"] = torch.ones_like(targets.float()).sum(-1)
+        diagnostics["retrieval/n_positive"] = targets.float().sum(-1)
         return diagnostics
 
 

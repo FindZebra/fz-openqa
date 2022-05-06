@@ -30,7 +30,7 @@ datamodule:
     - document.attention_mask
     - document.row_idx
     - document.match_score
-    - document.retrieval_score
+    - document.proposal_score
     - answer.input_ids
     - answer.attention_mask
     - answer.target

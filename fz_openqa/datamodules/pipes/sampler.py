@@ -24,7 +24,7 @@ class Sampler(Pipe):
         *,
         total: int | Dict[Split, int],
         match_score_key: str = "match_score",
-        retrieval_score_key: str = "retrieval_score",
+        proposal_score_key: str = "proposal_score",
         field="document",
         replace: bool = False,
         largest: bool | Dict[Split, bool] = False,
@@ -34,7 +34,7 @@ class Sampler(Pipe):
         super().__init__(**kwargs)
         self.total = total
         self.match_score_key = f"{field}.{match_score_key}"
-        self.retrieval_score_key = f"{field}.{retrieval_score_key}"
+        self.proposal_score_key = f"{field}.{proposal_score_key}"
         self.field = field
         self.replace = replace
         self.largest = largest
@@ -47,7 +47,7 @@ class Sampler(Pipe):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         # sample
         index = np.arange(len(logits))
@@ -137,7 +137,7 @@ class SamplerSupervised(Sampler):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         if self.match_score_key in batch.keys():
             scores = batch[self.match_score_key]
@@ -207,7 +207,7 @@ class SamplerBoostPositives(Sampler):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         if self.match_score_key in batch.keys():
             scores = batch[self.match_score_key]
@@ -265,18 +265,18 @@ class PrioritySampler(Sampler):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
         logits = logits / temperature
         # logits = logits - logits.max(dim=-1, keepdim=True).values
-        # batch[self.retrieval_score_key] = logits
+        # batch[self.proposal_score_key] = logits
 
         # sample
         z, log_w = self.sample(logits, total, largest=largest)
-        # retrieval_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
+        # proposal_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
 
         # re-index and return
         output = {k: reindex(v, z) for k, v in batch.items()}
-        output[f"{self.field}.retrieval_log_weight"] = log_w
+        output[f"{self.field}.proposal_log_weight"] = log_w
 
         return output
 

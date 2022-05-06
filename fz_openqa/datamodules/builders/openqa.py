@@ -58,15 +58,15 @@ class SelectMode(Enum):
 class OpenQaBuilder(DatasetBuilder):
     _column_names = [
         "document.row_idx",
-        "document.retrieval_score",
+        "document.proposal_score",
         "document.match_score",
-        "document.retrieval_rank",
+        "document.proposal_rank",
     ]
 
     _pt_attributes = [
         "document.match_score",
-        "document.retrieval_score",
-        "document.retrieval_rank",
+        "document.proposal_score",
+        "document.proposal_rank",
     ]
 
     def __init__(
@@ -328,7 +328,7 @@ class OpenQaBuilder(DatasetBuilder):
                     ApplyAsFlatten(
                         score_transform,
                         level=self._document_base_nesting_level - 1,
-                        input_filter=In(["document.retrieval_score", "document.match_score"]),
+                        input_filter=In(["document.proposal_score", "document.match_score"]),
                         update=True,
                     )
                     if score_transform is not None and relevance_classifier is not None
@@ -398,7 +398,7 @@ class OpenQaBuilder(DatasetBuilder):
                 CollateField(
                     "document",
                     level=self.openqa_config.document_nesting_level,
-                    to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
+                    to_tensor=["match_score", "proposal_score", "proposal_rank"],
                     id="collate-nested-document-attributes",
                 ),
             ),

@@ -184,8 +184,8 @@ class ToySampler:
             "question": self.data[split][idx],
             "target": self.targets[split][idx],
             "evidence": self.gather_knowledge(sampled.pid[idx]),
-            "retrieval_score": sampled.score[idx],
-            "retrieval_log_weight": sampled.log_weight[idx],
+            "proposal_score": sampled.score[idx],
+            "proposal_log_weight": sampled.log_weight[idx],
         }
 
         return data

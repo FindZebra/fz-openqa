@@ -2,7 +2,7 @@ from .base import Analytic
 from .count_matched_questions import CountMatchedQuestions
 from .log_retrieved_documents import LogRetrievedDocuments
 from .plot_match_triggers import PlotTopMatchTriggers
-from .plot_retrieval_score_distribution import PlotScoreDistributions
+from .plot_proposal_score_distribution import PlotScoreDistributions
 from .retriever_accuracy import RetrieverAccuracy
 from .retriever_distribution import RetrieverDistribution
 from .sequence_lengths import SequenceLengths
