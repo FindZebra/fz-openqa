@@ -6,6 +6,7 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 from datasets import Split
 from loguru import logger
@@ -53,8 +54,8 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
-        "train/retrieval/top3_Precision",
-        "validation/retrieval/top3_Precision",
+        "train/retrieval/Precision@3",
+        "validation/retrieval/Precision@3",
     ]
 
     def __init__(
@@ -254,19 +255,38 @@ class OptionRetriever(Module):
         except KeyError as e:
             raise KeyError("Merging documents requires `document.row_idx`.") from e
 
+        # get the list of matched document ids for each question
+        if "document.match_score" in batch:
+            match_score = batch["document.match_score"]
+            q_batch_size = batch["question.input_ids"].shape[:-1]
+            matched_documents = doc_ids.clone()
+            matched_documents = matched_documents.masked_fill(match_score <= 0, -1)
+        else:
+            q_batch_size = None
+            matched_documents = None
+
+        # get the unique document ids and flatten the document features
         batch["_document.row_idx"] = doc_ids
-        batch_size = doc_ids.shape
+        doc_batch_size = doc_ids.shape
         doc_ids = doc_ids.view(-1)
-        udoc_ids, uids, _ = unique_with_indices(doc_ids)
+        udoc_ids, uids, inv_ids = unique_with_indices(doc_ids)
         keys_to_merge = {"document.input_ids", "document.attention_mask", "document.row_idx"}
         for key in keys_to_merge & set(batch.keys()):
             feature = batch[key]
-            feature = feature.view(-1, *feature.shape[len(batch_size) :])
+            feature = feature.view(-1, *feature.shape[len(doc_batch_size) :])
             feature = feature[uids]
             batch[key] = feature
 
+        # expand the match score from [*q_bs, n_docs] to [*q_bs, n_all_unique_docs]
+        if matched_documents is not None:
+            matched_documents = matched_documents.view(*q_batch_size, 1, matched_documents.size(-1))
+            new_match_score = (
+                matched_documents == udoc_ids.view(*(1 for _ in q_batch_size), -1, 1)
+            ).any(dim=-1)
+            batch["document.match_score"] = new_match_score
+
         # save the original ids inverse ids
-        meta = {"_document.row_idx_": doc_ids.view(*batch_size), "_document.inv_ids_": uids}
+        meta = {"_document.row_idx_": doc_ids.view(*doc_batch_size), "_document.inv_ids_": uids}
 
         return batch, meta
 
@@ -330,6 +350,7 @@ class OptionRetriever(Module):
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
                 raw_doc_ids=step_output.get("_document.row_idx_", None),
+                doc_inv_ids=step_output.get("_document.inv_ids_", None),
                 share_documents_across_batch=self.share_documents_across_batch,
                 **head_meta,
                 **kwargs,
@@ -352,6 +373,8 @@ class OptionRetriever(Module):
 
         # process with the estimator
         output.update(self.estimator.step_end(**output))
+
+        # pprint_batch(output, "reduce_step_output")
 
         # average losses
         for k, v in output.items():

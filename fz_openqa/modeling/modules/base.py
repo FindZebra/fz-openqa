@@ -108,7 +108,7 @@ class Module(nn.Module, ABC):
 
         # select the keys with prefix
         if prefix is not None:
-            batch = self._select(prefix, batch)
+            batch = self._select_field(prefix, batch)
 
         if batch["input_ids"].shape[1] > self.max_length:
             warnings.warn(
@@ -350,9 +350,10 @@ class Module(nn.Module, ABC):
             topk = [None]
 
         def _name(name, k):
-            return f"top{k}{name}" if k is not None else f"{name}"
+            return f"{name}@{k}" if k is not None else f"{name}"
 
         if retrieval:
+            metric_kwargs["empty_target_action"] = "skip"
             _metrics = {
                 **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
                 **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
@@ -380,7 +381,7 @@ class Module(nn.Module, ABC):
         return {k: v for k, v in output.items() if not is_feature_name(k)}
 
     @staticmethod
-    def _select(prefix: str, batch: Batch) -> Batch:
+    def _select_field(prefix: str, batch: Batch) -> Batch:
         """Select attributes with prefix `prefix` from the `batch`"""
         prefix = f"{prefix}."
         return {k.replace(prefix, ""): v for k, v in batch.items() if str(k).startswith(prefix)}
