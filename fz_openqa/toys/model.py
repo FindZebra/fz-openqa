@@ -13,16 +13,14 @@ from torch.nn import Sequential
 
 
 class Encoder(nn.Module):
-    def __init__(self, output_size: int = 128):
+    def __init__(self):
         super(Encoder, self).__init__()
-        self.conv1 = nn.Conv2d(1, 8, 3, 1)
+        self.conv1 = nn.Conv2d(1, 8, 5, stride=1)
         self.norm_1 = nn.InstanceNorm2d(8)
-        self.conv2 = nn.Conv2d(8, 16, 3, 1)
-        self.norm_2 = nn.InstanceNorm2d(16)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216 // 4, output_size)
-        self.norm_3 = nn.LayerNorm(output_size)
+        self.conv2 = nn.Conv2d(8, 8, 5, stride=2)
+        self.norm_2 = nn.InstanceNorm2d(8)
+        self.conv3 = nn.Conv2d(8, 8, 5, stride=2)
+        self.dropout_conv = nn.Dropout(0.2)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -31,12 +29,10 @@ class Encoder(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = self.norm_2(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
+        x = self.dropout_conv(x)
+        x = F.relu(x)
+        x = self.conv3(x)
         x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = self.norm_3(x)
-        x = self.dropout2(x)
         return x
 
 
@@ -101,15 +97,16 @@ class ToyOptionRetriever(nn.Module):
     ):
         super().__init__()
         self.max_chunksize = max_chunksize
+        hidden = 72
         if share_backbone:
             rich.print("[magenta]SHARING BACKBONE")
-            self.backbone = Encoder(hidden)
+            self.backbone = Encoder()
             self.retriever_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
             self.reader_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
         else:
             self.backbone = lambda x: x
             self.retriever_head = nn.Sequential(
-                Encoder(hidden), nn.ReLU(), nn.Linear(hidden, output_size)
+                Encoder(), nn.ReLU(), nn.Linear(hidden, output_size)
             )
             self.reader_head = deepcopy(self.retriever_head)
 
