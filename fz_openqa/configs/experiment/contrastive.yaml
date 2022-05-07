@@ -2,7 +2,6 @@
 
 defaults:
   - option_retriever
-  - override /datamodule/sampler: priority
   - override /model/module/reader_head: none
   - override /model/module/gradients: contrastive
 
@@ -15,11 +14,6 @@ model:
     alpha: 1
     reader_kl_weight: 0.5
     retriever_kl_weight: 0
-
-datamodule:
-  n_retrieved_documents: 100
-  index_builder:
-    p: 256
 
   # dataloader
   drop_last: ${model.module.share_documents_across_batch}
