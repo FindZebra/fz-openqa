@@ -6,6 +6,7 @@ defaults:
   - relevance_classifier: partial_match
   - score_transform: multiply_by_relevance
   - dataset_transform: none
+  - preprocessing_op: none
   - sampler: random
   - transform: none
 

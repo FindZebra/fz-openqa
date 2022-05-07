@@ -58,17 +58,19 @@ class SciSpaCyFilter(TextFilter):
         text key to be analysed
     """
 
+    no_fingerprint = ["model"]
+
     def __init__(self, model_name: str = "en_core_sci_lg", **kwargs):
         super().__init__(**kwargs)
         self.model_name = model_name
-        self._load_model(self.model_name)
+        self.model = None
 
     def __repr__(self):
         return f"SciSpaCyFilter(model_name={self.model_name})"
 
-    def _load_model(self, model_name):
-        self.model = spacy.load(
-            model_name,
+    def _load_model(self):
+        return spacy.load(
+            self.model_name,
             disable=[
                 "tok2vec",
                 "tagger",
@@ -83,12 +85,14 @@ class SciSpaCyFilter(TextFilter):
         return self._join_ents(doc)
 
     def filter_batch(self, texts: List[str]) -> List[str]:
+        if self.model is None:
+            self.model = self._load_model()
         docs = self.model.pipe(texts)
         return [self._join_ents(doc) for doc in docs]
 
     @staticmethod
     def _join_ents(doc: Doc) -> str:
-        return " ".join([str(ent.text) for ent in doc.ents])
+        return ", ".join([str(ent.text) for ent in doc.ents])
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -97,4 +101,4 @@ class SciSpaCyFilter(TextFilter):
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self._load_model(self.model_name)
+        self.model = None

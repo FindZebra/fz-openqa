@@ -57,10 +57,16 @@ def run(config: DictConfig) -> None:
     # access dataset
     rich.print(dm.dataset)
 
+    i = 32
+    rich.print(dm.dataset["train"]["question.input_ids"][i][0])
+    rich.print(dm.dataset["train"]["question.attention_mask"][i][0])
+    rich.print(dm.dataset["train"]["question.token_type_ids"][i][0])
+
     # sample a batch
-    # batch = next(iter(dm.train_dataloader()))
-    # rich.print(batch["question.input_ids"][0])
-    # rich.print(batch["question.attention_mask"][0])
+    batch = next(iter(dm.train_dataloader()))
+    rich.print(batch["question.input_ids"][0, 0])
+    rich.print(batch["question.attention_mask"][0, 0])
+    rich.print(batch["question.token_type_ids"][0, 0])
 
 
 if __name__ == "__main__":
