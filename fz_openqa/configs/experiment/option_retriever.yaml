@@ -85,7 +85,7 @@ model:
   # Module definition
   module:
     mask_punctuation: true # MaxSim focuses too much on punctuation
-    use_conditional_mask: true
+    use_conditional_mask: false
     split_bert_layers: 0
     resample_k: null
     alpha: 0
