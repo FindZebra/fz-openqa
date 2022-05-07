@@ -173,7 +173,7 @@ class ReinforceGradients(Gradients):
         # `\hat{w} \propto S(D) \Zeta(D) p(a_st | Q, D)`
         log_W_hat = log_Zeta_hat.log_softmax(dim=-1)
         log_W_hat = log_W_hat.detach()
-        self.ess_diagnostics(diagnostics, log_W, key="ess-posterior")
+        self.ess_diagnostics(diagnostics, log_W_hat, key="ess-posterior")
 
         # compute KL divergence w.r.t to a uniform prior (regularization)
         kl_reader = kl_divergence(log_p_a, dim=1)
