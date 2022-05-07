@@ -1,9 +1,7 @@
 from typing import Any
 from typing import Optional
 
-import numpy as np
 import pytorch_lightning as pl
-import rich
 import spacy
 from loguru import logger
 from pip._internal import main as pipmain
@@ -15,7 +13,6 @@ from transformers import PreTrainedTokenizerFast
 
 import wandb
 from fz_openqa.utils.exceptions import catch_exception_as_warning
-from fz_openqa.utils.pretty import pprint_batch
 
 CORRECT_LABEL = "✅"
 INCORRECT_LABEL = "❌"
@@ -72,6 +69,7 @@ class LogPredictions(Callback):
     ) -> None:
         self.data = []
 
+    @catch_exception_as_warning
     def on_validation_batch_end(
         self,
         trainer: "pl.Trainer",
@@ -81,6 +79,9 @@ class LogPredictions(Callback):
         batch_idx: int,
         dataloader_idx: int,
     ) -> None:
+
+        if "_reader_logits_" not in outputs:
+            return
 
         if len(self.data) >= self.n_samples:
             return
@@ -132,7 +133,7 @@ class LogPredictions(Callback):
 
         return html + "\n"
 
-    # @catch_exception_as_warning
+    @catch_exception_as_warning
     @rank_zero_only
     def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         html = "<h1>Model predictions</h1>\n"
@@ -192,5 +193,5 @@ class LogPredictions(Callback):
         try:
             name = "predictions/htm"
             wandb.log({name: wandb.Html(html, inject=False)}, commit=False)
-        except Exception as e:
-            logger.warning(f"Could not log to wandb: {e}")
+        except wandb.errors.Error as e:
+            logger.warning(e)

@@ -70,7 +70,7 @@ class CustomAutoModel(AutoModel):
     def _replace_model_class_with_custom(cls, model_class):
         if model_class in CUSTOM_TRANSFORMERS:
             logger.warning(
-                f"Replacing original class <{model_class.__name__}> with"
+                f"Replacing original class <{model_class.__name__}> with "
                 f"custom class {CUSTOM_TRANSFORMERS[model_class]}"
             )
             model_class = CUSTOM_TRANSFORMERS[model_class]
