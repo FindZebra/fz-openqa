@@ -21,6 +21,7 @@ from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
+from .preprocessing import DatasetPreprocessing
 from .utils.format_row import format_row_concatenated_questions
 from .utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.generators import medqa
@@ -97,6 +98,7 @@ class QaBuilder(HfDatasetBuilder):
         query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
         drop_documents: bool = True,
+        preprocessing_op: Optional[DatasetPreprocessing] = None,
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
@@ -105,6 +107,7 @@ class QaBuilder(HfDatasetBuilder):
         self.n_query_tokens = n_query_tokens
         self.n_answer_tokens = n_answer_tokens
         self.drop_documents = drop_documents
+        self.preprocessing_op = preprocessing_op
 
         # set the dataset attributes
         for dn in dset_name.split("+"):
@@ -133,9 +136,22 @@ class QaBuilder(HfDatasetBuilder):
         for dset_name in dset_names:
             script_id, name = QA_DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
+
+        # load the base datasets
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self.load_one_dataset(n, **kwargs) for n in dset_names]
 
+        # apply preprocessing operators
+        if self.preprocessing_op is not None:
+            dsets = [
+                self.preprocessing_op(
+                    d,
+                    num_proc=self.num_proc,
+                )
+                for d in dsets
+            ]
+
+        # concatenate the datasets
         if len(dsets) == 1:
             return dsets[0]
         else:

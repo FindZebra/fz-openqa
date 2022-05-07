@@ -1,11 +1,7 @@
 from datasets import Dataset
 
-from fz_openqa.datamodules.builders.transforms import FlattenMultipleChoice
-from fz_openqa.datamodules.pipes import Flatten
-from fz_openqa.datamodules.pipes import Lambda
+from .flatten_multiple_choice import FlattenMultipleChoice
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.utils.datastruct import Batch
 
 
