@@ -37,35 +37,48 @@ class FlattenMultipleChoice(OpenQaTransform):
     def _transform_dataset(
         self, dataset: HfDataset, openqa_config: Optional[OpenQaConfig], **map_kwargs
     ) -> HfDataset:
-        """Reduce nesting by one level"""
+        """
+        Flatten: Reduce nesting by one level :
+        [n_questions, n_options, *] -> [n_questions * n_options, *]
 
-        # drop columns
-        dataset = dataset.remove_columns(
-            ["answer.target", "question.idx", "question.metamap", "question.row_idx"]
-        )
+        (Optional) Filter: Remove unmatched documents
+        """
 
-        # flatten the dataset
         lengths = {split: len(dset) for split, dset in dataset.items()}
-        dataset = dataset.map(
-            Flatten(level=1), desc="Flatten Multiple Choice dataset", batched=True, **map_kwargs
-        )
+        dataset = self._flatten_dataset(dataset, map_kwargs)
         self._log_diff_length("Flatten", dataset, lengths)
 
-        # filter out unmatched documents
         if self.dataset_filter is not None:
             lengths = {split: len(dset) for split, dset in dataset.items()}
-            dataset = DatasetDict(
-                {
-                    split: dset.filter(
-                        partial(self.dataset_filter, split=split), batched=True, **map_kwargs
-                    )
-                    for split, dset in dataset.items()
-                }
-            )
+            dataset = self._filter_dataset(dataset, map_kwargs)
             self._log_diff_length("Filter", dataset, lengths)
 
         # reset question.idx column
         dataset = set_index_column(dataset, key="question.row_idx")
+
+        return dataset
+
+    def _flatten_dataset(self, dataset, map_kwargs):
+        # drop columns
+        dataset = dataset.remove_columns(
+            ["answer.target", "question.idx", "question.metamap", "question.row_idx"]
+        )
+        # flatten the dataset
+        dataset = dataset.map(
+            Flatten(level=1), desc="Flatten Multiple Choice dataset", batched=True, **map_kwargs
+        )
+        return dataset
+
+    def _filter_dataset(self, dataset, map_kwargs):
+        # filter out unmatched documents
+        dataset = DatasetDict(
+            {
+                split: dset.filter(
+                    partial(self.dataset_filter, split=split), batched=True, **map_kwargs
+                )
+                for split, dset in dataset.items()
+            }
+        )
 
         return dataset
 
