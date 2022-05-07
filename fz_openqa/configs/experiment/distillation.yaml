@@ -25,6 +25,9 @@ model:
   optimizer_params:
     lr: 1e-5
   parameters: null
+  module:
+    strip_answer_from_question: true
+
 
 datamodule:
   dataset_update: null
