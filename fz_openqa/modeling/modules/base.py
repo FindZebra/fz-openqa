@@ -376,8 +376,8 @@ class Module(nn.Module, ABC):
         if retrieval:
             metric_kwargs["empty_target_action"] = "skip"
             _metrics = {
-                **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
-                **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
+                # **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
+                # **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
                 # **{_name("FallOut", k): RetrievalFallOut(k=k, **metric_kwargs) for k in topk},
                 # **{_name("HitRate", k): RetrievalHitRate(k=k, **metric_kwargs) for k in topk},
                 **{_name("MRR", None): RetrievalMRR(**metric_kwargs)},
