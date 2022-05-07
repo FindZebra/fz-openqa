@@ -44,6 +44,49 @@ def make_conditional_mask(token_type_ids, dtype, device):
     return extend_attention_mask.unsqueeze(1)
 
 
+def strip_answer_from_question(batch: Batch, pad_token_id) -> Batch:
+    required_columns = [
+        "question.input_ids",
+        "question.token_type_ids",
+        "question.attention_mask",
+    ]
+
+    for column in required_columns:
+        if column not in batch:
+            raise ValueError(f"{column} is required. " f"Found list({batch.keys()}")
+
+    input_ids = batch["question.input_ids"]
+    token_type_ids = batch["question.token_type_ids"]
+    attention_mask = batch["question.attention_mask"]
+    if input_ids.dim() > 2:
+        raise NotImplementedError("Not implemented for batch dimension > 1")
+
+    # todo: implementation without for loop: non_zero + gather/scatter
+    new_input_ids = torch.full_like(
+        input_ids,
+        fill_value=pad_token_id,
+    )
+    new_attention_mask = torch.zeros_like(attention_mask)
+    for i, input_ids_i in enumerate(input_ids):
+        token_type_ids_i: Tensor = token_type_ids[i]
+        attention_mask_i: Tensor = attention_mask[i]
+        is_answer_token = token_type_ids_i == 1
+
+        # set the new input_ids
+        input_ids_i = input_ids_i.masked_select(~is_answer_token)
+        new_input_ids[i, : len(input_ids_i)] = input_ids_i
+
+        # set the attention_mask
+        attention_mask_i = attention_mask_i.masked_select(~is_answer_token)
+        new_attention_mask[i, : len(attention_mask_i)] = attention_mask_i
+
+    batch["question.input_ids"] = new_input_ids
+    batch["question.attention_mask"] = new_attention_mask
+    batch["question.token_type_ids"] = torch.zeros_like(token_type_ids)
+
+    return batch
+
+
 class OptionRetriever(Module):
     """
     A reader-retriever model for multiple-choice OpenQA.
@@ -81,6 +124,7 @@ class OptionRetriever(Module):
         gradients: Gradients | DictConfig = None,
         share_documents_across_batch: bool = False,
         use_conditional_mask: bool = False,
+        strip_answer_from_question: bool = False,
         **kwargs,
     ):
         if gradients is None:
@@ -96,6 +140,7 @@ class OptionRetriever(Module):
         self.max_batch_size = max_batch_size
         self.share_documents_across_batch = share_documents_across_batch
         self.use_conditional_mask = use_conditional_mask
+        self.strip_answer_from_question = strip_answer_from_question
 
         # init the estimator
         self.estimator = maybe_instantiate(gradients)
@@ -108,6 +153,7 @@ class OptionRetriever(Module):
                 for symbol in string.punctuation
             ]
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
+        self.register_buffer("pad_token_id", torch.tensor(self.tokenizer.pad_token_id))
 
         # Log the fingerprint of the model
         for k, hs in fingerprint_bert(self.bert).items():
@@ -332,16 +378,10 @@ class OptionRetriever(Module):
         """
         pprint_batch(batch, "Option retriever::Input::batch", silent=silent)
 
-        # apply initial transformations to the data
-        self._format_input_data(batch)
-
         # initialize output dict
         step_output = {}
 
-        if self.share_documents_across_batch:
-            batch, meta = self._merge_unique_documents(batch)
-            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
-            step_output.update(meta)
+        batch = self._preprocess_batch(batch, silent, step_output)
 
         # process the batch using BERT
         max_batch_size_eval = -1 if self.training else self.max_batch_size
@@ -399,6 +439,22 @@ class OptionRetriever(Module):
             step_output.pop(key, None)
 
         return step_output
+
+    def _preprocess_batch(self, batch, silent, step_output):
+        # apply initial transformations to the data
+        self._format_input_data(batch)
+
+        # collapse all documents into the batch dimension
+        if self.share_documents_across_batch:
+            batch, meta = self._merge_unique_documents(batch)
+            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
+            step_output.update(meta)
+
+        # strip the answer from the question
+        if self.strip_answer_from_question:
+            batch = strip_answer_from_question(batch, self.pad_token_id)
+
+        return batch
 
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
