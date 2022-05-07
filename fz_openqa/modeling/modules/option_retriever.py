@@ -110,8 +110,8 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
-        "train/retrieval/Precision@3",
-        "validation/retrieval/Precision@3",
+        "train/retrieval/MRR",
+        "validation/retrieval/MRR",
     ]
 
     def __init__(
@@ -170,6 +170,7 @@ class OptionRetriever(Module):
             prefix=f"{prefix}retrieval/",
             topk=[1, 3, 5, 10, 20, 50, 100],
             retrieval=True,
+            allowed_splits=[Split.VALIDATION, Split.TEST],
         )
 
     def _init_total_logp_metrics(self, prefix):

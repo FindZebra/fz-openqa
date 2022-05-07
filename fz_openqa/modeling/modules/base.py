@@ -347,6 +347,7 @@ class Module(nn.Module, ABC):
         metric_kwargs: Optional[Dict] = None,
         topk: Optional[List[Union[None, int]]] = None,
         retrieval: bool = False,
+        allowed_splits: Optional[List[Split]] = None,
     ) -> SplitMetrics:
         """
         Return the base metrics for the given prefix.
@@ -374,6 +375,8 @@ class Module(nn.Module, ABC):
             return f"{name}@{k}" if k is not None else f"{name}"
 
         if retrieval:
+            # retrieval metrics are super slow,
+            # comment out for now
             metric_kwargs["empty_target_action"] = "skip"
             _metrics = {
                 # **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
@@ -393,7 +396,7 @@ class Module(nn.Module, ABC):
         )
 
         # return a copy of each MetricCollection for each split
-        return SplitMetrics(metrics)
+        return SplitMetrics(metrics, allowed_splits=allowed_splits)
 
     def _init_metrics(self, prefix: str):
         self.reader_metrics = self._get_base_metrics(prefix=prefix)

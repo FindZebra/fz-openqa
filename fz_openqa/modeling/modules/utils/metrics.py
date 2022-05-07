@@ -32,18 +32,19 @@ def is_computable(m: Metric | nn.Module):
 class SplitMetrics(nn.Module):
     """Define a metric for each split"""
 
-    def __init__(self, metric: Union[MetricCollection, Metric]):
+    def __init__(
+        self,
+        metric: Union[MetricCollection, Metric],
+        allowed_splits: Optional[Tuple[Split, ...]] = None,
+    ):
         super(SplitMetrics, self).__init__()
 
-        self.train_metric = deepcopy(metric)
-        self.valid_metric = deepcopy(metric)
-        self.test_metric = deepcopy(metric)
+        splits = {Split.TRAIN, Split.VALIDATION, Split.TEST}
+        if allowed_splits is not None:
+            splits = set.intersection(splits, set(allowed_splits))
+        self.splits = splits
 
-        self.metrics = {
-            f"_{Split.TRAIN}": self.train_metric,
-            f"_{Split.VALIDATION}": self.valid_metric,
-            f"_{Split.TEST}": self.test_metric,
-        }
+        self.metrics = nn.ModuleDict({f"_{split}": deepcopy(metric) for split in splits})
 
     def __getitem__(self, split: Split) -> Metric:
         return self.metrics[f"_{split}"]
@@ -51,12 +52,17 @@ class SplitMetrics(nn.Module):
     def reset(self, split: Optional[Split]):
         if split is None:
             map(lambda m: m.reset(), self.metrics.values())
-        else:
+        elif split in self.splits:
             self[split].reset()
+        else:
+            pass
 
     def update(self, split: Split, *args: torch.Tensor | None) -> None:
         """update the metrics of the given split."""
-        self[split].update(*args)
+        if split in self.splits:
+            self[split].update(*args)
+        else:
+            pass
 
     @staticmethod
     def safe_compute(metric: MetricCollection) -> Batch:
@@ -69,7 +75,7 @@ class SplitMetrics(nn.Module):
         Compute the metrics for the given `split` else compute the metrics for all splits.
         The metrics are return after computation.
         """
-        if split is not None:
+        if split is not None and split in self.splits:
             metrics = [self[split]]
         else:
             metrics = self.metrics.values()
