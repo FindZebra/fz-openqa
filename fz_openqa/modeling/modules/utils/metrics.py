@@ -44,7 +44,7 @@ class SplitMetrics(nn.Module):
             splits = set.intersection(splits, set(allowed_splits))
         self.splits = splits
 
-        self.metrics = nn.ModuleDict({f"_{split}": deepcopy(metric) for split in splits})
+        self.metrics = nn.ModuleDict({f"_{split}": deepcopy(metric) for split in self.splits})
 
     def __getitem__(self, split: Split) -> Metric:
         return self.metrics[f"_{split}"]
