@@ -89,7 +89,7 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      target_scale_init: 0.1
+      target_scale_init: 0.2
       learn_scale: true
       auto_scale: true
       share_parameters: true
@@ -100,7 +100,7 @@ model:
       id: reader
       use_soft_score: true
       normalize: false
-      target_scale_init: 0.1
+      target_scale_init: 0.2
       learn_scale: true
       auto_scale: true
       share_parameters: true
