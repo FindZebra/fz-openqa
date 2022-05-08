@@ -13,6 +13,7 @@ from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
+from ..heads.dpr import DprHead
 from ..heads.dpr import unique_with_indices
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
@@ -434,6 +435,9 @@ class OptionRetriever(Module):
             )
         )
 
+        # add the mask to the step_output
+        step_output["_qmask_"] = self.get_mask(batch, "question")
+
         pprint_batch(step_output, "Option retriever::step::output", silent=silent)
         cols_to_drop = {}
         for key in cols_to_drop:
@@ -461,6 +465,20 @@ class OptionRetriever(Module):
         """
         Gather losses and logits from all devices and return
         """
+
+        # potentially scale the heads
+        if isinstance(self.reader_head, DprHead):
+            if self.reader_head.is_scaled < 1:
+                reader_score = output["_reader_scores_"]
+                qmask = output["_qmask_"]
+                self.reader_head.set_scale(reader_score, qmask)
+
+        if isinstance(self.retriever_head, DprHead):
+            if self.retriever_head.is_scaled < 1:
+                retriever_score = output["_retriever_scores_"]
+                qmask = output["_qmask_"]
+                self.retriever_head.set_scale(retriever_score, qmask)
+
         # add the head diagnostics
         output.update(self._get_heads_diagnostics())
 

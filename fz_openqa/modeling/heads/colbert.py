@@ -205,6 +205,36 @@ class ColbertHead(DprHead):
             )
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
 
-        last_hidden_state = self.scale_sqrt(last_hidden_state)
+        if head == "question":
+            last_hidden_state = self.scale_query(last_hidden_state, q_lengths=mask.sum(-1))
 
         return last_hidden_state
+
+    def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
+        gain = self.target_scale_init * scores.std().detach().pow(-1)
+        self.scale_value = gain * self.scale_value.data
+        self.is_scaled.data += 1
+
+        # re-scale the scores
+        scores = scores * gain
+
+        rich.print(
+            f"> standardized | out.mean={scores.mean():.3f}, "
+            f"out.std={scores.std():.3f}, "
+            f"scale={self.scale_value:.3f}, "
+            f"kappa={self._kappa.data:.3f}, "
+            f"kappa_zero={self._kappa_zero.data:.3f}, "
+            f"scaled={self.is_scaled}"
+        )
+
+        return scores
+
+    def scale_query(self, hq: Tensor, q_lengths=None) -> Tensor:
+        if q_lengths is None:
+            raise ValueError("q_lengths is required for scale_query with Colbert")
+
+        q_lengths = q_lengths.view(*q_lengths.shape, *[1] * (hq.dim() - q_lengths.dim()))
+        # q_lengths = 1
+
+        hq = hq / (q_lengths * self.temperature)
+        return hq

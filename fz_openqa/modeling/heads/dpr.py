@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from typing import Dict
 from typing import Optional
@@ -51,16 +52,14 @@ class DprHead(Head):
         bayesian: bool = False,
         learn_scale: bool = False,
         target_scale_init: float = 1.0,
-        auto_scale: bool = False,
-        is_scaled: bool = False,
+        auto_scale: bool = True,
         scale_init: float = 1.0,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.bias = bias
         self.target_scale_init = target_scale_init
-        self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
-        self.auto_scale = auto_scale
+        self.register_buffer("is_scaled", torch.tensor(int(not auto_scale)))
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -78,18 +77,27 @@ class DprHead(Head):
         else:
             self.q_head = self.d_head = None
 
-        scale_value = torch.tensor(scale_init, dtype=torch.float)
-        offset_value = torch.tensor(0.0, dtype=torch.float)
-        if learn_scale:
-            self._scale = nn.Parameter(scale_value)
-            self._offset = nn.Parameter(offset_value)
-        else:
-            self.register_buffer("_scale", scale_value)
-            self.register_buffer("_offset", offset_value)
+        # set the temperature
+        self._kappa = nn.Parameter(torch.tensor(0.0), requires_grad=learn_scale)
+        self._kappa_zero = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+        self.scale_value = scale_init
 
     @property
-    def scale_value(self):
-        return self._scale
+    def temperature(self) -> Tensor:
+        return (self._kappa - self._kappa_zero).exp()
+
+    @temperature.setter
+    def temperature(self, value: Tensor):
+        self._kappa.data.fill_(0)
+        self._kappa_zero.data.fill_(-math.log(value))
+
+    @property
+    def scale_value(self) -> Tensor:
+        return self.temperature.pow(-1)
+
+    @scale_value.setter
+    def scale_value(self, value: Tensor):
+        self.temperature = 1 / value
 
     def entropy(self) -> Tensor | float:
         if isinstance(self.q_head, BayesianLinear):
@@ -109,28 +117,29 @@ class DprHead(Head):
 
         return 0.0
 
-    @property
-    def temperature(self) -> Tensor:
-        return self.scale_value.pow(-1)
+    def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
 
-    def set_scale(self, scores: Tensor):
-        self._scale.data = self.target_scale_init * scores.std().detach().pow(-1) * self._scale.data
-        self._offset.data = -scores.mean().detach() * self._scale.data
+        rich.print(f" Init: {self.scale_value}")
+        rich.print(f" Scores: {scores}")
+        rich.print(f" Qmask: {qmask.sum(-1)}")
+
+        self.scale_value = self.target_scale_init * scores.std().detach().pow(-1)
         self.is_scaled.data += 1
 
-        scores = self.scale_sqrt(scores)
+        scores = self.scale_query(scores, qmask=qmask)
         rich.print(
             f"> standardized | out.mean={scores.mean():.3f}, "
             f"out.std={scores.std():.3f}, "
-            f"scale={self._scale.data:.3f}, "
-            f"offset={self._offset.data:.3f}, "
+            f"scale={self.scale_value:.3f}, "
+            f"kappa={self._kappa.data:.3f}, "
+            f"kappa_zero={self._kappa_zero.data:.3f}, "
             f"scaled={self.is_scaled}"
         )
 
         return scores
 
-    def scale_sqrt(self, hq: Tensor) -> Tensor:
-        hq = hq * self.scale_value ** 0.5
+    def scale_query(self, hq: Tensor, qmask=None) -> Tensor:
+        hq = hq / self.temperature
         return hq
 
     def forward(
@@ -162,10 +171,6 @@ class DprHead(Head):
 
         # compute the score
         score, diagnostics = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
-
-        if self.auto_scale and self.is_scaled < 1:
-            score = self.set_scale(score)
-
         diagnostics["score"] = score + self.offset
 
         return diagnostics
@@ -230,7 +235,8 @@ class DprHead(Head):
         if self.normalize:
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
 
-        cls_repr = self.scale_sqrt(cls_repr)
+        if head == "question":
+            cls_repr = self.scale_query(cls_repr)
 
         return cls_repr
 

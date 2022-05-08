@@ -89,8 +89,9 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      scale_init: 0.1
+      target_scale_init: 1
       learn_scale: true
+      auto_scale: true
       share_parameters: true
       bias: false
     reader_head:
@@ -99,8 +100,9 @@ model:
       id: reader
       use_soft_score: true
       normalize: false
-      scale_init: 0.1
+      target_scale_init: 1
       learn_scale: true
+      auto_scale: true
       share_parameters: true
       bias: false
     gradients:
