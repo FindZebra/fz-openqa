@@ -9,7 +9,7 @@ model:
   module:
     share_documents_across_batch: true
     retriever_head:
-      target_scale_init: 1.0
+      target_scale_init: 0.1
 
   parameters:
     alpha: 1
