@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import time
 from pathlib import Path
 from typing import List
 from typing import Optional
@@ -11,6 +13,7 @@ import torch  # type: ignore
 from faiss import IndexReplicas
 from loguru import logger
 from torch import nn
+from tqdm import tqdm
 
 from fz_openqa.datamodules.index.handlers.base import IndexHandler
 from fz_openqa.utils.metric_type import MetricType
@@ -139,9 +142,11 @@ class FaissHandler(IndexHandler):
         self._index.train(train_vectors)
 
         # add vectors to the index
-        batch_size = faiss_train_size or len(vectors)
+        if faiss_train_size is None:
+            faiss_train_size = math.inf
+        batch_size = min(faiss_train_size, len(vectors))
         logger.info(f"Adding {len(vectors)} to the index " f"with batch size {batch_size}.")
-        for i in range(0, len(vectors), batch_size):
+        for i in tqdm(range(0, len(vectors), batch_size), desc="Adding vectors", unit="batch"):
             vecs = vectors[i : i + batch_size]
             vecs = vecs.to(torch.float32)
             self._index.add(vecs)
@@ -309,3 +314,39 @@ class FaissHandler(IndexHandler):
         co.shard = True
         assert co.shard_type in (0, 1, 2)
         return co
+
+    def training_initialize(self, index):
+        """
+        The index and quantizer should be owned by caller.
+        """
+        quantizer = index.quantizer
+        s = time.time()
+        self.index_ivf = faiss.extract_index_ivf(index)
+        self.clustering_index = faiss.index_cpu_to_all_gpus(quantizer)
+        self.index_ivf.clustering_index = self.clustering_index
+        logger.info(f"training initialize: {time.time() - s}s")
+
+    def training_finalize(self, index_ivf: faiss.IndexIVF) -> faiss.IndexIVF:
+        s = time.time()
+        index_ivf.clustering_index = faiss.index_gpu_to_cpu(index_ivf.clustering_index)
+        logger.info(f"training training_finalize: {time.time() - s}s")
+        return index_ivf
+
+    def _flush_to_cpu(self, index, nb, offset):
+        print("Flush indexes to CPU")
+
+        for i in range(self.ngpu):
+            index_src_gpu = faiss.downcast_index(
+                self.gpu_index if self.ngpu == 1 else self.gpu_index.at(i)
+            )
+            index_src = faiss.index_gpu_to_cpu(index_src_gpu)
+
+            index_src.copy_subset_to(index, 0, offset, offset + nb)
+            index_src_gpu.reset()
+            index_src_gpu.reserveMemory(self.max_add)
+
+        if self.ngpu > 1:
+            try:
+                self.gpu_index.sync_with_shard_indexes()
+            except Exception:
+                self.gpu_index.syncWithSubIndexes()

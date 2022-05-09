@@ -10,6 +10,7 @@ from datasets import Dataset
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 from torch import nn
+from tqdm import tqdm
 
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
@@ -40,8 +41,11 @@ def run():
     seed_everything(42)
 
     # Load the dataset
-    n = 10000
-    data = {"document.vector": [x for x in torch.randn(n, 200, 32)], "idx": list(range(n))}
+    N = 10_000  # 520_471_400
+    seq_len = 200
+    n = N // seq_len
+    hdim = 32
+    data = {"document.vector": [x for x in torch.randn(n, seq_len, hdim)], "idx": list(range(n))}
     corpus = Dataset.from_dict(data)
     collate_fn = Sequential(Collate(), ApplyToAll(torch.tensor))
 
@@ -50,7 +54,7 @@ def run():
         dataset=corpus,
         model=IndentityModel(),
         trainer=trainer,
-        faiss_train_size=1000,
+        faiss_train_size=1_000_000,
         loader_kwargs={
             "batch_size": 1000,
             "num_workers": 2,
@@ -62,7 +66,8 @@ def run():
         cache_dir=Path(os.getcwd()) / "cache" / "sandbox",
         persist_cache=False,
         progress_bar=True,
-        p=1000,
+        p=128,
+        nprobe=32,
         max_chunksize=1000,
         maxsim_chunksize=10000,
     )
@@ -72,8 +77,7 @@ def run():
     rich.print("[green]=== searching Index ===")
     idx = np.linspace(0, len(corpus) - 1, 1000)
     rich.print(f">> idx={len(idx)}")
-    batch = collate_fn([corpus[int(i)] for i in idx])
-    batch["question.vector"] = batch.pop("document.vector")
+    batch = make_query(collate_fn, corpus, idx)
     pprint_batch(batch, f"batch : {type(batch)}")
     # import pdb; pdb.set_trace()
     _ = index(batch, k=10)  # load max_sim
@@ -82,7 +86,19 @@ def run():
     pprint_batch(output, f"output, elapsed time: {time.time() - start_time:.2f}s")
     rich.print(output["document.row_idx"])
     # del index
+
+    bs = 100
+    rich.print(f">> benchmarking: bs={100}")
+    for i in tqdm(range(1000), desc=f"Searching bs={bs}", unit="batch"):
+        idx = np.random.randint(0, len(corpus), bs)
+
     rich.print("# END")
+
+
+def make_query(collate_fn, corpus, idx):
+    batch = collate_fn([corpus[int(i)] for i in idx])
+    batch["question.vector"] = batch.pop("document.vector")
+    return batch
 
 
 if __name__ == "__main__":

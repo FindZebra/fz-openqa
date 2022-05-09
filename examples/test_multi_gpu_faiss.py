@@ -4,16 +4,48 @@ import sys
 import tempfile
 from pathlib import Path
 
-from tqdm import tqdm
-
-from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from rich.status import Status
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
+
+import hydra
+import numpy as np
+from tqdm import tqdm
+
+from fz_openqa import configs
+from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from fz_openqa.datamodules.index.utils.io import log_mem_size
+
+
 import torch
 import faiss
 import rich
+import time
 
-if __name__ == "__main__":
+medqa_size = 186_000
+medwiki_size = 2_600_000
+ten_million = 10_000_000
+one_billion = 1_000_000_000
+
+
+qa_size = 12_000
+dtype = torch.float16
+hdim = 32
+seq_len = 200
+
+faiss_train_size = 1_000_000
+index_factory = "IVF10k,PQ32x8"
+nprobe = 32
+bs = 1_000
+k = 128
+eps = 1e-2
+
+
+@hydra.main(
+    config_path=str(Path(configs.__file__).parent),
+    config_name="script_config.yaml",
+)
+def run(config):
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "index.faiss"
         devices = list(range(faiss.get_num_gpus()))
@@ -21,14 +53,30 @@ if __name__ == "__main__":
         rich.print(f"tmpdir: {path}, devices={devices}")
         handler = FaissHandler(
             path=path,
-            index_factory="IVF100k,PQ32x8",
-            nprobe=32,
-            faiss_train_size=None,
+            index_factory=index_factory,
+            nprobe=nprobe,
+            faiss_train_size=faiss_train_size,
             faiss_shard=False,
         )
 
+        corpus_size = {
+            "medqa": medqa_size,
+            "medwiki": medwiki_size,
+            "ten_million": ten_million,
+            "one_billion": one_billion,
+        }[config.corpus]
+
         # Create a dataset
-        vectors = torch.randn(37_306_400, 128)
+        _bs = 10_000
+        with Status("Initializing vectors"):
+            vectors = torch.empty(corpus_size * seq_len, hdim, dtype=dtype)
+        log_mem_size(vectors, "vectors")
+
+        # fill values and normalize
+        for i in tqdm(range(0, len(vectors), _bs), desc="filling with randn and normalizing"):
+            v = vectors[i : i + _bs].to("cuda:0")
+            v.normal_()
+            vectors[i : i + _bs] = torch.nn.functional.normalize(v, dim=-1).cpu()
 
         # build the index
         handler.build(vectors)
@@ -36,35 +84,44 @@ if __name__ == "__main__":
         del handler
 
         # search the index
-        handler = FaissHandler(path=path)
+        handler = FaissHandler(
+            path=path, faiss_train_size=faiss_train_size, index_factory=index_factory
+        )
         handler.load()
         handler.cuda(devices=devices[len(devices) // 2 :])
 
         # search the index
-        bs = 10_000
         ranks = []
-        precision = []
-        for i in (pbar := tqdm(range(0, len(vectors), bs), unit="batch")) :
-            ids = list(range(i, i + bs))
+        hit_rate = []
+        t0 = time.time()
+        for i in (pbar := tqdm(range(0, qa_size, bs), unit="batch")) :
+            ids = np.random.randint(0, corpus_size, bs)
             query = vectors[ids]
-            scores, indices = handler(query, k=2048)
+            query += eps * torch.randn_like(query)
+            scores, indices = handler(query, k=k)
             for j, retrieved in zip(ids, indices):
                 retrieved = retrieved.cpu().numpy().tolist()
                 if j in retrieved:
                     ranks.append(retrieved.index(j))
-                    precision.append(1)
+                    hit_rate.append(1)
                 else:
                     ranks.append(len(retrieved))
-                    precision.append(0)
+                    hit_rate.append(0)
             pbar.set_description(
-                f"prec={sum(precision) / len(precision):.2%}, "
-                f"rank={sum(ranks) / len(ranks):.2f}"
+                f"hit={sum(hit_rate) / len(hit_rate):.2%}, "
+                f"rank={sum(ranks) / len(ranks):.2f}, "
+                f"bs={bs}, k={k}"
             )
 
-        ids = torch.randint(0, len(vectors), (1000,))
+        duration = time.time() - t0
+        rich.print(
+            f"Performed search in {duration:.2f}s, " f"{duration / qa_size / 1e3:.2f}ms/query"
+        )
+
+        ids = torch.randint(0, len(vectors), (10,))
         rich.print(f"Searching id: {ids}")
         queries = vectors[ids] + 0 * torch.randn_like(vectors[ids])
-        scores, indices = handler(queries, k=2048)
+        scores, indices = handler(queries, k=k)
 
         ranks = []
         for idx, outs in zip(ids, indices):
@@ -75,3 +132,7 @@ if __name__ == "__main__":
             ranks.append(rank)
 
         rich.print(f"Ranks: {ranks}")
+
+
+if __name__ == "__main__":
+    run()
