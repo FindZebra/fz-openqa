@@ -10,6 +10,10 @@ from fz_openqa.utils.functional import batch_reduce
 
 
 class ContrastiveGradients(SupervisedGradients):
+    def __init__(self, *args, agg: str = "mul", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.agg = agg
+
     def __call__(
         self,
         *,
@@ -19,7 +23,7 @@ class ContrastiveGradients(SupervisedGradients):
         share_documents_across_batch: bool = False,
         match_score: Tensor = None,
         raw_doc_ids: Tensor = None,
-        **kwargs
+        **kwargs,
     ):
         if share_documents_across_batch and raw_doc_ids is None:
             raise ValueError(
@@ -37,7 +41,7 @@ class ContrastiveGradients(SupervisedGradients):
             doc_ids=doc_ids,
             raw_doc_ids=raw_doc_ids,
             share_documents_across_batch=share_documents_across_batch,
-            **kwargs
+            **kwargs,
         )
 
         # possibly expand the logits and match_score, so they have the same shape
@@ -60,17 +64,26 @@ class ContrastiveGradients(SupervisedGradients):
         # is_neg_inf = (retriever_score.isinf()) & (retriever_score < 0)
         # retriever_score = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
 
-        # normalize the retriever scores
-        M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
-        retriever_score_normalized = retriever_score - M[:, None, None]
-        # rich.print(f"> retriever_score_normalized: "
-        #            f"{retriever_score_normalized[~is_neg_inf].cpu().detach().numpy().tolist()}")
+        if self.agg == "add":
+            # normalize the retriever scores
+            M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
+            retriever_score_normalized = retriever_score - M[:, None, None]
+            # rich.print(f"> retriever_score_normalized: "
+            #            f"{retriever_score_normalized[~is_neg_inf].cpu().detach().numpy().tolist()}")
 
-        # reader model: p(a|D) = H(a | D) \
-        reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
-        normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
-        # likelihood of the reader model
-        log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
+            # reader model: p(a|D) = H(a | D) \
+            reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
+            normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
+            # likelihood of the reader model
+            log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
+        elif self.agg == "mul":
+            retriever_score = retriever_score.masked_fill(retriever_score < -1e-4, 0)
+            reader_score = retriever_score.sum(dim=-1)
+            log_p_a = reader_score.log_softmax(dim=-1)
+
+        else:
+            raise ValueError(f"Unknown aggregation: {self.agg}")
+
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
 
         if torch.isnan(log_p_ast).any():

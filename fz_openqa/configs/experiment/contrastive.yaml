@@ -11,6 +11,9 @@ model:
     retriever_head:
       target_scale_init: 0.1
 
+    gradients:
+      agg: mul
+
   parameters:
     alpha: 1
     reader_kl_weight: 0
