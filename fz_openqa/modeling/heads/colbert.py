@@ -211,7 +211,8 @@ class ColbertHead(DprHead):
         return last_hidden_state
 
     def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
-        gain = self.target_scale_init * scores.std().detach().pow(-1)
+        scores_std = self._scores_std(scores)
+        gain = self.target_scale_init * scores_std.pow(-1)
         self.scale_value = gain * self.scale_value.data
         self.is_scaled.data += 1
 
@@ -220,11 +221,12 @@ class ColbertHead(DprHead):
 
         rich.print(
             f"> standardized | out.mean={scores.mean():.3f}, "
-            f"out.std={scores.std():.3f}, "
+            f"out.std={self._scores_std(scores):.3f}, "
             f"scale={self.scale_value:.3f}, "
             f"kappa={self._kappa.data:.3f}, "
             f"kappa_zero={self._kappa_zero.data:.3f}, "
-            f"scaled={self.is_scaled}"
+            f"scaled={self.is_scaled}, ",
+            f"gain={gain:.3f}",
         )
 
         return scores

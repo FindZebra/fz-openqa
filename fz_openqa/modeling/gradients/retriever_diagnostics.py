@@ -6,6 +6,12 @@ import torch
 from torch import Tensor
 
 
+def flat_scores_no_nans(scores):
+    scores_ = scores.view(-1)
+    scores_ = scores_[(~scores_.isnan()) & (~scores_.isinf())]
+    return scores_
+
+
 @torch.no_grad()
 def retriever_diagnostics(
     *,
@@ -31,9 +37,12 @@ def retriever_diagnostics(
     output = {}
 
     retriever_score = retriever_score.clone().detach()
-    output["retriever/score-std"] = retriever_score.std()
-    output["retriever/score-min-max"] = retriever_score.max() - retriever_score.min()
+    flat_scores = flat_scores_no_nans(retriever_score)
+    if len(flat_scores) > 0:
+        output["retriever/score-std"] = flat_scores.std()
+        output["retriever/score-min-max"] = flat_scores.max() - flat_scores.min()
 
+    # compute p(d | q)
     retriever_log_probs = retriever_score.log_softmax(dim=-1)
     retriever_probs = retriever_log_probs.exp()
 

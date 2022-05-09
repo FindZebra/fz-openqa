@@ -6,7 +6,7 @@
 #SBATCH --time=7-00:00:00
 
 # variables
-NAME="xytx-DIKU-reiA"
+NAME="ytxn-DIKU-reiA3"
 setup_with_model=false
 
 # display basic info

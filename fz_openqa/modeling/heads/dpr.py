@@ -119,17 +119,15 @@ class DprHead(Head):
 
     def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
 
-        rich.print(f" Init: {self.scale_value}")
-        rich.print(f" Scores: {scores}")
-        rich.print(f" Qmask: {qmask.sum(-1)}")
+        scores_std = self._scores_std(scores)
 
-        self.scale_value = self.target_scale_init * scores.std().detach().pow(-1)
+        self.scale_value = self.target_scale_init * scores_std.pow(-1)
         self.is_scaled.data += 1
 
         scores = self.scale_query(scores, qmask=qmask)
         rich.print(
             f"> standardized | out.mean={scores.mean():.3f}, "
-            f"out.std={scores.std():.3f}, "
+            f"out.std={self._scores_std(scores):.3f}, "
             f"scale={self.scale_value:.3f}, "
             f"kappa={self._kappa.data:.3f}, "
             f"kappa_zero={self._kappa_zero.data:.3f}, "
@@ -137,6 +135,12 @@ class DprHead(Head):
         )
 
         return scores
+
+    def _scores_std(self, scores):
+        scores_ = scores.view(-1).detach()
+        scores_ = scores_[(~scores_.isnan()) & (~scores_.isinf())]
+        scores_std = scores_.std()
+        return scores_std
 
     def scale_query(self, hq: Tensor, qmask=None) -> Tensor:
         hq = hq / self.temperature

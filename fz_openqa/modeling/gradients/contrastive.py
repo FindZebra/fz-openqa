@@ -27,7 +27,6 @@ class ContrastiveGradients(SupervisedGradients):
             )
 
         # parameters
-        gamma = kwargs.get("gamma", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
 
@@ -56,16 +55,17 @@ class ContrastiveGradients(SupervisedGradients):
                 pad_value=0,
             )
 
-        # reader model
-        # replace padding (-inf) with zeros
-        retriever_score = retriever_score.masked_fill(retriever_score < -1e-4, 0)
-        retriever_score = gamma * retriever_score
-        reader_score = retriever_score.sum(dim=-1)
-        log_p_a = reader_score.log_softmax(dim=-1)
+        # reader model: p(a|D) = H(a | D) \
+        M = retriever_score.view(retriever_score.size(0), -1).max(1).values
+        retriever_score_ = retriever_score - M[:, None, None]
+        reader_score = (retriever_score_).logsumexp(dim=-1)
+        normalizer = retriever_score_.logsumexp(dim=(1, 2))
+        # likelihood of the reader model
+        log_p_a = reader_score - normalizer.unsqueeze(dim=1)
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
 
         # regularization
-        kl_reader = batch_reduce(kl_divergence(log_p_a, dim=1), op=torch.mean)
+        kl_reader = batch_reduce(kl_divergence(reader_score, dim=1), op=torch.mean)
         diagnostics["reader/kl_uniform"] = kl_reader
         kl_retriever = batch_reduce(kl_divergence(retriever_score, dim=-1), op=torch.mean)
         diagnostics["retriever/kl_uniform"] = kl_retriever

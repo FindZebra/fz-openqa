@@ -10,7 +10,6 @@ model:
     share_documents_across_batch: true
 
   parameters:
-    gamma: 0.1
     alpha: 1
     reader_kl_weight: 0.5
     retriever_kl_weight: 0

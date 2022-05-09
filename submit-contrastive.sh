@@ -6,7 +6,7 @@
 #SBATCH --time=7-00:00:00
 
 # variables
-NAME="xytx-DIKU-contrastive"
+NAME="ytxn-DIKU-contrastive"
 setup_with_model=false
 
 # display basic info
@@ -29,7 +29,6 @@ poetry run python run.py +experiment=contrastive +environ=diku \
   base.eval_device_batch_size=2 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
-  datamodule.builder.dataset_builder.max_length=350 \
   +setup_with_model=${setup_with_model} \
   +kill_es=true \
   logger.wandb.name=${NAME}
