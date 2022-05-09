@@ -55,19 +55,32 @@ class ContrastiveGradients(SupervisedGradients):
                 pad_value=0,
             )
 
+        # clip the retriever score
+        TORCH_MAX_FLOAT = {torch.float32: 1e9, torch.float16: 1e5}[retriever_score.dtype]
+        # is_neg_inf = (retriever_score.isinf()) & (retriever_score < 0)
+        # retriever_score = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
+
+        # normalize the retriever scores
+        M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
+        retriever_score_normalized = retriever_score - M[:, None, None]
+        # rich.print(f"> retriever_score_normalized: "
+        #            f"{retriever_score_normalized[~is_neg_inf].cpu().detach().numpy().tolist()}")
+
         # reader model: p(a|D) = H(a | D) \
-        M = retriever_score.view(retriever_score.size(0), -1).max(1).values
-        retriever_score_ = retriever_score - M[:, None, None]
-        reader_score = (retriever_score_).logsumexp(dim=-1)
-        normalizer = retriever_score_.logsumexp(dim=(1, 2))
+        reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
+        normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
         # likelihood of the reader model
-        log_p_a = reader_score - normalizer.unsqueeze(dim=1)
+        log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
 
+        if torch.isnan(log_p_ast).any():
+            logger.warning("NaN in log_p_ast")
+
         # regularization
-        kl_reader = batch_reduce(kl_divergence(reader_score, dim=1), op=torch.mean)
+        kl_reader = batch_reduce(kl_divergence(log_p_a, dim=1), op=torch.mean)
         diagnostics["reader/kl_uniform"] = kl_reader
-        kl_retriever = batch_reduce(kl_divergence(retriever_score, dim=-1), op=torch.mean)
+        retriever_score_ = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
+        kl_retriever = batch_reduce(kl_divergence(retriever_score_, dim=-1), op=torch.mean)
         diagnostics["retriever/kl_uniform"] = kl_retriever
 
         # loss
@@ -90,7 +103,7 @@ class ContrastiveGradients(SupervisedGradients):
                 "reader/entropy": -(log_p_a.exp() * log_p_a).sum(dim=1).mean().detach(),
                 "reader/logp": log_p_ast.detach(),
                 "_reader_logits_": log_p_a.detach(),
-                "_reader_scores_": reader_score.detach(),
+                "_reader_scores_": log_p_a.detach(),
                 "_reader_targets_": targets.detach(),
                 "_retriever_scores_": retriever_score.detach(),
             }

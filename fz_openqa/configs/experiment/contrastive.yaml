@@ -8,10 +8,12 @@ defaults:
 model:
   module:
     share_documents_across_batch: true
+    retriever_head:
+      target_scale_init: 1.0
 
   parameters:
     alpha: 1
-    reader_kl_weight: 0.5
+    reader_kl_weight: 0
     retriever_kl_weight: 0
 
   # dataloader
