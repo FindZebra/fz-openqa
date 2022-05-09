@@ -99,12 +99,10 @@ class VizMaxsimCallback(Callback):
             qmask = hq.abs().sum(-1) == 0
             dmask = hd.abs().sum(-1) == 0
             scores = torch.einsum("bmqh,bmkdh->bmkqd", hq, hd)
-            MIN_SCORE = scores.min() - 0.2 * (scores.max() - scores.min())
-            MAX_SCORE = scores.max() + 0.2 * (scores.max() - scores.min())
             qmask = qmask[:, :, None, :, None]
             scores = scores.masked_fill(qmask, 0)
             dmask = dmask[:, :, :, None, :]
-            scores = scores.masked_fill(dmask, MIN_SCORE)
+            scores = scores.masked_fill(dmask, -torch.inf)
             targets = batch.get("answer.target")
             for i in range(min(self.max_questions, len(hq))):
                 js = list(range(len(d_input_ids[i])))
@@ -129,11 +127,22 @@ class VizMaxsimCallback(Callback):
                     for k in range(self.max_document):
                         # hd_ik = hd_i[k]
                         proposal_score_ik = proposal_score_i[k]
-                        scores_ik = scores_i[k, :q_padding_idx, :]
+                        scores_ik = scores_i[k, :q_padding_idx, :].clone()
                         d_input_ids_ik = d_input_ids_i[k]
                         msg = f" Document {i + 1}-{j + 1}-{k + 1} : score={proposal_score_ik:.2f} "
                         u = pretty_decode(d_input_ids_ik, tokenizer=self.tokenizer, style="white")
                         f.write(f"{msg}\n{u}\n")
+
+                        # min and max values
+                        flat_scores = scores_ik.clone().view(-1)
+                        flat_scores = flat_scores[(~flat_scores.isnan()) & (~flat_scores.isinf())]
+                        MIN_SCORE = flat_scores.min() - 0.2 * (
+                            flat_scores.max() - flat_scores.min()
+                        )
+                        MAX_SCORE = scores.max() + 0.2 * (flat_scores.max() - flat_scores.min())
+
+                        # replace `-inf` with `MIN_SCORE`
+                        scores_ik = scores_ik.masked_fill(scores_ik == -torch.inf, MIN_SCORE)
 
                         # visualize the scores
                         q_tokens = [
