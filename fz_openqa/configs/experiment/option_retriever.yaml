@@ -46,7 +46,7 @@ trainer:
 
 model:
   # global model configuration
-  metric_size: 32
+  metric_size: 64
   metric_type: inner_product
   num_warmup_steps: 5_000
 
@@ -204,3 +204,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
+    name: ytxn-${hostname}-${model.module.gradients._id}-${model.module.retriever_head._id}

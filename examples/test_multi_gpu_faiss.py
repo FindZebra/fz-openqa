@@ -66,17 +66,7 @@ def run(config):
             "one_billion": one_billion,
         }[config.corpus]
 
-        # Create a dataset
-        _bs = 10_000
-        with Status("Initializing vectors"):
-            vectors = torch.empty(corpus_size * seq_len, hdim, dtype=dtype)
-        log_mem_size(vectors, "vectors")
-
-        # fill values and normalize
-        for i in tqdm(range(0, len(vectors), _bs), desc="filling with randn and normalizing"):
-            v = vectors[i : i + _bs].to("cuda:0")
-            v.normal_()
-            vectors[i : i + _bs] = torch.nn.functional.normalize(v, dim=-1).cpu()
+        vectors = gen_vectors(corpus_size)
 
         # build the index
         handler.build(vectors)
@@ -132,6 +122,20 @@ def run(config):
             ranks.append(rank)
 
         rich.print(f"Ranks: {ranks}")
+
+
+def gen_vectors(corpus_size):
+    # Create a dataset
+    _bs = 10_000
+    with Status("Initializing vectors"):
+        vectors = torch.empty(corpus_size * seq_len, hdim, dtype=dtype)
+    log_mem_size(vectors, "vectors")
+    # fill values and normalize
+    for i in tqdm(range(0, len(vectors), _bs), desc="filling with randn and normalizing"):
+        v = vectors[i : i + _bs].to("cuda:0")
+        v.normal_()
+        vectors[i : i + _bs] = torch.nn.functional.normalize(v, dim=-1).cpu()
+    return vectors
 
 
 if __name__ == "__main__":

@@ -54,6 +54,7 @@ def run():
         dataset=corpus,
         model=IndentityModel(),
         trainer=trainer,
+        index_factory="torch",
         faiss_train_size=1_000_000,
         loader_kwargs={
             "batch_size": 1000,
@@ -64,7 +65,7 @@ def run():
         model_output_keys=["_hq_", "_hd_"],
         collate_pipe=collate_fn,
         cache_dir=Path(os.getcwd()) / "cache" / "sandbox",
-        persist_cache=False,
+        persist_cache=True,
         progress_bar=True,
         p=128,
         nprobe=32,
