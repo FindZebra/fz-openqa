@@ -6,6 +6,7 @@ def catch_exception_as_warning(f):
         try:
             return f(*args, **kw)
         except Exception as exc:
-            logger.warning(exc)
+            # logger.exception(exc)
+            logger.warning(f"{f.__name__} raised an exception: {exc}")
 
     return wrapper

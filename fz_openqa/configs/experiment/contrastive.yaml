@@ -5,6 +5,9 @@ defaults:
   - override /model/module/reader_head: none
   - override /model/module/gradients: contrastive
 
+trainer:
+  max_steps: 29_900
+
 model:
   module:
     share_documents_across_batch: true

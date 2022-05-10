@@ -42,7 +42,7 @@ trainer:
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   val_check_interval: 1.0
   precision: 32
-  max_steps: 100_000
+  max_steps: 100_000 # set 29_900 for the final exps
 
 model:
   # global model configuration
@@ -190,7 +190,7 @@ datamodule:
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false
     fais_gpu_ratio: 0.5
-    faiss_train_size: null
+    faiss_train_size: 1_000_000
     n_ranking_workers: ${datamodule.num_workers}
     nprobe: 32
     shard_faiss: false
@@ -204,3 +204,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
+    name: ytxn-F1-${hostname:}-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
