@@ -77,8 +77,8 @@ class ContrastiveGradients(SupervisedGradients):
             # likelihood of the reader model
             log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
         elif self.agg == "mul":
-            retriever_score = retriever_score.masked_fill(retriever_score < -1e-4, 0)
-            reader_score = retriever_score.sum(dim=-1)
+            retriever_score_ = retriever_score.masked_fill(torch.isinf(retriever_score), 0)
+            reader_score = retriever_score_.sum(dim=-1)
             log_p_a = reader_score.log_softmax(dim=-1)
 
         else:
