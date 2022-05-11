@@ -102,7 +102,9 @@ def dataset_iterator(x, preproc, bs):
     def prepare_block(i01):
         i0, i1 = i01
         xb = faiss_sanitize(x[i0:i1], force_numpy=True)
-        return i0, preproc.apply_py(xb)
+        if preproc is not None:
+            xb = preproc.apply_py(xb)
+        return i0, xb
 
     return rate_limited_imap(prepare_block, block_ranges)
 
@@ -322,7 +324,7 @@ def populate_ivf_index(
     return cpu_index
 
 
-def get_shareded_gpu_index(
+def get_sharded_gpu_index(
     cpu_index: faiss.Index,
     use_float16: bool = True,
     use_precomputed_tables: bool = False,

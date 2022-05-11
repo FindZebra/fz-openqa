@@ -17,7 +17,7 @@ from .utils.faiss import compute_centroids
 from .utils.faiss import faiss_sanitize
 from .utils.faiss import FaissFactory
 from .utils.faiss import get_gpu_resources
-from .utils.faiss import get_shareded_gpu_index
+from .utils.faiss import get_sharded_gpu_index
 from .utils.faiss import IdentityVectorTransform
 from .utils.faiss import populate_ivf_index
 from .utils.faiss import Tensors
@@ -146,6 +146,14 @@ class ShardedFaissVectorBase(FaissVectorBase):
 
     def search(self, query: torch.Tensor, k: int, **kwargs) -> (torch.Tensor, torch.Tensor):
         query = faiss_sanitize(query)
+        try:
+            query = self.preprocessor.apply_py(query)
+        except Exception as exc:
+            logger.error(
+                f"Failed to preprocess query ({type(query)}) "
+                f"with preprocessor: {self.preprocessor}. "
+                f"Exception: {exc}"
+            )
         return self.index.search(query, k)
 
     @property
@@ -165,7 +173,7 @@ class ShardedFaissVectorBase(FaissVectorBase):
 
         # copy the cpu index to the GPU shards
         cpu_index = self.index
-        self.index = get_shareded_gpu_index(
+        self.index = get_sharded_gpu_index(
             cpu_index,
             devices=devices,
             use_float16=self.use_float16,

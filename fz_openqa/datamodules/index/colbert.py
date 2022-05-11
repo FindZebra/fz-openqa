@@ -58,7 +58,7 @@ class ColbertIndex(DenseIndex):
         self,
         *args,
         p: int = 100,
-        maxsim_chunksize: int = 10000,
+        maxsim_chunksize: int = 4_000,
         fais_gpu_ratio: float = 0.5,
         n_ranking_workers: int = 2,
         **kwargs,

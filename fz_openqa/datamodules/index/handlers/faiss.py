@@ -31,6 +31,7 @@ class FaissHandler(IndexHandler):
         faiss_train_size: int = None,
         shard_faiss: bool = False,
         metric_type: MetricType = MetricType.inner_product,
+        random_train_subset: bool = False,
         **kwargs,
     ):
         """build the index from the vectors."""
@@ -64,7 +65,10 @@ class FaissHandler(IndexHandler):
 
         # train the index
         if faiss_train_size is not None and faiss_train_size < len(vectors):
-            train_ids = np.random.choice(len(vectors), faiss_train_size, replace=False)
+            if random_train_subset:
+                train_ids = np.random.choice(len(vectors), faiss_train_size, replace=False)
+            else:
+                train_ids = slice(None, faiss_train_size)
         else:
             train_ids = slice(None, None)
 

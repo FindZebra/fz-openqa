@@ -13,7 +13,7 @@ model:
 
   parameters:
     alpha: 1
-    reader_kl_weight: 0.5
+    reader_kl_weight: 0.3
     retriever_kl_weight: 0
 
 

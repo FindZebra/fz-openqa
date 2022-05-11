@@ -20,6 +20,7 @@ class FaissVectorBase(VectorBase):
         faiss_metric: int = faiss.METRIC_INNER_PRODUCT,
         train_on_cpu: bool = False,
         keep_on_cpu: bool = False,
+        add_batch_size: int = 65536,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -27,6 +28,7 @@ class FaissVectorBase(VectorBase):
         self.faiss_metric = faiss_metric
         self.index = faiss.index_factory(self.dimension, self.index_factory, faiss_metric)
         self.index.nprobe = nprobe
+        self.add_batch_size = add_batch_size
 
         # todo: implement functionalities for keeping the index on CPU
         self.train_on_cpu = train_on_cpu
@@ -37,8 +39,10 @@ class FaissVectorBase(VectorBase):
         return self.index.train(vectors)
 
     def add(self, vectors: torch.Tensor, **kwargs):
-        vectors = faiss_sanitize(vectors)
-        self.index.add(vectors)
+        for i in range(0, len(vectors), self.add_batch_size):
+            v = vectors[i : i + self.add_batch_size]
+            v = faiss_sanitize(v)
+            self.index.add(v)
 
     @staticmethod
     def index_file(path: PathLike) -> Path:
