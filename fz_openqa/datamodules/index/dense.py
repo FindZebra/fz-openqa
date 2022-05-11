@@ -255,14 +255,13 @@ class DenseIndex(Index):
             persist=True,
         )
 
-        # read the vectors from the cache as a pyarrow table and build the idnex
+        # read the vectors from the cache as a pyarrow table and build the index
         vectors = self._read_vectors_table()
-        vectors = vectors[:]
         if vectors.dim() == 2:
             stride = None
         elif vectors.dim() == 3:
             stride = vectors.shape[1]
-            vectors = vectors.view(-1, vectors.shape[-1]).contiguous()
+            vectors = vectors.view(-1, vectors.shape[-1])
         else:
             stride = None
             raise ValueError(f"Invalid vectors shape: {vectors.shape}, expected 2 or 3 dimensions.")

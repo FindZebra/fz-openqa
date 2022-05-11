@@ -35,7 +35,7 @@ base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
-  infer_batch_mul: 100
+  infer_batch_mul: 300
 
 trainer:
   gradient_clip_val: 0.5 # 2.0 might be unstable
@@ -46,7 +46,7 @@ trainer:
 
 model:
   # global model configuration
-  metric_size: 64
+  metric_size: 32
   metric_type: inner_product
   num_warmup_steps: 5_000
 
@@ -80,7 +80,7 @@ model:
     split_bert_layers: 0
     resample_k: null
     alpha: 0
-    max_batch_size: 200
+    max_batch_size: 400
     share_documents_across_batch: false
     retriever_head:
       output_size: ${model.metric_size}
@@ -182,10 +182,10 @@ datamodule:
     model_output_keys: [ _hq_, _hd_ ]
     p: 128
     dtype: float16
-    max_chunksize: null
-    maxsim_chunksize: 8_000 # use 4_000 for metric_size 128
+    max_chunksize: 100 # max batch to pass to the index
+    maxsim_chunksize: 4_000 # max batch to pass to the MaxSim ranker
     persist_cache: false
-    index_factory: IVF100k,PQ32x8
+    index_factory: IVF10000,PQ32 # wiki: shard:IVF100000,PQ32
     handler: flat
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false

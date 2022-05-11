@@ -3,10 +3,9 @@
 #SBATCH --output=./slurm/%j.out
 #SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
-#SBATCH --time=7-00:00:00
+#SBATCH --time=3-00:00:00
 
 # variables
-NAME="ytxn-DIKU-contrastive"
 setup_with_model=false
 
 # display basic info
@@ -30,5 +29,4 @@ poetry run python run.py +experiment=contrastive +environ=diku \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
-  +kill_es=true \
-  logger.wandb.name=${NAME}
+  +kill_es=true

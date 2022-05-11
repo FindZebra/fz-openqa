@@ -6,7 +6,6 @@
 #SBATCH --time=7-00:00:00
 
 # variables
-NAME="ytxn-DIKU-reiA3"
 setup_with_model=false
 
 # display basic info
@@ -25,11 +24,9 @@ fi
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
   base.device_batch_size=2 \
-  base.infer_batch_mul=2 \
+  base.infer_batch_mul=10 \
   base.eval_device_batch_size=1 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
-  datamodule.builder.dataset_builder.max_length=350 \
   +setup_with_model=${setup_with_model} \
-  +kill_es=true \
-  logger.wandb.name=${NAME}
+  +kill_es=true

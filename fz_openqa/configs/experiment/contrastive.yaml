@@ -19,8 +19,19 @@ model:
 
   parameters:
     alpha: 1
-    reader_kl_weight: 0.5
+    reader_kl_weight: 0.3
     retriever_kl_weight: 0
+
+
+datamodule:
+
+  sampler:
+    total: ${datamodule.n_documents}
+    temperature: 1
+    largest:
+      train: false
+      validation: true
+      test: true
 
   # dataloader
   drop_last: ${model.module.share_documents_across_batch}

@@ -100,6 +100,7 @@ class MaxSimRanker(nn.Module):
     def _score(pids: LongTensor, q_vectors: Tensor, vectors: Tensor, metric_type: str):
         metric_type = MetricType(metric_type)
         d_vectors = vectors[pids]
+        q_vectors = q_vectors.to(d_vectors)
 
         # build the query mask: queries tokens with all vectors
         # dimensions *exactly* equal to zero are considered to be padded
