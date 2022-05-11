@@ -354,28 +354,30 @@ class TensorArrowTable(TensorArrowBase):
 
         dim = new_shape[1]
         n_elements = new_table._index[-1, -1] - new_table._index[0, 0]
-        if not n_elements % new_shape[1] == 0:
+        if n_elements % dim != 0:
             raise ValueError(
                 "The number of elements in the new shape must be a "
                 "multiple of the number of elements in the old shape. "
                 f"Found total={n_elements} and h={dim}, "
                 f"total % h = {n_elements % dim}."
             )
-        new_length = math.floor(n_elements / dim)
 
         # build the new index
-        new_index = torch.linspace(0, n_elements, new_length + 1, dtype=torch.int64)
+        new_index = torch.arange(0, n_elements + 1, dim, dtype=torch.int64)
+        rich.print(f"> n: {n_elements + 1}")
+        rich.print(f"> new_index.start: {new_index[:10]}")
+        rich.print(f"> new_index.end: {new_index[-10:]}")
         new_table._index = torch.stack([new_index[:-1], new_index[1:]], dim=1)
         if not new_table._index[0, 0] == self._index[0, 0]:
             raise ValueError(
-                f"The first index in the new shape must be the same"
-                f" as the first index in the old shape. "
+                f"The first index in the new view must be the same "
+                f"as the first index in the old shape. "
                 f"Found {new_table._index[0, 0]} "
                 f"and {self._index[0, 0]}."
             )
         if not new_table._index[-1, -1] == self._index[-1, -1]:
             raise ValueError(
-                f"The last index in the new shape must be the same "
+                f"The last index in the new view must be the same "
                 f"as the last index in the old shape. "
                 f"Found {new_table._index[-1, -1]} "
                 f"and {self._index[-1, -1]}."
