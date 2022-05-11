@@ -8,7 +8,7 @@ import rich
 import torch
 from torch import nn
 
-from fz_openqa.datamodules.index.handlers.vector_base import VectorBase
+from .base import VectorBase
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -16,15 +16,15 @@ class TorchIndex(nn.Module):
     """Register vectors as parameters,
     return the argmax of the dot product in the forward pass."""
 
-    def __init__(self, hdim):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.register_buffer(
             "device_info",
             torch.zeros(
                 1,
             ),
         )
-        self.vectors = nn.Parameter(torch.empty(0, hdim), requires_grad=False)
+        self.vectors = nn.Parameter(torch.empty(0, self.dimension), requires_grad=False)
 
     def add(self, vectors: torch.Tensor, **kwargs):
         device = self.device_info.device

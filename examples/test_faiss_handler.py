@@ -16,6 +16,8 @@ from fz_openqa import configs
 from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 
+# import te omegaconf resolvers
+from fz_openqa.training import experiment  # type: ignore
 
 import torch
 import faiss
@@ -28,13 +30,13 @@ ten_million = 10_000_000
 one_billion = 1_000_000_000
 
 
-qa_size = 12_000
+qa_size = 300 * 20_000  # Q tokens * dataset size
 dtype = torch.float16
-hdim = 32
+hdim = 64
 seq_len = 200
 
 faiss_train_size = 1_000_000
-index_factory = "IVF10k,PQ32x8"
+index_factory = "shard:IVF10000,PQ32"
 nprobe = 32
 bs = 1_000
 k = 128
@@ -46,7 +48,8 @@ eps = 1e-2
     config_name="script_config.yaml",
 )
 def run(config):
-    with tempfile.TemporaryDirectory() as tmpdir:
+    cache_dir = config.sys.cache_dir
+    with tempfile.TemporaryDirectory(dir=cache_dir) as tmpdir:
         path = Path(tmpdir) / "index.faiss"
         devices = list(range(faiss.get_num_gpus()))
 
@@ -56,7 +59,6 @@ def run(config):
             index_factory=index_factory,
             nprobe=nprobe,
             faiss_train_size=faiss_train_size,
-            faiss_shard=False,
         )
 
         corpus_size = {
@@ -75,7 +77,10 @@ def run(config):
 
         # search the index
         handler = FaissHandler(
-            path=path, faiss_train_size=faiss_train_size, index_factory=index_factory
+            path=path,
+            index_factory=index_factory,
+            nprobe=nprobe,
+            faiss_train_size=faiss_train_size,
         )
         handler.load()
         handler.cuda(devices=devices[len(devices) // 2 :])
@@ -86,7 +91,7 @@ def run(config):
         t0 = time.time()
         for i in (pbar := tqdm(range(0, qa_size, bs), unit="batch")) :
             ids = np.random.randint(0, corpus_size, bs)
-            query = vectors[ids]
+            query = vectors[ids].clone()
             query += eps * torch.randn_like(query)
             scores, indices = handler(query, k=k)
             for j, retrieved in zip(ids, indices):
@@ -105,12 +110,12 @@ def run(config):
 
         duration = time.time() - t0
         rich.print(
-            f"Performed search in {duration:.2f}s, " f"{duration / qa_size / 1e3:.2f}ms/query"
+            f"Performed search in {duration:.2f}s, " f"{duration / qa_size * 1e3:.3f} ms/query"
         )
 
         ids = torch.randint(0, len(vectors), (10,))
-        rich.print(f"Searching id: {ids}")
-        queries = vectors[ids] + 0 * torch.randn_like(vectors[ids])
+        rich.print(f"\n\nExamples: query id: {ids}")
+        queries = vectors[ids] + eps * torch.randn_like(vectors[ids])
         scores, indices = handler(queries, k=k)
 
         ranks = []

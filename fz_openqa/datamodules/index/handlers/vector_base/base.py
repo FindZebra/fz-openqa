@@ -12,7 +12,7 @@ class VectorBase:
 
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, index_factory: str, dimension: int, **kwargs):
+    def __init__(self, *, index_factory: str, dimension: int, **kwargs):
         self.index_factory = index_factory
         self.dimension = dimension
 

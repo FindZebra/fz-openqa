@@ -32,7 +32,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 Vectors = Union[np.ndarray, torch.Tensor]
 FaissMetric = int
 
-test_size = 20_000
+test_size = 100
 medqa_size = 186_000
 medwiki_size = 2_600_000
 ten_million = 10_000_000
@@ -44,7 +44,7 @@ hdim = 64
 seq_len = 200
 
 faiss_train_size = 1_000_000
-default_factory = "OPQ16,IVF10000,PQ32"
+default_factory = "OPQ16,IVF100,PQ32"
 nprobe = 32
 bs = 1_000
 k = 128
@@ -166,7 +166,7 @@ def gen_vectors(corpus_size):
         _v_buffer.normal_()
         _v_buffer = torch.nn.functional.normalize(_v_buffer, dim=-1)
         v = _v_buffer.clone().to(dtype=vectors.dtype, device=vectors.device)
-        vectors[i: i + _bs] = v
+        vectors[i: i + _bs] = v[: len(vectors[i: i + _bs])]
     return vectors
 
 
@@ -312,15 +312,15 @@ def prepare_coarse_quantizer(
     return coarse_quantizer
 
 
-def build_and_train_index(vectors: Vectors,
-                          *,
-                          faiss_factory: FaissFactory,
-                          preproc: faiss.VectorTransform,
-                          coarse_quantizer: faiss.IndexFlat,
-                          n_train: int = 1_000_000,
-                          faiss_metric: FaissMetric = faiss.METRIC_INNER_PRODUCT,
-                          use_float16: bool = True,
-                          ) -> faiss.IndexIVF:
+def build_and_train_ivf_index(vectors: Vectors,
+                              *,
+                              faiss_factory: FaissFactory,
+                              preproc: faiss.VectorTransform,
+                              coarse_quantizer: faiss.IndexFlat,
+                              n_train: int = 1_000_000,
+                              faiss_metric: FaissMetric = faiss.METRIC_INNER_PRODUCT,
+                              use_float16: bool = True,
+                              ) -> faiss.IndexIVF:
     pqflat_str = faiss_factory.pqflat
     n_centroids = faiss_factory.n_centroids
     d = preproc.d_out
@@ -523,16 +523,16 @@ def run(config):
                                                     vectors=None,
                                                     cache_file=centroids_cache_file,
                                                     )
-        rich.print(coarse_quantizer)
+        rich.print(F"> coarse_quantizer ({type(coarse_quantizer)}): {coarse_quantizer}")
 
         ########################################################################
         # train the fine quantizer (PQ)
         ########################################################################
-        cpu_index = build_and_train_index(vectors=vectors,
-                                          faiss_factory=faiss_factory,
-                                          preproc=preproc,
-                                          coarse_quantizer=coarse_quantizer,
-                                          )
+        cpu_index = build_and_train_ivf_index(vectors=vectors,
+                                              faiss_factory=faiss_factory,
+                                              preproc=preproc,
+                                              coarse_quantizer=coarse_quantizer,
+                                              )
 
         index_cache_file = tmpdir / f"index-{faiss_factory.clean}.faiss"
         cpu_index = get_populated_index(cpu_index,
@@ -542,12 +542,18 @@ def run(config):
                                         cache_file=index_cache_file,
                                         )
         rich.print(cpu_index)
-        rich.print(f">> cpu_index: {cpu_index}, size: {cpu_index.ntotal}")
+        rich.print(f">> cpu_index ({cpu_index}): {cpu_index}, size: {cpu_index.ntotal}")
         del cpu_index
         cpu_index = get_populated_index(None,
                                         cache_file=index_cache_file,
                                         )
         rich.print(f">> cpu_index.loaded: {cpu_index}, size: {cpu_index.ntotal}")
+
+        rich.print("#######################################################################")
+        clustering = cpu_index.clustering_index
+        quantizer = cpu_index.quantizer
+        rich.print(f"Clustering index: {clustering}")
+        rich.print(f"Quantizer: {quantizer}")
 
         # exit
         rich.print(f"\n\n>> Cleaning up directory {tmpdir} with content:")

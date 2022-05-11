@@ -25,7 +25,7 @@ class FaissHandler(IndexHandler):
         vectors: torch.Tensor | TensorArrowTable | np.ndarray,
         *,
         index_factory: str = "Flat",
-        nprobe: int = 8,
+        nprobe: int = 32,
         keep_on_cpu: bool = False,
         train_on_cpu: bool = False,
         faiss_train_size: int = None,
@@ -99,8 +99,8 @@ class FaissHandler(IndexHandler):
 
         # init the index
         return AutoVectorBase(
-            config["index_factory"],
-            config["dimension"],
+            index_factory=config["index_factory"],
+            dimension=config["dimension"],
             faiss_metric=faiss_metric,
             nprobe=config["nprobe"],
             train_on_cpu=config["train_on_cpu"],
