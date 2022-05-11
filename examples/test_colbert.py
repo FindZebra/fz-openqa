@@ -102,6 +102,7 @@ def make_query(collate_fn, corpus, idx):
     return batch
 
 
+# CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7  poetry run python examples/test_colbert.py
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")
     run()
