@@ -346,7 +346,7 @@ class TensorArrowTable(TensorArrowBase):
             raise NotImplementedError(
                 "Only implemented for flattening. " "Accepted shapes are of the form (-1, x)"
             )
-        if -1 in self.shape:
+        if not self._equal_shapes:
             raise NotImplementedError("Only implemented for constant shapes")
 
         # create a new table with the new shape
@@ -362,16 +362,32 @@ class TensorArrowTable(TensorArrowBase):
                 f"total % h = {n_elements % dim}."
             )
         new_length = math.floor(n_elements / dim)
-        new_index = torch.linspace(0, n_elements + 1, new_length + 1, dtype=torch.int64)
 
-        # fills the new table
+        # build the new index
+        new_index = torch.linspace(0, n_elements, new_length + 1, dtype=torch.int64)
+        new_table._index = torch.stack([new_index[:-1], new_index[1:]], dim=1)
+        if not new_table._index[0, 0] == self._index[0, 0]:
+            raise ValueError(
+                f"The first index in the new shape must be the same"
+                f" as the first index in the old shape. "
+                f"Found {new_table._index[0, 0]} "
+                f"and {self._index[0, 0]}."
+            )
+        if not new_table._index[-1, -1] == self._index[-1, -1]:
+            raise ValueError(
+                f"The last index in the new shape must be the same "
+                f"as the last index in the old shape. "
+                f"Found {new_table._index[-1, -1]} "
+                f"and {self._index[-1, -1]}."
+            )
+
+        # set the shapes
         new_table._shared_shape = torch.tensor(
             [
                 dim,
             ],
             dtype=torch.int64,
         )
-        new_table._index = torch.stack([new_index[:-1], new_index[1:]], dim=1)
         new_table._shapes = new_table._shared_shape.repeat(len(new_table), 1)
         return new_table
 
