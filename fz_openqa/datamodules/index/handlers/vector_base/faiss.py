@@ -41,7 +41,7 @@ class FaissVectorBase(VectorBase):
     def add(self, vectors: torch.Tensor, **kwargs):
         for i in range(0, len(vectors), self.add_batch_size):
             v = vectors[i : i + self.add_batch_size]
-            v = faiss_sanitize(v)
+            v = faiss_sanitize(v, force_numpy=True)
             self.index.add(v)
 
     @staticmethod
