@@ -25,6 +25,7 @@ fi
 poetry run python run.py +experiment=contrastive +environ=diku \
   base.device_batch_size=1 \
   base.infer_batch_mul=10 \
+  base.datamodule.dset_name=medqa-tw \
   base.eval_device_batch_size=2 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
