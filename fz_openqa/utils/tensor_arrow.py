@@ -516,8 +516,8 @@ if __name__ == "__main__":
         bs = 100
         path = tmpdir
         dtype = "float16"
-        length = 20
-        size = 1000
+        length = 23
+        size = 9_028
 
         # data
         data = torch.randn(size, length, 32, dtype=torch.float16)
@@ -532,8 +532,6 @@ if __name__ == "__main__":
 
         # load
         vectors = TensorArrowTable(path, dtype=dtype)
-        rich.print(vectors)
-        rich.print(vectors[[1, 4, 34, 99]].sum(-1))
 
         # view
         flat_vectors = vectors.view(-1, vectors.size(-1))
@@ -544,9 +542,20 @@ if __name__ == "__main__":
                 f"expected {flat_data.shape}"
             )
 
+        rich.print("[magenta] Test #1")
         for idx in range(100):
             i = np.random.randint(0, len(flat_data))
             if not (flat_data[i] == flat_vectors[i]).all():
                 rich.print(f"Computed: {flat_data[i]}")
                 rich.print(f"Reference: {flat_vectors[i]}")
+                raise Exception(f"{i} mismatch")
+
+        rich.print("[magenta] Test #2")
+        bs = 234
+        for i in range(0, len(flat_data) + 7, bs):
+            v = flat_vectors[i : i + bs]
+            w = flat_data[i : i + bs]
+            if (v != w).any():
+                rich.print(f"Computed: {v}")
+                rich.print(f"Reference: {w}")
                 raise Exception(f"{i} mismatch")

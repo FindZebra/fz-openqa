@@ -204,4 +204,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F1-${hostname:}-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
+    name: ytxn-F1-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
