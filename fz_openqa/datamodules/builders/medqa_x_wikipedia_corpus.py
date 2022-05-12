@@ -1,7 +1,6 @@
 import json
+import logging
 import os
-import re
-import unicodedata
 from copy import copy
 from pathlib import Path
 from typing import Callable
@@ -10,6 +9,7 @@ from typing import Optional
 from typing import Union
 
 import rich
+import slugify
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -52,6 +52,10 @@ class ExtractPageContent(Pipe):
 
         # get the index of the wiki article within the wikipedia article, None otherwise
         indices = [self.wikipedia_index.get(title, None) for title in titles]
+        n_valid = sum(1 for i in indices if i is not None)
+        r = n_valid / len(indices)
+        if r > 1:
+            logging.debug(f"Fetch wiki articles: {r:.2%} valid")
         original_indexes, non_none_indices = zip(
             *[(k, i) for k, i in enumerate(indices) if i is not None]
         )
@@ -138,15 +142,21 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         self,
         *,
         dataset_builder: QaBuilder,
-        query_articles: Callable = QueryWikiAPI(text_key="answer.text"),
+        query_articles: Callable = None,
         num_proc: int = 4,
         batch_size: int = 10,
-        cache_dir: str = Path(os.getcwd()) / "cache",
-        directory_name: Optional[Union[str, Path]] = None,
+        cache_dir: str = None,
+        directory_name: Optional[Union[str, Path]] = "medwiki",
         upload_to_drive: bool = False,
         **kwargs,
     ):
         super(WikixMedQaCorpusBuilder, self).__init__(cache_dir=None, **kwargs)
+
+        if query_articles is None:
+            query_articles = QueryWikiAPI(text_key="answer.text", topn=10)
+
+        if cache_dir is None:
+            cache_dir = Path(os.getcwd()) / "cache"
 
         self.dataset_builder = dataset_builder
         # Pipe to query potential Wikipedia pages (e.g. Wikipedia API, SpikeX)
@@ -155,7 +165,9 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         self.map_kwargs = {"batched": True, "batch_size": batch_size, "num_proc": num_proc}
 
         log.info("Downloading Wikipedia dump...")
-        self.wikipedia_data = load_dataset("wikipedia", "20200501.en", split="train")
+        self.wikipedia_data = load_dataset(
+            "wikipedia", "20200501.en", split="train", cache_dir=cache_dir
+        )
         # Index to look up Wikipedia pages and extract page content
         self.wikipedia_index = {
             title: idx for idx, title in enumerate(self.wikipedia_data["title"])
@@ -184,7 +196,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         # write to disk
         if self.output_dir is not None:
-            log.info(f"Save the dataset to file n_files={len(dataset)}")
+            log.info(f"Save the dataset to file n_files={len(dataset)} " f"to {self.output_dir}")
             self.save_to_txt(output_dir=self.output_dir, dataset=dataset)
             # dataset.save_to_disk(str(self.output_file))
 
@@ -197,33 +209,15 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         return dataset
 
     @staticmethod
-    def save_to_txt(output_dir: Optional[Path], dataset: DatasetDict) -> None:
+    def save_to_txt(output_dir: Optional[Path], dataset: Dataset) -> None:
         """Save each article in the dataset to a txt file"""
-
-        def slugify(value, allow_unicode=False):
-            """
-            Taken from https://github.com/django/django/blob/master/django/utils/text.py
-            Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated
-            dashes to single dashes. Remove characters that aren't alphanumerics,
-            underscores, or hyphens. Convert to lowercase. Also strip leading and
-            trailing whitespace, dashes, and underscores.
-            """
-            value = str(value)
-            if allow_unicode:
-                value = unicodedata.normalize("NFKC", value)
-            else:
-                value = (
-                    unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
-                )
-            value = re.sub(r"[^\w\s-]", "", value.lower())
-            return re.sub(r"[-\s]+", "-", value).strip("-_")
 
         if not Path(output_dir).is_dir():
             os.mkdir(output_dir)
         for row in dataset:
             if isinstance(row["text"], str):
                 lines = [row["title"], row["text"]]
-                file_name = slugify(row["title"])
+                file_name = slugify.slugify(row["title"])
                 with open(f"{output_dir}/{file_name}.txt", "w") as f:
                     f.write("\n".join(lines))
 
@@ -248,7 +242,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         dataset = dataset.map(
             FlattenWikiPages(),
             **self.map_kwargs,
-            desc="Extracting Wikipedia pages",
+            desc="Flattening the dataset",
         )
 
         # step 2: add the split column and concatenate the dataset splits
@@ -267,7 +261,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         rich.print(f"[magenta]# fingerprint={dataset._fingerprint}")
         cache_file = self.cache_dir / f"{dataset._fingerprint}.jsonl"
         if not cache_file.exists():
-
             reduced_dataset = {}
             for row in track(dataset, description="Iterating through the dataset"):
                 page = row["wiki.query"]
@@ -281,7 +274,8 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
                 reduced_dataset[page]["question.idx"].append(qst_idx)
 
             # step 3.2: save to file and load as Dataset
-            # (if we load from the dataset from memory, it stays in memory, so we need to cache it)
+            # (if we load from the dataset from memory,
+            # it stays in memory, so we need to cache it)
             log.info(f"Saving the dataset to {cache_file}")
             reduced_dataset = ({"wiki.query": page, **row} for page, row in reduced_dataset.items())
             with open(cache_file, "w") as f:

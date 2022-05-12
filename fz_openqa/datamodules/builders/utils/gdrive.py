@@ -4,19 +4,25 @@ import shutil
 from typing import Dict
 from typing import List
 
-from apiclient import errors
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+from loguru import logger
+
+try:
+    from apiclient import errors
+    from google.auth.transport.requests import Request
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+except ImportError:
+    logger.warning("Google Drive API not installed")
+
+
+DEFAULT_SECRET_FILE = f"{os.getcwd()}/fz_openqa/datamodules/builders/utils/client-secrets.json"
 
 
 class Gdrive:
     def __init__(
         self,
-        client_secret_file: str = f"{os.getcwd()}"
-        f"/fz_openqa/datamodules/builders/utils/client-secrets.json",
-        # noqa: E501
+        client_secret_file: str = DEFAULT_SECRET_FILE,
         api_name: str = "drive",
         api_version: str = "v3",
         scopes: List[str] = ["https://www.googleapis.com/auth/drive"],
