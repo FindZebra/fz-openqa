@@ -172,7 +172,7 @@ datamodule:
       dset_name: ${datamodule.corpus_name}
       use_subset: ${datamodule.corpus_subset}
       passage_length: 200
-      passage_stride: 100
+      passage_stride: 150
       append_document_title: true
 
   # Index parameters
@@ -190,7 +190,7 @@ datamodule:
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false
     fais_gpu_ratio: 0.5 # 0.5 for wiki
-    faiss_train_size: 1_000_000
+    faiss_train_size: 5_000_000
     n_ranking_workers: ${datamodule.num_workers}
     nprobe: 32
     shard_faiss: false

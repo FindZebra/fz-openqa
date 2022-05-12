@@ -52,7 +52,7 @@ class MaxSim(torch.nn.Module):
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],
         faiss_devices: List[int],
-        max_chunksize: Optional[int] = 10_000,
+        max_chunksize: Optional[int] = 1_000,
         max_queue_size: int = 5,
         deduplicate_pids: bool = True,
         metric_type: MetricType = MetricType.inner_product,
@@ -65,7 +65,8 @@ class MaxSim(torch.nn.Module):
         self.metric_type = metric_type
         self.deduplicate_pids = deduplicate_pids
         # init the token_index
-        self.token_index = TokenIndex(token_index, faiss_devices)
+
+        self.token_index = TokenIndex(token_index, faiss_devices, max_chunksize=max_chunksize)
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)

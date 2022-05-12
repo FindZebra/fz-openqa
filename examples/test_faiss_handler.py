@@ -32,11 +32,11 @@ one_billion = 1_000_000_000
 
 qa_size = 300 * 20_000  # Q tokens * dataset size
 dtype = torch.float16
-hdim = 64
+hdim = 32
 seq_len = 200
 
 faiss_train_size = 1_000_000
-index_factory = "shard:IVF10000,PQ32"
+index_factory = "shard:IVF100000,PQ16"
 nprobe = 32
 bs = 1_000
 k = 128
@@ -69,6 +69,7 @@ def run(config):
         }[config.corpus]
 
         vectors = gen_vectors(corpus_size)
+        vectors = vectors.view(-1, hdim)
 
         # build the index
         handler.build(vectors)
@@ -132,14 +133,17 @@ def run(config):
 def gen_vectors(corpus_size):
     # Create a dataset
     _bs = 10_000
+    _device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     with Status("Initializing vectors"):
-        vectors = torch.empty(corpus_size * seq_len, hdim, dtype=dtype)
+        vectors = torch.empty(corpus_size, seq_len, hdim, dtype=dtype)
     log_mem_size(vectors, "vectors")
     # fill values and normalize
+    _v_buffer = torch.empty(_bs, seq_len, hdim, dtype=dtype, device=_device)
     for i in tqdm(range(0, len(vectors), _bs), desc="filling with randn and normalizing"):
-        v = vectors[i : i + _bs].to("cuda:0")
-        v.normal_()
-        vectors[i : i + _bs] = torch.nn.functional.normalize(v, dim=-1).cpu()
+        _v_buffer.normal_()
+        _v_buffer = torch.nn.functional.normalize(_v_buffer, dim=-1)
+        v = _v_buffer.clone().to(dtype=vectors.dtype, device=vectors.device)
+        vectors[i : i + _bs] = v[: len(vectors[i : i + _bs])]
     return vectors
 
 
