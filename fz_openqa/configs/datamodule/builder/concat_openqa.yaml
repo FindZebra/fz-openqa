@@ -2,7 +2,7 @@ defaults:
   - openqa
   - concat_qa@dataset_builder
   - corpus@corpus_builder
-  - analytics: none
+#  - analytics: none
 
 
 
