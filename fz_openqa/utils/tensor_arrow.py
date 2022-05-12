@@ -364,7 +364,6 @@ class TensorArrowTable(TensorArrowBase):
 
         # build the new index
         new_index = torch.arange(0, n_elements + 1, dim, dtype=torch.int64)
-        rich.print(f"> n: {n_elements + 1}")
         rich.print(f"> new_index.start: {new_index[:10]}")
         rich.print(f"> new_index.end: {new_index[-10:]}")
         new_table._index = torch.stack([new_index[:-1], new_index[1:]], dim=1)

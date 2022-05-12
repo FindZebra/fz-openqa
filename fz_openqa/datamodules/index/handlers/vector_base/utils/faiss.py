@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import math
 import re
 import sys
 import time
@@ -15,6 +16,7 @@ from typing import Union
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
+import rich
 import torch
 from loguru import logger
 from tqdm import tqdm
@@ -22,17 +24,20 @@ from tqdm import tqdm
 Tensors = Union[torch.Tensor, np.ndarray]
 FaissMetric = Union[str, int]
 
+index_factory_pattern = pat = re.compile(
+    "(OPQ[0-9]+(_[0-9]+)?|,PCAR[0-9]+)?,?" "(IVF[0-9]+)," "(PQ[a-zA-Z0-9]+|Flat)"
+)
+
+pq_pattern = re.compile("(PQ[0-9]+)(x[0-9]+)?(fs|fsr)?")
+
 
 class FaissFactory:
     """Custom parsing of the index factory strings"""
 
     def __init__(self, factory: str):
         self.factory = factory
-        pat = re.compile(
-            "(OPQ[0-9]+(_[0-9]+)?|,PCAR[0-9]+)?,?" + "(IVF[0-9]+)," + "(PQ[0-9]+|Flat)"
-        )
 
-        matchobject = pat.match(factory)
+        matchobject = index_factory_pattern.match(factory)
 
         if not matchobject:
             raise ValueError(f"Could not parse factory string: `{factory}`")
@@ -40,8 +45,29 @@ class FaissFactory:
         mog = matchobject.groups()
         self.preproc = mog[0]
         self.ivf = mog[2]
-        self.pqflat = mog[3]
+        self.pq = mog[3]
         self.n_centroids = int(self.ivf[3:])
+
+        if self.pq.startswith("PQ"):
+            pq_mog = pq_pattern.match(self.pq)
+            if not pq_mog:
+                raise ValueError(f"Could not parse PQ string: `{self.pq}`")
+
+            pq_groups = pq_mog.groups()
+
+            self.pq_ncodes = int(pq_groups[0][2:])
+            if pq_groups[1] is None:
+                self.pq_nbits = 8
+            else:
+                self.pq_nbits = int(pq_groups[1][1:])
+            if pq_groups[2] is None:
+                self.pq_type = "full"
+            else:
+                self.pq_type = pq_groups[2]
+        else:
+            self.pq_ncodes = None
+            self.pq_nbits = None
+            self.pq_type = None
 
     @property
     def clean(self):
@@ -52,7 +78,7 @@ class FaissFactory:
             f"FaissFactory("
             f"Preproc={self.preproc}, "
             f"IVF={self.ivf}, "
-            f"PQ={self.pqflat}, "
+            f"PQ={self.pq}, "
             f"centroids={self.n_centroids})"
         )
 
@@ -119,6 +145,7 @@ def get_gpu_resources(devices=None, tempmem: int = -1):
     for i in range(ngpu):
         res = faiss.StandardGpuResources()
         if tempmem >= 0:
+            logger.warning(f"Setting GPU:{i} " f"temporary memory to" f"{tempmem/1024**3:.2f} GB")
             res.setTempMemory(tempmem)
         gpu_resources.append(res)
 
@@ -153,7 +180,9 @@ def train_preprocessor(
         preproc = faiss.PCAMatrix(d, dout, 0, True)
     else:
         assert False
-    logger.info(f"Train Preprocessor: {preproc_str} with max. {n_train} vectors..")
+    logger.info(
+        f"Train Preprocessor: " f"{preproc_str} with max. " f"{n_train or math.inf} vectors.."
+    )
     t0 = time.time()
     y = faiss_sanitize(vectors[:n_train], force_numpy=True)
     preproc.train(y)
@@ -212,17 +241,41 @@ def build_and_train_ivf_index(
     use_float16: bool = True,
 ) -> faiss.IndexIVF:
     """Build the full IFV"""
-    pqflat_str = faiss_factory.pqflat
+    pqflat_str = faiss_factory.pq
     n_centroids = faiss_factory.n_centroids
-    d = preproc.d_out
+    dimension = preproc.d_out
     if pqflat_str == "Flat":
         logger.info("Making an IVFFlat index")
-        ivf_index = faiss.IndexIVFFlat(coarse_quantizer, d, n_centroids, faiss_metric)
+        ivf_index = faiss.IndexIVFFlat(coarse_quantizer, dimension, n_centroids, faiss_metric)
     else:
-        m = int(pqflat_str[2:])
-        assert m < 56 or use_float16, "PQ%d will work only with -float16" % m
-        logger.info("Making an IVFPQ index, m = ", m)
-        ivf_index = faiss.IndexIVFPQ(coarse_quantizer, d, n_centroids, m, 8)
+        logger.info(
+            f"Making an IVFPQ index with {faiss_factory.pq} ("
+            f"{faiss_factory.pq_ncodes} codes, "
+            f"{faiss_factory.pq_nbits} bits, "
+            f"type {faiss_factory.pq_type})"
+        )
+        if faiss_factory.pq_type == "full":
+            ivf_index = faiss.IndexIVFPQ(
+                coarse_quantizer,
+                dimension,
+                n_centroids,
+                faiss_factory.pq_ncodes,
+                faiss_factory.pq_nbits,
+                faiss_metric,
+            )
+        elif faiss_factory.pq_type == "fs":
+            if faiss_factory.pq_nbits != 4:
+                raise ValueError("Only 4 bits are supported for FastScan quantizer")
+            ivf_index = faiss.IndexIVFPQFastScan(
+                coarse_quantizer,
+                dimension,
+                n_centroids,
+                faiss_factory.pq_ncodes,
+                faiss_factory.pq_nbits,
+                faiss_metric,
+            )
+        else:
+            raise ValueError(f"Unknown PQ type {faiss_factory.pq_type}")
 
     coarse_quantizer.this.disown()
     ivf_index.own_fields = True

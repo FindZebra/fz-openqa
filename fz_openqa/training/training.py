@@ -137,7 +137,6 @@ def train(config: DictConfig) -> Optional[float]:
         os.system("pkill -f elasticsearch")
 
     # Log config to all lightning loggers
-    log.info("Logging hyperparameters.")
     train_utils.log_hyperparameters(
         config=config,
         model=model,

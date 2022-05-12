@@ -52,7 +52,7 @@ class MaxSim(torch.nn.Module):
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],
         faiss_devices: List[int],
-        max_chunksize: Optional[int] = 10_000,
+        max_chunksize: Optional[int] = 1_000,
         max_queue_size: int = 5,
         deduplicate_pids: bool = True,
         metric_type: MetricType = MetricType.inner_product,
@@ -65,7 +65,8 @@ class MaxSim(torch.nn.Module):
         self.metric_type = metric_type
         self.deduplicate_pids = deduplicate_pids
         # init the token_index
-        self.token_index = TokenIndex(token_index, faiss_devices)
+
+        self.token_index = TokenIndex(token_index, faiss_devices, max_chunksize=max_chunksize)
 
         # Store `emb2pid`
         self._validate_emb2pid(emb2pid, vectors)
@@ -181,7 +182,7 @@ class MaxSim(torch.nn.Module):
         except Exception:
             pass
         self.token_index.cpu()
-        self._send_signal(WorkerSignal.TO_CPU)
+        self._send_signal(WorkerSignal.TO_CPU, parallel=False)
         return self
 
     def to(self: T, device: torch.device) -> T:
@@ -195,20 +196,33 @@ class MaxSim(torch.nn.Module):
         except Exception:
             pass
         self.token_index.cuda()
-        self._send_signal(WorkerSignal.TO_CUDA)
+        self._send_signal(WorkerSignal.TO_CUDA, parallel=False)
         return self
 
-    def _send_signal(self, signal: WorkerSignal):
+    def _send_signal(self, signal: WorkerSignal, parallel=True):
 
-        for q in self.ranking_input_queues:
-            q.put(signal)
+        if parallel:
+            for q in self.ranking_input_queues:
+                q.put(signal)
 
-        while True:
-            data = [next(q, WorkerSignal.EXIT) for q in self.receivers]
-            if all(d == signal for d in data):
-                break
+            while True:
+                data = [next(q, WorkerSignal.EXIT) for q in self.receivers]
+                if all(d == signal for d in data):
+                    break
 
-        logger.info(f"{signal} acknowledged by all workers")
+            logger.info(f"{signal} acknowledged by all workers")
+
+        else:
+            for i, q in enumerate(self.ranking_input_queues):
+                logger.info(f"Sending {signal} to worker {i}")
+                q.put(signal)
+
+                rcv = self.receivers[i]
+                while True:
+                    output_signal = next(rcv, WorkerSignal.EXIT)
+                    if output_signal == signal:
+                        logger.info(f"{signal} acknowledged by worker {i}")
+                        break
 
     def _collect_worker_outputs(self):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
@@ -218,7 +232,27 @@ class MaxSim(torch.nn.Module):
     ) -> MaxSimOutput:
 
         # replace nans in q_vectors (padding)
-        q_vectors[q_vectors != q_vectors] = 0
+        q_vectors[q_vectors.isnan()] = 0
+
+        # rescale the query vectors to unit length for computational stability
+        # this assumes using cosine similarity, here we can only test if
+        # using the inner product, normalization has to be done on the model
+        # side. In the model, a temperature parameter is applied to the
+        # q_vectors, rescaling aims at inferring this parameter and
+        # applying it a-posteriori. This is a hack, a better implementation
+        # would store the temperatures in a separate field.
+        if MetricType(self.metric_type) != MetricType.inner_product:
+            raise ValueError(
+                f"Rescaling is only supported for inner product. " f"Found {self.metric_type}"
+            )
+        qmask = (q_vectors.abs().sum(-1) > 0).float()
+        vector_norm = q_vectors.norm(p=2, dim=-1)
+
+        q_norm = (qmask * vector_norm).sum(dim=-1) / qmask.sum(dim=-1)
+        if not (q_norm > 0).all():
+            logger.warning("Some queries have zero norm. Clamping to 1e-4.")
+        q_norm = q_norm.clamp(min=1e-4)
+        q_vectors = q_vectors / q_norm.view(-1, 1, 1)
 
         # process q_vectors using the token-level faiss index
         _time = time.time()
@@ -251,15 +285,24 @@ class MaxSim(torch.nn.Module):
 
         # reduce the results
         _time = time.time()
-        output = self.maxsim_reducer(maxsim_outputs, k=k)
+        output: MaxSimOutput = self.maxsim_reducer(maxsim_outputs, k=k)
         reduce_time = time.time() - _time
+
+        # rescale the scores back
+        output.scores = output.scores * q_norm.view(-1, 1)
 
         logger.info(
             f"Runtime: "
             f"faiss:{faiss_time:.1f}s, "
             f"deduplicate:{deduplicate_time:.1f}s, "
             f"ranking:{ranking_time:.1f}s, "
-            f"reduce:{reduce_time:.1f}s"
+            f"reduce:{reduce_time:.1f} | "
+            f"Stats: "
+            f"p={p}, k={k},"
+            f"unique_pids:{output.stats.prop_unique:.2%}, "
+            f"n_docs/point: {output.stats.number_docs_per_row.mean():.1f}, "
+            f"({output.stats.number_docs_per_row.min():.0f}, "
+            f"{output.stats.number_docs_per_row.max():.0f}), "
         )
 
         if torch.isnan(output.scores).any():
