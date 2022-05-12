@@ -73,10 +73,15 @@ class FaissHandler(IndexHandler):
             train_ids = slice(None, None)
 
         train_vectors = vectors[train_ids]
-        logger.info(f"Train the index " f"with {len(train_vectors)} vectors.")
+        logger.info(
+            f"Train the index "
+            f"with {len(train_vectors)} vectors "
+            f"(type: {type(train_vectors)})."
+        )
         self._index.train(train_vectors)
 
         # add vectors to the index
+        logger.info(f"Adding {len(vectors)} vectors (type: {type(vectors)}) to the index.")
         self._index.add(vectors)
 
         # free-up GPU memory
