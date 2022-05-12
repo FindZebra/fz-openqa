@@ -139,7 +139,9 @@ class VizMaxsimCallback(Callback):
                         MIN_SCORE = flat_scores.min() - 0.2 * (
                             flat_scores.max() - flat_scores.min()
                         )
-                        MAX_SCORE = scores.max() + 0.2 * (flat_scores.max() - flat_scores.min())
+                        MAX_SCORE = flat_scores.max() + 0.2 * (
+                            flat_scores.max() - flat_scores.min()
+                        )
 
                         # replace `-inf` with `MIN_SCORE`
                         scores_ik = scores_ik.masked_fill(scores_ik == -torch.inf, MIN_SCORE)
