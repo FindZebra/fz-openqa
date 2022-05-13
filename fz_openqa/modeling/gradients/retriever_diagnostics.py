@@ -105,6 +105,7 @@ def retriever_diagnostics(
         output["proposal/n_samples"] = proposal_rank.size(-1)
         output["proposal/max_sampled_rank"] = proposal_rank.max().float()
         output["proposal/min_sampled_rank"] = proposal_rank.min().float()
+        output["proposal/mean_sampled_rank"] = proposal_rank.float().mean()
 
     # diversity of the retrieved documents
     if doc_ids is not None:

@@ -182,6 +182,7 @@ class DenseIndex(Index):
         dataset: Dataset,
         nprobe: int = 8,
         faiss_train_size=None,
+        faiss_tempmem: int = -1,
         shard_faiss=False,
         **kwargs,
     ):
@@ -211,7 +212,7 @@ class DenseIndex(Index):
             train_on_cpu=self.train_faiss_on_cpu,
             nprobe=nprobe,
             faiss_train_size=faiss_train_size,
-            shard_faiss=shard_faiss,
+            faiss_tempmem=faiss_tempmem,
             metric_type=self.metric_type,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)

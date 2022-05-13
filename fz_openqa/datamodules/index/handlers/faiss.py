@@ -29,7 +29,7 @@ class FaissHandler(IndexHandler):
         keep_on_cpu: bool = False,
         train_on_cpu: bool = False,
         faiss_train_size: int = None,
-        shard_faiss: bool = False,
+        faiss_tempmem: int = -1,
         metric_type: MetricType = MetricType.inner_product,
         random_train_subset: bool = False,
         **kwargs,
@@ -44,7 +44,8 @@ class FaissHandler(IndexHandler):
 
         u = (
             f"Setup {type(self).__name__} with "
-            f"vectors ({type(vectors)}): ({len(vectors)}, {vectors.shape[-1]})"
+            f"vectors ({type(vectors).__name__}): "
+            f"({len(vectors)}, {vectors.shape[-1]})"
         )
         for k, v in [
             ("index_factory", index_factory),
@@ -52,6 +53,7 @@ class FaissHandler(IndexHandler):
             ("keep_on_cpu", keep_on_cpu),
             ("train_on_cpu", train_on_cpu),
             ("faiss_train_size", faiss_train_size),
+            ("faiss_tempmem", faiss_tempmem),
             ("metric_type", metric_type),
         ]:
             self.config[k] = v
@@ -81,7 +83,9 @@ class FaissHandler(IndexHandler):
         self._index.train(train_vectors)
 
         # add vectors to the index
-        logger.info(f"Adding {len(vectors)} vectors (type: {type(vectors)}) to the index.")
+        logger.info(
+            f"Adding {len(vectors)} vectors " f"(type: {type(vectors).__name__}) to the index."
+        )
         self._index.add(vectors)
 
         # free-up GPU memory
@@ -114,6 +118,7 @@ class FaissHandler(IndexHandler):
             nprobe=config["nprobe"],
             train_on_cpu=config["train_on_cpu"],
             keep_on_cpu=config["keep_on_cpu"],
+            tempmem=config["faiss_tempmem"],
         )
 
     def load(self):
