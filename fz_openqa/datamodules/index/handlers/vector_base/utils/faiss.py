@@ -144,9 +144,12 @@ def get_gpu_resources(devices=None, tempmem: int = -1):
         ngpu = len(devices)
     for i in range(ngpu):
         res = faiss.StandardGpuResources()
+        # res.setLogMemoryAllocations(True)
         if tempmem >= 0:
-            logger.warning(f"Setting GPU:{i} " f"temporary memory to" f"{tempmem/1024**3:.2f} GB")
+            logger.warning(f"Setting GPU:{i} temporary " f"memory to {tempmem/1024**3:.2f} GB")
             res.setTempMemory(tempmem)
+
+        rich.print(f"GPU:{i} Mem info:\n{res.getMemoryInfo()}")
         gpu_resources.append(res)
 
     return gpu_resources

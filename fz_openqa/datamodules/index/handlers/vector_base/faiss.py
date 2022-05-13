@@ -47,6 +47,9 @@ class FaissVectorBase(VectorBase):
         else:
             self.shard = False
 
+        if isinstance(tempmem, str):
+            tempmem = eval(tempmem)
+
         # parameters for the index
         self.nprobe = nprobe
         self.faiss_metric = faiss_metric

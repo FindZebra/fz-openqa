@@ -104,7 +104,7 @@ class TokenIndex(object):
             doc_ids = [item for sublist in doc_ids for item in sublist]
 
         # todo: refactor
-        max_bs = 100
+        max_bs = len(Q)
         token_ids = None
         for i in range(0, len(Q), max_bs):
             x = Q[i : i + max_bs]
