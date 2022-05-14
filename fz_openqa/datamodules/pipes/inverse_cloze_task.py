@@ -36,7 +36,7 @@ class InverseClozeTask(Pipe):
         self.input_field = input_field
         self.output_field = output_field
         self.min_distance = min_distance
-        self.score_keys = score_keys or ["document.match_score", "document.retrieval_score"]
+        self.score_keys = score_keys or ["document.match_score", "document.proposal_score"]
         self.max_score = max_score
         self.poisson_lambda = poisson_lambda
         self.n_neighbours = n_neighbours

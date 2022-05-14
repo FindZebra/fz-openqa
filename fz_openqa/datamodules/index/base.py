@@ -50,9 +50,9 @@ class Index(Pipe):
         verbose: bool = False,
         max_chunksize: int = 100,
         index_output_key: str = "row_idx",
-        score_output_key: str = "retrieval_score",
+        score_output_key: str = "proposal_score",
         analyzed_output_key: str = "analyzed_tokens",
-        rank_output_key: str = "retrieval_rank",
+        rank_output_key: str = "proposal_rank",
         # `Pipe` arguments
         id: Optional[str] = None,
         update: bool = False,

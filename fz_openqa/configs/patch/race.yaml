@@ -2,24 +2,24 @@
 
 defaults:
   - override /model/bert: roberta-base #deberta-v3-base
-  - override /model/module/reader_head: cross_attention
   - override /datamodule/relevance_classifier: none
   - override /datamodule/score_transform: none
 
 setup_with_model: true
 
 base:
-  device_batch_size: 1
+  device_batch_size: 2
   infer_batch_mul: 300
 
 trainer:
-  val_check_interval: 0.25
-  precision: 16
+  val_check_interval: 0.5
 
 model:
-  metric_siz: 128
+  num_warmup_steps: 20_000
+  metric_size: 128
+  num_lr_warmup_steps: 1_000
   module:
-    split_bert_layers: 2
+    split_bert_layers: 0
 
   optimizer_params:
     lr: 1e-5
@@ -33,7 +33,7 @@ datamodule:
 
   # dataset updates
   dataset_update:
-    freq: 3
+    freq: ${model.num_warmup_steps}
 
   builder:
     # update the builder parameters to use the quality builder

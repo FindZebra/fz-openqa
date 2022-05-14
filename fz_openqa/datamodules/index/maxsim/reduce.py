@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import List
 
+import rich
 import torch
 from loguru import logger
 from torch import Tensor
 from torch.nn import functional as F
 
 from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimOutput
+from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimStats
 
 
 class MaxSimReducer(object):
@@ -43,12 +45,14 @@ class MaxSimReducer(object):
 
         # debug
         upids = torch.unique(all_pids)
-        prop_unique = 100 * upids.numel() / all_pids.numel() if all_pids.numel() > 0 else -1
-        number_of_docs = all_pids[all_pids >= 0].numel() / all_pids.size(0)
-        logger.info(f"pids. unique: {prop_unique:.2f}%, docs/item: {number_of_docs:.3f}")
+        prop_unique = upids.numel() / all_pids.numel() if all_pids.numel() > 0 else -1
+        number_docs_per_row = (all_pids >= 0).float().sum(dim=1)
 
         # take the top-k results given the MaxSim score
         k_ = min(k, all_scores.shape[-1])
+        if k_ < k:
+            logger.warning(f"Could't retriever {k} results, found {k_}")
+
         all_scores = all_scores.to(torch.float32)
         maxsim_idx = torch.topk(all_scores, k=k_, dim=-1, largest=True, sorted=True).indices
 
@@ -65,6 +69,7 @@ class MaxSimReducer(object):
             pids=maxsim_pids.to(self.device, non_blocking=True),
             k=k,
             boundaries=None,
+            stats=MaxSimStats(prop_unique=prop_unique, number_docs_per_row=number_docs_per_row),
         )
         return output
 

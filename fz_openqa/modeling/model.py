@@ -72,7 +72,7 @@ class Model(LightningModule):
         module: Union[DictConfig, Module],
         monitor_metric: Optional[str],
         num_training_steps: int = 10000,
-        num_warmup_steps: int = 1000,
+        num_lr_warmup_steps: int = 1000,
         optimizer_params: Dict[str, Any] = None,
         ema_decay: Optional[float] = None,
         parameters: Optional[Parameters | Dict[str, Any]] = None,
@@ -87,11 +87,10 @@ class Model(LightningModule):
         # it also allows to access params with 'self.hparams' attribute
         # `lr` and `weight_decay` are registered in .hparams
         self.save_hyperparameters()
-        assert self.hparams["num_warmup_steps"] == num_warmup_steps
         assert self.hparams["optimizer_params"] == optimizer_params
         assert self.hparams["monitor_metric"] == monitor_metric
         assert self.hparams["num_training_steps"] == num_training_steps
-        assert self.hparams["num_warmup_steps"] == num_warmup_steps
+        assert self.hparams["num_lr_warmup_steps"] == num_lr_warmup_steps
 
         # store the state of the optimizer
         self.opt_states: Optional[Dict] = None
@@ -122,6 +121,8 @@ class Model(LightningModule):
                 self._params = Parameters(**parameters)
         else:
             self._params = parameters
+
+        logger.info(f"Parameters: {self._params}")
 
     @property
     def params(self) -> Dict[str, float]:
@@ -274,7 +275,7 @@ class Model(LightningModule):
         lr_scheduler = WarmupLinearSchedule(
             optimizer,
             num_training_steps=self.hparams.num_training_steps,
-            num_warmup_steps=self.hparams.num_warmup_steps,
+            num_warmup_steps=self.hparams.num_lr_warmup_steps,
         )
 
         # if a state is available, set it

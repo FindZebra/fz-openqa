@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from collections import defaultdict
 from copy import deepcopy
@@ -20,10 +21,13 @@ from rich.status import Status
 from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 
+from fz_openqa.modeling.parameters import Parameters
+from fz_openqa.utils import maybe_instantiate
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from fz_openqa import configs
-from fz_openqa.modeling.gradients import InBatchGradients
+from fz_openqa.modeling.gradients import InBatchGradients, ContrastiveGradients
 from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.toys.dataset import generate_toy_datasets
@@ -34,6 +38,9 @@ from fz_openqa.utils.pretty import pprint_batch
 
 logger = logging.getLogger(__name__)
 import wandb
+
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
 def norm(x):
@@ -68,7 +75,12 @@ def run(config: DictConfig) -> None:
         seed_everything(config.seed)
     if config.wandb:
         finish_wandb()
-        logger = WandbLogger(entity="findzebra", project="findzebra-qa-toys", group="mnist-toy")
+        logger = WandbLogger(
+            entity="findzebra",
+            project="findzebra-qa-toys",
+            group="mnist-toy",
+            name=config.get("wandb_name", None),
+        )
         config_ = deepcopy(OmegaConf.to_object(config))
         config_.pop("sys")
         logger.log_hyperparams(config_)
@@ -88,7 +100,6 @@ def run(config: DictConfig) -> None:
         "use_baseline": config.use_baseline,
         "baseline_dtype": torch.float16,
         "max_baseline_samples": config.max_baseline_samples,
-        "gamma": config.gamma,
     }
     estimator_cls, estimator_args = {
         "in_batch": (InBatchGradients, {}),
@@ -97,13 +108,14 @@ def run(config: DictConfig) -> None:
         "reinforce_b": (ReinforceGradients, {"expr": "B", **reinforce_args}),
         "reinforce_b_zero": (ReinforceGradients, {"expr": "B-zero", **reinforce_args}),
         "reinforce_c": (ReinforceGradients, {"expr": "C", **reinforce_args}),
+        "contrastive": (ContrastiveGradients, {}),
     }[config.estimator]
     estimator = estimator_cls(**estimator_args)
     sampler = ToySampler(
         data={k: v["data"] for k, v in datasets.items()},
         targets={k: v["targets"] for k, v in datasets.items()},
         knowledge=knowledge,
-        s_range=100,
+        s_range=None,
         batch_size=config.batch_size,
         n_samples=config.n_samples,
         sampler=config.sampler,
@@ -111,6 +123,18 @@ def run(config: DictConfig) -> None:
         chunksize=config.max_chunksize,
         sample_device=config.device,
     )
+
+    # parameters
+    if "parameters" not in config.keys():
+        parameters = Parameters()
+    elif isinstance(config.parameters, (dict, DictConfig)):
+        if "_target_" in config.parameters.keys():
+            parameters = maybe_instantiate(config.parameters)
+        else:
+            parameters = Parameters(**config.parameters)
+    else:
+        parameters = config.parameters
+    assert isinstance(parameters, Parameters)
 
     # training
     if config.share_backbone:
@@ -132,11 +156,13 @@ def run(config: DictConfig) -> None:
     gradients = defaultdict(RunningStats)
     for epoch in range(num_epochs):
         train_accuracy = Accuracy().to(config.device)
-        with Status("Indexing dataset.."):
-            model.eval()
-            sampler.index(model if epoch > 0 else None)
-            if logger is not None:
-                logger.log_metrics({"dataset_update/step": epoch}, step=global_step)
+        if epoch % config.update_freq == 0:
+            rich.print(f"> epoch={epoch}, indexing dataset..")
+            with Status("Indexing dataset.."):
+                model.eval()
+                sampler.index(model)
+                if logger is not None:
+                    logger.log_metrics({"dataset_update/step": epoch}, step=global_step)
         evaluate(
             model,
             estimator,
@@ -164,33 +190,28 @@ def run(config: DictConfig) -> None:
             model.train()
             global_step += 1
             batch = {k: v.to(config.device) for k, v in batch.items()}
+            optimizer.zero_grad()
             output = model(q=batch["question"], d=batch["evidence"])
             diagnostics = estimator(
                 reader_score=output["reader_score"],
                 retriever_score=output["retriever_score"],
                 targets=batch["target"],
-                retrieval_score=batch["retrieval_score"],
-                retrieval_log_weight=batch["retrieval_log_weight"],
+                proposal_score=batch["proposal_score"],
+                proposal_log_weight=batch["proposal_log_weight"],
+                **parameters(),
             )
 
             loss = diagnostics["loss"]
             loss = loss.mean()
             loss.backward()
             optimizer.step()
+            parameters.step()
 
             for k, p in model.named_parameters():
-                if p.requires_grad:
+                if p.requires_grad and p.grad is not None:
                     gradients[k].push(p.grad.data.clone(), per_dim=True)
 
             optimizer.zero_grad()
-
-            # retriever diagnostics
-            OptionRetriever._retriever_diagnostics(
-                retriever_score=output["retriever_score"],
-                retrieval_scores=batch["retrieval_score"],
-                retrieval_rank=batch["retrieval_score"].argsort(dim=-1, descending=True),
-                output=diagnostics,
-            )
 
             # update accuracy
             preds = diagnostics["_reader_logits_"].argmax(-1)
@@ -199,6 +220,10 @@ def run(config: DictConfig) -> None:
             if logger is not None:
                 pprint_batch(format_diagnostics(diagnostics, split="train"), "diags", silent=True)
                 logger.log_metrics(format_diagnostics(diagnostics, split="train"), step=global_step)
+                if parameters is not None:
+                    logger.log_metrics(
+                        format_diagnostics(parameters(), split="parameters"), step=global_step
+                    )
 
             if global_step % 10 == 0:
                 train_acc = train_accuracy.compute()
@@ -239,26 +264,40 @@ def run(config: DictConfig) -> None:
                 else:
 
                     # reduce gradients
-                    reader_gradients = reduce(
-                        RunningStats.cat,
-                        (g.flatten() for k, g in gradients.items() if "reader" in k),
-                    )
-                    retriever_gradients = reduce(
-                        RunningStats.cat,
-                        (g.flatten() for k, g in gradients.items() if "retriever" in k),
-                    )
-                    gradients = {"reader": reader_gradients, "retriever": retriever_gradients}
+                    reduced_gradients = {}
+                    if any("reader" in k for k in gradients.keys()):
+                        reduced_gradients["reader"] = reduce(
+                            RunningStats.cat,
+                            (g.flatten() for k, g in gradients.items() if "reader" in k),
+                        )
+                    if any("retriever" in k for k in gradients.keys()):
+                        reduced_gradients["retriever"] = reduce(
+                            RunningStats.cat,
+                            (g.flatten() for k, g in gradients.items() if "retriever" in k),
+                        )
 
+                    # log the gradients
                     logger.log_metrics(
                         format_diagnostics(
-                            {k: norm(g.mean) for k, g in gradients.items()}, split="gradients/norm"
+                            {k: norm(g.mean) for k, g in reduced_gradients.items()},
+                            split="gradients/norm",
                         ),
                         step=global_step,
                     )
                     logger.log_metrics(
                         format_diagnostics(
-                            {k: np.mean(g.std) for k, g in gradients.items()},
+                            {k: np.mean(g.std) for k, g in reduced_gradients.items()},
                             split="gradients/mean-std",
+                        ),
+                        step=global_step,
+                    )
+                    logger.log_metrics(
+                        format_diagnostics(
+                            {
+                                k: np.mean(np.absolute(g.mean[g.std > 0]) / g.std[g.std > 0])
+                                for k, g in reduced_gradients.items()
+                            },
+                            split="gradients/mean-snr",
                         ),
                         step=global_step,
                     )
@@ -305,7 +344,8 @@ def evaluate(
         loader_kwargs = {}
     loader = DataLoader(
         SplitWrapper(sampler, split="test"),
-        shuffle=False,
+        shuffle=True,
+        # worker_init_fn=seed_everything,
         **loader_kwargs,
     )
 
@@ -316,8 +356,8 @@ def evaluate(
             reader_score=output["reader_score"],
             retriever_score=output["retriever_score"],
             targets=batch["target"],
-            retrieval_score=batch["retrieval_score"],
-            retrieval_log_weight=batch["retrieval_log_weight"],
+            proposal_score=batch["proposal_score"],
+            proposal_log_weight=batch["proposal_log_weight"],
         )
 
         # update accuracy
@@ -334,6 +374,15 @@ def evaluate(
             for idx in range(M):
                 idx = (idx * (len(batch["question"]) - 1)) // M
                 log_predictions(batch, diagnostics, output, idx=idx, labels=labels)
+
+            # log embeddings
+            embs = model.get_embedding_as_image("reader")
+            embs = torchvision.utils.make_grid(embs, nrow=embs.size(0)).cpu().numpy().mean(0)
+            wandb.log({"embeddings/reader": wandb.Image(embs)})
+
+            embs = model.get_embedding_as_image("retriever")
+            embs = torchvision.utils.make_grid(embs, nrow=embs.size(0)).cpu().numpy().mean(0)
+            wandb.log({"embeddings/retriever": wandb.Image(embs)})
 
     test_acc = test_accuracy.compute()
     rich.print(
@@ -366,7 +415,7 @@ def log_predictions(batch, diagnostics, output, idx: int = 0, labels=None):
     ax[1].set_yticks([])
     ax[1].set_title(f"probs={probs}, labels={labels}")
     fig.tight_layout()
-    wandb.log({f"predictions-{idx}": fig})
+    wandb.log({f"predictions/{idx}": fig})
     plt.close(fig)
 
 

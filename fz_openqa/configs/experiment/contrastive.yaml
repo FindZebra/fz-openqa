@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - option_retriever
+  - override /model/module/reader_head: none
+  - override /model/module/gradients: contrastive
+
+trainer:
+  max_steps: 29_900
+
+model:
+  module:
+    share_documents_across_batch: true
+    retriever_head:
+      target_scale_init: 0.1
+
+    gradients:
+      agg: mul
+
+  parameters:
+    alpha: 1
+    reader_kl_weight: 0.3
+    retriever_kl_weight: 0
+
+
+datamodule:
+
+  sampler:
+    total: ${datamodule.n_documents}
+    temperature: 1
+    largest:
+      train: false
+      validation: true
+      test: true
+
+  # dataloader
+  drop_last: ${model.module.share_documents_across_batch}

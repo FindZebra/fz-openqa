@@ -182,6 +182,7 @@ class DenseIndex(Index):
         dataset: Dataset,
         nprobe: int = 8,
         faiss_train_size=None,
+        faiss_tempmem: int = -1,
         shard_faiss=False,
         **kwargs,
     ):
@@ -211,7 +212,7 @@ class DenseIndex(Index):
             train_on_cpu=self.train_faiss_on_cpu,
             nprobe=nprobe,
             faiss_train_size=faiss_train_size,
-            shard_faiss=shard_faiss,
+            faiss_tempmem=faiss_tempmem,
             metric_type=self.metric_type,
         )
         self._cache_vectors_and_build(dataset=dataset, **kwargs)
@@ -255,14 +256,13 @@ class DenseIndex(Index):
             persist=True,
         )
 
-        # read the vectors from the cache as a pyarrow table and build the idnex
+        # read the vectors from the cache as a pyarrow table and build the index
         vectors = self._read_vectors_table()
-        vectors = vectors[:]
         if vectors.dim() == 2:
             stride = None
         elif vectors.dim() == 3:
             stride = vectors.shape[1]
-            vectors = vectors.view(-1, vectors.shape[-1]).contiguous()
+            vectors = vectors.view(-1, vectors.shape[-1])
         else:
             stride = None
             raise ValueError(f"Invalid vectors shape: {vectors.shape}, expected 2 or 3 dimensions.")

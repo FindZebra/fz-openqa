@@ -13,16 +13,14 @@ from torch.nn import Sequential
 
 
 class Encoder(nn.Module):
-    def __init__(self, output_size: int = 128):
+    def __init__(self):
         super(Encoder, self).__init__()
-        self.conv1 = nn.Conv2d(1, 8, 3, 1)
+        self.conv1 = nn.Conv2d(1, 8, 5, stride=1)
         self.norm_1 = nn.InstanceNorm2d(8)
-        self.conv2 = nn.Conv2d(8, 16, 3, 1)
-        self.norm_2 = nn.InstanceNorm2d(16)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216 // 4, output_size)
-        self.norm_3 = nn.LayerNorm(output_size)
+        self.conv2 = nn.Conv2d(8, 8, 5, stride=2)
+        self.norm_2 = nn.InstanceNorm2d(8)
+        self.conv3 = nn.Conv2d(8, 8, 5, stride=2)
+        self.dropout_conv = nn.Dropout(0.2)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -31,12 +29,10 @@ class Encoder(nn.Module):
         x = self.conv2(x)
         x = F.relu(x)
         x = self.norm_2(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
+        x = self.dropout_conv(x)
+        x = F.relu(x)
+        x = self.conv3(x)
         x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = self.norm_3(x)
-        x = self.dropout2(x)
         return x
 
 
@@ -55,17 +51,20 @@ def cast_to_device(y: T, device: torch.device) -> T:
 
 def process_by_chunk(fn, x, chunksize=None, with_device: Optional[torch.device] = None, **kwargs):
     in_device = x.device
-    if with_device is not None and x.device != with_device:
-        x = cast_to_device(x, with_device)
 
     if chunksize is None:
+        if with_device is not None and x.device != with_device:
+            x = cast_to_device(x, with_device)
         y = fn(x, **kwargs)
         y = cast_to_device(y, in_device)
         return y
 
     output = None
     for i in range(0, len(x), chunksize):
-        y = fn(x[i : i + chunksize], **kwargs)
+        x_chunk = x[i : i + chunksize]
+        if with_device is not None and x.device != with_device:
+            x_chunk = cast_to_device(x_chunk, with_device)
+        y = fn(x_chunk, **kwargs)
         y = cast_to_device(y, in_device)
 
         if output is None:
@@ -98,15 +97,16 @@ class ToyOptionRetriever(nn.Module):
     ):
         super().__init__()
         self.max_chunksize = max_chunksize
+        hidden = 72
         if share_backbone:
             rich.print("[magenta]SHARING BACKBONE")
-            self.backbone = Encoder(hidden)
+            self.backbone = Encoder()
             self.retriever_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
             self.reader_head = Sequential(nn.ReLU(), nn.Linear(hidden, output_size))
         else:
             self.backbone = lambda x: x
             self.retriever_head = nn.Sequential(
-                Encoder(hidden), nn.ReLU(), nn.Linear(hidden, output_size)
+                Encoder(), nn.ReLU(), nn.Linear(hidden, output_size)
             )
             self.reader_head = deepcopy(self.retriever_head)
 
@@ -114,8 +114,8 @@ class ToyOptionRetriever(nn.Module):
         self.retriever_log_temperature = nn.Parameter(torch.tensor(temperature).log())
         self.n_classes = n_classes
         if n_classes is not None:
-            self.reader_embeddings = nn.Embedding(n_classes, output_size)
-            self.retriever_embeddings = nn.Embedding(n_classes, output_size)
+            self.reader_embeddings = nn.Embedding(n_classes, 28 ** 2)
+            self.retriever_embeddings = nn.Embedding(n_classes, 28 ** 2)
         else:
             self.reader_embeddings = None
             self.retriever_embeddings = None
@@ -124,6 +124,14 @@ class ToyOptionRetriever(nn.Module):
     def device(self):
         return next(iter(self.parameters())).device
 
+    def get_embedding_as_image(self, key):
+        emb = {
+            "reader": self.reader_embeddings.weight,
+            "retriever": self.retriever_embeddings.weight,
+        }[key]
+
+        return emb.view(self.n_classes, 1, 28, 28)
+
     def _process_query(self, query: torch.Tensor):
 
         hq = process_by_chunk(self.backbone, query)
@@ -131,8 +139,15 @@ class ToyOptionRetriever(nn.Module):
         h_reader = self.reader_head(hq)
 
         if self.reader_embeddings is not None:
-            h_reader = h_reader.unsqueeze(1) + self.reader_embeddings.weight.unsqueeze(0)
-            h_retriever = h_retriever.unsqueeze(1) + self.retriever_embeddings.weight.unsqueeze(0)
+            x_emb = self.get_embedding_as_image("reader")
+            h_emb = self.backbone(x_emb)
+            reader_emb = self.reader_head(h_emb)
+            h_reader = h_reader.unsqueeze(1) + reader_emb.unsqueeze(0)
+
+            x_emb = self.get_embedding_as_image("retriever")
+            h_emb = self.backbone(x_emb)
+            retriever_emb = self.retriever_head(h_emb)
+            h_retriever = h_retriever.unsqueeze(1) + retriever_emb.unsqueeze(0)
 
         return {
             "retriever": (h_retriever / self.retriever_temperature()),

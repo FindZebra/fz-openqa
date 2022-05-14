@@ -1,4 +1,5 @@
 import os
+import socket
 
 import hydra
 import numpy as np
@@ -43,6 +44,7 @@ GIT_HASH_SHORT = git_revision_short_hash()
 GIT_BRANCH_NAME = git_branch_name()
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("hostname", socket.gethostname)
 OmegaConf.register_new_resolver("int", lambda x: int(x))
 OmegaConf.register_new_resolver("int_mul", int_mul)
 OmegaConf.register_new_resolver("int_div", int_div)

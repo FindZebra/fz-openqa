@@ -14,30 +14,37 @@ from torch import Tensor
 from torchmetrics import Accuracy
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
+from torchmetrics.retrieval import RetrievalMetric
 
 from fz_openqa.utils.datastruct import Batch
 
 
-def is_computable(m: Metric):
+def is_computable(m: Metric | nn.Module):
     """check if one can call .compute() on metric"""
-    return not isinstance(m, Accuracy) or m.mode is not None
+    if isinstance(m, Accuracy):
+        return m.mode is not None
+    elif isinstance(m, RetrievalMetric):
+        return len(m.indexes) > 0
+    else:
+        return True
 
 
 class SplitMetrics(nn.Module):
     """Define a metric for each split"""
 
-    def __init__(self, metric: Union[MetricCollection, Metric]):
+    def __init__(
+        self,
+        metric: Union[MetricCollection, Metric],
+        allowed_splits: Optional[Tuple[Split, ...]] = None,
+    ):
         super(SplitMetrics, self).__init__()
 
-        self.train_metric = deepcopy(metric)
-        self.valid_metric = deepcopy(metric)
-        self.test_metric = deepcopy(metric)
+        splits = {Split.TRAIN, Split.VALIDATION, Split.TEST}
+        if allowed_splits is not None:
+            splits = set.intersection(splits, set(allowed_splits))
+        self.splits = splits
 
-        self.metrics = {
-            f"_{Split.TRAIN}": self.train_metric,
-            f"_{Split.VALIDATION}": self.valid_metric,
-            f"_{Split.TEST}": self.test_metric,
-        }
+        self.metrics = nn.ModuleDict({f"_{split}": deepcopy(metric) for split in self.splits})
 
     def __getitem__(self, split: Split) -> Metric:
         return self.metrics[f"_{split}"]
@@ -45,12 +52,17 @@ class SplitMetrics(nn.Module):
     def reset(self, split: Optional[Split]):
         if split is None:
             map(lambda m: m.reset(), self.metrics.values())
-        else:
+        elif split in self.splits:
             self[split].reset()
+        else:
+            pass
 
     def update(self, split: Split, *args: torch.Tensor | None) -> None:
         """update the metrics of the given split."""
-        self[split].update(*args)
+        if split in self.splits:
+            self[split].update(*args)
+        else:
+            pass
 
     @staticmethod
     def safe_compute(metric: MetricCollection) -> Batch:
@@ -63,7 +75,7 @@ class SplitMetrics(nn.Module):
         Compute the metrics for the given `split` else compute the metrics for all splits.
         The metrics are return after computation.
         """
-        if split is not None:
+        if split is not None and split in self.splits:
             metrics = [self[split]]
         else:
             metrics = self.metrics.values()
@@ -77,25 +89,53 @@ class SplitMetrics(nn.Module):
 
 class SafeMetricCollection(MetricCollection):
     """
-    A safe implementation of MetricCollection, so top-k accuracy  won't
-    raise an error if the batch size is too small.
+    A safe implementation of MetricCollection handling multiple failues:
+        1. top-k accuracy  won't raise an error if the batch size is too small.
+        2. automatically fills the `index` attribute for `RetrievalMetric`
     """
 
     def update(self, *args: Any, **kwargs: Any) -> None:
-        for _, m in self.items(keep_base=True):
+        args = list(args)
+
+        # automatically create the index if needed
+        if len(args) < 3 and any(isinstance(m, RetrievalMetric) for m in self.values()):
+            m = [m for m in self.values() if isinstance(m, RetrievalMetric)][0]
             preds, targets = args
-            if isinstance(m, Accuracy) and m.top_k is not None and preds.shape[-1] <= m.top_k:
-                pass
+            start_index = 1 + max(i.max() for i in m.indexes) if len(m.indexes) else 0
+            indexes = torch.arange(start_index, len(preds) + start_index, device=preds.device)
+            indexes = indexes.view(indexes.size(0), *(1 for _ in preds.shape[1:]))
+            indexes = indexes.expand_as(preds)
+            args = [preds, targets, indexes]
+
+        for _, m in self.items(keep_base=True):
+
+            # handle Accuracy
+            if isinstance(m, Accuracy):
+                # skip metric if n_documents <= k
+                preds, targets, *_ = args
+                if m.top_k is not None and preds.shape[-1] <= m.top_k:
+                    continue
+
+                m_kwargs = m._filter_kwargs(**kwargs)
+                m.update(*args[:2], **m_kwargs)
+
+            # handle Retrieval Metrics
+            elif isinstance(m, RetrievalMetric):
+                # skip metric if n_documents <= k
+                if hasattr(m, "k"):
+                    preds, targets, *_ = args
+                    if m.k is not None and preds.shape[-1] <= m.k:
+                        continue
+
+                m_kwargs = m._filter_kwargs(**kwargs)
+                m.update(*args[:3], **m_kwargs)
+
             else:
                 m_kwargs = m._filter_kwargs(**kwargs)
-                m.update(preds, targets, **m_kwargs)
+                m.update(*args, **m_kwargs)
 
     def compute(self) -> Dict[str, Any]:
-        return {
-            k: m.compute()
-            for k, m in self.items()
-            if not isinstance(m, Accuracy) or m.mode is not None
-        }
+        return {k: m.compute() for k, m in self.items() if is_computable(m)}
 
 
 class NestedMetricCollections(MetricCollection):

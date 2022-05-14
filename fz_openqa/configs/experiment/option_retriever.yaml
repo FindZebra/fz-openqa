@@ -25,6 +25,7 @@ defaults:
       - lr_monitor
       - log_predictions
       - progress_bar
+      - viz_maxsim
 
 base:
   seed: null # TODO: remove
@@ -34,53 +35,52 @@ base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
-  infer_batch_mul: 100
+  infer_batch_mul: 300
 
 trainer:
-  max_epochs: 10
-  gradient_clip_val: 2.0
+  gradient_clip_val: 0.5 # 2.0 might be unstable
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   val_check_interval: 1.0
   precision: 32
+  max_steps: 100_000 # set 29_900 for the final exps
 
 model:
+  # global model configuration
   metric_size: 32
   metric_type: inner_product
+  num_warmup_steps: 5_000
 
+  # optimizer configuration
   ema_decay: null
-  num_warmup_steps: 5_000 # Colbert uses no warmup
-  num_training_steps: 100_000 # TODO !!
-  bert:
-    config:
-      hidden_dropout_prob: 0.1
-      attention_probs_dropout_prob: 0.1
-
+  num_lr_warmup_steps: 1_000 # Colbert uses no warmup
+  num_training_steps: 20_000 # TODO !!
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
+
+  # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
+    reader_kl_weight: 0
+    alpha: 1
+    proposal_kl_weight: 0
+    retriever_kl_weight: 0
     tau: null
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
-    gamma: 1
-    question_mask: 1
-    alpha: 0
-    reader_kl_weight: 0.5
     agg_retriever_kl_weight: 0
-    retriever_kl_weight:
-      mode: cosine
-      num_steps: 20_000
-      initial_value: 0.1
-      final_value: 1e-5
+
+  # Module definition
   module:
-    mask_punctuation: false
+    mask_punctuation: true # MaxSim focuses too much on punctuation
+    use_conditional_mask: false
+    strip_answer_from_question: false
     split_bert_layers: 0
     resample_k: null
     alpha: 0
-    max_batch_size: 200
+    max_batch_size: 400
     share_documents_across_batch: false
     retriever_head:
       output_size: ${model.metric_size}
@@ -89,13 +89,9 @@ model:
       use_soft_score: false
       compute_agg_score: true
       normalize: true
-      use_mask: true
-      is_scaled: true
-      use_answer_mask: false
-      bayesian: false
-      learn_scale: false
-      scale: 1.
-      scale_init: 0.1
+      target_scale_init: 0.1
+      learn_scale: true
+      auto_scale: true
       share_parameters: true
       bias: false
     reader_head:
@@ -103,13 +99,10 @@ model:
       metric_type: ${model.metric_type}
       id: reader
       use_soft_score: true
-      use_mask: true
       normalize: false
-      is_scaled: true
-      bayesian: false
-      learn_scale: false
-      scale: 1.
-      scale_init: 0.1
+      target_scale_init: 0.1
+      learn_scale: true
+      auto_scale: true
       share_parameters: true
       bias: false
     gradients:
@@ -120,11 +113,11 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: 20
-    reset_optimizer: false # TODO !!
+    freq: ${int_mul:2,${model.num_warmup_steps}}
+    reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
-      relevance_classifier: null
+      # relevance_classifier: null
       score_transform: null
 
   # dataloader
@@ -141,17 +134,19 @@ datamodule:
   num_proc: 8
   output_columns:
     - answer.target
+    - question.row_idx
     - question.input_ids
     - question.attention_mask
+    - question.token_type_ids
     - document.input_ids
     - document.attention_mask
     - document.row_idx
     - document.match_score
-    - document.retrieval_score
-    - document.retrieval_rank
+    - document.proposal_score
+    - document.proposal_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 300
+  n_retrieved_documents: 100
   n_documents: 10
 
   # document sampler
@@ -182,20 +177,21 @@ datamodule:
 
   # Index parameters
   index_builder:
-    es_temperature: 5. # todo !!!
-    auxiliary_weight: 5. # todo: 10
+    es_temperature: 10. # todo !!!
+    auxiliary_weight: 2. # todo: 10
     model_output_keys: [ _hq_, _hd_ ]
-    p: 2048
+    p: 32
     dtype: float16
-    max_chunksize: null
-    maxsim_chunksize: 16_000 # use 4_000 for metric_size 128
+    max_chunksize: 100 # max batch to pass to the index
+    maxsim_chunksize: 2_000 # max batch to pass to the MaxSim ranker
     persist_cache: false
-    index_factory: IVF100k,PQ32x8
+    index_factory: IVF10000,PQ32 # wiki: shard:IVF100000,PQ16
     handler: flat
     keep_faiss_on_cpu: false
     train_faiss_on_cpu: false
-    fais_gpu_ratio: 0.5
-    faiss_train_size: null
+    fais_gpu_ratio: 0.5 # 0.5 for wiki
+    faiss_train_size: 5_000_000
+    faiss_tempmem: 1 << 30
     n_ranking_workers: ${datamodule.num_workers}
     nprobe: 32
     shard_faiss: false
@@ -209,3 +205,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
+    name: ytxn-F1-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}

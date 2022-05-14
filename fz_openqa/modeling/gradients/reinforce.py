@@ -6,6 +6,7 @@ from typing import Optional
 import einops
 import rich
 import torch
+from loguru import logger
 from torch import Tensor
 
 from fz_openqa.datamodules.index.utils.io import log_mem_size
@@ -27,7 +28,6 @@ class ReinforceGradients(Gradients):
         space: Space = Space.EXP,
         max_baseline_samples: int = 3,
         expr: str = "B",
-        gamma: float = 1.0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -37,14 +37,17 @@ class ReinforceGradients(Gradients):
         self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
         self.expr = expr
-        self.gamma = gamma
 
-        rich.print(
-            f"{self.__class__.__name__}: "
-            f"use_baseline={self.use_baseline}, "
-            f"expr={self.expr}, "
-            f"gamma={self.gamma}"
+        logger.info(
+            f"{self.__class__.__name__}: " f"use_baseline={self.use_baseline}, " f"expr={self.expr}"
         )
+
+    @staticmethod
+    def max_normalize(score: Tensor) -> Tensor:
+        shape = score.shape
+        maxes = score.view(score.size(0), -1).max(dim=1).values.detach()
+        maxes = maxes.view(shape[0], *([1] * (len(shape) - 1)))
+        return score - maxes
 
     def __call__(
         self,
@@ -52,8 +55,8 @@ class ReinforceGradients(Gradients):
         retriever_score: Tensor = None,
         reader_score: Tensor = None,
         targets: Tensor = None,
-        retrieval_score: Optional[Tensor] = None,
-        retrieval_log_weight: Optional[Tensor] = None,
+        proposal_score: Optional[Tensor] = None,
+        proposal_log_weight: Optional[Tensor] = None,
         retriever_agg_score: Optional[Tensor] = None,
         retriever_log_p_dloc: Optional[Tensor] = None,
         reader_log_p_dloc: Optional[Tensor] = None,
@@ -75,9 +78,9 @@ class ReinforceGradients(Gradients):
             f_\theta(d,q): shape [bs, n_opts, n_docs]
         targets
             a_\star: shape [bs]
-        retrieval_score
+        proposal_score
             f_\psi(d,q): shape [bs, n_opts, n_docs]
-        retrieval_log_weight
+        proposal_log_weight
             log s(d,q): shape [bs, n_opts, n_docs]
 
         Returns
@@ -86,25 +89,31 @@ class ReinforceGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
-        gamma = kwargs.get("gamma", self.gamma)
+        alpha = kwargs.get("alpha", 1.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+        proposal_kl_weight = kwargs.get("proposal_kl_weight", None)
         agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
         maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
+        # normalize the scores
+        reader_score = self.max_normalize(reader_score)
+        retriever_score = self.max_normalize(retriever_score)
+        proposal_score = self.max_normalize(proposal_score)
+
         # rename input variables
         f_theta_ = reader_score
         f_phi_ = retriever_score
-        f_psi_ = retrieval_score
-        log_s_ = retrieval_log_weight
+        f_psi_ = proposal_score
+        log_s_ = proposal_log_weight
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
             retriever_score=retriever_score,
-            retrieval_score=retrieval_score,
+            proposal_score=proposal_score,
             reader_score=reader_score,
-            retriever_agg_score=reader_score,
+            retriever_agg_score=retriever_agg_score,
             retriever_log_p_dloc=retriever_log_p_dloc,
             **kwargs,
         )
@@ -116,26 +125,23 @@ class ReinforceGradients(Gradients):
         assert log_s_ is not None
         assert targets is not None
 
-        # reader likelihood `log p(a | d, q)`
-        log_p_a__d_ = f_theta_.log_softmax(dim=1)
+        # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
+        f_phi_ = alpha * f_phi_ + (1 - alpha) * f_psi_
 
         # `log \zeta = f_\phi(d) - f_\psi(d)`
         log_zeta_ = f_phi_ - f_psi_
 
-        # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
-        log_zeta_hat_ = log_zeta_ + log_p_a__d_
-
         # importance weights
-        log_w_ = (log_s_ + log_zeta_).log_softmax(dim=-1).detach()
-        log_w_hat_ = (log_s_ + log_zeta_hat_).log_softmax(dim=-1).detach()
+        _normalizer = alpha * (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
+        log_w_ = (log_s_ + alpha * log_zeta_) - _normalizer
+        log_w_ = log_w_.detach()
 
         # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
-        # log_p_d__a_ = f_phi - (log_w_ * f_phi).logsumexp(dim=-1, keepdim=True)
         log_p_d__a_ = f_phi_ - (log_w_.exp().detach() * f_phi_).sum(dim=-1, keepdim=True)
 
         # compute cartesian product: `D \in \Dset^{(M)}`
-        args = f_theta_, f_phi_, f_psi_, log_s_, log_w_, log_w_hat_, log_p_d__a_
-        f_theta, f_phi, f_psi, log_s, log_w, log_w_hat, log_p_d__a = batch_cartesian_product(*args)
+        args = f_theta_, f_phi_, f_psi_, log_s_, log_w_, log_p_d__a_
+        f_theta, f_phi, f_psi, log_s, log_w, log_p_d__a = batch_cartesian_product(*args)
 
         # reader likelihood `log p(a | d, q)`
         log_p_a__d = f_theta.log_softmax(dim=1)
@@ -145,7 +151,6 @@ class ReinforceGradients(Gradients):
 
         # W(D) = \prod_{j=1}^M w_j), for D in \Dset^{(M)}
         log_W = log_w.sum(dim=1)
-        log_W_hat = log_w_hat.sum(dim=1)
         self.ess_diagnostics(diagnostics, log_W)
 
         # compute the log-likelihood estimate
@@ -156,11 +161,25 @@ class ReinforceGradients(Gradients):
         diagnostics["reader/lb"] = lb_p_ast
         diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
 
+        # log p(a_st | q, A, D)
+        targets_ = targets.view(targets.size(0), 1, 1)
+        targets_ = targets_.expand(targets.size(0), 1, log_p_a__d.size(2))
+        log_p_ast_D = log_p_a__d.gather(dim=1, index=targets_).squeeze(1)
+
+        # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
+        log_Zeta = f_phi.sum(1) - f_psi.sum(1)
+        log_S = log_s.sum(dim=1)
+        log_Zeta_hat = log_S + log_Zeta + log_p_ast_D
+        # `\hat{w} \propto S(D) \Zeta(D) p(a_st | Q, D)`
+        log_W_hat = log_Zeta_hat.log_softmax(dim=-1)
+        log_W_hat = log_W_hat.detach()
+        self.ess_diagnostics(diagnostics, log_W_hat, key="ess-posterior")
+
         # compute KL divergence w.r.t to a uniform prior (regularization)
         kl_reader = kl_divergence(log_p_a, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader.mean()
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
-        # kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
+        kl_retrieval = kl_divergence(f_phi_, q_logits=f_psi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever.mean()
         if retriever_agg_score is not None:
             log_nq = math.log(retriever_agg_score.size(0))
@@ -182,11 +201,6 @@ class ReinforceGradients(Gradients):
         else:
             kl_maxsim_reader = 0
 
-        # log p(a_st | q, A, D)
-        targets_ = targets.view(targets.size(0), 1, 1)
-        targets_ = targets_.expand(targets.size(0), 1, log_p_a__d.size(2))
-        log_p_ast_d = log_p_a__d.gather(dim=1, index=targets_).squeeze(1)
-
         # compute the baseline (unused in current experiments)
         if self.use_baseline:
             space = {"A": Space.EXP, "B": Space.EXP, "C": Space.LOG}[self.expr]
@@ -203,21 +217,21 @@ class ReinforceGradients(Gradients):
 
         # compute the gradient estimate
         if self.expr == "A":
-            h = log_p_ast_d + gamma * log_p_D__A
-            score = (log_W - log_p_ast.unsqueeze(-1) + log_p_ast_d).exp()
+            h = log_p_ast_D + log_p_D__A
+            score = (log_W - log_p_ast.unsqueeze(-1) + log_p_ast_D).exp()
             if log_b is not None:
                 score = score - (log_W - log_p_ast.unsqueeze(-1) + log_b).exp()
             loss = -1 * (score.detach() * h).sum(-1)
 
         elif self.expr == "A2":
-            h = log_p_ast_d + gamma * log_p_D__A
-            score = (log_W_hat).exp()
+            h = log_p_ast_D + log_p_D__A
+            score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
             loss = -1 * (score.detach() * h).sum(-1)
 
         elif self.expr in {"B", "B-zero"}:
-            weight = (log_W + log_p_ast_d - log_p_ast.unsqueeze(-1)).exp()
+            weight = (log_W + log_p_ast_D - log_p_ast.unsqueeze(-1)).exp()
             if log_b is not None:
                 weight = weight - (log_W + log_b - log_p_ast.unsqueeze(-1)).exp()
             reader_loss = log_p_ast
@@ -225,16 +239,16 @@ class ReinforceGradients(Gradients):
                 retriever_loss = (weight.detach() * log_p_D__A.sum(1)).sum(-1)
             else:
                 retriever_loss = 0
-            loss = -(reader_loss + gamma * retriever_loss)
+            loss = -(reader_loss + retriever_loss)
 
         elif self.expr == "C":
             if log_b is None:
                 log_b = 0
             reader_weight = log_W.exp()
-            retriever_weight = log_W.exp() * (log_p_ast_d - log_b)
-            reader_loss = (reader_weight.detach() * log_p_ast_d).sum(-1)
+            retriever_weight = log_W.exp() * (log_p_ast_D - log_b)
+            reader_loss = (reader_weight.detach() * log_p_ast_D).sum(-1)
             retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
-            loss = -(reader_loss + gamma * retriever_loss)
+            loss = -(reader_loss + retriever_loss)
         else:
             raise ValueError(f"expr must be either A, B or C, got {self.expr}")
 
@@ -243,12 +257,19 @@ class ReinforceGradients(Gradients):
             loss = loss + reader_kl_weight * kl_reader
         if retriever_kl_weight is not None:
             loss = loss + retriever_kl_weight * kl_retriever
+        if proposal_kl_weight is not None:
+            loss = loss + proposal_kl_weight * kl_retrieval
         if agg_retriever_kl_weight is not None:
             loss = loss + agg_retriever_kl_weight * kl_agg_retriever
         if maxsim_retriever_kl_weight is not None:
             loss = loss + maxsim_retriever_kl_weight * kl_maxsim_retriever
         if maxsim_reader_kl_weight is not None:
             loss = loss + maxsim_reader_kl_weight * kl_maxsim_reader
+
+        # add the relevance targets for the retriever
+        diagnostics.update(
+            self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
+        )
 
         return {
             "loss": loss,
@@ -264,12 +285,12 @@ class ReinforceGradients(Gradients):
 
     @staticmethod
     @torch.no_grad()
-    def ess_diagnostics(diagnostics, log_W_):
-        K = log_W_.size(-1)
-        log_ess = 2 * log_W_.logsumexp(dim=-1) - (2 * log_W_).logsumexp(dim=-1)
-        diagnostics["ess/mean"] = log_ess.exp().mean()
-        diagnostics["ess/ratio-mean"] = log_ess.exp().mean() / K
-        diagnostics["ess/max"] = log_W_.max().exp()
+    def ess_diagnostics(diagnostics, log_W, key="ess"):
+        K = log_W.size(-1)
+        log_ess = 2 * log_W.logsumexp(dim=-1) - (2 * log_W).logsumexp(dim=-1)
+        diagnostics[f"{key}/mean"] = log_ess.exp().mean()
+        diagnostics[f"{key}/ratio-mean"] = log_ess.exp().mean() / K
+        diagnostics[f"{key}/max"] = log_W.max().exp()
 
     @staticmethod
     @torch.no_grad()

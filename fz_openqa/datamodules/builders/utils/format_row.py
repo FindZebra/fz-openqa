@@ -112,7 +112,7 @@ def format_row_flat_questions_with_docs(
         match_score = match_score[j] if match_score is not None else None
         repr += (
             f"|-* Document #{1 + j}, "
-            f"score={row['document.retrieval_score'][j]:.2f}, "
+            f"score={row['document.proposal_score'][j]:.2f}, "
             f"match_score={match_score}, "
             f"match_on={match_on}\n"
         )
@@ -184,7 +184,7 @@ def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str
         match_on = match_on[j] if match_on is not None else None
         repr += f"|---* {locator} - Document #{1 + j} "
         repr += f"(id={get(row, 'document.idx', j)}, row_idx={get(row, 'document.row_idx', j)}), "
-        repr += f"score={row['document.retrieval_score'][j]:.2f}, "
+        repr += f"score={row['document.proposal_score'][j]:.2f}, "
         if "document.match_score" in row:
             repr += f"match_score={row['document.match_score'][j]}, " f"match_on={match_on}"
         if "document.question_idx" in row:

@@ -6,12 +6,14 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
+from ..heads.dpr import DprHead
 from ..heads.dpr import unique_with_indices
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
@@ -28,6 +30,62 @@ from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.pretty import pprint_batch
 
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
+
+
+def make_conditional_mask(token_type_ids, dtype, device):
+    min_multiplier = -10000.0
+    mask = token_type_ids == 1
+    extend_attention_mask = torch.zeros(
+        *token_type_ids.shape, token_type_ids.shape[-1], dtype=dtype, device=device
+    )
+    extend_attention_mask = extend_attention_mask.masked_fill(mask[:, None, :], min_multiplier)
+    extend_attention_mask = extend_attention_mask.masked_fill(mask[:, :, None], 0)
+
+    # output format is [bs, n_heads, seq_len, seq_len]
+    return extend_attention_mask.unsqueeze(1)
+
+
+def strip_answer_from_question(batch: Batch, pad_token_id) -> Batch:
+    required_columns = [
+        "question.input_ids",
+        "question.token_type_ids",
+        "question.attention_mask",
+    ]
+
+    for column in required_columns:
+        if column not in batch:
+            raise ValueError(f"{column} is required. " f"Found list({batch.keys()}")
+
+    input_ids = batch["question.input_ids"]
+    token_type_ids = batch["question.token_type_ids"]
+    attention_mask = batch["question.attention_mask"]
+    if input_ids.dim() > 2:
+        raise NotImplementedError("Not implemented for batch dimension > 1")
+
+    # todo: implementation without for loop: non_zero + gather/scatter
+    new_input_ids = torch.full_like(
+        input_ids,
+        fill_value=pad_token_id,
+    )
+    new_attention_mask = torch.zeros_like(attention_mask)
+    for i, input_ids_i in enumerate(input_ids):
+        token_type_ids_i: Tensor = token_type_ids[i]
+        attention_mask_i: Tensor = attention_mask[i]
+        is_answer_token = token_type_ids_i == 1
+
+        # set the new input_ids
+        input_ids_i = input_ids_i.masked_select(~is_answer_token)
+        new_input_ids[i, : len(input_ids_i)] = input_ids_i
+
+        # set the attention_mask
+        attention_mask_i = attention_mask_i.masked_select(~is_answer_token)
+        new_attention_mask[i, : len(attention_mask_i)] = attention_mask_i
+
+    batch["question.input_ids"] = new_input_ids
+    batch["question.attention_mask"] = new_attention_mask
+    batch["question.token_type_ids"] = torch.zeros_like(token_type_ids)
+
+    return batch
 
 
 class OptionRetriever(Module):
@@ -53,8 +111,8 @@ class OptionRetriever(Module):
         "validation/reader/logp",
         "train/reader/Accuracy",
         "validation/reader/Accuracy",
-        "train/retriever/Accuracy",
-        "validation/retriever/Accuracy",
+        "train/retrieval/MRR",
+        "validation/retrieval/MRR",
     ]
 
     def __init__(
@@ -64,10 +122,14 @@ class OptionRetriever(Module):
         retriever_head: Head | DictConfig,
         mask_punctuation: bool = False,
         max_batch_size: Optional[int] = None,
-        gradients: Gradients | DictConfig = ReinforceGradients(),
+        gradients: Gradients | DictConfig = None,
         share_documents_across_batch: bool = False,
+        use_conditional_mask: bool = False,
+        strip_answer_from_question: bool = False,
         **kwargs,
     ):
+        if gradients is None:
+            gradients = ReinforceGradients()
 
         super().__init__(*args, **kwargs)
 
@@ -78,6 +140,8 @@ class OptionRetriever(Module):
         # parameters
         self.max_batch_size = max_batch_size
         self.share_documents_across_batch = share_documents_across_batch
+        self.use_conditional_mask = use_conditional_mask
+        self.strip_answer_from_question = strip_answer_from_question
 
         # init the estimator
         self.estimator = maybe_instantiate(gradients)
@@ -90,6 +154,7 @@ class OptionRetriever(Module):
                 for symbol in string.punctuation
             ]
         self.register_buffer("sep_token_id", torch.tensor(self.tokenizer.sep_token_id))
+        self.register_buffer("pad_token_id", torch.tensor(self.tokenizer.pad_token_id))
 
         # Log the fingerprint of the model
         for k, hs in fingerprint_bert(self.bert).items():
@@ -101,8 +166,12 @@ class OptionRetriever(Module):
         """Initialize the metrics for each split."""
         self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
         self.retriever_reading_metrics = self._get_base_metrics(prefix=f"{prefix}reader/retriever-")
+
         self.retriever_metrics = self._get_base_metrics(
-            prefix=f"{prefix}retriever/", topk=[None, 3, 5, 10, 20, 50, 100]
+            prefix=f"{prefix}retrieval/",
+            topk=[1, 3, 5, 10, 20, 50, 100],
+            retrieval=True,
+            allowed_splits=[Split.VALIDATION, Split.TEST],
         )
 
     def _init_total_logp_metrics(self, prefix):
@@ -216,6 +285,8 @@ class OptionRetriever(Module):
         original_shape = batch[f"{field}.input_ids"].shape
         pprint_batch(batch, f"forward {field}", silent=silent)
 
+        # set the batch size allowed for one forward pass,
+        # if the batch size exceeds the limit, the model processes the data by chunk
         if max_batch_size is None:
             max_batch_size = self.max_batch_size
         elif max_batch_size < 0:
@@ -225,8 +296,27 @@ class OptionRetriever(Module):
         flat_batch = flatten_first_dims(
             batch,
             n_dims=len(original_shape) - 1,
-            keys=[f"{field}.input_ids", f"{field}.attention_mask"],
+            keys=[f"{field}.input_ids", f"{field}.attention_mask", f"{field}.token_type_ids"],
         )
+
+        # make the `extended_attention_mask`
+        if self.use_conditional_mask and field == "question":
+            token_id_key = f"{field}.token_type_ids"
+            if token_id_key not in flat_batch.keys():
+                raise ValueError(
+                    f"Key {token_id_key} must be provided when using "
+                    f"`use_conditional_mask=True`. "
+                    f"Found keys: {list(flat_batch.keys())}"
+                )
+            device = self.bert.device
+            conditional_mask = make_conditional_mask(
+                flat_batch[token_id_key], self.bert.dtype, device
+            )
+            bert_mask = self.bert.get_extended_attention_mask(
+                flat_batch[f"{field}.attention_mask"], None, device
+            )
+            extended_attention_mask = bert_mask + conditional_mask
+            flat_batch["question.extended_attention_mask"] = extended_attention_mask
 
         # process the document with the backbone
         h = self._backbone(
@@ -240,7 +330,7 @@ class OptionRetriever(Module):
         h = h.view(*original_shape[:-1], *h.shape[1:])
         return h
 
-    def _merge_unique_documents(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+    def _merge_unique_documents(self, batch: Dict[str, Any]) -> (Dict[str, Any], Dict[str, Any]):
         """
         merge all documents in the batch (*bs, n_docs, *) -> (n_unique_docs, *)
         """
@@ -249,21 +339,40 @@ class OptionRetriever(Module):
         except KeyError as e:
             raise KeyError("Merging documents requires `document.row_idx`.") from e
 
+        # get the list of matched document ids for each question
+        if "document.match_score" in batch:
+            match_score = batch["document.match_score"]
+            q_batch_size = batch["question.input_ids"].shape[:-1]
+            matched_documents = doc_ids.clone()
+            matched_documents = matched_documents.masked_fill(match_score <= 0, -1)
+        else:
+            q_batch_size = None
+            matched_documents = None
+
+        # get the unique document ids and flatten the document features
         batch["_document.row_idx"] = doc_ids
-        batch_size = doc_ids.shape
+        doc_batch_size = doc_ids.shape
         doc_ids = doc_ids.view(-1)
-        udoc_ids, uids = unique_with_indices(doc_ids)
+        udoc_ids, uids, inv_ids = unique_with_indices(doc_ids)
         keys_to_merge = {"document.input_ids", "document.attention_mask", "document.row_idx"}
         for key in keys_to_merge & set(batch.keys()):
             feature = batch[key]
-            feature = feature.view(-1, *feature.shape[len(batch_size) :])
+            feature = feature.view(-1, *feature.shape[len(doc_batch_size) :])
             feature = feature[uids]
             batch[key] = feature
 
-        # save the original ids inverse ids
-        batch.update({"_document.row_idx": doc_ids.view(*batch_size), "_document.inv_ids": uids})
+        # expand the match score from [*q_bs, n_docs] to [*q_bs, n_all_unique_docs]
+        if matched_documents is not None:
+            matched_documents = matched_documents.view(*q_batch_size, 1, matched_documents.size(-1))
+            new_match_score = (
+                matched_documents == udoc_ids.view(*(1 for _ in q_batch_size), -1, 1)
+            ).any(dim=-1)
+            batch["document.match_score"] = new_match_score
 
-        return batch
+        # save the original ids inverse ids
+        meta = {"_document.row_idx_": doc_ids.view(*doc_batch_size), "_document.inv_ids_": uids}
+
+        return batch, meta
 
     def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
         """
@@ -271,15 +380,10 @@ class OptionRetriever(Module):
         """
         pprint_batch(batch, "Option retriever::Input::batch", silent=silent)
 
-        # apply initial transformations to the data
-        self._format_input_data(batch)
-
-        if self.share_documents_across_batch:
-            batch = self._merge_unique_documents(batch)
-            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
-
         # initialize output dict
         step_output = {}
+
+        batch = self._preprocess_batch(batch, silent, step_output)
 
         # process the batch using BERT
         max_batch_size_eval = -1 if self.training else self.max_batch_size
@@ -318,16 +422,21 @@ class OptionRetriever(Module):
         step_output.update(
             self.estimator.step(
                 targets=batch.get("answer.target", None),
-                retrieval_score=batch.get("document.retrieval_score", None),
-                retrieval_rank=batch.get("document.retrieval_rank", None),
-                retrieval_log_weight=batch.get("document.retrieval_log_weight", None),
+                proposal_score=batch.get("document.proposal_score", None),
+                proposal_rank=batch.get("document.proposal_rank", None),
+                proposal_log_weight=batch.get("document.proposal_log_weight", None),
                 match_score=batch.get("document.match_score", None),
                 doc_ids=batch.get("document.row_idx", None),
-                raw_doc_ids=batch.get("_document.row_idx", None),
+                raw_doc_ids=step_output.get("_document.row_idx_", None),
+                doc_inv_ids=step_output.get("_document.inv_ids_", None),
+                share_documents_across_batch=self.share_documents_across_batch,
                 **head_meta,
                 **kwargs,
             )
         )
+
+        # add the mask to the step_output
+        step_output["_qmask_"] = self.get_mask(batch, "question")
 
         pprint_batch(step_output, "Option retriever::step::output", silent=silent)
         cols_to_drop = {}
@@ -336,15 +445,47 @@ class OptionRetriever(Module):
 
         return step_output
 
+    def _preprocess_batch(self, batch, silent, step_output):
+        # apply initial transformations to the data
+        self._format_input_data(batch)
+
+        # collapse all documents into the batch dimension
+        if self.share_documents_across_batch:
+            batch, meta = self._merge_unique_documents(batch)
+            pprint_batch(batch, "Option retriever::Input-merged::batch", silent=silent)
+            step_output.update(meta)
+
+        # strip the answer from the question
+        if self.strip_answer_from_question:
+            batch = strip_answer_from_question(batch, self.pad_token_id)
+
+        return batch
+
     def _reduce_step_output(self, output: Batch) -> Batch:
         """
         Gather losses and logits from all devices and return
         """
+
+        # potentially scale the heads
+        if isinstance(self.reader_head, DprHead):
+            if self.reader_head.is_scaled < 1:
+                reader_score = output["_reader_scores_"]
+                qmask = output["_qmask_"]
+                self.reader_head.set_scale(reader_score, qmask)
+
+        if isinstance(self.retriever_head, DprHead):
+            if self.retriever_head.is_scaled < 1:
+                retriever_score = output["_retriever_scores_"]
+                qmask = output["_qmask_"]
+                self.retriever_head.set_scale(retriever_score, qmask)
+
         # add the head diagnostics
         output.update(self._get_heads_diagnostics())
 
         # process with the estimator
         output.update(self.estimator.step_end(**output))
+
+        # pprint_batch(output, "reduce_step_output")
 
         # average losses
         for k, v in output.items():
@@ -357,7 +498,7 @@ class OptionRetriever(Module):
 
     @staticmethod
     def _format_input_data(batch):
-        _key = "document.retrieval_score"
+        _key = "document.proposal_score"
         batch[_key] = batch[_key].clamp(min=-1e3, max=1e6)
 
     def _get_heads_diagnostics(self):
@@ -395,9 +536,9 @@ class OptionRetriever(Module):
                     split, retriever_reading_logits, reader_targets
                 )
 
-        # lof the retriever accuracy
+        # log the retriever accuracy
         retriever_logits = output.get("_retriever_logits_", None)
-        retriever_targets = output.get("_retriever_targets_", None)
+        retriever_targets = output.get("_retriever_binary_targets_", None)
         if retriever_logits is not None and retriever_logits.numel() > 0:
             if retriever_targets is not None:
                 self.retriever_metrics.update(split, retriever_logits, retriever_targets)

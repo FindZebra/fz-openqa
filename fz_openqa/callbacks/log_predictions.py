@@ -1,17 +1,18 @@
 from typing import Any
 from typing import Optional
 
-import numpy as np
 import pytorch_lightning as pl
 import spacy
 from loguru import logger
 from pip._internal import main as pipmain
 from pytorch_lightning.callbacks import Callback
+from pytorch_lightning.utilities import rank_zero_only
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 from spacy import displacy
 from transformers import PreTrainedTokenizerFast
 
 import wandb
+from fz_openqa.utils.exceptions import catch_exception_as_warning
 
 CORRECT_LABEL = "✅"
 INCORRECT_LABEL = "❌"
@@ -50,7 +51,7 @@ class LogPredictions(Callback):
         log_dir: str,
         verbose: bool = True,
         n_samples: int = 10,
-        spacy_model: Optional[str] = "en_core_sci_md",
+        spacy_model: Optional[str] = None,
     ):
         super(LogPredictions, self).__init__()
         self.tokenizer = tokenizer
@@ -68,6 +69,7 @@ class LogPredictions(Callback):
     ) -> None:
         self.data = []
 
+    @catch_exception_as_warning
     def on_validation_batch_end(
         self,
         trainer: "pl.Trainer",
@@ -77,21 +79,48 @@ class LogPredictions(Callback):
         batch_idx: int,
         dataloader_idx: int,
     ) -> None:
+
+        if "_reader_logits_" not in outputs:
+            return
+
+        if len(self.data) >= self.n_samples:
+            return
+
         preds = outputs["_reader_logits_"].argmax(dim=-1).cpu().detach()
         targets = batch["answer.target"].cpu().detach()
-        mask = preds == targets
 
         batch_keys = [
             "question.input_ids",
             "document.input_ids",
             "answer.target",
-            "document.retrieval_score",
+            "document.proposal_score",
         ]
-        preds_keys = ["_reader_logits_", "_retriever_scores_", "_reader_scores_"]
-        out = {k: v[mask] for k, v in batch.items() if k in batch_keys}
-        out.update({k: v[mask] for k, v in outputs.items() if k in preds_keys})
+        preds_keys = [
+            "_reader_logits_",
+            "_retriever_scores_",
+            "_reader_scores_",
+        ]
+        out = {k: v for k, v in batch.items() if k in batch_keys}
+        out.update({k: v for k, v in outputs.items() if k in preds_keys})
+
+        # handle the document_ids in the case where documents are shared across the batch
+        if "_document.inv_ids_" in outputs:
+            uids = outputs["_document.inv_ids_"]
+            doc_input_ids = out["document.input_ids"]
+            bs, n_opts, n_docs, seq_length = doc_input_ids.shape
+            doc_input_ids = doc_input_ids.view(-1, seq_length)
+            doc_input_ids = doc_input_ids[uids]
+            doc_input_ids = doc_input_ids.view(1, 1, len(uids), seq_length)
+            doc_input_ids = doc_input_ids.expand(bs, n_opts, len(uids), seq_length)
+            out["document.input_ids"] = doc_input_ids
+
+        # select the rows where the prediction was correct
+        mask = preds == targets
+        out = {k: v[mask] for k, v in out.items()}
 
         for i in range(len(out["question.input_ids"])):
+            if len(self.data) >= self.n_samples:
+                break
             self.data += [{k: v[i] for k, v in out.items()}]
 
     def decode(self, input_ids):
@@ -104,17 +133,19 @@ class LogPredictions(Callback):
 
         return html + "\n"
 
+    @catch_exception_as_warning
+    @rank_zero_only
     def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        if len(self.data) > self.n_samples:
-            self.data = np.random.choice(self.data, self.n_samples, replace=False)
-
         html = "<h1>Model predictions</h1>\n"
         for k, row in enumerate(self.data):
             html += '<div tag="Question" style="font-size:12px">\n'
             html += f"<h2>Q #{k}</h2>\n"
             probs = row["_reader_logits_"].softmax(-1)
-            scores = row["document.retrieval_score"]
+            proposal_scores = row["document.proposal_score"]
             target = row["answer.target"]
+            doc_input_ids = row["document.input_ids"]
+
+            # display each question
             for i, qids in enumerate(row["question.input_ids"]):
                 is_correct = i == target
                 html += "<hr>"
@@ -133,14 +164,26 @@ class LogPredictions(Callback):
                 html += '<div class="row" style="background-color:#fff;">\n'
                 for _j, j in enumerate(js[:3]):
                     html += '<div tag="document" class="column">\n'
+                    try:
+                        # cannot be retrieved when setting `share_documents_across_batch`
+                        proposal_score_ = f"{proposal_scores[i, j]:.2f}"
+                    except IndexError:
+                        proposal_score_ = "--"
+
+                    try:
+                        # cannot be retrieved when using `ContrastiveGradients`
+                        reader_score_ = f"{reader_scores[j]:.2f}"
+                    except IndexError:
+                        reader_score_ = "--"
+
                     html += (
                         f"<h4>Doc #{_j}, "
                         f"retriever_prob={doc_probs[j]:.2f}, "
-                        f"retrieval_score={scores[i, j]:.2f}, "
-                        f"reader_score={reader_scores[j]:.2f}, "
+                        f"proposal_score={proposal_score_}, "
+                        f"reader_score={reader_score_}, "
                         f"</h4>\n"
                     )
-                    dids = row["document.input_ids"][i][j]
+                    dids = doc_input_ids[i][j]
                     html += self.decode(dids)
                     html += '</div">\n'
                 html += "</div>\n"
@@ -148,7 +191,7 @@ class LogPredictions(Callback):
             html += '</div">\n'
 
         try:
-            name = "predictions"
+            name = "predictions/htm"
             wandb.log({name: wandb.Html(html, inject=False)}, commit=False)
-        except Exception as e:
-            logger.warning(f"Could not log to wandb: {e}")
+        except wandb.errors.Error as e:
+            logger.warning(e)

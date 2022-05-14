@@ -23,9 +23,16 @@ class MaxSimInput:
 
 
 @dataclass
+class MaxSimStats:
+    prop_unique: float
+    number_docs_per_row: Tensor
+
+
+@dataclass
 class MaxSimOutput:
     pids: Tensor
     scores: Tensor
     boundaries: Optional[Tuple[int, int]]
     k: int
     idx: int = None
+    stats: Optional[MaxSimStats] = None

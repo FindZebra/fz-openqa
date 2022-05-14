@@ -30,9 +30,8 @@ base:
 trainer:
   gpus: ${n_gpus:}
   strategy: dp
-  min_epochs: 1
-  max_epochs: 1_000
   accumulate_grad_batches: ${base.accumulate_grad_batches}
+  max_steps: 1_000_000
 
 model:
   lr: 1e-5

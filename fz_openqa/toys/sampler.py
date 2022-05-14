@@ -2,6 +2,7 @@ from collections import defaultdict
 from collections import namedtuple
 from typing import Dict
 
+import rich
 import torch
 from torch.utils.data import Dataset
 
@@ -69,7 +70,7 @@ class ToySampler:
         data: Dict[str, torch.Tensor],
         targets: Dict[str, torch.Tensor],
         knowledge: torch.Tensor,
-        s_range=100,
+        s_range=None,
         batch_size: int = 32,
         n_samples: int = 10,
         n_classes: int = None,
@@ -123,12 +124,14 @@ class ToySampler:
         h_dataset = model.process_query(data)["retriever"]
         scores = model.score(hq=h_dataset, hd=h_knowledge)
         # normalize scores
-        s_max = scores.max(dim=-1, keepdim=True).values
-        s_min = scores.min(dim=-1, keepdim=True).values
-        scores = (scores - s_min) / (s_max - s_min)
-        scores = self.s_range * scores
+        if self.s_range is not None:
+            s_max = scores.max(dim=-1, keepdim=True).values
+            s_min = scores.min(dim=-1, keepdim=True).values
+            scores = (scores - s_min) / (s_max - s_min)
+            scores = self.s_range * scores
         return scores
 
+    @torch.no_grad()
     def __call__(self, qids: torch.Tensor, *, split: str, k: int = 10):
         assert self.scores is not None
 
@@ -181,8 +184,8 @@ class ToySampler:
             "question": self.data[split][idx],
             "target": self.targets[split][idx],
             "evidence": self.gather_knowledge(sampled.pid[idx]),
-            "retrieval_score": sampled.score[idx],
-            "retrieval_log_weight": sampled.log_weight[idx],
+            "proposal_score": sampled.score[idx],
+            "proposal_log_weight": sampled.log_weight[idx],
         }
 
         return data

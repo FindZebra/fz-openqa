@@ -175,7 +175,7 @@ def run(config: DictConfig) -> None:
         for j in range(len(eg["document.text"])):
             rich.print(get_separator("."))
             txt = eg["document.text"][j]
-            score = eg["document.retrieval_score"][j]
+            score = eg["document.proposal_score"][j]
             rich.print(f"doc #{j + 1}: score={score} [white]{txt}")
 
     # alternatively, you can search for a whole dataset:

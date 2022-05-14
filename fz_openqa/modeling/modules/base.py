@@ -4,19 +4,26 @@ import collections
 import warnings
 from abc import ABC
 from abc import abstractmethod
+from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
+from torchmetrics import RetrievalFallOut
+from torchmetrics import RetrievalHitRate
 from torchmetrics.classification import Accuracy
+from torchmetrics.retrieval import RetrievalMRR
+from torchmetrics.retrieval import RetrievalPrecision
+from torchmetrics.retrieval import RetrievalRecall
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from transformers.models.bert.modeling_bert import BertEncoder
@@ -31,6 +38,7 @@ from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
+from fz_openqa.utils.pretty import pprint_batch
 
 
 def is_feature_name(x):
@@ -102,10 +110,11 @@ class Module(nn.Module, ABC):
         max_batch_size: Optional[int] = None,
         **kwargs,
     ) -> Union[Tensor, Dict[str, Tensor]]:
+        batch = copy(batch)
 
         # select the keys with prefix
         if prefix is not None:
-            batch = self._select(prefix, batch)
+            batch = self._select_field(prefix, batch)
 
         if batch["input_ids"].shape[1] > self.max_length:
             warnings.warn(
@@ -117,19 +126,32 @@ class Module(nn.Module, ABC):
         # get input data
         inputs_ids = batch["input_ids"][:, : self.max_length]
         attention_mask = batch["attention_mask"][:, : self.max_length]
+        extended_attention_mask = batch.pop("extended_attention_mask", None)
+        if extended_attention_mask is not None:
+            extended_attention_mask = extended_attention_mask[
+                :, : self.max_length, : self.max_length
+            ]
 
         # process data by chunk
         output = None
-        bs, seq_len, *_ = inputs_ids.shape
+        bs, seq_len = inputs_ids.shape
         if max_batch_size is None:
             chunk_size = bs
         else:
             chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
 
         for i in range(0, bs, chunk_size):
+            # chuck the `extended_attention_mask` attribute
+            if extended_attention_mask is not None:
+                extended_attention_mask_ = extended_attention_mask[i : i + chunk_size]
+            else:
+                extended_attention_mask_ = None
+
+            # process the chunk using BERT
             chunk = self._process_tokens(
                 inputs_ids[i : i + chunk_size],
                 attention_mask[i : i + chunk_size],
+                extended_attention_mask=extended_attention_mask_,
                 **kwargs,
             )
             if output is None:
@@ -143,11 +165,13 @@ class Module(nn.Module, ABC):
         self,
         input_ids: Tensor,
         attention_mask: Tensor,
+        extended_attention_mask: Optional[Tensor],
         **kwargs,
     ) -> Tensor:
         bert_output = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            extended_attention_mask=extended_attention_mask,
         )
         return bert_output.last_hidden_state
 
@@ -322,6 +346,8 @@ class Module(nn.Module, ABC):
         prefix: Optional[str] = None,
         metric_kwargs: Optional[Dict] = None,
         topk: Optional[List[Union[None, int]]] = None,
+        retrieval: bool = False,
+        allowed_splits: Optional[List[Split]] = None,
     ) -> SplitMetrics:
         """
         Return the base metrics for the given prefix.
@@ -345,15 +371,32 @@ class Module(nn.Module, ABC):
         if topk is None:
             topk = [None]
 
-        def _name(k):
-            return f"top{k}_Accuracy" if k is not None else "Accuracy"
+        def _name(name, k):
+            return f"{name}@{k}" if k is not None else f"{name}"
 
+        if retrieval:
+            # retrieval metrics are super slow,
+            # comment out for now
+            metric_kwargs["empty_target_action"] = "skip"
+            _metrics = {
+                # **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},
+                # **{_name("Recall", k): RetrievalRecall(k=k, **metric_kwargs) for k in topk},
+                # **{_name("FallOut", k): RetrievalFallOut(k=k, **metric_kwargs) for k in topk},
+                # **{_name("HitRate", k): RetrievalHitRate(k=k, **metric_kwargs) for k in topk},
+                **{_name("MRR", None): RetrievalMRR(**metric_kwargs)},
+            }
+        else:
+            _metrics = {_name("Accuracy", k): Accuracy(top_k=k, **metric_kwargs) for k in topk}
+
+        # Wrap the Metric as a `SafeMetricCollection` to avoid crashing
+        # when `k` is larger than the number of documents in the batch
         metrics = SafeMetricCollection(
-            {_name(k): Accuracy(top_k=k, **metric_kwargs) for k in topk},
+            _metrics,
             prefix=prefix,
         )
 
-        return SplitMetrics(metrics)
+        # return a copy of each MetricCollection for each split
+        return SplitMetrics(metrics, allowed_splits=allowed_splits)
 
     def _init_metrics(self, prefix: str):
         self.reader_metrics = self._get_base_metrics(prefix=prefix)
@@ -364,7 +407,7 @@ class Module(nn.Module, ABC):
         return {k: v for k, v in output.items() if not is_feature_name(k)}
 
     @staticmethod
-    def _select(prefix: str, batch: Batch) -> Batch:
+    def _select_field(prefix: str, batch: Batch) -> Batch:
         """Select attributes with prefix `prefix` from the `batch`"""
         prefix = f"{prefix}."
         return {k.replace(prefix, ""): v for k, v in batch.items() if str(k).startswith(prefix)}

@@ -2,5 +2,6 @@ defaults:
   - base
 
 _target_: fz_openqa.datamodules.builders.QaBuilder
+preprocessing_op: ${datamodule.preprocessing_op}
 query_expansion: null
 dset_name: medqa-us

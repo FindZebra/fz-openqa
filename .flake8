@@ -3,3 +3,6 @@ ignore = W503, F401, E203, E402, C901
 max-line-length = 100
 max-complexity = 18
 select = B,C,E,F,W,T4,B9
+per-file-ignores =
+    fz_openqa/modeling/bert/custom_bert.py:E501
+    fz_openqa/modeling/bert/auto_model.py:E501

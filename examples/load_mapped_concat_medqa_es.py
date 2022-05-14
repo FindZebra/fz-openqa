@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 
-
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
@@ -28,6 +27,9 @@ from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
 from fz_openqa.datamodules.builders.transforms.flatten_multiple_choice import FlattenMultipleChoice
 from fz_openqa.utils.pretty import pprint_batch
+from fz_openqa.datamodules.builders.transforms.collapse_multiple_choice import (
+    CollapseMultipleChoice,
+)
 
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
@@ -74,10 +76,11 @@ def run(config):
         num_proc=4,
     )
 
-    if config.get("flatten", False):
-        dataset_transform = FlattenMultipleChoice()
-    else:
-        dataset_transform = None
+    dataset_transform = config.get("dataset_transform", None)
+    if isinstance(dataset_transform, str):
+        dataset_transform = {"flatten": FlattenMultipleChoice, "collapse": CollapseMultipleChoice}[
+            dataset_transform
+        ]()
 
     # define the OpenQA builder
     builder = OpenQaBuilder(
@@ -106,7 +109,7 @@ def run(config):
     # access dataset
     rich.print(dm.dataset)
 
-    dm.display_samples(n_samples=10)
+    dm.display_samples(n_samples=1)
 
     # sample a batch
     # _ = next(iter(dm.train_dataloader()))

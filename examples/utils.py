@@ -30,7 +30,7 @@ def display_search_results(corpus, queries: Dict, results: Dict):
         zip(
             queries["question.text"],
             results["document.row_idx"],
-            results["document.retrieval_score"],
+            results["document.proposal_score"],
             results["document.analyzed_tokens"],
         )
     ):

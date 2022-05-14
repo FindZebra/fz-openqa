@@ -13,8 +13,6 @@ base:
 trainer:
   gpus: 8
   strategy: dp
-  min_epochs: 1
-  max_epochs: 1000
   accumulate_grad_batches: 4
   val_check_interval: 100
 
@@ -32,7 +30,7 @@ datamodule:
     - document.attention_mask
     - document.row_idx
     - document.match_score
-    - document.retrieval_score
+    - document.proposal_score
     - answer.input_ids
     - answer.attention_mask
     - answer.target

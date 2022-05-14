@@ -32,8 +32,8 @@ def safe_concatenate(scores):
 class RetrieverDistribution(Analytic):
     """Report statistics on the retriever distribution."""
 
-    requires_columns: List[str] = ["document.retrieval_score"]
-    output_file_name = "retrieval_distribution.json"
+    requires_columns: List[str] = ["document.proposal_score"]
+    output_file_name = "proposal_distribution.json"
     n_samples: int = 1000
     batch_size: int = 1000
     percentiles: List[int] = [10, 50, 90]
@@ -46,7 +46,7 @@ class RetrieverDistribution(Analytic):
         Report on a specific split of the dataset.
         """
         scores = None
-        dset = keep_only_columns(dset, ["document.retrieval_score"])
+        dset = keep_only_columns(dset, ["document.proposal_score"])
         n_steps = len(dset) // self.batch_size
         for i in tqdm(
             range(0, len(dset), self.batch_size),
@@ -56,7 +56,7 @@ class RetrieverDistribution(Analytic):
         ):
             row = dset[i : i + self.batch_size]
             scores_i = self._get_scores(
-                row, key="document.retrieval_score", n_samples=self.n_samples // max(1, n_steps)
+                row, key="document.proposal_score", n_samples=self.n_samples // max(1, n_steps)
             )
             if scores is None:
                 scores = scores_i

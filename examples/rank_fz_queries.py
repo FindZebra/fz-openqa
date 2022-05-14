@@ -232,7 +232,7 @@ def run(config: DictConfig) -> None:
             doc_txt = doc_txt.replace("'", "")
             rich.print(
                 f"- doc #{j + 1}, local_rank={loc_rank + 1}, "
-                f"score={batch['document.retrieval_score'][i][loc_rank]:.2f}, "
+                f"score={batch['document.proposal_score'][i][loc_rank]:.2f}, "
                 f"cui={docs['document.cui'][j]}, "
                 f"text=`[white]{doc_txt}[/white]`"
             )
@@ -284,7 +284,7 @@ def run(config: DictConfig) -> None:
                     )
                     f.write(
                         f"- doc #{j + 1}, query #{i+1}, "
-                        f"score={batch['document.retrieval_score'][i][j]:.2f}, "
+                        f"score={batch['document.proposal_score'][i][j]:.2f}, "
                         f"title={docs['document.title'][j]}, "
                         f"match={is_match}, "
                         f"text=`{doc_txt}`\n"

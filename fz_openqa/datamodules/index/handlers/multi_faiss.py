@@ -47,7 +47,8 @@ class MultiFaissHandler(IndexHandler):
             raise ValueError(
                 f"The length of vectors and doc_ids must be equal. "
                 f"Found: {len(vectors)} != {len(doc_ids)}. "
-                f"vectors: shape={vectors.shape} ({type(vectors)})."
+                f"vectors: shape={vectors.shape} "
+                f"({type(vectors).__name__})."
             )
 
         self.index_map = self.get_indexes_map(doc_ids)
