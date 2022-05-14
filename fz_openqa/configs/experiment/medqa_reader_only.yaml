@@ -1,17 +1,14 @@
 # @package _global_
 
 defaults:
-  - base
+  - option_retriever
   - override /model: medqa_reader
+  - override /model/module/retriever_head: none
+  - override /model/module/reader_head: none
+  - override /model/module/gradients: none
   - override /model/bert: pubmed_multiple_choice
-  - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: elasticsearch
-  - override /datamodule/relevance_classifier: none
-  - override /datamodule/sampler: priority
-  - override /datamodule/transform: view_reader_concat
-#  - override /datamodule/dataset_filter: none
   - override /datamodule/builder/analytics: none
-  - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - progress_bar
@@ -29,25 +26,19 @@ base:
 
 
 trainer:
-  gpus: 8
-  strategy: dp
-  min_epochs: 1
-  max_epochs: 30
-  gradient_clip_val: 2.0
-  accumulate_grad_batches: 4
+  max_steps: 30000 # maybe  use fewer steps
+  accumulate_grad_batches:  ${base.accumulate_grad_batches}
   val_check_interval: 1.0
   precision: 32
 
 model:
   lr: 1e-5
   weight_decay: 1e-3
-  num_warmup_steps: 1_000
-  num_training_steps: 10_000
+  num_lr_warmup_steps: 1_000
+  num_training_steps: 100_000 # learning rate is decay from 1 to 0 during these steps
 
 datamodule:
-  use_subset: false # todo: debug: remove
-  train_batch_size: 16
-  eval_batch_size: 32
+  dataset_update: null # don't update dataset
   num_proc: 4
   num_workers: 4
   output_columns:
@@ -57,53 +48,30 @@ datamodule:
     - document.attention_mask
     - document.row_idx
     - document.match_score
-    - document.retrieval_score
-    - document.retrieval_rank
+    - document.proposal_score
+    - document.proposal_rank
     - answer.input_ids
     - answer.attention_mask
     - answer.target
 
   # documents
-  n_retrieved_documents: 100
   n_documents: 3
 
   # document sampler
   sampler:
     total: ${datamodule.n_documents}
     largest:
-      train: true
+      train: false
       validation: true
       test: true
 
   index_builder:
     es_temperature: 10. # divide the scores by a factor 10 (more uniform distribution)
-    auxiliary_weight: 4. # boost the answer options by a factor (5 = 1 + 4)
+    auxiliary_weight: 2. # boost the answer options by a factor (5 = 1 + 4)
 
-  # encoding tokens
-  add_encoding_tokens: true
-  add_special_tokens: true
 
-  # tag documents as positive or negative
-  relevance_classifier:
-    interpretable: false
 
-  # OpenQA builder parameters
-  builder:
-    batch_size: 100
-    writer_batch_size: 1_000
-    dataset_builder:
-      dset_name: medqa-us # todo: change to TW
-      min_answer_length: 3
-      n_query_tokens: 1
-    corpus_builder:
-      to_sentences: false
-      use_subset: false # todo: debug: remove
-      passage_length: 200
-      passage_stride: 200
-
-logger: null
-callbacks: null
-
-#logger:
-#  wandb:
-#    group: baseline-reader-us # name your experiment here
+logger:
+  wandb:
+   name: null
+   group: baseline-reader-us # name your experiment here
