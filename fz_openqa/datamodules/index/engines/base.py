@@ -9,24 +9,31 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
+import torch
 from datasets import Dataset
 from datasets.search import SearchResults
 from hydra.utils import instantiate
 from loguru import logger
 
 from fz_openqa.datamodules.index._base import camel_to_snake
+from fz_openqa.datamodules.index._base import slice_batch
 from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.utils.array import FormatArray
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
 class IndexEngine(Pipe, metaclass=abc.ABCMeta):
     """This class implements an index."""
 
-    no_fingerprint: List[str] = ["k", "path"]
+    no_fingerprint: List[str] = ["k", "path", "max_batch_size"]
     no_index_name: List[str] = []
     index_columns: List[str] = []
     query_columns: List[str] = []
@@ -39,6 +46,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         *,
         path: PathLike,
         k: int = 10,
+        max_batch_size: Optional[int] = None,
         # Pipe args
         input_filter: None = None,
         update: bool = False,
@@ -48,6 +56,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         super().__init__(input_filter=input_filter, update=update)
         # default number of retrieved documents
         self.k = k
+        self.max_batch_size = max_batch_size
 
         # set the index configuration
         self.config = self.default_config
@@ -78,6 +87,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         with open(str(self.state_file), "r") as f:
             state = json.load(f)
             self.k = state.pop("k")
+            self.max_batch_size = state.pop("max_batch_size")
             self.config = state["config"]
 
     @property
@@ -93,6 +103,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         state["config"] = copy(self.config)
         state["path"] = str(self.path)
         state["k"] = self.k
+        state["max_batch_size"] = self.max_batch_size
         state["_target_"] = type(self).__module__ + "." + type(self).__qualname__
         return state
 
@@ -107,7 +118,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             self.load()
         else:
             logger.info(f"Creating index at {self.path}")
-            self._build(vectors=vectors, corpus=corpus, **copy(self.config))
+            self._build(vectors=vectors, corpus=corpus)
             self.save()
             assert self.exists(), f"Index {type(self).__name__} was not created."
 
@@ -187,3 +198,69 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             fingerprints = get_fingerprint(fingerprints)
 
         return fingerprints
+
+    def _call_batch(
+        self,
+        query: Batch,
+        idx: Optional[List[int]] = None,
+        k: Optional[int] = None,
+        vectors: Optional[Tensors] = None,
+        output_format: Optional[OutputFormat] = None,
+        **kwargs,
+    ) -> Batch:
+        """
+        Search the index for a batch of examples (query).
+
+        Filter the incoming batch using the same pipe as the one
+        used to build the index."""
+        k = k or self.k
+
+        # fetch vectors
+        if vectors is None:
+            q_vectors = None
+        else:
+            q_vectors = vectors[idx]
+
+        # search the index by chunk
+        batch_size = infer_batch_size(query)
+        search_results = None
+        if self.max_batch_size is not None:
+            eff_batch_size = min(max(1, self.max_batch_size), batch_size)
+        else:
+            eff_batch_size = batch_size
+        for i in range(0, batch_size, eff_batch_size):
+
+            # slice the query
+            chunk_i = slice_batch(query, slice(i, i + eff_batch_size))
+            if q_vectors is not None:
+                q_vectors_i = q_vectors[i : i + eff_batch_size]
+            else:
+                q_vectors_i = None
+
+            # search
+            r = self._search_chunk(chunk_i, k=k, vectors=q_vectors_i, **kwargs)
+
+            if search_results is None:
+                search_results = r
+            else:
+                search_results += r
+
+        # format the output
+        formatter = FormatArray(output_format)
+        output = {
+            self.output_index_key: formatter(search_results.index),
+            self.output_score_key: formatter(search_results.score),
+        }
+
+        pprint_batch(output, "Engine out")
+
+        return output
+
+    @abc.abstractmethod
+    def _search_chunk(
+        self, query: Batch, *, k: int, vectors: Optional[torch.Tensor], **kwargs
+    ) -> SearchResult:
+        raise NotImplementedError
+
+    def __del__(self):
+        self.free_memory()

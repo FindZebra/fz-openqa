@@ -42,7 +42,8 @@ class ElasticsearchEngine(IndexEngine):
     index_columns: List[str] = ["document.row_idx", "document.text"]
     query_columns: List[str] = ["question.text", "answer.text"]
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
-        "_instance" "timeout",
+        "_instance",
+        "timeout",
         "es_logging_level",
         "ingest_batch_size",
     ]
@@ -68,7 +69,6 @@ class ElasticsearchEngine(IndexEngine):
         self,
         vectors: Optional[Tensors | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
-        **kwargs,
     ):
 
         if corpus is None:
@@ -183,7 +183,9 @@ class ElasticsearchEngine(IndexEngine):
             k=k,
         )
 
-    def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+    def _search_chunk(
+        self, batch: Batch, idx: Optional[List[int]] = None, **kwargs
+    ) -> SearchResult:
 
         args = [batch.get(key, None) for key in self.query_columns]
 
@@ -197,10 +199,7 @@ class ElasticsearchEngine(IndexEngine):
 
         search_result = self.search(*args, **kwargs)
 
-        return {
-            self.output_index_key: search_result.index,
-            self.output_score_key: search_result.score,
-        }
+        return search_result
 
     def __getstate__(self):
         """this method is called when attempting pickling.

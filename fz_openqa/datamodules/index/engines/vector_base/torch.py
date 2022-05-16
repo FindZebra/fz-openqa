@@ -4,30 +4,41 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
+import numpy as np
 import rich
 import torch
 from torch import nn
 
 from .base import VectorBase
+from .utils.faiss import Tensors
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
 class TorchIndex(nn.Module):
     """Register vectors as parameters,
     return the argmax of the dot product in the forward pass."""
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, dimension: int, **kwargs):
+        super().__init__()
         self.register_buffer(
             "device_info",
             torch.zeros(
                 1,
             ),
         )
-        self.vectors = nn.Parameter(torch.empty(0, self.dimension), requires_grad=False)
+        self.vectors = nn.Parameter(torch.empty(0, dimension), requires_grad=False)
 
-    def add(self, vectors: torch.Tensor, **kwargs):
+    def add(self, vectors: Tensors, **kwargs):
         device = self.device_info.device
+        if isinstance(vectors, TensorArrowTable):
+            vectors = vectors[:]
+        elif isinstance(vectors, np.ndarray):
+            vectors = torch.from_numpy(vectors)
+        elif isinstance(vectors, torch.Tensor):
+            pass
+        else:
+            raise TypeError(f"unsupported type: {type(vectors)}")
         self.vectors.data = torch.cat([self.vectors.data, vectors.to(device)], dim=0)
 
     def save(self, path: Path):
@@ -40,7 +51,6 @@ class TorchIndex(nn.Module):
     def forward(self, batch: Batch) -> (torch.Tensor, torch.Tensor):
         query: torch.Tensor = batch["query"]
         k: int = batch["k"]
-        rich.print(f">> TorchIndex.forward: {query.shape}, k={k}")
         scores = torch.einsum("bh,nh->bn", query, self.vectors)
         k = min(k, len(self.vectors))
         scores, indices = torch.topk(scores, k, dim=1, largest=True)

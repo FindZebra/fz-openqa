@@ -95,7 +95,7 @@ def run(config: DictConfig) -> None:
         tokenizer = loader.tokenizer
     model.eval()
     model.freeze()
-    logger.info(f"IndentityModel {type(model)} loaded")
+    logger.info(f"RandnModel {type(model)} loaded")
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")

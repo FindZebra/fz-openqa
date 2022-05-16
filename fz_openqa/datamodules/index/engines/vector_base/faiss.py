@@ -251,7 +251,10 @@ class FaissVectorBase(VectorBase):
         ps.set_index_parameter(self.index, "nprobe", self.nprobe)
 
     def cpu(self):
-        self.index = faiss.index_gpu_to_cpu(self.index)  # type: ignore
+        try:
+            self.index = faiss.index_gpu_to_cpu(self.index)  # type: ignore
+        except AttributeError:
+            pass
 
         # set the nprobe parameter
         try:

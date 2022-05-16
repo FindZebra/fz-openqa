@@ -1,19 +1,30 @@
 from __future__ import annotations
 
+from typing import Any
+from typing import Callable
+from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
+import rich
 import torch  # type: ignore
-from faiss import IndexReplicas
+from datasets import Dataset
+from datasets import Split
+from datasets.search import SearchResults
 from loguru import logger
+from pytorch_lightning import Trainer
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.engines.vector_base import VectorBase
 from fz_openqa.datamodules.index.engines.vector_base.auto import AutoVectorBase
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.search_result import SearchResult
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.metric_type import MetricType
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
@@ -22,52 +33,51 @@ class FaissEngine(IndexEngine):
 
     _max_num_proc: int = 1
 
+    index_columns: List[str] = ["_hd_"]
+    query_columns: List[str] = ["_hq_"]
+    no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
+        "loader_kwargs",
+        "keep_on_cpu",
+        "train_on_cpu",
+        "_index",
+        "tempmem",
+    ]
+    no_index_name = IndexEngine.no_index_name + [
+        "_instance" "timeout",
+        "es_logging_level",
+        "auxiliary_weight",
+        "es_temperature",
+        "ingest_batch_size",
+    ]
+
+    _default_config: Dict[str, Any] = {
+        "index_factory": "Flat",
+        "nprobe": 32,
+        "keep_on_cpu": False,
+        "train_on_cpu": False,
+        "train_size": 1_000_000,
+        "tempmem": -1,
+        "metric_type": MetricType.inner_product,
+        "random_train_subset": False,
+    }
+
     def _build(
         self,
-        vectors: torch.Tensor | TensorArrowTable | np.ndarray,
-        *,
-        index_factory: str = "Flat",
-        nprobe: int = 32,
-        keep_on_cpu: bool = False,
-        train_on_cpu: bool = False,
-        faiss_train_size: int = None,
-        faiss_tempmem: int = -1,
-        metric_type: MetricType = MetricType.inner_product,
-        random_train_subset: bool = False,
-        **kwargs,
+        vectors: Optional[Tensors | TensorArrowTable] = None,
+        corpus: Optional[Dataset] = None,
     ):
         """build the index from the vectors."""
-        metric_type = MetricType(metric_type).name
-        if isinstance(vectors, np.ndarray):
-            vectors = torch.from_numpy(vectors)
 
+        # input checks and casting
         assert len(vectors.shape) == 2, f"The vectors must be 2D. vectors: {vectors.shape}"
-        self.config["dimension"] = vectors.shape[-1]
-
-        u = (
-            f"Setup {type(self).__name__} with "
-            f"vectors ({type(vectors).__name__}): "
-            f"({len(vectors)}, {vectors.shape[-1]})"
-        )
-        for k, v in [
-            ("index_factory", index_factory),
-            ("nprobe", nprobe),
-            ("keep_on_cpu", keep_on_cpu),
-            ("train_on_cpu", train_on_cpu),
-            ("faiss_train_size", faiss_train_size),
-            ("faiss_tempmem", faiss_tempmem),
-            ("metric_type", metric_type),
-        ]:
-            self.config[k] = v
-            u += f", {k}={v}"
-
-        # log config
-        logger.info(u)
+        self.config["metric_type"] = MetricType(self.config["metric_type"]).name
 
         # init the index
         self._index = self._init_index(self.config)
 
         # train the index
+        faiss_train_size = self.config["train_size"]
+        random_train_subset = self.config["random_train_subset"]
         if faiss_train_size is not None and faiss_train_size < len(vectors):
             if random_train_subset:
                 train_ids = np.random.choice(len(vectors), faiss_train_size, replace=False)
@@ -104,13 +114,13 @@ class FaissEngine(IndexEngine):
         super().save()
         self._index.save(self.path)
 
-    def _init_index(self, config) -> VectorBase:
-
+    def _init_index(self, config: Dict) -> VectorBase:
         # faiss metric
+        metric_type = MetricType(config["metric_type"]).name
         faiss_metric = {
             MetricType.inner_product.name: faiss.METRIC_INNER_PRODUCT,
             MetricType.euclidean.name: faiss.METRIC_L2,
-        }[config["metric_type"]]
+        }[metric_type]
 
         # init the index
         return AutoVectorBase(
@@ -120,7 +130,7 @@ class FaissEngine(IndexEngine):
             nprobe=config["nprobe"],
             train_on_cpu=config["train_on_cpu"],
             keep_on_cpu=config["keep_on_cpu"],
-            tempmem=config["faiss_tempmem"],
+            tempmem=config["tempmem"],
         )
 
     def load(self):
@@ -145,12 +155,13 @@ class FaissEngine(IndexEngine):
     def is_up(self) -> bool:
         return self._index is not None
 
-    def __del__(self):
-        self.free_memory()
+    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
+        q_vectors, *_ = query
+        return self._index.search(q_vectors, k=k)
 
-    def __call__(
-        self, query: torch.Tensor, *, k: int, **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Call the index."""
-        scores, indexes = self._index.search(query, k)
-        return scores, indexes
+    def _search_chunk(
+        self, query: Batch, *, k: int, vectors: Optional[torch.Tensor], **kwargs
+    ) -> SearchResult:
+        pprint_batch(query)
+        scores, indices = self.search(vectors, k=k)
+        return SearchResult(score=scores, index=indices, k=k)
