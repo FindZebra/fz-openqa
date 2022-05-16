@@ -5,8 +5,8 @@ from typing import Optional
 
 from datasets import Dataset
 
-from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.base import IndexMode
+from fz_openqa.datamodules.index._base import Index
+from fz_openqa.datamodules.index._base import IndexMode
 from fz_openqa.datamodules.index.helpers import FakeDataset
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Partial

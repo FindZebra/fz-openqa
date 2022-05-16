@@ -12,7 +12,7 @@ import torch
 from loguru import logger
 from torch import Tensor
 
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
+from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.maxsim.base_worker import ctx
 from fz_openqa.datamodules.index.maxsim.base_worker import format_device
 from fz_openqa.datamodules.index.maxsim.base_worker import WorkerSignal
@@ -47,7 +47,7 @@ class MaxSim(torch.nn.Module):
     def __init__(
         self,
         *,
-        token_index: IndexHandler | PathLike,
+        token_index: IndexEngine | PathLike,
         vectors: TensorArrowTable | Tensor,
         emb2pid: TensorArrowTable | Tensor,
         ranking_devices: List[int],

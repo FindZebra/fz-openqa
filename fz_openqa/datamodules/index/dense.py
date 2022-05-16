@@ -19,12 +19,12 @@ from datasets import Split
 from loguru import logger
 from pytorch_lightning import Trainer
 
-from fz_openqa.datamodules.index.base import camel_to_snake
-from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
-from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
-from fz_openqa.datamodules.index.handlers.index_lookup import IndexLookupHandler
-from fz_openqa.datamodules.index.handlers.multi_faiss import MultiFaissHandler
+from fz_openqa.datamodules.index._base import camel_to_snake
+from fz_openqa.datamodules.index._base import Index
+from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.index.engines.faiss import FaissEngine
+from fz_openqa.datamodules.index.engines.index_lookup import IndexLookupHandler
+from fz_openqa.datamodules.index.engines.multi_faiss import MultiFaissHandler
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
 from fz_openqa.datamodules.pipes.collate import Collate
@@ -63,7 +63,7 @@ class DenseIndex(Index):
     """
 
     default_key = ["input_ids", "attention_mask", "document_idx"]
-    _index: Optional[IndexHandler] = None
+    _index: Optional[IndexEngine] = None
     model: Callable | torch.nn.Module = None
     _vectors_table: Optional[TensorArrowTable] = None
     _master: bool = True
@@ -201,7 +201,7 @@ class DenseIndex(Index):
 
         """
         self._set_index_name(dataset=dataset)
-        Handler = {"flat": FaissHandler, "multi": MultiFaissHandler, "lookup": IndexLookupHandler}[
+        Handler = {"flat": FaissEngine, "multi": MultiFaissHandler, "lookup": IndexLookupHandler}[
             self.handler
         ]
 
@@ -391,7 +391,7 @@ class DenseIndex(Index):
         self._index.cpu()
 
     @property
-    def index(self) -> IndexHandler:
+    def index(self) -> IndexEngine:
         if not self._index.is_up:
             self._index.load()
         return self._index

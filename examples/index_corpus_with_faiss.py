@@ -2,7 +2,7 @@ import os
 import sys
 
 from fz_openqa.datamodules.builders import QaBuilder
-from fz_openqa.datamodules.index.base import IndexMode
+from fz_openqa.datamodules.index._base import IndexMode
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 

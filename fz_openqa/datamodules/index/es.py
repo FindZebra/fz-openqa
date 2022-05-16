@@ -12,8 +12,8 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from ..utils.dataset import keep_only_columns
-from .base import Index
-from .base import IndexMode
+from ._base import Index
+from ._base import IndexMode
 from .search_result import SearchResult
 from fz_openqa.configs.datamodule.index_builder import es_body
 from fz_openqa.datamodules.index.utils.es_engine import ElasticSearchEngine

@@ -12,8 +12,8 @@ import numpy as np
 from datasets import Dataset
 
 from ..utils.dataset import keep_only_columns
-from .base import Index
-from .base import IndexMode
+from ._base import Index
+from ._base import IndexMode
 from .search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat

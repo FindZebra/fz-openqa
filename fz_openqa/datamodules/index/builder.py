@@ -2,7 +2,7 @@ from copy import copy
 
 from loguru import logger
 
-from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.index._base import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from fz_openqa.datamodules.index.dense import DenseIndex
 from fz_openqa.datamodules.index.es import ElasticSearchIndex

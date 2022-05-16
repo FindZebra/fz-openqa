@@ -11,13 +11,13 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
-from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.index.engines.faiss import FaissEngine
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-class MultiFaissHandler(IndexHandler):
+class MultiFaissHandler(IndexEngine):
     """
     This class handles a faiss index for each Document.
 
@@ -56,7 +56,7 @@ class MultiFaissHandler(IndexHandler):
         self.id_lookup = {}
         for doc_id, doc_path in tqdm(self.index_map.items(), desc="Building indexes.."):
 
-            index = FaissHandler(path=doc_path, **kwargs)
+            index = FaissEngine(path=doc_path, **kwargs)
             ids = [i for i, d in enumerate(doc_ids) if d == doc_id]
             if len(ids) == 0:
                 raise ValueError(f"No vectors found for doc_id: {doc_id}")
@@ -100,7 +100,7 @@ class MultiFaissHandler(IndexHandler):
             self.id_lookup = {int(k): torch.tensor(v) for k, v in id_lookup.items()}
         self.indexes = {}
         for doc_id, doc_path in self.index_map.items():
-            self.indexes[int(doc_id)] = IndexHandler.load_from_path(path=doc_path)
+            self.indexes[int(doc_id)] = IndexEngine.load_from_path(path=doc_path)
 
         assert set(self.id_lookup.keys()) == set(self.indexes.keys())
 

@@ -7,7 +7,7 @@ from typing import Optional
 import numpy as np
 import torch
 
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
+from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.maxsim.datastruct import FaissInput
 from fz_openqa.utils.datastruct import PathLike
 
@@ -17,7 +17,7 @@ class TokenIndex(object):
 
     def __init__(
         self,
-        index: IndexHandler | PathLike,
+        index: IndexEngine | PathLike,
         devices: List[int],
         multiprocessing: bool = False,
         max_chunksize: int = None,
@@ -27,9 +27,9 @@ class TokenIndex(object):
         super(TokenIndex, self).__init__()
         assert isinstance(devices, list)
 
-        if not isinstance(index, IndexHandler):
+        if not isinstance(index, IndexEngine):
             assert isinstance(index, (str, Path))
-        self._index: IndexHandler | PathLike = index
+        self._index: IndexEngine | PathLike = index
         self.max_chunksize = max_chunksize
 
         if not multiprocessing:
@@ -37,12 +37,12 @@ class TokenIndex(object):
 
     def prepare(self):
         if isinstance(self._index, (str, Path)):
-            self._index = IndexHandler.load_from_path(self._index)
+            self._index = IndexEngine.load_from_path(self._index)
             self._index.load()
 
     @property
-    def index(self) -> IndexHandler:
-        if not isinstance(self._index, IndexHandler):
+    def index(self) -> IndexEngine:
+        if not isinstance(self._index, IndexEngine):
             self.prepare()
         return self._index
 
@@ -85,7 +85,7 @@ class TokenIndex(object):
         Q: torch.Tensor,
         faiss_depth: int,
         *,
-        index: IndexHandler,
+        index: IndexEngine,
         doc_ids: Optional[List[int]] = None,
     ) -> torch.Tensor:
         """Query the faiss index for each embedding vector"""

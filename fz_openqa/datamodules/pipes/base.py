@@ -314,6 +314,9 @@ class Pipe(Component):
         Dataset
             Processed dataset
         """
+        return self._call_dataset_dict(dataset, **kwargs)
+
+    def _call_dataset_dict(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
         new_datasets = {
             split: self._call_dataset(d, split=split, **kwargs) for split, d in dataset.items()
         }
@@ -403,6 +406,9 @@ class Pipe(Component):
         Dataset
             Processed dataset
         """
+        if fingerprint_kwargs_exclude is None:
+            fingerprint_kwargs_exclude = []
+
         for key in ["batched", "with_indices"]:
             if key in kwargs.keys():
                 raise ValueError(f"{key} cannot be set, it is always set as True.")

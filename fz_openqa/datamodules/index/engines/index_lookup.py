@@ -12,11 +12,11 @@ import numpy as np
 import torch
 from loguru import logger
 
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
+from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-class IndexLookupHandler(IndexHandler):
+class IndexLookupHandler(IndexEngine):
     """Retrieve all the passages corresponding to a given document id."""
 
     def _build(

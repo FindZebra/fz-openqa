@@ -10,15 +10,17 @@ import torch  # type: ignore
 from faiss import IndexReplicas
 from loguru import logger
 
-from fz_openqa.datamodules.index.handlers.base import IndexHandler
-from fz_openqa.datamodules.index.handlers.vector_base import VectorBase
-from fz_openqa.datamodules.index.handlers.vector_base.auto import AutoVectorBase
+from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.index.engines.vector_base import VectorBase
+from fz_openqa.datamodules.index.engines.vector_base.auto import AutoVectorBase
 from fz_openqa.utils.metric_type import MetricType
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-class FaissHandler(IndexHandler):
+class FaissEngine(IndexEngine):
     """This class implements a low level index."""
+
+    _max_num_proc: int = 1
 
     def _build(
         self,

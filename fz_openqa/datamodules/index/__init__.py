@@ -1,4 +1,4 @@
-from .base import Index
+from ._base import Index
 from .builder import ColbertOrEsIndexBuilder
 from .builder import ElasticSearchIndexBuilder
 from .builder import FaissIndexBuilder
@@ -7,6 +7,4 @@ from .builder import IndexBuilder
 from .builder import StaticIndexBuilder
 from .dense import DenseIndex
 from .es import ElasticSearchIndex
-from .rank import ComputeCuiRank
-from .rank import FetchCuiAndRank
 from .static import StaticIndex
