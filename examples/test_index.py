@@ -1,9 +1,10 @@
-import json
 import logging
 import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
+from datasets import DatasetDict
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
@@ -96,7 +97,9 @@ def run(config: DictConfig) -> None:
             append_document_title=True,
         )
         corpus = corpus_builder()
-        rich.print(f"> corpus: {corpus}")
+        document_ids = corpus["document.idx"]
+        max_doc_id = max(document_ids)
+        rich.print(f"> corpus: {corpus}, max_doc_id={max_doc_id}")
 
         # initialize the QA dataset
         qa_builder = QaBuilder(
@@ -108,6 +111,18 @@ def run(config: DictConfig) -> None:
             analytics=None,
         )
         qa_dataset = qa_builder()
+
+        # add the document index coumns
+        qa_dataset = DatasetDict(
+            {
+                split: dset.add_column(
+                    "question.document_idx",
+                    [np.random.randint(0, max_doc_id + 1) for _ in range(len(dset))],
+                )
+                for split, dset in qa_dataset.items()
+            }
+        )
+
         rich.print(f"> qa_dataset: {qa_dataset}")
 
         # build the index
@@ -117,7 +132,8 @@ def run(config: DictConfig) -> None:
                 # {"name": "es",
                 #  "config": {"es_temperature": 10., }
                 #  },
-                {"name": "faiss", "config": {"index_factory": "torch", "dimension": 32}},
+                # {"name": "faiss", "config": {"index_factory": "torch", "dimension": 32}},
+                {"name": "lookup", "config": {}},
             ],
             persist_cache=True,
             cache_dir=tmpdir,

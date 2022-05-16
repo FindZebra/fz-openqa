@@ -168,7 +168,6 @@ class Index(Pipe):
         return self._call_dataset_any(dataset, **kwargs)
 
     def _call_dataset_any(self, dataset: T, **kwargs) -> T:
-
         # cache the query vectors
         if self.requires_vector:
             vectors = self.cache_vectors(
@@ -186,8 +185,7 @@ class Index(Pipe):
 
         # process the dataset with the Engines
         for engine in self.engines:
-
-            # prepare the engine
+            # prepare the engine: load and place to CUDA if needed
             if not engine.is_up:
                 engine.load()
             engine.cuda()
@@ -216,7 +214,8 @@ class Index(Pipe):
             engine.free_memory()
 
         # cleanup the vectors
-        self.predict_queries.delete_cached_files()
+        if self.requires_vector:
+            self.predict_queries.delete_cached_files()
 
         return dataset
 

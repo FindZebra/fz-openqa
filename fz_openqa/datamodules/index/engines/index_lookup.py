@@ -3,38 +3,47 @@ from __future__ import annotations
 import abc
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 from typing import List
 from typing import Optional
 from typing import Tuple
 
 import faiss.contrib.torch_utils  # type: ignore
-import numpy as np
+import rich
 import torch
+from datasets import Dataset
+from datasets.search import SearchResults
 from loguru import logger
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.search_result import SearchResult
+from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-class IndexLookupHandler(IndexEngine):
+class LookupEngine(IndexEngine):
     """Retrieve all the passages corresponding to a given document id."""
+
+    no_fingerprint: List[str] = IndexEngine.no_fingerprint + ["_lookup"]
 
     def _build(
         self,
-        vectors: torch.Tensor | TensorArrowTable | np.ndarray,
-        *,
-        doc_ids: Optional[List[int]] = None,
-        **kwargs,
+        vectors: Optional[Tensors | TensorArrowTable] = None,
+        corpus: Optional[Dataset] = None,
     ):
         """build the index from the vectors."""
-        if doc_ids is None:
-            raise ValueError(f"`doc_ids` is required to build the" f"{self.__class__.__name__}")
+        if corpus is None:
+            raise ValueError("`corpus` is required")
 
-        if not len(doc_ids) == len(vectors):
+        if self.corpus_document_idx_key not in corpus.column_names:
             raise ValueError(
-                f"`doc_ids` and `vectors` must have the same length. "
-                f"Found {len(doc_ids)} and {len(vectors)} respectively."
+                f"`{self.corpus_document_idx_key}` is "
+                f"required to build the"
+                f"{self.__class__.__name__}. "
+                f"Found {corpus.column_names}."
             )
+        doc_ids = corpus[self.corpus_document_idx_key]
 
         # NB: for Colbert, this is a pretty ineffective way to build the index: this is an index
         # from document id to token id, an index from document id to passage id would be better.
@@ -45,7 +54,6 @@ class IndexLookupHandler(IndexEngine):
         n_cols = max(len(v) for v in lookup_.values()) + 1
         n_rows = max(lookup_.keys()) + 1
 
-        # todo: need the handle the -1 on MaxSim side
         self._lookup = torch.empty(n_rows, n_cols, dtype=torch.int64).fill_(-1)
         for i in range(n_rows):
             self._lookup[i, : len(lookup_[i])] = torch.tensor(sorted(lookup_[i]))
@@ -74,12 +82,10 @@ class IndexLookupHandler(IndexEngine):
         """Move the index to CPU."""
         ...
 
-    @abc.abstractmethod
     def cuda(self, devices: Optional[List[int]] = None):
         """Move the index to CUDA."""
         ...
 
-    @abc.abstractmethod
     def free_memory(self):
         """Free the memory of the index."""
         self._lookup = None
@@ -91,20 +97,20 @@ class IndexLookupHandler(IndexEngine):
     def __del__(self):
         self.free_memory()
 
-    def __call__(
-        self, query: torch.Tensor, *, k: int, doc_ids: List[int] | torch.Tensor = None, **kwargs
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if doc_ids is None:
-            raise ValueError("`doc_ids` is required")
+    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
+        doc_ids, *_ = query
+        doc_ids = torch.tensor(doc_ids, dtype=torch.int64, device=self._lookup.device)
+        pids = self._lookup[doc_ids][:, :k]
+        scores = torch.zeros_like(pids, dtype=torch.float32)
+        return SearchResult(score=scores, index=pids, k=k)
 
-        if not len(doc_ids) == query.shape[0]:
+    def _search_chunk(
+        self, query: Batch, *, k: int, vectors: Optional[torch.Tensor], **kwargs
+    ) -> SearchResult:
+        if self.dataset_document_idx_key not in query.keys():
             raise ValueError(
-                f"`doc_ids` and `vectors` must have the same length. "
-                f"Found {len(doc_ids)} and {query.shape[0]} respectively."
+                f"`{self.dataset_document_idx_key}` " f"is required. Found {query.keys()}."
             )
 
-        doc_ids = torch.tensor(doc_ids, dtype=torch.int64, device=self._lookup.device)
-
-        pids = self._lookup[doc_ids]
-        scores = torch.zeros_like(pids, dtype=torch.float32)
-        return scores, pids
+        doc_ids = query[self.dataset_document_idx_key]
+        return self.search(doc_ids, k=k, vectors=vectors, **kwargs)

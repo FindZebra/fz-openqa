@@ -6,12 +6,12 @@ from typing import Dict
 from .base import IndexEngine
 from .es import ElasticsearchEngine
 from .faiss import FaissEngine
-from .index_lookup import IndexLookupHandler
+from .index_lookup import LookupEngine
 from fz_openqa.utils.fingerprint import get_fingerprint
 
 Engines = {
     "faiss": FaissEngine,
-    "lookup": IndexLookupHandler,
+    "lookup": LookupEngine,
     "es": ElasticsearchEngine,
 }
 

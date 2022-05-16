@@ -162,6 +162,6 @@ class FaissEngine(IndexEngine):
     def _search_chunk(
         self, query: Batch, *, k: int, vectors: Optional[torch.Tensor], **kwargs
     ) -> SearchResult:
-        pprint_batch(query)
+        pprint_batch(query, f"Search:chunk:vectors: {vectors.shape}, dtype: {vectors.dtype}")
         scores, indices = self.search(vectors, k=k)
         return SearchResult(score=scores, index=indices, k=k)

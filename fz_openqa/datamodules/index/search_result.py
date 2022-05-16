@@ -101,9 +101,7 @@ class SearchResult:
     ):
 
         if not all(len(x) <= k for x in score):
-            raise ValueError(
-                f"All results must have length <= k. Found: " f"{[len(x) for x in score]}"
-            )
+            raise ValueError(f"All results must have length <= k. Found: {[len(x) for x in score]}")
 
         # pad to length
         index = pad_second_dim(index, k=k, fill_token=-1)

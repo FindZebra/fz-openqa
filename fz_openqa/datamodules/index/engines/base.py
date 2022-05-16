@@ -40,6 +40,8 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
     _default_config: Dict[str, Any] = {}
     output_score_key = "document.proposal_score"
     output_index_key = "document.row_idx"
+    corpus_document_idx_key = "document.idx"
+    dataset_document_idx_key = "question.document_idx"
 
     def __init__(
         self,
@@ -166,7 +168,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         ...
 
     @abc.abstractmethod
-    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResults:
+    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
         ...
 
     def _get_index_name(self, dataset, config) -> str:
