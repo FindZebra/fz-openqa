@@ -205,7 +205,7 @@ class FaissVectorBase(VectorBase):
                 f"Exception: {exc}"
             )
 
-        logger.debug(f"Faiss:Query: {query.shape}, k: {k}")
+        # logger.debug(f"Faiss:Query: {query.shape}, k: {k}")
         return self.index.search(query, k)
 
     @property

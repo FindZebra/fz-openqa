@@ -9,6 +9,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from datasets import Dataset
 from datasets.search import SearchResults
@@ -20,6 +21,9 @@ from fz_openqa.datamodules.index._base import slice_batch
 from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.control.condition import Contains
+from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
@@ -38,17 +42,20 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
     index_columns: List[str] = []
     query_columns: List[str] = []
     _default_config: Dict[str, Any] = {}
+    query_field = "question"
     output_score_key = "document.proposal_score"
     output_index_key = "document.row_idx"
     corpus_document_idx_key = "document.idx"
     dataset_document_idx_key = "question.document_idx"
+    require_vectors: bool = False
 
     def __init__(
         self,
         *,
         path: PathLike,
         k: int = 10,
-        max_batch_size: Optional[int] = None,
+        max_batch_size: Optional[int] = 100,
+        merge_previous_results: bool = False,
         # Pipe args
         input_filter: None = None,
         update: bool = False,
@@ -59,6 +66,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         # default number of retrieved documents
         self.k = k
         self.max_batch_size = max_batch_size
+        self.merge_previous_results = merge_previous_results
 
         # set the index configuration
         self.config = self.default_config
@@ -90,6 +98,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             state = json.load(f)
             self.k = state.pop("k")
             self.max_batch_size = state.pop("max_batch_size")
+            self.merge_previous_results = state.pop("merge_previous_results")
             self.config = state["config"]
 
     @property
@@ -106,6 +115,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         state["path"] = str(self.path)
         state["k"] = self.k
         state["max_batch_size"] = self.max_batch_size
+        state["merge_previous_results"] = self.merge_previous_results
         state["_target_"] = type(self).__module__ + "." + type(self).__qualname__
         return state
 
@@ -217,7 +227,20 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         used to build the index."""
         k = k or self.k
 
-        # fetch vectors
+        # get the previous vectors if any
+        pprint_batch(query, f"{type(self).__name__}::base::query")
+        if self.output_index_key in query and self.merge_previous_results:
+            prev_search_results = SearchResult(
+                index=query[self.output_index_key],
+                score=query[self.output_score_key],
+                format=output_format,
+                k=len(query[self.output_index_key][0]),
+            )
+            rich.print(f">> PREV: \n{prev_search_results}")
+        else:
+            prev_search_results = None
+
+        # fetch the query vectors
         if vectors is None:
             q_vectors = None
         else:
@@ -241,20 +264,25 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
 
             # search
             r = self._search_chunk(chunk_i, k=k, vectors=q_vectors_i, **kwargs)
+            if output_format is not None:
+                r = r.to(output_format)
 
             if search_results is None:
                 search_results = r
             else:
                 search_results += r
 
+        # merge with the previous results
+        if prev_search_results is not None:
+            search_results = search_results | prev_search_results
+
         # format the output
-        formatter = FormatArray(output_format)
         output = {
-            self.output_index_key: formatter(search_results.index),
-            self.output_score_key: formatter(search_results.score),
+            self.output_index_key: search_results.index,
+            self.output_score_key: search_results.score,
         }
 
-        pprint_batch(output, "Engine out")
+        pprint_batch(query, f"{type(self).__name__}::base::output")
 
         return output
 

@@ -22,7 +22,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
-class LookupEngine(IndexEngine):
+class DocumentLookupEngine(IndexEngine):
     """Retrieve all the passages corresponding to a given document id."""
 
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + ["_lookup"]

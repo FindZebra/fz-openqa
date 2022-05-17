@@ -73,11 +73,12 @@ def run(config: DictConfig) -> None:
     datasets.logging.set_verbosity(logging.ERROR)
 
     with tempfile.TemporaryDirectory(dir=config.sys.cache_dir) as tmpdir:
-        tmpdir = Path(config.sys.cache_dir) / "test-index"
+        # tmpdir = config.sys.cache_dir
+        tmpdir = Path(tmpdir) / "test-index"
         tmpdir.mkdir(exist_ok=True, parents=True)
 
         # model
-        model = RandnModel()
+        model = RandnModel(dpr=False)
         rich.print(f"# [magenta] model : {get_fingerprint(model)}")
 
         # trainer
@@ -129,16 +130,38 @@ def run(config: DictConfig) -> None:
         index = Index(
             corpus,
             engines=[
+                {
+                    "name": "es",
+                    "k": 100,
+                    "merge_previous_results": True,
+                    "config": {
+                        "es_temperature": 10.0,
+                    },
+                },
                 # {"name": "es",
-                #  "config": {"es_temperature": 10., }
+                #  "k": 10,
+                #  "config": {"es_temperature": 3., }
                 #  },
                 # {"name": "faiss", "config": {"index_factory": "torch", "dimension": 32}},
-                {"name": "lookup", "config": {}},
+                # {"name": "lookup", "config": {}},
+                {
+                    "name": "faiss_token",
+                    "k": 4000,
+                    "merge_previous_results": True,
+                    "max_batch_size": 100,
+                    "config": {
+                        "index_factory": "IVF128,Flat",
+                        "dimension": 32,
+                        "p": 16,
+                        "max_bs": 512,
+                    },
+                },
             ],
             persist_cache=True,
             cache_dir=tmpdir,
             model=model,
             trainer=trainer,
+            dtype="float16",
             corpus_collate_pipe=corpus_builder.get_collate_pipe(),
             dataset_collate_pipe=qa_builder.get_collate_pipe(),
             loader_kwargs={"batch_size": 100, "num_workers": 2, "pin_memory": True},
@@ -153,6 +176,7 @@ def run(config: DictConfig) -> None:
             qa_dataset,
             set_new_fingerprint=True,
             num_proc=1,
+            batch_size=100,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)

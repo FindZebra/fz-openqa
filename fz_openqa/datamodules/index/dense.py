@@ -22,8 +22,8 @@ from pytorch_lightning import Trainer
 from fz_openqa.datamodules.index._base import camel_to_snake
 from fz_openqa.datamodules.index._base import Index
 from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.index.engines.document_lookup import DocumentLookupEngine
 from fz_openqa.datamodules.index.engines.faiss import FaissEngine
-from fz_openqa.datamodules.index.engines.index_lookup import LookupEngine
 from fz_openqa.datamodules.index.engines.multi_faiss import MultiFaissHandler
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes.base import Pipe
@@ -201,7 +201,7 @@ class DenseIndex(Index):
 
         """
         self._set_index_name(dataset=dataset)
-        Handler = {"flat": FaissEngine, "multi": MultiFaissHandler, "lookup": LookupEngine}[
+        Handler = {"flat": FaissEngine, "multi": MultiFaissHandler, "lookup": DocumentLookupEngine}[
             self.handler
         ]
 
@@ -268,7 +268,7 @@ class DenseIndex(Index):
             raise ValueError(f"Invalid vectors shape: {vectors.shape}, expected 2 or 3 dimensions.")
 
         # retrieve document ids
-        if isinstance(self._index, (MultiFaissHandler, LookupEngine)):
+        if isinstance(self._index, (MultiFaissHandler, DocumentLookupEngine)):
             doc_ids = dataset["document.idx"]
             doc_ids = self._expand_seq_length(doc_ids, stride)
         else:

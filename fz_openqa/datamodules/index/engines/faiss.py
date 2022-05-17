@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 from typing import Any
-from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
-import rich
 import torch  # type: ignore
 from datasets import Dataset
-from datasets import Split
-from datasets.search import SearchResults
 from loguru import logger
-from pytorch_lightning import Trainer
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.engines.vector_base import VectorBase
@@ -22,9 +17,7 @@ from fz_openqa.datamodules.index.engines.vector_base.auto import AutoVectorBase
 from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.metric_type import MetricType
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
@@ -33,8 +26,8 @@ class FaissEngine(IndexEngine):
 
     _max_num_proc: int = 1
 
-    index_columns: List[str] = ["_hd_"]
-    query_columns: List[str] = ["_hq_"]
+    index_columns: List[str] = []
+    query_columns: List[str] = []
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
         "loader_kwargs",
         "keep_on_cpu",
@@ -60,6 +53,7 @@ class FaissEngine(IndexEngine):
         "metric_type": MetricType.inner_product,
         "random_train_subset": False,
     }
+    require_vectors: bool = True
 
     def _build(
         self,
@@ -100,11 +94,8 @@ class FaissEngine(IndexEngine):
         )
         self._index.add(vectors)
 
-        # free-up GPU memory
+        # make sure to free-up GPU memory
         self.cpu()
-
-        # save
-        self.save()
 
     def __len__(self) -> int:
         return self._index.ntotal
@@ -162,6 +153,5 @@ class FaissEngine(IndexEngine):
     def _search_chunk(
         self, query: Batch, *, k: int, vectors: Optional[torch.Tensor], **kwargs
     ) -> SearchResult:
-        pprint_batch(query, f"Search:chunk:vectors: {vectors.shape}, dtype: {vectors.dtype}")
         scores, indices = self.search(vectors, k=k)
         return SearchResult(score=scores, index=indices, k=k)

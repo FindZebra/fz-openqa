@@ -4,14 +4,16 @@ from typing import Any
 from typing import Dict
 
 from .base import IndexEngine
+from .document_lookup import DocumentLookupEngine
 from .es import ElasticsearchEngine
 from .faiss import FaissEngine
-from .index_lookup import LookupEngine
+from .token_faiss import FaissTokenEngine
 from fz_openqa.utils.fingerprint import get_fingerprint
 
 Engines = {
     "faiss": FaissEngine,
-    "lookup": LookupEngine,
+    "faiss_token": FaissTokenEngine,
+    "doc_lookup": DocumentLookupEngine,
     "es": ElasticsearchEngine,
 }
 

@@ -6,7 +6,7 @@ from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import T
+from typing import TypeVar
 
 import datasets
 import pytorch_lightning as pl
@@ -25,6 +25,7 @@ from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.datamodules.pipes.control.condition import Condition
+from fz_openqa.datamodules.pipes.control.condition import Contains
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
@@ -33,6 +34,8 @@ from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
+
+HfDataset = TypeVar("HfDataset", Dataset, DatasetDict)
 
 
 class Index(Pipe):
@@ -80,19 +83,19 @@ class Index(Pipe):
             cache_dir = tempfile.TemporaryDirectory(dir=cache_dir)
         self.cache_dir = cache_dir / str(corpus._fingerprint)
 
-        # register the Engines
-        self.engines = []
-        for engine in engines:
-            if isinstance(engine, dict):
-                engine = AutoEngine(**engine, path=self.cache_dir, set_unique_path=True)
-                self.engines.append(engine)
-
         # input fields and input filter for query time
         self.query_field = query_field
         self.index_field = index_field
         query_input_filter = HasPrefix(self.query_field)
         if input_filter is not None:
             query_input_filter = Reduce(query_input_filter, input_filter)
+
+        # register the Engines
+        self.engines = []
+        for engine in engines:
+            if isinstance(engine, dict):
+                engine = AutoEngine(**engine, path=self.cache_dir, set_unique_path=True)
+                self.engines.append(engine)
 
         # build the Pipe
         super().__init__(
@@ -140,8 +143,7 @@ class Index(Pipe):
 
     @property
     def requires_vector(self):
-        DenseIndexes = (FaissEngine,)
-        return any(isinstance(engine, DenseIndexes) for engine in self.engines)
+        return any(engine.require_vectors for engine in self.engines)
 
     def load(self):
         """Load the index from disk."""
@@ -167,7 +169,7 @@ class Index(Pipe):
     def _call_dataset_dict(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
         return self._call_dataset_any(dataset, **kwargs)
 
-    def _call_dataset_any(self, dataset: T, **kwargs) -> T:
+    def _call_dataset_any(self, dataset: HfDataset, **kwargs) -> HfDataset:
         # cache the query vectors
         if self.requires_vector:
             vectors = self.cache_vectors(
