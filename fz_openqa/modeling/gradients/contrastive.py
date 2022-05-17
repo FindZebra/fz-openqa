@@ -63,23 +63,25 @@ class ContrastiveGradients(SupervisedGradients):
         # is_neg_inf = (retriever_score.isinf()) & (retriever_score < 0)
         # retriever_score = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
 
+        # additive model
+        M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
+        retriever_score_normalized = retriever_score - M[:, None, None]
+        reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
+        normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
+        # likelihood of the reader model
+        log_p_a_add = reader_score_ - normalizer.unsqueeze(dim=1)
+
+        # multiplicative model
+        retriever_score_ = retriever_score.masked_fill(torch.isinf(retriever_score), 0)
+        reader_score = retriever_score_.sum(dim=-1)
+        log_p_a_mul = reader_score.log_softmax(dim=-1)
+
         if self.agg == "add":
-            # normalize the retriever scores
-            M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
-            retriever_score_normalized = retriever_score - M[:, None, None]
-            # rich.print(f"> retriever_score_normalized: "
-            #            f"{retriever_score_normalized[~is_neg_inf].cpu().detach().numpy().tolist()}")
-
-            # reader model: p(a|D) = H(a | D) \
-            reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
-            normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
-            # likelihood of the reader model
-            log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
+            log_p_a = log_p_a_add
         elif self.agg == "mul":
-            retriever_score_ = retriever_score.masked_fill(torch.isinf(retriever_score), 0)
-            reader_score = retriever_score_.sum(dim=-1)
-            log_p_a = reader_score.log_softmax(dim=-1)
-
+            log_p_a = log_p_a_mul
+        elif self.agg in {"add_mul", "mul_add"}:
+            log_p_a = 0.5 * (log_p_a_add + log_p_a_mul)
         else:
             raise ValueError(f"Unknown aggregation: {self.agg}")
 
