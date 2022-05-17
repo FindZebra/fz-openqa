@@ -112,7 +112,6 @@ def es_create_index(
 
     except RequestError as err:
         if err.error == "resource_already_exists_exception":
-            logger.info(f"ElasticSearch index with name=`{index_name}` already exists.")
             newly_created = False
         else:
             raise err

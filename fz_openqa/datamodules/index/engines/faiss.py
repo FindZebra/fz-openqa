@@ -14,7 +14,7 @@ from loguru import logger
 from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.engines.vector_base import VectorBase
 from fz_openqa.datamodules.index.engines.vector_base.auto import AutoVectorBase
-from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.metric_type import MetricType
@@ -29,18 +29,15 @@ class FaissEngine(IndexEngine):
     index_columns: List[str] = []
     query_columns: List[str] = []
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
-        "loader_kwargs",
         "keep_on_cpu",
         "train_on_cpu",
         "_index",
         "tempmem",
     ]
     no_index_name = IndexEngine.no_index_name + [
-        "_instance" "timeout",
-        "es_logging_level",
-        "auxiliary_weight",
-        "es_temperature",
-        "ingest_batch_size",
+        "keep_on_cpu",
+        "train_on_cpu",
+        "tempmem",
     ]
 
     _default_config: Dict[str, Any] = {
@@ -50,14 +47,14 @@ class FaissEngine(IndexEngine):
         "train_on_cpu": False,
         "train_size": 1_000_000,
         "tempmem": -1,
-        "metric_type": MetricType.inner_product,
+        "metric_type": MetricType.inner_product.name,
         "random_train_subset": False,
     }
     require_vectors: bool = True
 
     def _build(
         self,
-        vectors: Optional[Tensors | TensorArrowTable] = None,
+        vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
         """build the index from the vectors."""
@@ -146,7 +143,7 @@ class FaissEngine(IndexEngine):
     def is_up(self) -> bool:
         return self._index is not None
 
-    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
+    def search(self, *query: Any, k: int = None, **kwargs) -> (TensorLike, TensorLike):
         q_vectors, *_ = query
         return self._index.search(q_vectors, k=k)
 

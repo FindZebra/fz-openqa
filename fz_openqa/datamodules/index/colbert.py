@@ -11,7 +11,7 @@ from loguru import logger as log
 from torch import Tensor
 
 from fz_openqa.datamodules.index.dense import DenseIndex
-from fz_openqa.datamodules.index.maxsim.maxsim import MaxSim
+from fz_openqa.datamodules.index.engines.maxsim_utils.maxsim import MaxSim
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.datamodules.index.utils.io import log_mem_size

@@ -19,7 +19,7 @@ from .utils.faiss import get_gpu_resources
 from .utils.faiss import get_sharded_gpu_index
 from .utils.faiss import IdentityVectorTransform
 from .utils.faiss import populate_ivf_index
-from .utils.faiss import Tensors
+from .utils.faiss import TensorLike
 from .utils.faiss import train_preprocessor
 
 
@@ -144,14 +144,14 @@ class FaissVectorBase(VectorBase):
         return index
 
     def _build_preprocessor(
-        self, vectors: Tensors
+        self, vectors: TensorLike
     ) -> faiss.VectorTransform | IdentityVectorTransform:
         if self.factory.preproc is not None:
             return train_preprocessor(self.factory.preproc, vectors=vectors)
         else:
             return IdentityVectorTransform(self.dimension)
 
-    def _build_coarse_quantizer(self, vectors: Tensors, **kwargs) -> faiss.IndexFlat:
+    def _build_coarse_quantizer(self, vectors: TensorLike, **kwargs) -> faiss.IndexFlat:
         centroids = compute_centroids(
             vectors=vectors,
             preproc=self.preprocessor,

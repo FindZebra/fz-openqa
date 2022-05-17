@@ -21,7 +21,7 @@ import torch
 from loguru import logger
 from tqdm import tqdm
 
-Tensors = Union[torch.Tensor, np.ndarray]
+TensorLike = Union[torch.Tensor, np.ndarray]
 FaissMetric = Union[str, int]
 
 index_factory_pattern = pat = re.compile(
@@ -93,7 +93,7 @@ class IdentityVectorTransform:
         return x
 
 
-def faiss_sanitize(x: Tensors, force_numpy: bool = False) -> Tensors:
+def faiss_sanitize(x: TensorLike, force_numpy: bool = False) -> TensorLike:
     """ convert array to a c-contiguous float array """
     if isinstance(x, torch.Tensor):
         x = x.to(torch.float32).contiguous()
@@ -146,10 +146,9 @@ def get_gpu_resources(devices=None, tempmem: int = -1):
         res = faiss.StandardGpuResources()
         # res.setLogMemoryAllocations(True)
         if tempmem >= 0:
-            logger.warning(f"Setting GPU:{i} temporary " f"memory to {tempmem/1024**3:.2f} GB")
+            logger.warning(f"Setting GPU:{i} temporary memory to {tempmem/1024**3:.2f} GB")
             res.setTempMemory(tempmem)
 
-        rich.print(f"GPU:{i} Mem info:\n{res.getMemoryInfo()}")
         gpu_resources.append(res)
 
     return gpu_resources
@@ -168,7 +167,7 @@ def make_vres_vdev(gpu_resources, i0=0, i1=-1):
 
 
 def train_preprocessor(
-    preproc_str, *, vectors: Tensors, n_train: int = None
+    preproc_str, *, vectors: TensorLike, n_train: int = None
 ) -> faiss.VectorTransform | IdentityVectorTransform:
     """Train a faiss preprocessor VectorTransform."""
     d = vectors.shape[1]
@@ -194,7 +193,7 @@ def train_preprocessor(
 
 
 def compute_centroids(
-    vectors: Tensors,
+    vectors: TensorLike,
     *,
     n_centroids: int,
     gpu_resources: List,
@@ -234,7 +233,7 @@ def compute_centroids(
 
 
 def build_and_train_ivf_index(
-    vectors: Tensors,
+    vectors: TensorLike,
     *,
     faiss_factory: FaissFactory,
     preproc: faiss.VectorTransform,
@@ -302,7 +301,7 @@ def populate_ivf_index(
     cpu_index: faiss.IndexIVF,
     *,
     preproc: faiss.VectorTransform,
-    vectors: Tensors,
+    vectors: TensorLike,
     gpu_resources: List,
     max_add_per_gpu=1 << 25,
     use_float16: bool = True,

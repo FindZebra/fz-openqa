@@ -10,6 +10,8 @@ from datasets import Dataset
 
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Pipe
+from fz_openqa.datamodules.pipes.base import camel_to_snake
+from fz_openqa.datamodules.pipes.base import slice_batch
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
@@ -20,15 +22,6 @@ from fz_openqa.utils.functional import infer_batch_size
 class IndexMode(Enum):
     INDEX = "index"
     QUERY = "query"
-
-
-def slice_batch(batch: Batch, i: int | slice) -> Batch:
-    return {k: v[i] for k, v in batch.items()}
-
-
-def camel_to_snake(name):
-    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
 
 class Index(Pipe):

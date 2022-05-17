@@ -10,7 +10,6 @@ from typing import TypeVar
 
 import datasets
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -20,12 +19,10 @@ from torch import nn
 
 from fz_openqa.datamodules.index.engines import AutoEngine
 from fz_openqa.datamodules.index.engines.base import IndexEngine
-from fz_openqa.datamodules.index.engines.faiss import FaissEngine
 from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Predict
 from fz_openqa.datamodules.pipes.control.condition import Condition
-from fz_openqa.datamodules.pipes.control.condition import Contains
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
@@ -169,7 +166,9 @@ class Index(Pipe):
     def _call_dataset_dict(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
         return self._call_dataset_any(dataset, **kwargs)
 
-    def _call_dataset_any(self, dataset: HfDataset, **kwargs) -> HfDataset:
+    def _call_dataset_any(
+        self, dataset: HfDataset, clean_caches: bool = True, set_new_fingerprint=True, **kwargs
+    ) -> HfDataset:
         # cache the query vectors
         if self.requires_vector:
             vectors = self.cache_vectors(
@@ -187,11 +186,6 @@ class Index(Pipe):
 
         # process the dataset with the Engines
         for engine in self.engines:
-            # prepare the engine: load and place to CUDA if needed
-            if not engine.is_up:
-                engine.load()
-            engine.cuda()
-
             # process the dataset
             if isinstance(dataset, DatasetDict):
                 dataset = DatasetDict(
@@ -200,6 +194,7 @@ class Index(Pipe):
                             dset,
                             vectors=vectors.get(split, None),
                             output_format=OutputFormat.NUMPY,
+                            set_new_fingerprint=set_new_fingerprint,
                             **kwargs,
                         )
                         for split, dset in dataset.items()
@@ -207,7 +202,11 @@ class Index(Pipe):
                 )
             elif isinstance(dataset, Dataset):
                 dataset = engine(
-                    dataset, vectors=vectors, output_format=OutputFormat.NUMPY, **kwargs
+                    dataset,
+                    vectors=vectors,
+                    output_format=OutputFormat.NUMPY,
+                    set_new_fingerprint=set_new_fingerprint,
+                    **kwargs,
                 )
             else:
                 raise TypeError(f"Unsupported dataset type: {type(dataset)}")
@@ -216,8 +215,9 @@ class Index(Pipe):
             engine.free_memory()
 
         # cleanup the vectors
-        if self.requires_vector:
+        if clean_caches and self.requires_vector:
             self.predict_queries.delete_cached_files()
+            self.predict_docs.delete_cached_files()
 
         return dataset
 

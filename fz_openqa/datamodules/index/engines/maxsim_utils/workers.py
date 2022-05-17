@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import torch
 
-from fz_openqa.datamodules.index.maxsim.base_worker import format_device
-from fz_openqa.datamodules.index.maxsim.base_worker import TensorWorker
-from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimInput
-from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimOutput
-from fz_openqa.datamodules.index.maxsim.ranker import MaxSimRanker
+from fz_openqa.datamodules.index.engines.maxsim_utils.base_worker import format_device
+from fz_openqa.datamodules.index.engines.maxsim_utils.base_worker import TensorWorker
+from fz_openqa.datamodules.index.engines.maxsim_utils.datastruct import MaxSimInput
+from fz_openqa.datamodules.index.engines.maxsim_utils.datastruct import MaxSimOutput
+from fz_openqa.datamodules.index.engines.maxsim_utils.ranker import MaxSimRanker
 
 
 class MaxSimWorker(TensorWorker):

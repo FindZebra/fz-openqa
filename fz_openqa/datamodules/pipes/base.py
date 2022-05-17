@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from abc import abstractmethod
 from copy import copy
@@ -15,6 +17,7 @@ from typing import List
 from typing import Optional
 from typing import T
 
+import re
 import datasets
 import jsondiff
 import rich
@@ -32,6 +35,15 @@ from fz_openqa.utils.functional import get_batch_eg
 from fz_openqa.utils.json_struct import reduce_json_struct
 
 from loguru import logger
+
+
+def slice_batch(batch: Batch, i: int | slice) -> Batch:
+    return {k: v[i] for k, v in batch.items()}
+
+
+def camel_to_snake(name):
+    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
 
 class Pipe(Component):
@@ -422,17 +434,16 @@ class Pipe(Component):
             )
 
         if set_new_fingerprint:
-            new_fingerprint = get_fingerprint(
-                {
-                    "dataset": dataset._fingerprint,
-                    "pipe": self.fingerprint(reduce=True),
-                    "params": {
-                        k: get_fingerprint(v)
-                        for k, v in kwargs.items()
-                        if k not in fingerprint_kwargs_exclude
-                    },
-                }
-            )
+            new_fingerprint_dict = {
+                "dataset": dataset._fingerprint,
+                "pipe": self.fingerprint(reduce=True),
+                "params": {
+                    k: get_fingerprint(v)
+                    for k, v in kwargs.items()
+                    if k not in fingerprint_kwargs_exclude
+                },
+            }
+            new_fingerprint = get_fingerprint(new_fingerprint_dict)
             logger.info(f"{type(self).__name__}: Setting `new_fingerprint` to {new_fingerprint}")
         else:
             new_fingerprint = None
@@ -548,8 +559,8 @@ class Pipe(Component):
 
         # define the fingerprint for the kwargs
         kwargs_fingerprint_dict = {k: get_fingerprint(v) for k, v in kwargs.items()}
-        kwargs_fingerprint = get_fingerprint(kwargs_fingerprint_dict)
-        fingerprints["__kwargs__"] = fingerprint_kwargs_exclude
+        # kwargs_fingerprint = get_fingerprint(kwargs_fingerprint_dict)
+        fingerprints["__kwargs__"] = kwargs_fingerprint_dict
 
         # get the dataset fingerprint
         if isinstance(dataset, Dataset):
@@ -568,7 +579,7 @@ class Pipe(Component):
         # compare to previously saved fingerprints
         name = self.__class__.__name__
 
-        file = path / f"{name}-{dset_fingerprint}-{kwargs_fingerprint}.json"
+        file = path / f"{name}-{dset_fingerprint}.json"
         if file.exists():
             prev_fingerprints = json.loads(file.read_text())
             diff = jsondiff.diff(prev_fingerprints, fingerprints)
@@ -584,22 +595,6 @@ class Pipe(Component):
             else:
                 logger.info(f"Fingerprint for {name} is identical to the latest run.")
         else:
-            logger.info(f"No previous fingerprint found for {name}.")
+            logger.info(f"No previous fingerprint found for {name}. file={file}")
 
         file.write_text(json.dumps(fingerprints, indent=2))
-
-
-"""
-# elastic search
-
-
-# scispaCy match:
- - Recall@    1: 3.23%
- - Recall@    5: 33.47%
- - Recall@   20: 55.65%
- - Recall@   50: 68.55%
- - Recall@  100: 75.40%
- - Recall@ 1000: 85.48%
-
-
-"""

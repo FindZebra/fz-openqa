@@ -16,7 +16,7 @@ from datasets.search import SearchResults
 from loguru import logger
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
-from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -29,7 +29,7 @@ class DocumentLookupEngine(IndexEngine):
 
     def _build(
         self,
-        vectors: Optional[Tensors | TensorArrowTable] = None,
+        vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
         """build the index from the vectors."""

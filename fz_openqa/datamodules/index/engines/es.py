@@ -10,6 +10,7 @@ from typing import Optional
 import rich
 from datasets import Dataset
 from elasticsearch import Elasticsearch
+from loguru import logger
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
@@ -19,7 +20,7 @@ from fz_openqa.datamodules.index.engines.utils.es import es_create_index
 from fz_openqa.datamodules.index.engines.utils.es import es_ingest_bulk
 from fz_openqa.datamodules.index.engines.utils.es import es_remove_index
 from fz_openqa.datamodules.index.engines.utils.es import es_search_bulk
-from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.utils.datastruct import Batch
@@ -67,7 +68,7 @@ class ElasticsearchEngine(IndexEngine):
 
     def _build(
         self,
-        vectors: Optional[Tensors | TensorArrowTable] = None,
+        vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
 
@@ -88,6 +89,10 @@ class ElasticsearchEngine(IndexEngine):
         is_new_index = es_create_index(
             self.instance, self.config["index_name"], body=self.config["es_body"]
         )
+        if not is_new_index:
+            logger.info(
+                f"ElasticSearch index with name=`{self.config['index_name']}` already exists."
+            )
 
         # build the index
         if is_new_index:
@@ -148,9 +153,9 @@ class ElasticsearchEngine(IndexEngine):
     @property
     def is_up(self) -> bool:
         """Check if the index is up."""
-        is_indexed = es_create_index(self.instance, self.config["index_name"])
+        is_new_index = es_create_index(self.instance, self.config["index_name"])
         istance_init = hasattr(self, "_instance")
-        return istance_init is not None and is_indexed
+        return istance_init is not None and not is_new_index
 
     def search(
         self, *queries: (List[str], Optional[List[str]]), k: int = None, **kwargs

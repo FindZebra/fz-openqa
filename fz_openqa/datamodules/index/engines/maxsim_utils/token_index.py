@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
-from fz_openqa.datamodules.index.maxsim.datastruct import FaissInput
+from fz_openqa.datamodules.index.engines.maxsim_utils.datastruct import FaissInput
 from fz_openqa.utils.datastruct import PathLike
 
 

@@ -18,7 +18,7 @@ from loguru import logger
 
 from fz_openqa.datamodules.index._base import camel_to_snake
 from fz_openqa.datamodules.index._base import slice_batch
-from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import Contains
@@ -56,6 +56,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         k: int = 10,
         max_batch_size: Optional[int] = 100,
         merge_previous_results: bool = False,
+        verbose: bool = False,
         # Pipe args
         input_filter: None = None,
         update: bool = False,
@@ -67,6 +68,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         self.k = k
         self.max_batch_size = max_batch_size
         self.merge_previous_results = merge_previous_results
+        self.verbose = verbose
 
         # set the index configuration
         self.config = self.default_config
@@ -99,6 +101,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             self.k = state.pop("k")
             self.max_batch_size = state.pop("max_batch_size")
             self.merge_previous_results = state.pop("merge_previous_results")
+            self.verbose = state.pop("verbose")
             self.config = state["config"]
 
     @property
@@ -116,13 +119,14 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         state["k"] = self.k
         state["max_batch_size"] = self.max_batch_size
         state["merge_previous_results"] = self.merge_previous_results
+        state["verbose"] = self.verbose
         state["_target_"] = type(self).__module__ + "." + type(self).__qualname__
         return state
 
     def build(
         self,
         *,
-        vectors: Optional[Tensors | TensorArrowTable] = None,
+        vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
         if self.exists():
@@ -146,10 +150,9 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         """Check if the index exists."""
         return self.path.exists()
 
-    @abc.abstractmethod
     def __len__(self) -> int:
         """Return the number of vectors in the index."""
-        ...
+        return -1
 
     @abc.abstractmethod
     def _build(self, *data: Any, **kwargs):
@@ -178,7 +181,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         ...
 
     @abc.abstractmethod
-    def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
+    def search(self, *query: Any, k: int = None, **kwargs) -> (TensorLike, TensorLike):
         ...
 
     def _get_index_name(self, dataset, config) -> str:
@@ -216,7 +219,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         query: Batch,
         idx: Optional[List[int]] = None,
         k: Optional[int] = None,
-        vectors: Optional[Tensors] = None,
+        vectors: Optional[TensorLike] = None,
         output_format: Optional[OutputFormat] = None,
         **kwargs,
     ) -> Batch:
@@ -226,19 +229,26 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         Filter the incoming batch using the same pipe as the one
         used to build the index."""
         k = k or self.k
+        pprint_batch(query, f"{type(self).__name__}::base::query", silent=not self.verbose)
 
-        # get the previous vectors if any
-        pprint_batch(query, f"{type(self).__name__}::base::query")
-        if self.output_index_key in query and self.merge_previous_results:
-            prev_search_results = SearchResult(
-                index=query[self.output_index_key],
-                score=query[self.output_score_key],
-                format=output_format,
-                k=len(query[self.output_index_key][0]),
-            )
-            rich.print(f">> PREV: \n{prev_search_results}")
-        else:
-            prev_search_results = None
+        # auto load the engine
+        if not self.is_up:
+            self.load()
+            self.cuda()
+            assert self.is_up, f"Index {type(self).__name__} is not up."
+
+        # get the pids given by the previous engine, if any
+        pids = None
+        prev_search_results = None
+        if self.output_index_key in query:
+            pids = query[self.output_index_key]
+            if self.output_index_key in query and self.merge_previous_results:
+                prev_search_results = SearchResult(
+                    index=pids,
+                    score=query[self.output_score_key],
+                    format=output_format,
+                    k=len(query[self.output_index_key][0]),
+                )
 
         # fetch the query vectors
         if vectors is None:
@@ -261,9 +271,15 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
                 q_vectors_i = q_vectors[i : i + eff_batch_size]
             else:
                 q_vectors_i = None
+            if pids is not None:
+                pids_i = pids[i : i + eff_batch_size]
+            else:
+                pids_i = None
 
-            # search
-            r = self._search_chunk(chunk_i, k=k, vectors=q_vectors_i, **kwargs)
+            # search the index for the chunk
+            r = self._search_chunk(chunk_i, k=k, vectors=q_vectors_i, pids=pids_i, **kwargs)
+
+            # store the results
             if output_format is not None:
                 r = r.to(output_format)
 
@@ -282,7 +298,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             self.output_score_key: search_results.score,
         }
 
-        pprint_batch(query, f"{type(self).__name__}::base::output")
+        pprint_batch(output, f"{type(self).__name__}::base::output", silent=not self.verbose)
 
         return output
 

@@ -26,6 +26,7 @@ from fz_openqa import configs
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.fingerprint import get_fingerprint
+import loguru
 
 # import the OmegaConf resolvers
 from fz_openqa.training import experiment  # type: ignore
@@ -69,8 +70,9 @@ class RandnModel(nn.Module):
 )
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    torch.multiprocessing.set_sharing_strategy("file_system")
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(logging.ERROR)
+    # datasets.logging.set_verbosity(logging.ERROR)
 
     with tempfile.TemporaryDirectory(dir=config.sys.cache_dir) as tmpdir:
         # tmpdir = config.sys.cache_dir
@@ -85,18 +87,20 @@ def run(config: DictConfig) -> None:
         trainer = instantiate(config.trainer)
 
         # initialize the tokenizer
-        tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+        bert_id = "google/bert_uncased_L-2_H-128_A-2"
+        tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
         # initialize the corpus
         corpus_builder = CorpusBuilder(
-            dset_name=config.get("dset_name", "medqa"),
+            dset_name=config.get("dset_name", "medwiki"),
             tokenizer=tokenizer,
-            use_subset=config.get("corpus_subset", False),
+            use_subset=config.get("corpus_subset", True),
             cache_dir=config.sys.get("cache_dir"),
             num_proc=config.get("num_proc", 2),
             analytics=None,
             append_document_title=True,
         )
+        corpus_builder.subset_size = [100]
         corpus = corpus_builder()
         document_ids = corpus["document.idx"]
         max_doc_id = max(document_ids)
@@ -111,20 +115,17 @@ def run(config: DictConfig) -> None:
             num_proc=config.get("num_proc", 2),
             analytics=None,
         )
-        qa_dataset = qa_builder()
 
-        # add the document index coumns
-        qa_dataset = DatasetDict(
-            {
-                split: dset.add_column(
-                    "question.document_idx",
-                    [np.random.randint(0, max_doc_id + 1) for _ in range(len(dset))],
-                )
-                for split, dset in qa_dataset.items()
-            }
-        )
-
-        rich.print(f"> qa_dataset: {qa_dataset}")
+        # # add the document index columns
+        # qa_dataset = DatasetDict(
+        #     {
+        #         split: dset.add_column(
+        #             "question.document_idx",
+        #             [np.random.randint(0, max_doc_id + 1) for _ in range(len(dset))],
+        #         )
+        #         for split, dset in qa_dataset.items()
+        #     }
+        # )
 
         # build the index
         index = Index(
@@ -156,6 +157,15 @@ def run(config: DictConfig) -> None:
                         "max_bs": 512,
                     },
                 },
+                {
+                    "name": "maxsim",
+                    "k": 100,
+                    "merge_previous_results": False,
+                    "max_batch_size": 100,
+                    "config": {
+                        "max_chunksize": 4000,
+                    },
+                },
             ],
             persist_cache=True,
             cache_dir=tmpdir,
@@ -173,10 +183,22 @@ def run(config: DictConfig) -> None:
 
         rich.print("[green] ### Mapping the dataset")
         mapped_qa = index(
-            qa_dataset,
+            qa_builder(),
             set_new_fingerprint=True,
             num_proc=1,
             batch_size=100,
+            clean_caches=False,
+            cache_fingerprint=tmpdir / "index_fingerprint",
+        )
+        rich.print(mapped_qa)
+
+        rich.print("[magenta] ### Mapping the dataset (CACHE)")
+        mapped_qa = index(
+            qa_builder(),
+            set_new_fingerprint=True,
+            num_proc=1,
+            batch_size=100,
+            clean_caches=True,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)

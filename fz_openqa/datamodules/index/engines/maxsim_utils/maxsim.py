@@ -13,16 +13,16 @@ from loguru import logger
 from torch import Tensor
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
-from fz_openqa.datamodules.index.maxsim.base_worker import ctx
-from fz_openqa.datamodules.index.maxsim.base_worker import format_device
-from fz_openqa.datamodules.index.maxsim.base_worker import WorkerSignal
-from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimInput
-from fz_openqa.datamodules.index.maxsim.datastruct import MaxSimOutput
-from fz_openqa.datamodules.index.maxsim.ranker import MaxSimRanker
-from fz_openqa.datamodules.index.maxsim.reduce import MaxSimReducer
-from fz_openqa.datamodules.index.maxsim.token_index import TokenIndex
-from fz_openqa.datamodules.index.maxsim.utils import get_unique_pids
-from fz_openqa.datamodules.index.maxsim.workers import MaxSimWorker
+from fz_openqa.datamodules.index.engines.maxsim_utils.base_worker import ctx
+from fz_openqa.datamodules.index.engines.maxsim_utils.base_worker import format_device
+from fz_openqa.datamodules.index.engines.maxsim_utils.base_worker import WorkerSignal
+from fz_openqa.datamodules.index.engines.maxsim_utils.datastruct import MaxSimInput
+from fz_openqa.datamodules.index.engines.maxsim_utils.datastruct import MaxSimOutput
+from fz_openqa.datamodules.index.engines.maxsim_utils.ranker import MaxSimRanker
+from fz_openqa.datamodules.index.engines.maxsim_utils.reduce import MaxSimReducer
+from fz_openqa.datamodules.index.engines.maxsim_utils.token_index import TokenIndex
+from fz_openqa.datamodules.index.engines.maxsim_utils.utils import get_unique_pids
+from fz_openqa.datamodules.index.engines.maxsim_utils.workers import MaxSimWorker
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.metric_type import MetricType
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -47,49 +47,30 @@ class MaxSim(torch.nn.Module):
     def __init__(
         self,
         *,
-        token_index: IndexEngine | PathLike,
         vectors: TensorArrowTable | Tensor,
-        emb2pid: TensorArrowTable | Tensor,
-        ranking_devices: List[int],
-        faiss_devices: List[int],
+        devices: List[int] = None,
         max_chunksize: Optional[int] = 1_000,
         max_queue_size: int = 5,
-        deduplicate_pids: bool = True,
         metric_type: MetricType = MetricType.inner_product,
     ):
         super(MaxSim, self).__init__()
-        logger.info(f"Setting MaxSim with ranking devices: {ranking_devices}")
-        logger.info(f"Setting MaxSim with faiss (tokens) devices: {faiss_devices}")
-        logger.info(f"Setting MaxSim with metric {metric_type}")
-
         self.metric_type = metric_type
-        self.deduplicate_pids = deduplicate_pids
-        # init the token_index
 
-        self.token_index = TokenIndex(token_index, faiss_devices, max_chunksize=max_chunksize)
-
-        # Store `emb2pid`
-        self._validate_emb2pid(emb2pid, vectors)
-        # Add `-1` : padding
-        ones = torch.ones_like(emb2pid[..., -1:])
-        emb2pid = torch.cat([emb2pid, -ones], dim=-1)
-        self.register_buffer("emb2pid", emb2pid)
-
-        # setup the Rankers
-        # init the devices
-        if len(ranking_devices) == 0:
-            ranking_devices = [-1]
-        self.ranking_devices = [format_device(d) for d in ranking_devices]
+        if devices is None:
+            devices = list(range(torch.cuda.device_count()))
+        if len(devices) == 0:
+            devices = [-1]
+        self.devices = [format_device(d) for d in devices]
 
         # Define the vectors partition
-        partition = torch.linspace(0, emb2pid.max() + 1, len(ranking_devices) + 1, dtype=torch.long)
+        partition = torch.linspace(0, len(vectors), len(devices) + 1, dtype=torch.long)
         partition = torch.cat([partition[:-1, None], partition[1:, None]], dim=1)
         self.register_buffer("partition", partition)
 
         # Initialize Input and Output queues
         self.ranking_input_queues: List[ctx.Queue] = []
         self.ranking_output_queues: List[ctx.Queue] = []
-        for _ in ranking_devices:
+        for _ in devices:
             q = ctx.Queue(maxsize=max_queue_size)
             self.ranking_input_queues.append(q)
             q = ctx.Queue(maxsize=max_queue_size)
@@ -99,9 +80,7 @@ class MaxSim(torch.nn.Module):
         self.receivers = [iter(q.get, WorkerSignal.EXIT) for q in self.ranking_output_queues]
 
         # initialize the MaxSim workers
-        self.maxsim_workers = self._init_maxsim_rankers(
-            vectors, self.ranking_devices, max_chunksize
-        )
+        self.maxsim_workers = self._init_maxsim_rankers(vectors, self.devices, max_chunksize)
 
         # initialize the MaxSimReducer
         self.maxsim_reducer = MaxSimReducer(device=None)
@@ -123,7 +102,7 @@ class MaxSim(torch.nn.Module):
     def _init_maxsim_rankers(self, vectors, devices, max_chunksize) -> List[MaxSimWorker]:
 
         maxsim_workers: List[MaxSimWorker] = []
-        for idx, idevice in enumerate(self.ranking_devices):
+        for idx, idevice in enumerate(self.devices):
             part = self.partition[idx]
 
             # initialize the `MaxSimRanker` given the partition
@@ -195,7 +174,6 @@ class MaxSim(torch.nn.Module):
             pass
         except Exception:
             pass
-        self.token_index.cuda()
         self._send_signal(WorkerSignal.TO_CUDA, parallel=False)
         return self
 
@@ -221,59 +199,26 @@ class MaxSim(torch.nn.Module):
                 while True:
                     output_signal = next(rcv, WorkerSignal.EXIT)
                     if output_signal == signal:
-                        logger.info(f"{signal} acknowledged by worker {i}")
+                        logger.debug(f"{signal} acknowledged by worker {i}")
                         break
 
     def _collect_worker_outputs(self):
         return [next(q, WorkerSignal.EXIT) for q in self.receivers]
 
     def _process_batch(
-        self, q_vectors: Tensor, *, p: int, k: int, doc_ids: Optional[List[int]] = None
+        self,
+        q_vectors: Tensor,
+        *,
+        k: int,
+        pids: Tensor,
     ) -> MaxSimOutput:
 
         # replace nans in q_vectors (padding)
         q_vectors[q_vectors.isnan()] = 0
 
-        # rescale the query vectors to unit length for computational stability
-        # this assumes using cosine similarity, here we can only test if
-        # using the inner product, normalization has to be done on the model
-        # side. In the model, a temperature parameter is applied to the
-        # q_vectors, rescaling aims at inferring this parameter and
-        # applying it a-posteriori. This is a hack, a better implementation
-        # would store the temperatures in a separate field.
-        if MetricType(self.metric_type) != MetricType.inner_product:
-            raise ValueError(
-                f"Rescaling is only supported for inner product. " f"Found {self.metric_type}"
-            )
-        qmask = (q_vectors.abs().sum(-1) > 0).float()
-        vector_norm = q_vectors.norm(p=2, dim=-1)
-
-        q_norm = (qmask * vector_norm).sum(dim=-1) / qmask.sum(dim=-1)
-        if not (q_norm > 0).all():
-            logger.warning("Some queries have zero norm. Clamping to 1e-4.")
-        q_norm = q_norm.clamp(min=1e-4)
-        q_vectors = q_vectors / q_norm.view(-1, 1, 1)
-
-        # process q_vectors using the token-level faiss index
-        _time = time.time()
-        token_ids = self.token_index(q_vectors, p, doc_ids=doc_ids)
-        faiss_time = time.time() - _time
-
-        # retriever the pids from the token_ids, at this step, there are duplicated pids.
-        pids = self.emb2pid[token_ids.to(self.emb2pid.device)]
-
-        # Deduplicate pids; this step is done on `device`, which is set by default on CPU.
-        # This step can be quite slow, but it saves a lot of memory.
-        if self.deduplicate_pids:
-            _time = time.time()
-            pids = get_unique_pids(pids)
-            deduplicate_time = time.time() - _time
-        else:
-            deduplicate_time = 0
-
         # send the token_ids to each device
         _time = time.time()
-        for q, device in zip(self.ranking_input_queues, self.ranking_devices):
+        for q, device in zip(self.ranking_input_queues, self.devices):
             q_vectors_i = q_vectors.to(device, non_blocking=True)
             pids_i = pids.clone().to(device, non_blocking=True)
             worker_input = MaxSimInput(q_vectors=q_vectors_i, pids=pids_i, k=k)
@@ -288,21 +233,16 @@ class MaxSim(torch.nn.Module):
         output: MaxSimOutput = self.maxsim_reducer(maxsim_outputs, k=k)
         reduce_time = time.time() - _time
 
-        # rescale the scores back
-        output.scores = output.scores * q_norm.view(-1, 1)
-
-        logger.info(
+        logger.debug(
             f"Runtime: "
-            f"faiss:{faiss_time:.1f}s, "
-            f"deduplicate:{deduplicate_time:.1f}s, "
             f"ranking:{ranking_time:.1f}s, "
             f"reduce:{reduce_time:.1f} | "
             f"Stats: "
-            f"p={p}, k={k},"
+            f"k={k}, input_pids: {pids.shape}, "
             f"unique_pids:{output.stats.prop_unique:.2%}, "
             f"n_docs/point: {output.stats.number_docs_per_row.mean():.1f}, "
-            f"({output.stats.number_docs_per_row.min():.0f}, "
-            f"{output.stats.number_docs_per_row.max():.0f}), "
+            f"(min={output.stats.number_docs_per_row.min():.0f}, "
+            f"max={output.stats.number_docs_per_row.max():.0f}), "
         )
 
         if torch.isnan(output.scores).any():
@@ -318,13 +258,14 @@ class MaxSim(torch.nn.Module):
         *,
         k: int = None,
         p: int = None,
-        doc_ids: Optional[List[int]] = None,
+        pids: Tensor = None,
         **kwargs,
     ) -> Optional[MaxSimOutput]:
         """Send data to the MaxSim pipeline"""
         if isinstance(q_vectors, torch.Tensor):
-            assert p is not None and k is not None, "p and k must be specified"
-            return self._process_batch(q_vectors, p=p, k=k, doc_ids=doc_ids)
+            assert k is not None, "k must be specified"
+            assert pids is not None, "pids must be specified"
+            return self._process_batch(q_vectors, k=k, pids=pids)
 
         elif isinstance(q_vectors, WorkerSignal):
             # send the signal through the pipeline

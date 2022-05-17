@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
@@ -16,7 +17,7 @@ from loguru import logger
 
 from fz_openqa.datamodules.index.engines.base import IndexEngine
 from fz_openqa.datamodules.index.engines.faiss import FaissEngine
-from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import Tensors
+from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.io import build_emb2pid_from_vectors
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
@@ -27,6 +28,7 @@ def _pad(r, max_length, fill_value):
 
 
 class FaissTokenEngine(FaissEngine):
+    no_fingerprint: List[str] = FaissEngine.no_fingerprint + ["emb2pid"]
     _default_config: Dict[str, Any] = {
         "p": 10,
         "max_bs": 1 << 10,
@@ -35,18 +37,35 @@ class FaissTokenEngine(FaissEngine):
 
     def _build(
         self,
-        vectors: Optional[Tensors | TensorArrowTable] = None,
+        vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
         # build the token to passage id lookup table
         self.emb2pid = build_emb2pid_from_vectors(vectors)
 
+        # Store `emb2pid`
+        self._validate_emb2pid(self.emb2pid, vectors)
+        # Add `-1` : padding, so indexing with -1 returns -1
+        ones = torch.ones_like(self.emb2pid[..., -1:])
+        self.emb2pid = torch.cat([self.emb2pid, -ones], dim=-1)
+
         # flatten the vectors
         flat_vectors = vectors.view(-1, vectors.shape[-1])
-        rich.print(
-            f"[magenta]# Init flat_vectors {flat_vectors.shape}, emb2pid {self.emb2pid.shape}"
-        )
         super(FaissTokenEngine, self)._build(vectors=flat_vectors, corpus=corpus)
+
+    @staticmethod
+    def _validate_emb2pid(emb2pid, vectors):
+        if set(range(len(vectors))) != set(emb2pid.unique().tolist()):
+            raise ValueError(
+                f"All positions in `vector` must be in `emb2pid`."
+                f"{set(range(len(vectors)))} != {set(emb2pid.unique().tolist())}"
+            )
+
+        if emb2pid.min() != 0:
+            raise ValueError(f"`emb2pid` must start at 0. Found {emb2pid.min()}")
+
+        if emb2pid.max() != len(vectors) - 1:
+            raise ValueError(f"`emb2pid` must end at {len(vectors) - 1}. Found {emb2pid.max()}")
 
     def search(self, *query: Any, k: int = None, **kwargs) -> SearchResult:
         q_vectors, *_ = query
@@ -62,7 +81,6 @@ class FaissTokenEngine(FaissEngine):
         # This is done with a for loop across batch size, which can be quite slow.
         scores, pids = self._deduplicate_pids(scores, pids)
 
-        rich.print(f"{type(self).__name__} search: {indices.shape} | {scores.shape}")
         if scores.shape[1] > self.k:
             logger.warning(
                 f"{type(self).__name__} search: "
@@ -81,7 +99,6 @@ class FaissTokenEngine(FaissEngine):
         unique_pids = []
         sum_scores = []
         for qpids, qscores in zip(pids, scores):
-
             # ge the unique pids
             q_unique_pids, upids_inv = torch.unique(qpids, return_inverse=True)
 

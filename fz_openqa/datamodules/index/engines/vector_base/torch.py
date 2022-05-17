@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from .base import VectorBase
-from .utils.faiss import Tensors
+from .utils.faiss import TensorLike
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
@@ -29,7 +29,7 @@ class TorchIndex(nn.Module):
         )
         self.vectors = nn.Parameter(torch.empty(0, dimension), requires_grad=False)
 
-    def add(self, vectors: Tensors, **kwargs):
+    def add(self, vectors: TensorLike, **kwargs):
         device = self.device_info.device
         if isinstance(vectors, TensorArrowTable):
             vectors = vectors[:]
