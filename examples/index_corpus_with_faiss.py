@@ -2,8 +2,8 @@ import os
 import sys
 
 from fz_openqa.datamodules.builders import QaBuilder
-from fz_openqa.datamodules.index._base import IndexMode
 from fz_openqa.datamodules.index.colbert import ColbertIndex
+from fz_openqa.datamodules.index.index import IndexMode
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 
 current_dir = os.path.dirname(os.path.realpath(__file__))

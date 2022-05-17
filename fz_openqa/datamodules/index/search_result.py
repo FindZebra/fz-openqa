@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from copy import copy
 from copy import deepcopy
 from functools import partial
-from numbers import Number
 from random import randint
 from typing import Any
 from typing import Callable
@@ -11,10 +9,8 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import TypeVar
-from typing import Union
 
 import numpy as np
-import rich
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -153,7 +149,6 @@ class SearchResult:
         fill_missing_values: bool = False,
         k: int,
     ):
-
         if score is None:
             score = masked_fill(deepcopy(index), new_value=0)
         else:
@@ -189,12 +184,9 @@ class SearchResult:
                 raise ValueError(
                     "`dataset_size` must be provided when `fill_missing_values` is True."
                 )
-            self.fill_missing_values_()
-
-    def fill_missing_values_(self):
-        self.index = masked_fill(
-            self.index, new_value=(0, self.dataset_size - 1), condition=is_negative
-        )
+            self.index = masked_fill(
+                self.index, new_value=(0, self.dataset_size - 1), condition=is_negative
+            )
 
     def __add__(self, other):
         if not isinstance(other, SearchResult):

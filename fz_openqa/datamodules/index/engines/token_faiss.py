@@ -28,6 +28,7 @@ def _pad(r, max_length, fill_value):
 
 
 class FaissTokenEngine(FaissEngine):
+    _max_num_proc: int = 1
     no_fingerprint: List[str] = FaissEngine.no_fingerprint + ["emb2pid"]
     _default_config: Dict[str, Any] = {
         "p": 10,

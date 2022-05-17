@@ -39,9 +39,11 @@ def ping_es() -> bool:
 class ElasticsearchEngine(IndexEngine):
     """This class an Elastic Search index."""
 
+    _max_num_proc: int = 4
+
     _instance: Elasticsearch
     index_columns: List[str] = ["document.row_idx", "document.text"]
-    query_columns: List[str] = ["question.text", "answer.text"]
+    query_columns: List[str] = ["question.text", "question.answer_text"]
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
         "_instance",
         "timeout",

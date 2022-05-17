@@ -9,6 +9,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import numpy as np
 import rich
 import torch
 from datasets import Dataset
@@ -16,10 +17,10 @@ from datasets.search import SearchResults
 from hydra.utils import instantiate
 from loguru import logger
 
-from fz_openqa.datamodules.index._base import camel_to_snake
-from fz_openqa.datamodules.index._base import slice_batch
 from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
+from fz_openqa.datamodules.index.utils.misc import camel_to_snake
+from fz_openqa.datamodules.index.utils.misc import slice_batch
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import Contains
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
@@ -34,10 +35,22 @@ from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 
+def _stack_nested_tensors(index):
+    """Transform nested Tensors into a single Tensor. I.e. [Tensor, Tensor, ...] -> Tensor"""
+    if isinstance(index, list) and isinstance(index[0], (np.ndarray, torch.Tensor)):
+        if isinstance(index[0], np.ndarray):
+            index = np.stack(index)
+        elif isinstance(index[0], torch.Tensor):
+            index = torch.stack(index)
+        else:
+            raise TypeError(f"Unsupported type: {type(index[0])}")
+    return index
+
+
 class IndexEngine(Pipe, metaclass=abc.ABCMeta):
     """This class implements an index."""
 
-    no_fingerprint: List[str] = ["k", "path", "max_batch_size"]
+    no_fingerprint: List[str] = ["k", "path", "max_batch_size", "verbose"]
     no_index_name: List[str] = []
     index_columns: List[str] = []
     query_columns: List[str] = []
@@ -77,6 +90,10 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
 
         # set the path where to solve the configuration and data
         self.path = None if path is None else Path(path)
+
+    @property
+    def name(self) -> str:
+        return type(self).__name__
 
     @classmethod
     def load_from_path(cls, path: PathLike):
@@ -134,6 +151,8 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             self.load()
         else:
             logger.info(f"Creating index at {self.path}")
+            if self.require_vectors and vectors is None:
+                raise ValueError(f"{self.name} requires vectors, but none were provided")
             self._build(vectors=vectors, corpus=corpus)
             self.save()
             assert self.exists(), f"Index {type(self).__name__} was not created."
@@ -241,14 +260,16 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         pids = None
         prev_search_results = None
         if self.output_index_key in query:
-            pids = query[self.output_index_key]
+            pids = _stack_nested_tensors(query[self.output_index_key])
             if self.output_index_key in query and self.merge_previous_results:
                 prev_search_results = SearchResult(
                     index=pids,
-                    score=query[self.output_score_key],
+                    score=_stack_nested_tensors(query[self.output_score_key]),
                     format=output_format,
                     k=len(query[self.output_index_key][0]),
                 )
+            if isinstance(pids, np.ndarray):
+                pids = torch.from_numpy(pids)
 
         # fetch the query vectors
         if vectors is None:

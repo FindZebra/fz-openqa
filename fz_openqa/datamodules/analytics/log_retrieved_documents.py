@@ -13,7 +13,7 @@ from rich.console import Console
 from torch import Tensor
 
 import wandb
-from ..index._base import camel_to_snake
+from ..index.utils.misc import camel_to_snake
 from ..utils.datastruct import OpenQaDataset
 from ..utils.typing import HfDataset
 from .base import Analytic

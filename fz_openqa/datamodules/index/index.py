@@ -10,6 +10,7 @@ from typing import TypeVar
 
 import datasets
 import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -19,20 +20,58 @@ from torch import nn
 
 from fz_openqa.datamodules.index.engines import AutoEngine
 from fz_openqa.datamodules.index.engines.base import IndexEngine
+from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Collate
+from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Predict
+from fz_openqa.datamodules.pipes import PrintBatch
+from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import Condition
+from fz_openqa.datamodules.pipes.control.condition import Contains
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
+from fz_openqa.datamodules.pipes.control.condition import In
+from fz_openqa.datamodules.pipes.control.condition import Not
 from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
+from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.utils.functional import infer_batch_size
+from fz_openqa.utils.shape import infer_batch_shape
+from fz_openqa.utils.shape import infer_shape
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 HfDataset = TypeVar("HfDataset", Dataset, DatasetDict)
+
+ALLOWED_COLUMNS_NESTING = [
+    "question.input_ids",
+    "question.attention_mask",
+    "question.text",
+    "question.answer_text",
+    "document.row_idx",
+    "document.proposal_score",
+]
+ALLOWED_COLUMNS_CACHING = [
+    "question.input_ids",
+    "question.attention_mask",
+]
+INFER_NESTING_KEYS = [
+    "question.input_ids",
+    "question.attention_mask",
+    "question.text",
+]
+
+
+def infer_nesting_level(dataset: HfDataset, keys: List[str], n: int = 10) -> int:
+    assert isinstance(dataset, (Dataset, DatasetDict))
+    dset = dataset if isinstance(dataset, Dataset) else next(iter(dataset.values()))
+    sample = {k: v for k, v in dset[:n].items() if k in keys}
+    batch_size = infer_batch_shape(sample)
+    nesting_level = len(batch_size) - 1
+    return nesting_level
 
 
 class Index(Pipe):
@@ -92,7 +131,12 @@ class Index(Pipe):
         for engine in engines:
             if isinstance(engine, dict):
                 engine = AutoEngine(**engine, path=self.cache_dir, set_unique_path=True)
+                if engine.require_vectors and model is None:
+                    logger.warning(f"No `model` was provided => skipping {type(engine).__name__}")
+                    continue
                 self.engines.append(engine)
+        if len(self.engines) == 0:
+            raise ValueError(f"No engines were registered for {type(self).__name__}")
 
         # build the Pipe
         super().__init__(
@@ -167,12 +211,33 @@ class Index(Pipe):
         return self._call_dataset_any(dataset, **kwargs)
 
     def _call_dataset_any(
-        self, dataset: HfDataset, clean_caches: bool = True, set_new_fingerprint=True, **kwargs
+        self,
+        dataset: HfDataset,
+        clean_caches: bool = True,
+        set_new_fingerprint: bool = True,
+        **kwargs,
     ) -> HfDataset:
+        # infer the nesting level. I.e. Questions as shape [bs, ...] or [bs, n_options, ...]
+        nesting_level = infer_nesting_level(dataset, INFER_NESTING_KEYS, n=10)
+
         # cache the query vectors
         if self.requires_vector:
+            dataset_caching = keep_only_columns(dataset, ALLOWED_COLUMNS_CACHING)
+
+            # flatten the dataset if it is nested
+            if nesting_level > 0:
+                flatten_op = Flatten(level=nesting_level)
+                dataset_caching = flatten_op(
+                    dataset_caching,
+                    level=nesting_level,
+                    keys=["question.input_ids", "question.attention_mask"],
+                    desc="Flattening dataset before caching",
+                    **kwargs,
+                )
+
+            # cache the vectors
             vectors = self.cache_vectors(
-                dataset,
+                dataset_caching,
                 predict=self.predict_queries,
                 trainer=self.trainer,
                 collate_fn=self.dataset_collate_pipe,
@@ -186,32 +251,50 @@ class Index(Pipe):
 
         # process the dataset with the Engines
         for engine in self.engines:
+            # wrap the engine with a flattening op to handle the nesting level
+            if nesting_level > 0:
+                # Filter out the columns that cannot be flattened
+                # TODO: this is a hack to avoid the problem of the engine
+                #  not being able to handle the nesting level. Find a better way.
+                input_filter = In(ALLOWED_COLUMNS_NESTING)
+
+                # wrap the pipe with the flattening op
+                pipe = ApplyAsFlatten(
+                    engine, level=nesting_level, input_filter=input_filter, flatten_idx=True
+                )
+            else:
+                pipe = engine
+
+            # pipe = Sequential(PrintBatch(f"{engine.name}::input"), pipe)
+
             # process the dataset
             if isinstance(dataset, DatasetDict):
                 dataset = DatasetDict(
                     {
-                        split: engine(
+                        split: pipe(
                             dset,
                             vectors=vectors.get(split, None),
                             output_format=OutputFormat.NUMPY,
                             set_new_fingerprint=set_new_fingerprint,
+                            desc=f"{type(engine).__name__} ({split})",
                             **kwargs,
                         )
                         for split, dset in dataset.items()
                     }
                 )
             elif isinstance(dataset, Dataset):
-                dataset = engine(
+                dataset = pipe(
                     dataset,
                     vectors=vectors,
                     output_format=OutputFormat.NUMPY,
                     set_new_fingerprint=set_new_fingerprint,
+                    desc=f"{type(engine).__name__}",
                     **kwargs,
                 )
             else:
                 raise TypeError(f"Unsupported dataset type: {type(dataset)}")
 
-            # free the memory allocated by the engine
+            # free the CPU and GPU memory allocated by the engine
             engine.free_memory()
 
         # cleanup the vectors

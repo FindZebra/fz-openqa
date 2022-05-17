@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 from datasets import DatasetDict
 
+from fz_openqa.datamodules.pipelines.collate.field import CollateField
+
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
 from hydra.utils import instantiate
@@ -15,8 +17,8 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from fz_openqa.datamodules.builders import QaBuilder
-from fz_openqa.datamodules.index.base import Index
+from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
+from fz_openqa.datamodules.index.index import Index
 import datasets
 import hydra
 import rich
@@ -107,7 +109,7 @@ def run(config: DictConfig) -> None:
         rich.print(f"> corpus: {corpus}, max_doc_id={max_doc_id}")
 
         # initialize the QA dataset
-        qa_builder = QaBuilder(
+        qa_builder = ConcatQaBuilder(
             dset_name=config.get("dset_name", "medqa-us"),
             tokenizer=tokenizer,
             use_subset=config.get("use_subset", True),
@@ -115,6 +117,9 @@ def run(config: DictConfig) -> None:
             num_proc=config.get("num_proc", 2),
             analytics=None,
         )
+
+        qa_dataset = qa_builder()
+        rich.print(f"> qa_dataset: {qa_dataset}")
 
         # # add the document index columns
         # qa_dataset = DatasetDict(
@@ -135,26 +140,25 @@ def run(config: DictConfig) -> None:
                     "name": "es",
                     "k": 100,
                     "merge_previous_results": True,
+                    "max_batch_size": 100,
+                    "verbose": False,
                     "config": {
                         "es_temperature": 10.0,
+                        "auxiliary_weight": 2.0,
                     },
                 },
-                # {"name": "es",
-                #  "k": 10,
-                #  "config": {"es_temperature": 3., }
-                #  },
-                # {"name": "faiss", "config": {"index_factory": "torch", "dimension": 32}},
-                # {"name": "lookup", "config": {}},
                 {
                     "name": "faiss_token",
-                    "k": 4000,
+                    "k": 1000,
                     "merge_previous_results": True,
                     "max_batch_size": 100,
+                    # "verbose": True,
                     "config": {
-                        "index_factory": "IVF128,Flat",
+                        "index_factory": "shard:IVF100000,PQ16",
                         "dimension": 32,
                         "p": 16,
-                        "max_bs": 512,
+                        "max_bs": 32,
+                        "tempmem": 1 << 30,
                     },
                 },
                 {
@@ -163,18 +167,22 @@ def run(config: DictConfig) -> None:
                     "merge_previous_results": False,
                     "max_batch_size": 100,
                     "config": {
-                        "max_chunksize": 4000,
+                        "max_chunksize": 1000,
                     },
                 },
             ],
             persist_cache=True,
             cache_dir=tmpdir,
-            model=model,
+            model=model,  # todo
             trainer=trainer,
             dtype="float16",
             corpus_collate_pipe=corpus_builder.get_collate_pipe(),
-            dataset_collate_pipe=qa_builder.get_collate_pipe(),
-            loader_kwargs={"batch_size": 100, "num_workers": 2, "pin_memory": True},
+            dataset_collate_pipe=CollateField("question", tokenizer=tokenizer),
+            loader_kwargs={
+                "batch_size": 1000,
+                "num_workers": config.get("num_proc", 2),
+                "pin_memory": True,
+            },
         )
         rich.print(f"> index: {index.fingerprint(reduce=True)}")
 
@@ -183,10 +191,9 @@ def run(config: DictConfig) -> None:
 
         rich.print("[green] ### Mapping the dataset")
         mapped_qa = index(
-            qa_builder(),
-            set_new_fingerprint=True,
-            num_proc=1,
-            batch_size=100,
+            qa_dataset,
+            num_proc=config.get("num_proc", 2),
+            batch_size=50,
             clean_caches=False,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
@@ -194,11 +201,10 @@ def run(config: DictConfig) -> None:
 
         rich.print("[magenta] ### Mapping the dataset (CACHE)")
         mapped_qa = index(
-            qa_builder(),
-            set_new_fingerprint=True,
-            num_proc=1,
-            batch_size=100,
-            clean_caches=True,
+            qa_dataset,
+            num_proc=config.get("num_proc", 2),
+            batch_size=50,
+            clean_caches=False,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)

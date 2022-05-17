@@ -20,7 +20,7 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 
-from fz_openqa.datamodules.index._base import camel_to_snake
+from fz_openqa.datamodules.index.utils.misc import camel_to_snake
 from fz_openqa.datamodules.utils.dataset import get_column_names
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 from fz_openqa.datamodules.utils.typing import HfDataset

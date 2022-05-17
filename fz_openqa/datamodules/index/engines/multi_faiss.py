@@ -27,6 +27,8 @@ class MultiFaissHandler(IndexEngine):
     handles a different partition. This is a temporary workaround
     """
 
+    _max_num_proc: int = 1
+
     def _build(
         self,
         vectors: torch.Tensor | TensorArrowTable | np.ndarray,

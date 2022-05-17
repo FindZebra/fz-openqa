@@ -5,9 +5,7 @@ from typing import Optional
 
 from datasets import Dataset
 
-from fz_openqa.datamodules.index._base import Index
-from fz_openqa.datamodules.index._base import IndexMode
-from fz_openqa.datamodules.index.helpers import FakeDataset
+from fz_openqa.datamodules.index.index import Index
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes.base import Pipe
@@ -15,23 +13,6 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.array import concat_arrays
 from fz_openqa.utils.datastruct import Batch
-
-
-class SearchCorpus(ApplyAsFlatten):
-    def __init__(
-        self,
-        index: Index,
-        *,
-        k: int = 1,
-        level: int = 0,
-        **kwargs,
-    ):
-        assert "input_filter" not in kwargs
-        self.index = index
-        input_filter = In(index.input_keys(IndexMode.QUERY))
-        pipe = Partial(index, k=k)
-        # pipe = Sequential(PrintBatch("SearchCorpus"), pipe)
-        super().__init__(pipe, level=level, input_filter=input_filter, flatten_idx=True)
 
 
 class FetchDocuments(Pipe):
@@ -50,7 +31,7 @@ class FetchDocuments(Pipe):
     def __init__(
         self,
         *,
-        corpus_dataset: Dataset | FakeDataset,
+        corpus_dataset: Dataset,
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = None,
         index_key: str = "document.row_idx",
