@@ -13,7 +13,7 @@ import numpy as np
 from tqdm import tqdm
 
 from fz_openqa import configs
-from fz_openqa.datamodules.index.handlers.faiss import FaissHandler
+from fz_openqa.datamodules.index.engines.faiss import FaissEngine
 from fz_openqa.datamodules.index.utils.io import log_mem_size
 
 # import te omegaconf resolvers
@@ -54,7 +54,7 @@ def run(config):
         devices = list(range(faiss.get_num_gpus()))
 
         rich.print(f"tmpdir: {path}, devices={devices}")
-        handler = FaissHandler(
+        handler = FaissEngine(
             path=path,
             index_factory=index_factory,
             nprobe=nprobe,
@@ -77,7 +77,7 @@ def run(config):
         del handler
 
         # search the index
-        handler = FaissHandler(
+        handler = FaissEngine(
             path=path,
             index_factory=index_factory,
             nprobe=nprobe,

@@ -1,12 +1,8 @@
 from copy import copy
 
-from loguru import logger
+from datasets import Dataset
 
-from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.colbert import ColbertIndex
-from fz_openqa.datamodules.index.dense import DenseIndex
-from fz_openqa.datamodules.index.es import ElasticSearchIndex
-from fz_openqa.datamodules.index.static import StaticIndex
+from fz_openqa.datamodules.index.index import Index
 
 
 class IndexBuilder:
@@ -15,43 +11,7 @@ class IndexBuilder:
     def __init__(self, **kwargs):
         self.params = kwargs
 
-    def __call__(self, **kwargs) -> Index:
+    def __call__(self, corpus: Dataset, **kwargs) -> Index:
         params = copy(self.params)
         params.update(kwargs)
-        return self.cls(**params)
-
-
-class FaissIndexBuilder(IndexBuilder):
-    cls = DenseIndex
-
-
-class ColbertIndexBuilder(IndexBuilder):
-    cls = ColbertIndex
-
-
-class ElasticSearchIndexBuilder(IndexBuilder):
-    cls = ElasticSearchIndex
-
-
-class StaticIndexBuilder(IndexBuilder):
-    cls = StaticIndex
-
-
-class FaissOrEsIndexBuilder(IndexBuilder):
-    cls = DenseIndex
-    alt_cls = ElasticSearchIndex
-
-    def __call__(self, **kwargs) -> Index:
-        params = copy(self.params)
-        params.update(kwargs)
-
-        if params.get("model", None) is not None:
-            return self.cls(**params)
-        else:
-            logger.warning("No model specified, using ElasticSearchIndex")
-            return self.alt_cls(**params)
-
-
-class ColbertOrEsIndexBuilder(FaissOrEsIndexBuilder):
-    cls = ColbertIndex
-    alt_cls = ElasticSearchIndex
+        return self.cls(corpus, **params)

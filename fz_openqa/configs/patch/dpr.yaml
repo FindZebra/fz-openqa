@@ -4,12 +4,7 @@ defaults:
   - override /model/module/retriever_head: dpr
 
 model:
+  metric_size: 768
   module:
     retriever_head:
-      output_size: 768
       normalize: false
-
-datamodule:
-  # index
-  index_builder:
-    index_factory: Flat

@@ -35,3 +35,9 @@ datamodule:
 
   # dataloader
   drop_last: ${model.module.share_documents_across_batch}
+
+
+logger:
+  wandb:
+    group: option-retriever
+    name: ytxn-F2-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-contrastive-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}

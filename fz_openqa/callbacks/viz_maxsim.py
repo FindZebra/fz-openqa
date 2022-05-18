@@ -228,7 +228,7 @@ class VizMaxsimCallback(Callback):
         elif not isinstance(pl_module.module.retriever_head, ColbertHead):
             warnings.warn(
                 f"{type(self).__name__} requires head of type ColbertHead. "
-                f"Found {type(pl_module.moduleretriever_head).__name__}"
+                f"Found {type(pl_module.module.retriever_head).__name__}"
             )
             return False
         else:

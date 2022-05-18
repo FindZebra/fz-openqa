@@ -4,9 +4,6 @@ defaults:
   - override /model/bert: roberta-base #deberta-v3-base
   - override /datamodule/relevance_classifier: none
 
-setup_with_model: true
-
-
 base:
   device_batch_size: 2
   infer_batch_mul: 100
@@ -22,7 +19,7 @@ datamodule:
   dset_name: race
   corpus_name: race
   # documents
-  n_retrieved_documents: 300
+  n_retrieved_documents: 500
 
   # dataset updates
   dataset_update:
@@ -40,10 +37,10 @@ datamodule:
 
     # Index parameters
     index_builder:
-      max_chunksize: null
-      maxsim_chunksize: 4_000
-      persist_cache: false
-      handler: lookup
+      engines:
+        es:
+          config:
+            filter_with_doc_ids: true
 
 
 logger:

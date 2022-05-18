@@ -7,6 +7,7 @@ import xxhash
 from datasets.fingerprint import Hasher
 from torch import nn
 
+from fz_openqa.utils.tensor_arrow import TensorArrowTable
 from wandb.util import np
 
 
@@ -61,3 +62,8 @@ def fingerprint_bert(bert):
         "input_tensor": input_fingerprint,
         "ber_output_tensor": output_fingerprint,
     }
+
+
+@get_fingerprint.register(TensorArrowTable)
+def get_tensor_arrow_table_fingerprint(obj: TensorArrowTable) -> str:
+    return get_fingerprint({"path": str(obj.path), "dtype": obj._dtype})
