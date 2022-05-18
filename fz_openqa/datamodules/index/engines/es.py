@@ -37,7 +37,7 @@ def ping_es() -> bool:
 class ElasticsearchEngine(IndexEngine):
     """This class an Elastic Search index."""
 
-    _max_num_proc: int = 4
+    _max_num_proc: int = None
 
     _instance: Elasticsearch
     index_columns: List[str] = ["document.row_idx", "document.text", "document.idx"]

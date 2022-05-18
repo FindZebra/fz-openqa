@@ -5,7 +5,7 @@ defaults:
 engines:
   es:
     k: ${datamodule.n_retrieved_documents}
-    max_batch_size: 512
+    max_batch_size: 100
     verbose: false
     merge_previous_results: false
     config:
