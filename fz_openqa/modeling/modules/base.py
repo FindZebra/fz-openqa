@@ -168,10 +168,20 @@ class Module(nn.Module, ABC):
         extended_attention_mask: Optional[Tensor],
         **kwargs,
     ) -> Tensor:
+
+        if extended_attention_mask is not None:
+            raise NotImplementedError(
+                "extended_attention_mask is not supported in BERT. "
+                "This feature has been removed as it is mostly unused "
+                "for now. "
+                "Some changes are needed in the code to support it: "
+                "RoBERTa models need to be adapted."
+            )
+
         bert_output = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            extended_attention_mask=extended_attention_mask,
+            # extended_attention_mask=extended_attention_mask,
         )
         return bert_output.last_hidden_state
 

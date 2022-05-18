@@ -12,7 +12,9 @@ from transformers.models.auto.auto_factory import _get_model_class
 
 from fz_openqa.modeling.bert.custom_bert import CustomBertModel
 
-CUSTOM_TRANSFORMERS = {BertModel: CustomBertModel}
+CUSTOM_TRANSFORMERS = {
+    # BertModel: CustomBertModel
+}
 
 
 class CustomAutoModel(AutoModel):

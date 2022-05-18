@@ -73,11 +73,14 @@ def cleanup_cache(cache_dir, max_age: int = MAX_AGE):
             if file.is_dir() and file.name.endswith(TEMPDIR_SUFFIX):
                 age = datetime.datetime.fromtimestamp(os.stat(file).st_ctime)
                 time_diff = datetime.datetime.now() - age
+                size = sum(f.stat().st_size for f in file.glob("**/*") if f.is_file())
                 if time_diff.total_seconds() > max_age:
-                    logger.warning(f"Deleting temporary cache {file}, age={time_diff}")
+                    logger.warning(
+                        f"Deleting cache {file} (age={time_diff}, size={size/2**30:.2f}GB)"
+                    )
                     shutil.rmtree(file, ignore_errors=True)
                 else:
-                    logger.debug(f"Keeping temporary cache {file}, age={time_diff}")
+                    logger.debug(f"Keeping cache {file} (age={time_diff}, size={size/2**30:.2f}GB)")
 
 
 def infer_nesting_level(dataset: HfDataset, keys: List[str], n: int = 10) -> int:

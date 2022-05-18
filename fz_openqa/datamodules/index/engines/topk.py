@@ -29,6 +29,7 @@ class TopkEngine(IndexEngine):
         vectors: Optional[TensorLike | TensorArrowTable] = None,
         corpus: Optional[Dataset] = None,
     ):
+        self.config["dataset_size"] = corpus.num_rows
         # check and cast the inputs
         if self.merge_previous_results:
             logger.warning(
@@ -75,7 +76,13 @@ class TopkEngine(IndexEngine):
         scores, indices = self.search(scores, pids, k=k)
 
         # here, fill_missing_values=True so -1 indices are filled with random indices
-        return SearchResult(score=scores, index=indices, k=k, fill_missing_values=True)
+        return SearchResult(
+            score=scores,
+            index=indices,
+            k=k,
+            fill_missing_values=True,
+            dataset_size=self.config["dataset_size"],
+        )
 
     def _check_input(self, pids, key):
         if pids is None:
