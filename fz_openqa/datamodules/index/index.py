@@ -53,6 +53,7 @@ ALLOWED_COLUMNS_NESTING = [
     "question.answer_text",
     "document.row_idx",
     "document.proposal_score",
+    "question.document_idx",
 ]
 ALLOWED_COLUMNS_CACHING = [
     "question.input_ids",

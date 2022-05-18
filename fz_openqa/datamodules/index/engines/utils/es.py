@@ -1,8 +1,8 @@
-import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 
+import torch
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers as es_helpers
 from elasticsearch import RequestError
@@ -15,6 +15,7 @@ def es_search_bulk(
     index_name: str,
     queries: List[str],
     auxiliary_queries: List[str] = None,
+    document_ids: List[int] = None,
     auxiliary_weight: float = 0,
     k: int = 10,
 ):
@@ -27,9 +28,11 @@ def es_search_bulk(
 
     request = []
     for i, query in enumerate(queries):
+        should_query_parts = []
+        must_query_parts = []
 
         # this is the main query
-        query_parts = [
+        should_query_parts.append(
             {
                 "match": {
                     "text": {
@@ -39,11 +42,11 @@ def es_search_bulk(
                     }
                 }
             },
-        ]
+        )
 
         # this is an additional query term using the auxiliary_queries (answer option)
         if auxiliary_queries is not None and auxiliary_weight > 0:
-            query_parts.append(
+            should_query_parts.append(
                 {
                     "match": {
                         "text": {
@@ -55,10 +58,26 @@ def es_search_bulk(
                 },
             )
 
+        if document_ids is not None:
+            doc_id = document_ids[i]
+            if isinstance(doc_id, torch.Tensor):
+                doc_id = doc_id.item()
+            must_query_parts.append(
+                {
+                    "match": {
+                        "document_id": {
+                            "query": doc_id,
+                            # "zero_terms_query": "all",
+                            "operator": "or",
+                        }
+                    }
+                },
+            )
+
         # final request
         r = {
             "query": {
-                "bool": {"should": query_parts},
+                "bool": {"should": should_query_parts, "must": must_query_parts},
             },
             "from": 0,
             "size": k,
@@ -138,8 +157,9 @@ def es_ingest_bulk(
     es_instance: Elasticsearch,
     index_name: str,
     *,
-    document_idx: List[int],
+    row_idx: List[int],
     document_txt: List[str],
+    document_idx: List[int] = None,
     title: str = "__no_title__",
 ):
     actions = [
@@ -148,8 +168,9 @@ def es_ingest_bulk(
             "_title": title,
             "_source": {
                 "title": title,
-                "idx": document_idx[i],
+                "idx": row_idx[i],
                 "text": document_txt[i],
+                "document_idx": document_idx[i] if document_idx else None,
             },
         }
         for i in range(len(document_txt))

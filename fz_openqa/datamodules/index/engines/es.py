@@ -7,7 +7,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from datasets import Dataset
 from elasticsearch import Elasticsearch
 from loguru import logger
@@ -24,7 +23,6 @@ from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLi
 from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 DEFAULT_ES_BODY = OmegaConf.to_object(
@@ -42,8 +40,8 @@ class ElasticsearchEngine(IndexEngine):
     _max_num_proc: int = 4
 
     _instance: Elasticsearch
-    index_columns: List[str] = ["document.row_idx", "document.text"]
-    query_columns: List[str] = ["question.text", "question.answer_text"]
+    index_columns: List[str] = ["document.row_idx", "document.text", "document.idx"]
+    query_columns: List[str] = ["question.text", "question.answer_text", "question.document_idx"]
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
         "_instance",
         "timeout",
@@ -56,16 +54,19 @@ class ElasticsearchEngine(IndexEngine):
         "auxiliary_weight",
         "es_temperature",
         "ingest_batch_size",
+        "filter_with_doc_ids",
     ]
     _default_config: Dict[str, Any] = {
         "timeout": 60,
         "es_body": DEFAULT_ES_BODY,
         "index_key": "document.row_idx",
         "index_text_key": "document.text",
+        "index_doc_id_key": "document.idx",
         "ingest_batch_size": 1000,
         "auxiliary_weight": 0,
         "es_temperature": 1.0,
         "es_logging_level": "error",
+        "filter_with_doc_ids": False,
     }
 
     def _build(
@@ -105,8 +106,9 @@ class ElasticsearchEngine(IndexEngine):
                     _ = es_ingest_bulk(
                         self.instance,
                         index_name=self.config["index_name"],
-                        document_idx=batch[self.config["index_key"]],
+                        row_idx=batch[self.config["index_key"]],
                         document_txt=batch[self.config["index_text_key"]],
+                        document_idx=batch[self.config.get("index_doc_id_key", None)],
                     )
             except Exception as ex:
                 # clean up the index if something went wrong
@@ -166,8 +168,11 @@ class ElasticsearchEngine(IndexEngine):
         k = k or self.k
 
         # unpack args
-        query_text, auxiliary_text = queries
+        query_text, auxiliary_text, document_ids = queries
         config = self.config
+
+        if not config["filter_with_doc_ids"]:
+            document_ids = None
 
         # query Elastic Search
         scores, indexes, contents = es_search_bulk(
@@ -177,6 +182,7 @@ class ElasticsearchEngine(IndexEngine):
             k=k,
             auxiliary_queries=auxiliary_text,
             auxiliary_weight=config["auxiliary_weight"],
+            document_ids=document_ids,
         )
 
         if config["es_temperature"] is not None:
@@ -202,6 +208,10 @@ class ElasticsearchEngine(IndexEngine):
                 f"Missing auxiliary text "
                 f"(column={self.query_columns[1]}) required "
                 f"for auxiliary weight > 0"
+            )
+        if self.config["filter_with_doc_ids"] and args[2] is None:
+            raise ValueError(
+                f"Missing doc ids " f"(column={self.query_columns[2]}) required " f"for filtering"
             )
 
         search_result = self.search(*args, **kwargs)

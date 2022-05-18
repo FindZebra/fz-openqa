@@ -239,11 +239,11 @@ class FaissVectorBase(VectorBase):
 
         # move the index to the GPU
         if self.shard:
-            logger.warning(f">> Moving index to GPU shard {devices}")
-            self.index = self._mode_to_cuda(self.index, devices)
-        else:
-            logger.warning(f">> Moving index to GPU {devices} (no sharding)")
+            logger.warning(f">> Moving index to GPU shards {devices}")
             self.index = self._move_to_cuda_shard(self.index, devices)
+        else:
+            logger.warning(f">> Moving index to GPU replicas {devices} (no sharding)")
+            self.index = self._mode_to_cuda(self.index, devices)
 
         # set the nprobe parameter
         ps = faiss.GpuParameterSpace()

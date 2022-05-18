@@ -50,7 +50,7 @@ def _stack_nested_tensors(index):
 class IndexEngine(Pipe, metaclass=abc.ABCMeta):
     """This class implements an index."""
 
-    no_fingerprint: List[str] = ["k", "path", "max_batch_size", "verbose"]
+    no_fingerprint: List[str] = ["path", "max_batch_size", "verbose"]
     no_index_name: List[str] = []
     index_columns: List[str] = []
     query_columns: List[str] = []

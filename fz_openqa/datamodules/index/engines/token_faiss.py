@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -9,7 +10,6 @@ from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
 import numpy as np
-import rich
 import torch  # type: ignore
 import torch.nn.functional as F
 from datasets import Dataset
@@ -72,15 +72,29 @@ class FaissTokenEngine(FaissEngine):
         q_vectors, *_ = query
 
         # query the token index
+        _time = time.time()
         scores, indices = self._query_to_token_ids(
             q_vectors, self.config["p"], index=self._index, max_bs=self.config["max_bs"]
         )
+        faiss_time = time.time() - _time
+
         # retrieve the passage ids from the token ids
         pids = self.emb2pid[indices.to(self.emb2pid.device)]
+        lookup_time = time.time() - faiss_time
 
         # Deduplicate pids; this step is done on `device`, which is set by default on CPU.
         # This is done with a for loop across batch size, which can be quite slow.
         scores, pids = self._deduplicate_pids(scores, pids)
+        deduplicate_time = time.time() - lookup_time
+
+        pad_ratio = (pids <= 0).float().sum() / pids.numel()
+        logger.info(
+            f"Faiss time: {faiss_time:.2f}s, "
+            f"lookup time: {lookup_time:.2f}s, "
+            f"deduplicate time: {deduplicate_time:.2f}s, "
+            f"pids: {pids.shape}, "
+            f"pad_ratio={pad_ratio:.2%}"
+        )
 
         if scores.shape[1] > self.k:
             logger.warning(
@@ -96,6 +110,7 @@ class FaissTokenEngine(FaissEngine):
     def _deduplicate_pids(
         self, scores: torch.Tensor, pids: torch.Tensor
     ) -> (torch.Tensor, torch.Tensor):
+        # todo: test this
 
         unique_pids = []
         sum_scores = []

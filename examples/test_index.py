@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 from datasets import DatasetDict
 
-from fz_openqa.datamodules.pipelines.collate.field import CollateField
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
@@ -28,6 +27,8 @@ from fz_openqa import configs
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.fingerprint import get_fingerprint
+from fz_openqa.datamodules.pipelines.collate.field import CollateField
+from fz_openqa.utils.pretty import pprint_batch
 import loguru
 
 # import the OmegaConf resolvers
@@ -82,7 +83,8 @@ def run(config: DictConfig) -> None:
         tmpdir.mkdir(exist_ok=True, parents=True)
 
         # model
-        model = RandnModel(dpr=False)
+        hdim = 64
+        model = RandnModel(hdim=hdim, dpr=False)
         rich.print(f"# [magenta] model : {get_fingerprint(model)}")
 
         # trainer
@@ -94,9 +96,9 @@ def run(config: DictConfig) -> None:
 
         # initialize the corpus
         corpus_builder = CorpusBuilder(
-            dset_name=config.get("dset_name", "medwiki"),
+            dset_name=config.get("dset_name", "quality"),
             tokenizer=tokenizer,
-            use_subset=config.get("corpus_subset", True),
+            use_subset=config.get("corpus_subset", False),
             cache_dir=config.sys.get("cache_dir"),
             num_proc=config.get("num_proc", 2),
             analytics=None,
@@ -110,9 +112,9 @@ def run(config: DictConfig) -> None:
 
         # initialize the QA dataset
         qa_builder = ConcatQaBuilder(
-            dset_name=config.get("dset_name", "medqa-us"),
+            dset_name=config.get("dset_name", "quality"),
             tokenizer=tokenizer,
-            use_subset=config.get("use_subset", True),
+            use_subset=config.get("use_subset", False),
             cache_dir=config.sys.get("cache_dir"),
             num_proc=config.get("num_proc", 2),
             analytics=None,
@@ -138,38 +140,40 @@ def run(config: DictConfig) -> None:
             engines=[
                 {
                     "name": "es",
-                    "k": 100,
+                    "k": 101,
                     "merge_previous_results": True,
                     "max_batch_size": 100,
                     "verbose": False,
                     "config": {
                         "es_temperature": 10.0,
                         "auxiliary_weight": 2.0,
+                        "filter_with_doc_ids": False,
                     },
                 },
-                {
-                    "name": "faiss_token",
-                    "k": 1000,
-                    "merge_previous_results": True,
-                    "max_batch_size": 100,
-                    # "verbose": True,
-                    "config": {
-                        "index_factory": "shard:IVF100000,PQ16",
-                        "dimension": 32,
-                        "p": 16,
-                        "max_bs": 32,
-                        "tempmem": 1 << 30,
-                    },
-                },
-                {
-                    "name": "maxsim",
-                    "k": 100,
-                    "merge_previous_results": False,
-                    "max_batch_size": 100,
-                    "config": {
-                        "max_chunksize": 1000,
-                    },
-                },
+                # {
+                #     "name": "faiss_token",
+                #     "k": 3000,
+                #     "merge_previous_results": True,
+                #     "max_batch_size": 100,
+                #     # "verbose": True,
+                #     "config": {
+                #         "index_factory": "shard:IVF100000,PQ16",
+                #         "train_size": 5_000_000,
+                #         "dimension": hdim,
+                #         "p": 16,
+                #         "max_bs": 1 << 11,
+                #         "tempmem": -1,
+                #     },
+                # },
+                # {
+                #     "name": "maxsim",
+                #     "k": 100,
+                #     "merge_previous_results": False,
+                #     "max_batch_size": 100,
+                #     "config": {
+                #         "max_chunksize": 1000,
+                #     },
+                # },
             ],
             persist_cache=True,
             cache_dir=tmpdir,
@@ -198,6 +202,17 @@ def run(config: DictConfig) -> None:
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)
+
+        bs = 10
+        for k in range(bs):
+            rich.print(f"{k}/{bs}")
+            row = mapped_qa["train"][k]
+            q_doc_ids = row["question.document_idx"]
+            doc_ids = row["document.row_idx"]
+            rich.print(q_doc_ids)
+            rich.print(doc_ids)
+
+        exit()
 
         rich.print("[magenta] ### Mapping the dataset (CACHE)")
         mapped_qa = index(
