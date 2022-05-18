@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import datetime
+import os
+import shutil
 import tempfile
+from copy import copy
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -10,11 +14,11 @@ from typing import TypeVar
 
 import datasets
 import pytorch_lightning as pl
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 from loguru import logger
+from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from torch import nn
 
@@ -25,13 +29,9 @@ from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import Predict
-from fz_openqa.datamodules.pipes import PrintBatch
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.condition import Condition
-from fz_openqa.datamodules.pipes.control.condition import Contains
 from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.control.condition import Not
 from fz_openqa.datamodules.pipes.control.condition import Reduce
 from fz_openqa.datamodules.pipes.predict import DEFAULT_LOADER_KWARGS
 from fz_openqa.datamodules.utils.dataset import keep_only_columns
@@ -39,9 +39,7 @@ from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.functional import infer_batch_size
 from fz_openqa.utils.shape import infer_batch_shape
-from fz_openqa.utils.shape import infer_shape
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 
 HfDataset = TypeVar("HfDataset", Dataset, DatasetDict)
@@ -64,6 +62,22 @@ INFER_NESTING_KEYS = [
     "question.attention_mask",
     "question.text",
 ]
+
+MAX_AGE = 60 * 60 * 24 * 7  # 1 week
+TEMPDIR_SUFFIX = "-tempdir"
+
+
+def cleanup_cache(cache_dir, max_age: int = MAX_AGE):
+    if os.path.exists(cache_dir):
+        for file in Path(cache_dir).iterdir():
+            if file.is_dir() and file.name.endswith(TEMPDIR_SUFFIX):
+                age = datetime.datetime.fromtimestamp(os.stat(file).st_ctime)
+                time_diff = datetime.datetime.now() - age
+                if time_diff.total_seconds() > max_age:
+                    logger.warning(f"Deleting temporary cache {file}, age={time_diff}")
+                    shutil.rmtree(file, ignore_errors=True)
+                else:
+                    logger.debug(f"Keeping temporary cache {file}, age={time_diff}")
 
 
 def infer_nesting_level(dataset: HfDataset, keys: List[str], n: int = 10) -> int:
@@ -115,10 +129,13 @@ class Index(Pipe):
         if model_output_keys is None:
             model_output_keys = ["_hq_", "_hd_"]
 
+        # clean the temporary cache
+        cleanup_cache(cache_dir, max_age=MAX_AGE)
+
         # set the path where to store the index
         if not persist_cache:
-            cache_dir = tempfile.TemporaryDirectory(dir=cache_dir)
-        self.cache_dir = cache_dir / str(corpus._fingerprint)
+            cache_dir = tempfile.mkdtemp(dir=cache_dir, suffix=TEMPDIR_SUFFIX)
+        self.cache_dir = Path(cache_dir) / str(corpus._fingerprint)
 
         # input fields and input filter for query time
         self.query_field = query_field
@@ -128,14 +145,26 @@ class Index(Pipe):
             query_input_filter = Reduce(query_input_filter, input_filter)
 
         # register the Engines
+        if isinstance(engines, (dict, DictConfig)):
+            assert all(isinstance(cfg, (dict, DictConfig)) for cfg in engines.values())
+            engines = [{**{"name": k}, **v} for k, v in engines.items()]
+
+        self.engines_config = copy(engines)
         self.engines = []
         for engine in engines:
             if isinstance(engine, dict):
                 engine = AutoEngine(**engine, path=self.cache_dir, set_unique_path=True)
-                if engine.require_vectors and model is None:
-                    logger.warning(f"No `model` was provided => skipping {type(engine).__name__}")
-                    continue
+            elif isinstance(engine, IndexEngine):
+                pass
+            else:
+                raise TypeError(f"Unknown engine type {type(engine)}")
+
+            if engine.require_vectors and model is None:
+                logger.warning(f"No `model` was provided => skipping {type(engine).__name__}")
+                continue
+            else:
                 self.engines.append(engine)
+
         if len(self.engines) == 0:
             raise ValueError(f"No engines were registered for {type(self).__name__}")
 
@@ -250,6 +279,15 @@ class Index(Pipe):
         else:
             vectors = None if isinstance(dataset, Dataset) else {}
 
+        # fingerprint the state as: dataset_hash + \sum _i engine_i_hash, this allows
+        # giving a unique fingerprint to the intermediate results of the engines
+        if isinstance(dataset, Dataset):
+            fingerprint_state = dataset._fingerprint
+        elif isinstance(dataset, DatasetDict):
+            fingerprint_state = {k: v._fingerprint for k, v in dataset.items()}
+        else:
+            raise ValueError("Unsupported dataset type")
+
         # process the dataset with the Engines
         for engine in self.engines:
             # wrap the engine with a flattening op to handle the nesting level
@@ -274,9 +312,10 @@ class Index(Pipe):
                     {
                         split: pipe(
                             dset,
-                            vectors=vectors.get(split, None),
+                            vectors=vectors.get(split, None) if engine.require_vectors else None,
                             output_format=OutputFormat.NUMPY,
                             set_new_fingerprint=set_new_fingerprint,
+                            # fingerprint_state=fingerprint_state.get(split, None),
                             desc=f"{type(engine).__name__} ({split})",
                             **kwargs,
                         )
@@ -286,9 +325,10 @@ class Index(Pipe):
             elif isinstance(dataset, Dataset):
                 dataset = pipe(
                     dataset,
-                    vectors=vectors,
+                    vectors=vectors if engine.require_vectors else None,
                     output_format=OutputFormat.NUMPY,
                     set_new_fingerprint=set_new_fingerprint,
+                    # fingerprint_state=fingerprint_state,
                     desc=f"{type(engine).__name__}",
                     **kwargs,
                 )
@@ -297,6 +337,21 @@ class Index(Pipe):
 
             # free the CPU and GPU memory allocated by the engine
             engine.free_memory()
+
+            # update the fingerprint state
+            if isinstance(dataset, Dataset):
+                fingerprint_state = get_fingerprint(
+                    {"state": fingerprint_state, "new": engine.fingerprint(reduce=True)}
+                )
+            elif isinstance(dataset, DatasetDict):
+                fingerprint_state = {
+                    k: get_fingerprint(
+                        {"state": fingerprint_state, "new": engine.fingerprint(reduce=True)}
+                    )
+                    for k, v in fingerprint_state.items()
+                }
+            else:
+                raise ValueError("Unsupported dataset type")
 
         # cleanup the vectors
         if clean_caches and self.requires_vector:
@@ -374,3 +429,10 @@ class Index(Pipe):
     def read_vectors_table(self, vector_file: Path) -> TensorArrowTable:
         logger.info(f"Reading vectors table from: {vector_file.absolute()}")
         return TensorArrowTable(vector_file, dtype=self.dtype)
+
+    def __del__(self):
+        if hasattr(self, "persist_cache") and not self.persist_cache:
+            shutil.rmtree(self.cache_dir, ignore_errors=True)
+
+    def __repr__(self):
+        return f"{type(self).__name__}(engines={self.engines_config})"

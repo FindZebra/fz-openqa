@@ -1,22 +1,27 @@
 defaults:
-  - elasticsearch
+  - es
 
-_target_: fz_openqa.datamodules.index.FaissOrEsIndexBuilder
+# define the engines
+engines:
+  es:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 512
+    verbose: false
+    merge_previous_results: false
+    config:
+      es_temperature: 1
+      auxiliary_weight: 0
+      filter_with_doc_ids: false
+  faiss:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 512
+    verbose: false
+    merge_previous_results: false
+    config:
+      index_factory: "shard:IVF1000,Flat"
+      train_size: 1_000_000
+      metric_type: ${model.metric_type}
+      nprobe: 32
 
-index_factory: IVF100,PQ16x8
-handler: flat
-nprobe: 32
-
-loader_kwargs:
-  batch_size: 1000
-  num_workers: 8
-  pin_memory: true
-
-faiss_train_size: 10000
-in_memory: true
-dtype: float32
-model_output_keys: [ _hq_, _hd_ ]
-persist_cache: false
-cache_dir: ${sys.cache_dir}
-progress_bar: true
-_id: dpr
+# logging
+id: dpr

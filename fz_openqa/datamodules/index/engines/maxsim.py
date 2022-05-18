@@ -32,6 +32,7 @@ class MaxSimEngine(IndexEngine):
         "max_queue_size",
         "ranker",
         "vectors",
+        "merge_previous_results",
     ]
     no_index_name = IndexEngine.no_index_name + [
         "max_chunksize",
@@ -51,6 +52,14 @@ class MaxSimEngine(IndexEngine):
         corpus: Optional[Dataset] = None,
     ):
         # check and cast the inputs
+        if self.merge_previous_results:
+            logger.warning(
+                "merge_previous_results is set to True, "
+                "but MaxSimEngine is a re-ranker: setting "
+                "merge_previous_results to False"
+            )
+            self.merge_previous_results = False
+
         self.config["metric_type"] = MetricType(self.config["metric_type"]).name
         if not isinstance(vectors, TensorArrowTable):
             raise NotImplementedError("MaxSimEngine requires TensorArrowTable")

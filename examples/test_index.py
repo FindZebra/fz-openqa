@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from datasets import DatasetDict
 
+from fz_openqa.datamodules.index import IndexBuilder
 
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
@@ -75,7 +76,7 @@ def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     torch.multiprocessing.set_sharing_strategy("file_system")
     datasets.set_caching_enabled(True)
-    # datasets.logging.set_verbosity(logging.ERROR)
+    datasets.logging.set_verbosity(logging.ERROR)
 
     with tempfile.TemporaryDirectory(dir=config.sys.cache_dir) as tmpdir:
         # tmpdir = config.sys.cache_dir
@@ -96,7 +97,7 @@ def run(config: DictConfig) -> None:
 
         # initialize the corpus
         corpus_builder = CorpusBuilder(
-            dset_name=config.get("dset_name", "quality"),
+            dset_name=config.get("corpus_name", "medqa"),
             tokenizer=tokenizer,
             use_subset=config.get("corpus_subset", False),
             cache_dir=config.sys.get("cache_dir"),
@@ -112,7 +113,7 @@ def run(config: DictConfig) -> None:
 
         # initialize the QA dataset
         qa_builder = ConcatQaBuilder(
-            dset_name=config.get("dset_name", "quality"),
+            dset_name=config.get("dset_name", "medqa-us"),
             tokenizer=tokenizer,
             use_subset=config.get("use_subset", False),
             cache_dir=config.sys.get("cache_dir"),
@@ -135,19 +136,18 @@ def run(config: DictConfig) -> None:
         # )
 
         # build the index
-        index = Index(
-            corpus,
+        index_builder = IndexBuilder(
             engines=[
                 {
                     "name": "es",
-                    "k": 101,
+                    "k": 1000,
                     "merge_previous_results": True,
-                    "max_batch_size": 100,
+                    "max_batch_size": 512,
                     "verbose": False,
                     "config": {
                         "es_temperature": 10.0,
                         "auxiliary_weight": 2.0,
-                        "filter_with_doc_ids": True,
+                        "filter_with_doc_ids": False,
                     },
                 },
                 # {
@@ -165,29 +165,40 @@ def run(config: DictConfig) -> None:
                 #         "tempmem": -1,
                 #     },
                 # },
-                # {
-                #     "name": "maxsim",
-                #     "k": 100,
-                #     "merge_previous_results": False,
-                #     "max_batch_size": 100,
-                #     "config": {
-                #         "max_chunksize": 1000,
-                #     },
-                # },
+                {
+                    "name": "maxsim",
+                    "k": 100,
+                    "merge_previous_results": False,
+                    "max_batch_size": 100,
+                    "config": {
+                        "max_chunksize": 1000,
+                    },
+                },
+                {
+                    "name": "topk",
+                    "k": 100,
+                    "max_batch_size": 100,
+                },
             ],
             persist_cache=True,
             cache_dir=tmpdir,
-            model=model,  # todo
-            trainer=trainer,
             dtype="float16",
-            corpus_collate_pipe=corpus_builder.get_collate_pipe(),
-            dataset_collate_pipe=CollateField("question", tokenizer=tokenizer),
             loader_kwargs={
                 "batch_size": 1000,
                 "num_workers": config.get("num_proc", 2),
                 "pin_memory": True,
             },
         )
+
+        # build the index
+        index = index_builder(
+            corpus,
+            model=model if config.get("setup_with_model", True) else None,
+            trainer=trainer,
+            corpus_collate_pipe=corpus_builder.get_collate_pipe(),
+            dataset_collate_pipe=CollateField("question", tokenizer=tokenizer),
+        )
+
         rich.print(f"> index: {index.fingerprint(reduce=True)}")
 
         # output = index(qa_dataset["train"][:3])
@@ -197,38 +208,23 @@ def run(config: DictConfig) -> None:
         mapped_qa = index(
             qa_dataset,
             num_proc=config.get("num_proc", 2),
-            batch_size=50,
+            batch_size=100,
             clean_caches=False,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)
-
-        bs = 10
-        for k in range(bs):
-            rich.print(f"{k}/{bs}")
-            row = mapped_qa["train"][k]
-            q_doc_ids = row["question.document_idx"]
-            doc_row_ids = row["document.row_idx"]
-            doc_scores = row["document.proposal_score"]
-            print("===============")
-            for j in range(len(q_doc_ids)):
-                print(f"==> {j}")
-                doc_ids = corpus[doc_row_ids[j].numpy().tolist()]["document.idx"]
-                rich.print(q_doc_ids[j])
-                rich.print(doc_scores[j])
-                rich.print(doc_ids)
-
-        exit()
 
         rich.print("[magenta] ### Mapping the dataset (CACHE)")
         mapped_qa = index(
             qa_dataset,
             num_proc=config.get("num_proc", 2),
-            batch_size=50,
+            batch_size=100,
             clean_caches=False,
             cache_fingerprint=tmpdir / "index_fingerprint",
         )
         rich.print(mapped_qa)
+
+        pprint_batch(mapped_qa["train"][:3], "Mapped QA dataset")
 
         # build the index
         # engine_config = {"es_temperature": 5.0}

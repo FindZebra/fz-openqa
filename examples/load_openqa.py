@@ -1,6 +1,8 @@
 import os
 import sys
 
+from fz_openqa.datamodules.pipelines.collate.field import CollateField
+
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -23,11 +25,11 @@ import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
 from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
-from fz_openqa.datamodules.builders import MedQaCorpusBuilder
+from fz_openqa.datamodules.builders import CorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.index.builder import FaissIndexBuilder, ColbertIndexBuilder
-from fz_openqa.datamodules.pipes import ExactMatch
+from fz_openqa.datamodules.index.builder import IndexBuilder
+from fz_openqa.datamodules.pipes import ExactMatch, PrioritySampler
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
@@ -52,7 +54,7 @@ def run(config):
     On the cluster, run:
     ```bash
     CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python \
-    examples/load_mapped_concat_medqa_faiss.py \
+    examples/load_openqa.py \
     sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
     ```
     """
@@ -64,22 +66,47 @@ def run(config):
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
     use_colbert = config.get("colbert", False)
+    setup_with_model = config.get("setup_with_model", False)
+    hidden_size = 32 if use_colbert else 128
+    bert_id = "google/bert_uncased_L-2_H-128_A-2"
     try:
         cache_dir = config.sys.cache_dir
     except Exception:
         cache_dir = default_cache_dir
 
-    # load model
-    zero_shot = config.get("zero_shot", True)
-    if zero_shot:
-        model = ZeroShot(head="contextual" if use_colbert else "flat")
+    # faiss engines
+    if use_colbert:
+        faiss_engines = [
+            {
+                "name": "maxsim",
+                "k": 100,
+                "merge_previous_results": False,
+                "max_batch_size": 100,
+                "config": {
+                    "max_chunksize": 1000,
+                },
+            },
+        ]
     else:
-        loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
-        if config.get("verbose", False):
-            loader.print_config()
-        model = loader.load_model(last=config.get("last", False))
-    model.eval()
-    model.freeze()
+        faiss_engines = [
+            {
+                "name": "faiss",
+                "k": 100,
+                "merge_previous_results": False,
+                "max_batch_size": 100,
+                "config": {
+                    "index_factory": "IVF1000,Flat",
+                    "train_size": 5_000_000,
+                    "dimension": hidden_size,
+                    "p": 16,
+                    "max_bs": 1 << 11,
+                    "tempmem": -1,
+                },
+            },
+        ]
+
+    # load model
+    model, zero_shot = load_model(config, use_colbert, hidden_size=hidden_size, bert_id=bert_id)
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
@@ -89,15 +116,14 @@ def run(config):
         trainer = None
 
     # tokenizer and text formatter
-    tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="dmis-lab/biobert-base-cased-v1.2"
-    )
-    text_formatter = TextFormatter(lowercase=True)
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # define the medqa builder
-    dataset_builder = ConcatQaBuilder(
+    concat_dset = config.get("concat_qa", False)
+    QaBuilderCls = ConcatQaBuilder if concat_dset else QaBuilder
+    dataset_builder = QaBuilderCls(
+        dset_name=config.get("dset_name", "medqa-us"),
         tokenizer=tokenizer,
-        text_formatter=text_formatter,
         use_subset=config.get("use_subset", True),
         add_encoding_tokens=not zero_shot,
         cache_dir=cache_dir,
@@ -106,9 +132,9 @@ def run(config):
     dataset_builder.subset_size = [200, 50, 50]
 
     # define the corpus builder
-    corpus_builder = MedQaCorpusBuilder(
+    corpus_builder = CorpusBuilder(
+        dset_name=config.get("corpus_name", "medqa"),
         tokenizer=tokenizer,
-        text_formatter=text_formatter,
         add_encoding_tokens=not zero_shot,
         use_subset=config.get("corpus_subset", False),
         cache_dir=cache_dir,
@@ -116,19 +142,35 @@ def run(config):
     )
 
     # define the index builder
-    IndexCls = ColbertIndexBuilder if use_colbert else FaissIndexBuilder
-    index_builder = IndexCls(
-        model=model,
-        trainer=trainer,
-        model_output_keys=["_hd_", "_hq_"],
-        collate_pipe=corpus_builder._get_collate_pipe(),
+    index_builder = IndexBuilder(
+        engines=[
+            {
+                "name": "es",
+                "k": 100,
+                "merge_previous_results": True,
+                "max_batch_size": 512,
+                "verbose": False,
+                "config": {
+                    "es_temperature": 10.0,
+                    "auxiliary_weight": 2.0 if concat_dset else 0,
+                    "filter_with_doc_ids": False,
+                },
+            },
+            *faiss_engines,
+            {
+                "name": "topk",
+                "k": 100,
+                "max_batch_size": 100,
+            },
+        ],
+        corpus_collate_pipe=corpus_builder.get_collate_pipe(),
         loader_kwargs={
             "batch_size": config.get("batch_size", 10),
             "num_workers": config.get("num_workers", 4),
             "pin_memory": config.get("pin_memory", True),
         },
         cache_dir=cache_dir,
-        persist_cache=True,
+        persist_cache=False,
     )
 
     # define the OpenQA builder
@@ -137,21 +179,20 @@ def run(config):
         corpus_builder=corpus_builder,
         index_builder=index_builder,
         relevance_classifier=ExactMatch(interpretable=True),
-        n_retrieved_documents=1000,
-        n_documents=10,
-        max_pos_docs=1,
-        filter_unmatched=config.get("filter_unmatched", True),
-        num_proc=4,
+        sampler=PrioritySampler(total=10),
+        n_retrieved_documents=100,
+        num_proc=config.get("num_proc", 4),
         batch_size=config.get("map_batch_size", 100),
-        select_mode=config.get("select_mode", "sample"),
     )
 
     # define the data module
     dm = DataModule(builder=builder)
 
     # preprocess the data
-    dm.prepare_data()
-    dm.setup()
+    dm.setup(
+        model=model if setup_with_model else None,
+        trainer=trainer,
+    )
     dm.display_samples(n_samples=3)
 
     # access dataset
@@ -159,6 +200,22 @@ def run(config):
 
     # sample a batch
     # _ = next(iter(dm.train_dataloader()))
+
+
+def load_model(config, use_colbert, hidden_size=64, bert_id=None):
+    zero_shot = config.get("zero_shot", True)
+    if zero_shot:
+        model = ZeroShot(
+            head="contextual" if use_colbert else "flat", hidden_size=hidden_size, bert_id=bert_id
+        )
+    else:
+        loader = CheckpointLoader(config.get("checkpoint", DEFAULT_CKPT), override=config)
+        if config.get("verbose", False):
+            loader.print_config()
+        model = loader.load_model(last=config.get("last", False))
+    model.eval()
+    model.freeze()
+    return model, zero_shot
 
 
 if __name__ == "__main__":

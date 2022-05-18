@@ -1,10 +1,8 @@
 from typing import List
 
-import rich
+from tokenizers import AddedToken
 from transformers import PreTrainedTokenizerFast
 
-from ...modeling.functional import flatten
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -74,9 +72,15 @@ class InferTokenTypeIds(Pipe):
         in `symbol_map` will be ignored."""
         super(InferTokenTypeIds, self).__init__(**kwargs)
         self.field = field
-        self.special_tokens = {
-            t: tokenizer(t, add_special_tokens=False).input_ids[0]
+
+        # register the special tokens
+        special_tokens = [
+            t.content if isinstance(t, AddedToken) else t
             for t in tokenizer.all_special_tokens_extended
+        ]
+
+        self.special_tokens = {
+            t: tokenizer(t, add_special_tokens=False).input_ids[0] for t in special_tokens
         }
 
         # generate the symbol map or check the input

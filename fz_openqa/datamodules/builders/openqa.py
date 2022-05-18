@@ -156,7 +156,8 @@ class OpenQaBuilder(DatasetBuilder):
         }
 
     def __repr__(self):
-        args = json.dumps({k: str(v) for k, v in self.to_dict().items()}, indent=2)
+        repr = self.to_dict()
+        args = json.dumps({k: str(v) for k, v in repr.items()}, indent=2)
         return f"{self.__class__.__name__}({args})"
 
     def _call(
@@ -201,7 +202,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # build the index, potentially using a model
         index = self.index_builder(
-            dataset=corpus,
+            corpus,
             model=model,
             trainer=trainer,
             corpus_collate_pipe=self.corpus_builder._get_collate_pipe(),
@@ -310,7 +311,6 @@ class OpenQaBuilder(DatasetBuilder):
         map_kwargs = {
             "num_proc": num_proc,
             "batch_size": batch_size,
-            "batched": True,
             # about: writer_batch_size:
             # to avoid: pyarrow.lib.ArrowInvalid: Invalid null value
             #   https://github.com/huggingface/datasets/issues/2831

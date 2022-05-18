@@ -41,7 +41,7 @@ class FaissEngine(IndexEngine):
     ]
 
     _default_config: Dict[str, Any] = {
-        "index_factory": "Flat",
+        "index_factory": "IVF100,Flat",
         "nprobe": 32,
         "keep_on_cpu": False,
         "train_on_cpu": False,
@@ -62,6 +62,7 @@ class FaissEngine(IndexEngine):
         # input checks and casting
         assert len(vectors.shape) == 2, f"The vectors must be 2D. vectors: {vectors.shape}"
         self.config["metric_type"] = MetricType(self.config["metric_type"]).name
+        self.config["dimension"] = vectors.shape[1]
 
         # init the index
         self._index = self._init_index(self.config)
@@ -87,7 +88,8 @@ class FaissEngine(IndexEngine):
 
         # add vectors to the index
         logger.info(
-            f"Adding {len(vectors)} vectors " f"(type: {type(vectors).__name__}) to the index."
+            f"Adding {len(vectors)} vectors "
+            f"(type: {type(vectors).__name__}, {vectors.shape}) to the index."
         )
         self._index.add(vectors)
 

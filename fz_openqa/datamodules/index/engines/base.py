@@ -80,7 +80,13 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         # set the index configuration
         self.config = self.default_config
         if config is not None:
-            self.config.update(config)
+            for key, value in config.items():
+                if key not in self.default_config:
+                    raise ValueError(
+                        f"Unknown config argument `{key}`. "
+                        f"The valid arguments are: {self.default_config}"
+                    )
+                self.config[key] = value
 
         # set the path where to solve the configuration and data
         self.path = None if path is None else Path(path)
@@ -244,7 +250,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         k = k or self.k
         pprint_batch(query, f"{type(self).__name__}::base::query", silent=not self.verbose)
 
-        # auto load the engine
+        # Auto-load the engine if not already done.
         if not self.is_up:
             self.load()
             self.cuda()
@@ -252,18 +258,22 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
 
         # get the pids given by the previous engine, if any
         pids = None
+        scores = None
         prev_search_results = None
         if self.output_index_key in query:
             pids = _stack_nested_tensors(query[self.output_index_key])
+            scores = _stack_nested_tensors(query[self.output_score_key])
             if self.output_index_key in query and self.merge_previous_results:
                 prev_search_results = SearchResult(
                     index=pids,
-                    score=_stack_nested_tensors(query[self.output_score_key]),
+                    score=scores,
                     format=output_format,
                     k=len(query[self.output_index_key][0]),
                 )
             if isinstance(pids, np.ndarray):
                 pids = torch.from_numpy(pids)
+            if isinstance(scores, np.ndarray):
+                scores = torch.from_numpy(scores)
 
         # fetch the query vectors
         if vectors is None:
@@ -290,9 +300,15 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
                 pids_i = pids[i : i + eff_batch_size]
             else:
                 pids_i = None
+            if scores is not None:
+                scores_i = scores[i : i + eff_batch_size]
+            else:
+                scores_i = None
 
             # search the index for the chunk
-            r = self._search_chunk(chunk_i, k=k, vectors=q_vectors_i, pids=pids_i, **kwargs)
+            r = self._search_chunk(
+                chunk_i, k=k, vectors=q_vectors_i, pids=pids_i, scores=scores_i, **kwargs
+            )
 
             # store the results
             if output_format is not None:

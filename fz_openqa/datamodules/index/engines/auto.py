@@ -9,6 +9,7 @@ from .es import ElasticsearchEngine
 from .faiss import FaissEngine
 from .maxsim import MaxSimEngine
 from .token_faiss import FaissTokenEngine
+from .topk import TopkEngine
 from fz_openqa.utils.fingerprint import get_fingerprint
 
 Engines = {
@@ -17,6 +18,7 @@ Engines = {
     "maxsim": MaxSimEngine,
     "doc_lookup": DocumentLookupEngine,
     "es": ElasticsearchEngine,
+    "topk": TopkEngine,
 }
 
 

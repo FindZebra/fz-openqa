@@ -302,6 +302,7 @@ def train_with_dataset_updates(
     test_every_update: bool = True,
     load_best_model: bool = False,
     index_on_first_step: bool = False,
+    keep_in_memory: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -319,7 +320,7 @@ def train_with_dataset_updates(
                     datamodule,
                     model=model,
                     trainer=trainer,
-                    keep_in_memory=True,
+                    keep_in_memory=keep_in_memory,
                     dataset_iter=dataset_iter,
                     **kwargs,
                 )

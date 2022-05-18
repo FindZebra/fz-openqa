@@ -85,12 +85,18 @@ class FetchDocuments(Pipe):
 
         rows = self._fetch_rows(indexes, max_chunk_size=self.max_chunk_size)
         new_indexes = rows[self.index_key]
-        if not new_indexes == indexes:
+        if len(new_indexes) != len(indexes):
             raise ValueError(
                 f"The number of returned rows does not match with the input index. "
                 f"Retrieved {len(new_indexes)} indexes, expected {len(indexes)}."
+            )
+
+        no_neg_indices = [i for i in range(len(indexes)) if indexes[i] >= 0]
+        if new_indexes[no_neg_indices[0]] != indexes[no_neg_indices[0]]:
+            raise ValueError(
+                f"The retrieved indices do not matched the query indicies. "
                 f"First 10 retrieved indexes: {new_indexes[:10]}. "
-                f"First 10 indexes: {indexes[:10]}. "
+                f"First 10 query indexes: {indexes[:10]}. "
                 f"Try using a smaller batch size."
             )
 

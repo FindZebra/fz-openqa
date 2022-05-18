@@ -82,10 +82,17 @@ def es_search_bulk(
     indexes, scores, contents = [], [], []
     for query in result["responses"]:
         temp_indexes, temp_scores, temp_content = [], [], []
+        if "hits" not in query:
+            rich.print("[magenta]===== ES RESPONSE =====")
+            rich.print(query)
+            rich.print("[magenta]=======================")
+            raise ValueError("ES did not return any hits (see above for details)")
+
         for hit in query["hits"]["hits"]:
             temp_scores.append(hit["_score"])
             temp_indexes.append(hit["_source"]["idx"])
             temp_content.append(hit["_source"]["text"])
+
         indexes.append(temp_indexes)
         scores.append(temp_scores)
         contents.append(temp_content)
@@ -152,6 +159,8 @@ def es_ingest_bulk(
     document_txt: List[str],
     document_idx: List[int] = None,
     title: str = "__no_title__",
+    chunk_size=1000,
+    request_timeout=200,
 ):
     actions = [
         {
@@ -170,7 +179,7 @@ def es_ingest_bulk(
     return es_helpers.bulk(
         es_instance,
         actions,
-        chunk_size=1000,
-        request_timeout=200,
+        chunk_size=chunk_size,
+        request_timeout=request_timeout,
         refresh="true",
     )
