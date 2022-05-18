@@ -147,7 +147,7 @@ def run(config: DictConfig) -> None:
                     "config": {
                         "es_temperature": 10.0,
                         "auxiliary_weight": 2.0,
-                        "filter_with_doc_ids": False,
+                        "filter_with_doc_ids": True,
                     },
                 },
                 # {
@@ -208,9 +208,15 @@ def run(config: DictConfig) -> None:
             rich.print(f"{k}/{bs}")
             row = mapped_qa["train"][k]
             q_doc_ids = row["question.document_idx"]
-            doc_ids = row["document.row_idx"]
-            rich.print(q_doc_ids)
-            rich.print(doc_ids)
+            doc_row_ids = row["document.row_idx"]
+            doc_scores = row["document.proposal_score"]
+            print("===============")
+            for j in range(len(q_doc_ids)):
+                print(f"==> {j}")
+                doc_ids = corpus[doc_row_ids[j].numpy().tolist()]["document.idx"]
+                rich.print(q_doc_ids[j])
+                rich.print(doc_scores[j])
+                rich.print(doc_ids)
 
         exit()
 

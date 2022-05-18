@@ -10,10 +10,8 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-import rich
 import torch
 from datasets import Dataset
-from datasets.search import SearchResults
 from hydra.utils import instantiate
 from loguru import logger
 
@@ -22,10 +20,6 @@ from fz_openqa.datamodules.index.search_result import SearchResult
 from fz_openqa.datamodules.index.utils.misc import camel_to_snake
 from fz_openqa.datamodules.index.utils.misc import slice_batch
 from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.condition import Contains
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.control.condition import Reduce
-from fz_openqa.utils.array import FormatArray
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import OutputFormat
 from fz_openqa.utils.datastruct import PathLike

@@ -2,6 +2,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers as es_helpers
@@ -29,7 +30,7 @@ def es_search_bulk(
     request = []
     for i, query in enumerate(queries):
         should_query_parts = []
-        must_query_parts = []
+        filter_query = []
 
         # this is the main query
         should_query_parts.append(
@@ -62,22 +63,12 @@ def es_search_bulk(
             doc_id = document_ids[i]
             if isinstance(doc_id, torch.Tensor):
                 doc_id = doc_id.item()
-            must_query_parts.append(
-                {
-                    "match": {
-                        "document_id": {
-                            "query": doc_id,
-                            # "zero_terms_query": "all",
-                            "operator": "or",
-                        }
-                    }
-                },
-            )
+            filter_query.append({"term": {"document_idx": int(doc_id)}})
 
         # final request
         r = {
             "query": {
-                "bool": {"should": should_query_parts, "must": must_query_parts},
+                "bool": {"should": should_query_parts, "filter": filter_query},
             },
             "from": 0,
             "size": k,
@@ -170,7 +161,7 @@ def es_ingest_bulk(
                 "title": title,
                 "idx": row_idx[i],
                 "text": document_txt[i],
-                "document_idx": document_idx[i] if document_idx else None,
+                "document_idx": int(document_idx[i]) if document_idx is not None else None,
             },
         }
         for i in range(len(document_txt))
