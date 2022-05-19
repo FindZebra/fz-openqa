@@ -99,7 +99,7 @@ class ContrastiveGradients(SupervisedGradients):
             # Probabilistic model (additive)
             log_s = proposal_log_weight  # importance sampling log-weights
             # compute the likelihood
-            log_w = (log_s + retriever_score).detach()
+            log_w = log_s + retriever_score
             log_w_flat = log_w.view(log_w.size(0), -1)
             log_denum = log_w_flat.logsumexp(dim=-1).unsqueeze(dim=1)
             log_num = log_w.logsumexp(dim=-1)
