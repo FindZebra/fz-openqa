@@ -19,7 +19,7 @@ model:
 
   parameters:
     alpha: 1
-    reader_kl_weight: 0.3
+    reader_kl_weight: 0
     retriever_kl_weight: 0
 
 
@@ -30,7 +30,7 @@ datamodule:
     temperature: 1
     largest:
       train: false
-      validation: true
+      validation: false
       test: true
 
   # dataloader
