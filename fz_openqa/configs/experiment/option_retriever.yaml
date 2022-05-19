@@ -80,7 +80,7 @@ model:
     split_bert_layers: 0
     resample_k: null
     alpha: 0
-    max_batch_size: 400
+    max_batch_size: 160
     share_documents_across_batch: false
     retriever_head:
       output_size: ${model.metric_size}
@@ -194,4 +194,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F2-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
+    name: ytxn-F3-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}

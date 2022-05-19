@@ -23,6 +23,7 @@ fi
 
 # run the model
 poetry run python run.py +experiment=contrastive +environ=diku \
+  +patch=dpr \
   base.device_batch_size=1 \
   base.infer_batch_mul=10 \
   base.datamodule.dset_name=medqa-tw \

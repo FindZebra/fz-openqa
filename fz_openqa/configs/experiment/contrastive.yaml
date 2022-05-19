@@ -10,12 +10,13 @@ trainer:
 
 model:
   module:
-    share_documents_across_batch: true
+    max_batch_size: 160 # chunk size for BERT during evaluation
+    share_documents_across_batch: false
     retriever_head:
       target_scale_init: 0.1
 
     gradients:
-      agg: mul
+      agg: prob
 
   parameters:
     alpha: 1
@@ -26,12 +27,19 @@ model:
 datamodule:
 
   sampler:
-    total: ${datamodule.n_documents}
+    total:
+      train: ${datamodule.n_documents}
+      validation: ${datamodule.n_retrieved_documents}
+      test: ${datamodule.n_retrieved_documents}
     temperature: 1
     largest:
       train: false
       validation: false
       test: true
+
+    # setting `from_uniform=True` means that the weights returned by the sampler will be
+    # s(z) = p(z) / tau(z) * u(z) / p(z) = u(z) / tau(z)
+    from_uniform: true
 
   # dataloader
   drop_last: ${model.module.share_documents_across_batch}
@@ -40,4 +48,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F2-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-contrastive-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
+    name: ytxn-F3-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-contrast-prob-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
