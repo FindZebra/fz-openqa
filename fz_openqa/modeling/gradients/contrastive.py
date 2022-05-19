@@ -1,3 +1,6 @@
+from typing import Optional
+
+import rich
 import torch
 from loguru import logger
 from torch import Tensor
@@ -9,7 +12,7 @@ from fz_openqa.utils.functional import batch_reduce
 
 
 class ContrastiveGradients(SupervisedGradients):
-    def __init__(self, *args, agg: str = "mul", **kwargs):
+    def __init__(self, *args, agg: str = "prob", **kwargs):
         super().__init__(*args, **kwargs)
         self.agg = agg
 
@@ -18,12 +21,19 @@ class ContrastiveGradients(SupervisedGradients):
         *,
         targets: Tensor,
         retriever_score: Tensor,
+        proposal_log_weight: Optional[Tensor] = None,
         doc_ids: Tensor = None,
         share_documents_across_batch: bool = False,
         match_score: Tensor = None,
         raw_doc_ids: Tensor = None,
         **kwargs,
     ):
+        if self.agg == "prob" and share_documents_across_batch:
+            raise ValueError(
+                f"Sharing documents across batch is incompatible with {self.agg} "
+                f"because the proposal weights would not be defined."
+            )
+
         if share_documents_across_batch and raw_doc_ids is None:
             raise ValueError(
                 "`raw_doc_ids` must be provided when setting `share_documents_across_batch=True`"
@@ -39,6 +49,7 @@ class ContrastiveGradients(SupervisedGradients):
             match_score=match_score,
             doc_ids=doc_ids,
             raw_doc_ids=raw_doc_ids,
+            proposal_log_weight=proposal_log_weight,
             share_documents_across_batch=share_documents_across_batch,
             **kwargs,
         )
@@ -63,29 +74,49 @@ class ContrastiveGradients(SupervisedGradients):
         # is_neg_inf = (retriever_score.isinf()) & (retriever_score < 0)
         # retriever_score = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
 
-        # additive model
-        M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
-        retriever_score_normalized = retriever_score - M[:, None, None]
-        reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
-        normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
-        # likelihood of the reader model
-        log_p_a_add = reader_score_ - normalizer.unsqueeze(dim=1)
-
-        # multiplicative model
-        retriever_score_ = retriever_score.masked_fill(torch.isinf(retriever_score), 0)
-        reader_score = retriever_score_.sum(dim=-1)
-        log_p_a_mul = reader_score.log_softmax(dim=-1)
-
         if self.agg == "add":
-            log_p_a = log_p_a_add
+            # additive model
+            M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
+            retriever_score_normalized = retriever_score - M[:, None, None]
+            reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
+            normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
+            # likelihood of the reader model
+            log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
+            log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+            # loss
+            loss = -log_p_ast
+            loss = batch_reduce(loss, op=torch.mean)
         elif self.agg == "mul":
-            log_p_a = log_p_a_mul
-        elif self.agg in {"add_mul", "mul_add"}:
-            log_p_a = 0.5 * (log_p_a_add + log_p_a_mul)
+            # multiplicative model
+            retriever_score_ = retriever_score.masked_fill(torch.isinf(retriever_score), 0)
+            reader_score = retriever_score_.sum(dim=-1)
+            log_p_a = reader_score.log_softmax(dim=-1)
+            log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+            # loss
+            loss = -log_p_ast
+            loss = batch_reduce(loss, op=torch.mean)
+        elif self.agg == "prob":
+            # Probabilistic model (additive)
+            log_s = proposal_log_weight  # importance sampling log-weights
+            # compute the likelihood
+            log_w = (log_s + retriever_score).detach()
+            log_w_flat = log_w.view(log_w.size(0), -1)
+            log_denum = log_w_flat.logsumexp(dim=-1).unsqueeze(dim=1)
+            log_num = log_w.logsumexp(dim=-1)
+            log_p_a = log_num - log_denum
+            log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+
+            # compute the gradients
+            log_w_num = log_w.log_softmax(dim=-1)
+            log_w_denum = log_w_flat.log_softmax(dim=-1)
+            A = (log_w_num.detach().exp() * retriever_score).sum(dim=-1)
+            A_ast = A.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+            B = (
+                log_w_denum.detach().exp() * retriever_score.view(retriever_score.size(0), -1)
+            ).sum(dim=-1)
+            loss = -(A_ast - B)
         else:
             raise ValueError(f"Unknown aggregation: {self.agg}")
-
-        log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
 
         if torch.isnan(log_p_ast).any():
             logger.warning("NaN in log_p_ast")
@@ -96,10 +127,6 @@ class ContrastiveGradients(SupervisedGradients):
         retriever_score_ = retriever_score.clamp(min=-TORCH_MAX_FLOAT)
         kl_retriever = batch_reduce(kl_divergence(retriever_score_, dim=-1), op=torch.mean)
         diagnostics["retriever/kl_uniform"] = kl_retriever
-
-        # loss
-        loss = -log_p_ast
-        loss = batch_reduce(loss, op=torch.mean)
 
         # auxiliary loss terms
         if reader_kl_weight is not None:

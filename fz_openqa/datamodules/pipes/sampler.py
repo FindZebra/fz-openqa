@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
+import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
 
+import loguru
 import numpy as np
 import rich
 import torch
@@ -259,6 +262,15 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
+    def __init__(self, *args, from_uniform: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.from_uniform = from_uniform
+        loguru.logger.info(
+            f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
+            f"This means the sampler will consider the base distribution to be uniform"
+            f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
+        )
+
     @torch.no_grad()
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
@@ -271,7 +283,7 @@ class PrioritySampler(Sampler):
         # batch[self.proposal_score_key] = logits
 
         # sample
-        z, log_w = self.sample(logits, total, largest=largest)
+        z, log_w = self.sample(logits, total, largest=largest, from_uniform=self.from_uniform)
         # proposal_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
 
         # re-index and return
@@ -282,7 +294,11 @@ class PrioritySampler(Sampler):
 
     @staticmethod
     def sample(
-        logits: torch.Tensor, k: int = None, largest: bool = False, mode: str = "uniform"
+        logits: torch.Tensor,
+        k: int = None,
+        largest: bool = False,
+        mode: str = "uniform",
+        from_uniform: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample `log p(z)` using priority sampling with subset of size `m`
 
@@ -297,6 +313,7 @@ class PrioritySampler(Sampler):
 
         assert mode in {"uniform", "exponential"}
         log_pz = logits.log_softmax(dim=-1)
+        N = log_pz.shape[-1]
         if mode == "uniform":
             if largest:
                 u = 0.5 * torch.ones_like(log_pz)
@@ -321,6 +338,7 @@ class PrioritySampler(Sampler):
             log_tau = -float("inf") + torch.zeros_like(log_pz)
         z = z[..., :k]
         log_pz = log_pz.gather(dim=-1, index=z)
+
         if mode == "uniform":
             log_qz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
         elif mode == "exponential":
@@ -328,4 +346,16 @@ class PrioritySampler(Sampler):
             log_qz = (log_qz).exp().mul(-1).exp().mul(-1).log1p()
         else:
             raise ValueError(f"Unknown mode {mode}")
-        return z, log_pz - log_qz
+
+        # compute the log weights, and handle replacing the base distribution with u(z)
+        if from_uniform:
+            warnings.warn(
+                "Priority sampling: consider the base distribution to be uniform"
+                "when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
+            )
+            log_pz = torch.zeros_like(log_pz) - math.log(N)
+
+        # finally, compute the log weights
+        log_weight = log_pz - log_qz
+
+        return z, log_weight
