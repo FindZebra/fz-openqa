@@ -10,7 +10,7 @@ base:
 
 trainer:
   max_steps: 29_900
-  check_val_every_n_epoch: 2.0
+  check_val_every_n_epoch: 2
 
 
 model:
