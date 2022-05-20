@@ -5,8 +5,12 @@ defaults:
   - override /model/module/reader_head: none
   - override /model/module/gradients: contrastive
 
+base:
+  batch_size: 32 # change to 64?
+
 trainer:
   max_steps: 29_900
+  val_check_interval: 2.0
 
 model:
   module:
