@@ -6,7 +6,7 @@ defaults:
   - override /model/module/gradients: contrastive
 
 base:
-  batch_size: 32 # change to 64?
+  batch_size: 64
 
 trainer:
   max_steps: 29_900
@@ -14,8 +14,10 @@ trainer:
 
 
 model:
+  optimizer_params:
+    lr: 3e-6
   module:
-    max_batch_size: 160 # chunk size for BERT during evaluation
+    max_batch_size: 200 # chunk size for BERT during evaluation
     share_documents_across_batch: false
     retriever_head:
       target_scale_init: 0.1
@@ -30,11 +32,12 @@ model:
 
 
 datamodule:
+  n_documents: 16
 
   sampler:
     total:
       train: ${datamodule.n_documents}
-      validation: ${datamodule.n_retrieved_documents}
+      validation: ${int_mul:2,${datamodule.n_documents}} # ${datamodule.n_retrieved_documents}
       test: ${datamodule.n_retrieved_documents}
     temperature: 1
     largest:

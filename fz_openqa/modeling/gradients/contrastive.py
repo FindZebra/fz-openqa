@@ -102,7 +102,7 @@ class ContrastiveGradients(SupervisedGradients):
             log_w = log_s + retriever_score
             log_w_flat = log_w.view(log_w.size(0), -1)
             try:
-                self.ess_diagnostics(diagnostics, log_w_flat)
+                self.ess_diagnostics(diagnostics, log_w.view(-1, log_w.size(-1)))
             except Exception as e:
                 logger.warning(e)
             log_denum = log_w_flat.logsumexp(dim=-1).unsqueeze(dim=1)
