@@ -285,15 +285,6 @@ class ReinforceGradients(Gradients):
 
     @staticmethod
     @torch.no_grad()
-    def ess_diagnostics(diagnostics, log_W, key="ess"):
-        K = log_W.size(-1)
-        log_ess = 2 * log_W.logsumexp(dim=-1) - (2 * log_W).logsumexp(dim=-1)
-        diagnostics[f"{key}/mean"] = log_ess.exp().mean()
-        diagnostics[f"{key}/ratio-mean"] = log_ess.exp().mean() / K
-        diagnostics[f"{key}/max"] = log_W.max().exp()
-
-    @staticmethod
-    @torch.no_grad()
     def baseline(
         reader_scores: Tensor,
         *,
