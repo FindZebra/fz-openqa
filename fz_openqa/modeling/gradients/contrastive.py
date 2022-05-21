@@ -40,6 +40,7 @@ class ContrastiveGradients(SupervisedGradients):
             )
 
         # parameters
+        alpha = kwargs.get("alpha", 0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
 
@@ -78,10 +79,10 @@ class ContrastiveGradients(SupervisedGradients):
             # additive model
             M = retriever_score.view(retriever_score.size(0), -1).max(dim=1).values
             retriever_score_normalized = retriever_score - M[:, None, None]
-            reader_score_ = retriever_score_normalized.logsumexp(dim=-1)
-            normalizer = retriever_score_normalized.logsumexp(dim=(1, 2))
+            num = retriever_score_normalized.logsumexp(dim=-1)
+            denum = retriever_score_normalized.logsumexp(dim=(1, 2))
             # likelihood of the reader model
-            log_p_a = reader_score_ - normalizer.unsqueeze(dim=1)
+            log_p_a = num - denum.unsqueeze(dim=1)
             log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
             # loss
             loss = -log_p_ast
@@ -99,7 +100,7 @@ class ContrastiveGradients(SupervisedGradients):
             # Probabilistic model (additive)
             log_s = proposal_log_weight  # importance sampling log-weights
             # compute the likelihood
-            log_w = log_s + retriever_score
+            log_w = alpha * (log_s + retriever_score)
             log_w_flat = log_w.view(log_w.size(0), -1)
             try:
                 self.ess_diagnostics(diagnostics, log_w.view(-1, log_w.size(-1)))

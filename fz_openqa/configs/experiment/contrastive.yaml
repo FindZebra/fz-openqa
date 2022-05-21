@@ -6,7 +6,7 @@ defaults:
   - override /model/module/gradients: contrastive
 
 base:
-  batch_size: 64
+  batch_size: 32
 
 trainer:
   max_steps: 29_900
@@ -15,7 +15,7 @@ trainer:
 
 model:
   optimizer_params:
-    lr: 3e-6
+    lr: 1e-5
   module:
     max_batch_size: 200 # chunk size for BERT during evaluation
     share_documents_across_batch: false
@@ -26,7 +26,7 @@ model:
       agg: prob
 
   parameters:
-    alpha: 1
+    alpha: 0
     reader_kl_weight: 0
     retriever_kl_weight: 0
 
