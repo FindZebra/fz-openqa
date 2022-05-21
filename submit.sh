@@ -27,7 +27,7 @@ echo "====== starting experiment ========="
 # startup elastic search
 if [ "$setup_with_model" = false ]
 then
-    elasticsearch --quiet &
+    ES_JAVA_OPTS="-Xms4g -Xmx32" elasticsearch --quiet &
 fi
 
 # run the model
