@@ -265,11 +265,12 @@ class PrioritySampler(Sampler):
     def __init__(self, *args, from_uniform: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self.from_uniform = from_uniform
-        loguru.logger.info(
-            f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
-            f"This means the sampler will consider the base distribution to be uniform"
-            f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
-        )
+        if from_uniform:
+            loguru.logger.info(
+                f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
+                f"This means the sampler will consider the base distribution to be uniform"
+                f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
+            )
 
     @torch.no_grad()
     def _call_batch(
@@ -350,7 +351,7 @@ class PrioritySampler(Sampler):
         # compute the log weights, and handle replacing the base distribution with u(z)
         if from_uniform:
             warnings.warn(
-                "Priority sampling: consider the base distribution to be uniform"
+                "Priority sampling: consider the base distribution to be uniform "
                 "when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
             )
             log_pz = torch.zeros_like(log_pz) - math.log(N)

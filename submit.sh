@@ -3,7 +3,7 @@
 #SBATCH --output=./slurm/%j.out
 #SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
-#SBATCH --time=7-00:00:00
+#SBATCH --time=3-00:00:00
 
 # variables
 setup_with_model=false
@@ -23,9 +23,12 @@ fi
 
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
-  base.device_batch_size=2 \
+  +patch=dpr \
+  model/module/gradients=in_batch \
+  base.device_batch_size=1 \
   base.infer_batch_mul=10 \
-  base.eval_device_batch_size=1 \
+  datamodule.dset_name=medqa-us \
+  base.eval_device_batch_size=4 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
