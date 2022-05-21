@@ -5,29 +5,9 @@
 #SBATCH -p gpu --gres=gpu:titanrtx:4
 #SBATCH --time=3-00:00:00
 
-
-for i in "$@"; do
-  case $i in
-    -e=*|--dset_name=*)
-      DSET_NAME="${i#*=}"
-      shift # past argument=value
-      ;;
-    -s=*|--corpus_name=*)
-      CORPUS_NAME="${i#*=}"
-      shift # past argument=value
-      ;;
-    --gradients)
-      GRADIENTS="${i#*=}"
-      shift # past argument with no value
-      ;;
-    -*|--*)
-      echo "Unknown option $i"
-      exit 1
-      ;;
-    *)
-      ;;
-  esac
-done
+DSET_NAME=$1
+CORPUS_NAME=$2
+GRADIENTS=$3
 
 echo "===================================="
 echo "DSET_NAME    = ${DSET_NAME}"
