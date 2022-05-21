@@ -6,6 +6,15 @@ defaults:
 model:
   metric_size: 768
   module:
+    reader_head:
+      output_size: null
+      use_soft_score: false
+      compute_agg_score: false
+      normalize: true
+      scale_init: 1
+      target_scale_init: 1
+      learn_scale: false
+      auto_scale: false
     retriever_head:
       output_size: null
       use_soft_score: false
