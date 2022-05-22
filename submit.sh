@@ -37,7 +37,7 @@ poetry run python run.py +experiment=option_retriever +environ=diku \
   base.device_batch_size=1 \
   base.infer_batch_mul=10 \
   datamodule.dset_name=${DSET_NAME} \
-  datamodule.dset_name=${CORPUS_NAME} \
+  datamodule.corpus_name=${CORPUS_NAME} \
   base.eval_device_batch_size=4 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
