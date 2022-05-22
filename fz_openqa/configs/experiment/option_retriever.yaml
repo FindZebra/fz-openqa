@@ -40,7 +40,7 @@ base:
 trainer:
   gradient_clip_val: 0.5 # 2.0 might be unstable
   accumulate_grad_batches: ${base.accumulate_grad_batches}
-  val_check_interval: 500
+  check_val_every_n_epoch: 2
   precision: 32
   max_steps: 100_000 # set 29_900 for the final exps
 
@@ -63,8 +63,8 @@ model:
 
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
-    reader_kl_weight: 0
     alpha: 1
+    reader_kl_weight: 0
     proposal_kl_weight: 0
     retriever_kl_weight: 0
     tau: null
