@@ -56,7 +56,7 @@ model:
   num_training_steps: 20_000 # TODO !!
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 5e-6
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
