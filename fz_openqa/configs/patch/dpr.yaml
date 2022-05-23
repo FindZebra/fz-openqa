@@ -1,6 +1,7 @@
 # @package _global_
 
 defaults:
+  - override /model/module/reader_head: dpr
   - override /model/module/retriever_head: dpr
 
 model:
