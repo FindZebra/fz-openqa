@@ -48,12 +48,12 @@ model:
   # global model configuration
   metric_size: 64
   metric_type: inner_product
-  num_warmup_steps: 5_000
+  period: 5_000
 
   # optimizer configuration
   ema_decay: null
   num_lr_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: 20_000 # TODO !!
+  num_training_steps: ${int_mul:2,${model.period}}
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
@@ -63,7 +63,11 @@ model:
 
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
-    alpha: 1
+    alpha:
+      mode: cosine
+      num_steps: ${int_div:${model.period},2}
+      initial_value: 0
+      final_value: 1
     reader_kl_weight: 0
     proposal_kl_weight: 0
     retriever_kl_weight: 0
@@ -113,7 +117,7 @@ model:
 datamodule:
   # how often to map the dataset
   dataset_update:
-    freq: ${int_mul:2,${model.num_warmup_steps}}
+    freq: ${model.period}
     reset_optimizer: true # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
