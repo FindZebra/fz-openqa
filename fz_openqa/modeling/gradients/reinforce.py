@@ -128,6 +128,9 @@ class ReinforceGradients(Gradients):
 
         # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
         f_phi_ = alpha * f_phi_ + (1 - alpha) * f_psi_
+        # todo: also regularize the reader scores?
+        # todo: mul grads by  `1/alpha`?
+        f_theta_ = alpha * f_theta_
 
         # `log \zeta = f_\phi(d) - f_\psi(d)`
         log_zeta_ = f_phi_ - f_psi_
@@ -228,7 +231,7 @@ class ReinforceGradients(Gradients):
             score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
-            loss = -1 * (score.detach() * h).sum(-1)
+            loss = -1 * (score.detach() / alpha * h).sum(-1)
 
         elif self.expr in {"B", "B-zero"}:
             weight = (log_W + log_p_ast_D - log_p_ast.unsqueeze(-1)).exp()
