@@ -133,8 +133,7 @@ class ReinforceGradients(Gradients):
         log_zeta_ = f_phi_ - f_psi_
 
         # importance weights
-        _normalizer = (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
-        log_w_ = (log_s_ + log_zeta_) - _normalizer
+        log_w_ = (log_s_ + log_zeta_).log_softmax(dim=-1)
         log_w_ = log_w_.detach()
 
         # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
