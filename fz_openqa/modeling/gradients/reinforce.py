@@ -98,9 +98,10 @@ class ReinforceGradients(Gradients):
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
         # normalize the scores
-        reader_score = self.max_normalize(reader_score)
-        retriever_score = self.max_normalize(retriever_score)
-        proposal_score = self.max_normalize(proposal_score)
+        # todo: remove?
+        # reader_score = self.max_normalize(reader_score)
+        # retriever_score = self.max_normalize(retriever_score)
+        # proposal_score = self.max_normalize(proposal_score)
 
         # rename input variables
         f_theta_ = reader_score
@@ -132,8 +133,8 @@ class ReinforceGradients(Gradients):
         log_zeta_ = f_phi_ - f_psi_
 
         # importance weights
-        _normalizer = alpha * (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
-        log_w_ = (log_s_ + alpha * log_zeta_) - _normalizer
+        _normalizer = (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
+        log_w_ = (log_s_ + log_zeta_) - _normalizer
         log_w_ = log_w_.detach()
 
         # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
