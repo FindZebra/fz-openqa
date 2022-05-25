@@ -11,6 +11,7 @@ from datasets import Dataset
 from datasets import Split
 from tqdm import tqdm
 
+from ...utils.exceptions import catch_exception_as_warning
 from ..pipes import Sampler
 from ..utils.dataset import keep_only_columns
 from .base import Analytic
@@ -39,6 +40,7 @@ class RetrieverDistribution(Analytic):
     percentiles: List[int] = [10, 50, 90]
     _allow_wandb: bool = True
 
+    @catch_exception_as_warning
     def process_dataset_split(
         self, dset: Dataset, *, split: Optional[str | Split] = None
     ) -> Dict | List:
@@ -86,16 +88,16 @@ class RetrieverDistribution(Analytic):
         # prepare the output and the percentiles for the rank of `p(d|q) == x`
         min_max_scores = np.min(scores, axis=-1), np.max(scores, axis=-1)
         output = {
-            "entropy": f"{entropy.mean():.3f}",
-            "n_samples": f"{len(scores)}",
-            "min-max-scores": f"{np.mean(min_max_scores):.3f}",
+            "entropy": float(entropy.mean()),
+            "n_samples": len(scores),
+            "min-max-scores": float(np.mean(min_max_scores)),
         }
         for p in self.percentiles:
             p = p / 100.0
             arg_pmf = np.argmin(np.abs(pmf - p), axis=-1)
             arg_pmf = arg_pmf.astype(np.float32)
             output[f"rank_pmf={p:.2f}"] = {
-                "p50": f"{np.percentile(arg_pmf, 50):.1f}",
+                "p50": float(np.percentile(arg_pmf, 50)),
             }
 
         return output
