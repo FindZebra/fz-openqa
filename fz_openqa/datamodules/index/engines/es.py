@@ -30,8 +30,8 @@ DEFAULT_ES_BODY = OmegaConf.to_object(
 )
 
 
-def ping_es() -> bool:
-    return Elasticsearch().ping()
+def ping_es(**kwargs) -> bool:
+    return Elasticsearch().ping(**kwargs)
 
 
 class ElasticsearchEngine(IndexEngine):
