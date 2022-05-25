@@ -113,6 +113,7 @@ model:
       use_baseline: false # todo
       expr: A2
       cartesian_max_size: ${eval:"1<<20"}
+      alpha_baseline: uniform
 
 
 datamodule:
@@ -175,7 +176,7 @@ datamodule:
       query_expansion: null
       n_query_tokens: 1 # todo!!! (10)
       n_answer_tokens: 1 # previous exps: 10
-      max_length: 350 # todo!!!
+      max_length: 350 # todo!!! 312
     corpus_builder:
       dset_name: ${datamodule.corpus_name}
       use_subset: ${datamodule.corpus_subset}
@@ -196,10 +197,10 @@ datamodule:
       es:
         config:
           es_temperature: 10.
-          auxiliary_weight: 2.
+          auxiliary_weight: 2. # todo: 0, 1
 
 
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F3-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
+    name: ytxn-F4-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}

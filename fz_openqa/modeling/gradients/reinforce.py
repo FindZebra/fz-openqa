@@ -28,6 +28,7 @@ class ReinforceGradients(Gradients):
         space: Space = Space.EXP,
         max_baseline_samples: int = 3,
         cartesian_max_size: int = None,
+        alpha_baseline: str = "uniform",
         expr: str = "B",
         **kwargs,
     ):
@@ -38,6 +39,7 @@ class ReinforceGradients(Gradients):
         self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
         self.cartesian_max_size = cartesian_max_size
+        self.alpha_baseline = alpha_baseline
         self.expr = expr
 
         logger.info(
@@ -129,7 +131,13 @@ class ReinforceGradients(Gradients):
         assert targets is not None
 
         # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
-        f_phi_ = alpha * f_phi_ + (1 - alpha) * f_psi_
+        f_phi_ = alpha * f_phi_
+        if self.alpha_baseline == "proposal":
+            f_phi_ = f_phi_ + (1 - alpha) * f_psi_
+        elif self.alpha_baseline == "uniform":
+            pass
+        else:
+            raise AttributeError(f"Unknown alpha_baseline = {self.alpha_baseline}")
         # todo: also regularize the reader scores?
         # todo: mul grads by  `1/alpha`?
         f_theta_ = alpha * f_theta_
