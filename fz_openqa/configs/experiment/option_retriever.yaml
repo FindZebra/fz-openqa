@@ -112,6 +112,7 @@ model:
     gradients:
       use_baseline: false # todo
       expr: A2
+      cartesian_max_size: ${eval:"1<<20"}
 
 
 datamodule:
@@ -155,7 +156,10 @@ datamodule:
 
   # document sampler
   sampler:
-    total: ${datamodule.n_documents}
+    total:
+      train: ${datamodule.n_documents}
+      validation: ${int_mul:2,${datamodule.n_documents}}
+      test: ${int_mul:2,${datamodule.n_documents}}
     temperature: 1
     largest:
       train: false

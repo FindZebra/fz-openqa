@@ -27,6 +27,7 @@ class ReinforceGradients(Gradients):
         w_max: Optional[float] = None,
         space: Space = Space.EXP,
         max_baseline_samples: int = 3,
+        cartesian_max_size: int = None,
         expr: str = "B",
         **kwargs,
     ):
@@ -36,6 +37,7 @@ class ReinforceGradients(Gradients):
         self.use_baseline = use_baseline
         self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
+        self.cartesian_max_size = cartesian_max_size
         self.expr = expr
 
         logger.info(
@@ -143,8 +145,11 @@ class ReinforceGradients(Gradients):
         log_p_d__a_ = f_phi_ - (log_w_.exp().detach() * f_phi_).sum(dim=-1, keepdim=True)
 
         # compute cartesian product: `D \in \Dset^{(M)}`
-        args = f_theta_, f_phi_, f_psi_, log_s_, log_w_, log_p_d__a_
-        f_theta, f_phi, f_psi, log_s, log_w, log_p_d__a = batch_cartesian_product(*args)
+        args = f_phi_, f_theta_, f_psi_, log_s_, log_w_, log_p_d__a_
+        f_phi, f_theta, f_psi, log_s, log_w, log_p_d__a = batch_cartesian_product(
+            *args, max_size=self.cartesian_max_size
+        )
+        rich.print(f">> f_phi_: {f_phi_.shape} -> f_phi: {f_phi.shape}")
 
         # reader likelihood `log p(a | d, q)`
         log_p_a__d = f_theta.log_softmax(dim=1)

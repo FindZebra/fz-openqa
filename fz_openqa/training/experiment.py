@@ -52,6 +52,7 @@ OmegaConf.register_new_resolver("int_max", int_max)
 OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
 OmegaConf.register_new_resolver("git_hash", lambda *_: GIT_HASH)
 OmegaConf.register_new_resolver("git_hash_short", lambda *_: GIT_HASH_SHORT)
+OmegaConf.register_new_resolver("eval", lambda x: eval(x))
 
 
 def run_experiment_with_config(config: DictConfig):
