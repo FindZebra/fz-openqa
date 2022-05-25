@@ -8,6 +8,7 @@ engines:
     max_batch_size: 100
     verbose: false
     merge_previous_results: true
+    merge_max_size: null
     config:
       es_temperature: 10.
       auxiliary_weight: 0
@@ -17,6 +18,7 @@ engines:
     max_batch_size: 512
     verbose: false
     merge_previous_results: true
+    merge_max_size: ${datamodule.n_retrieved_documents}
     config:
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
@@ -27,6 +29,7 @@ engines:
     max_batch_size: 10
     verbose: false
     merge_previous_results: false
+    merge_max_size: null
     config: { }
 
 # logging

@@ -63,6 +63,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         k: int = 10,
         max_batch_size: Optional[int] = 100,
         merge_previous_results: bool = False,
+        merge_max_size: Optional[int] = None,
         verbose: bool = False,
         # Pipe args
         input_filter: None = None,
@@ -75,6 +76,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
         self.k = k
         self.max_batch_size = max_batch_size
         self.merge_previous_results = merge_previous_results
+        self.merge_max_size = merge_max_size
         self.verbose = verbose
 
         # set the index configuration
@@ -321,7 +323,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
 
         # merge with the previous results
         if prev_search_results is not None:
-            search_results = search_results | prev_search_results
+            search_results = search_results.union(prev_search_results, new_size=self.merge_max_size)
 
         # format the output
         output = {

@@ -150,7 +150,7 @@ datamodule:
     - document.proposal_rank
 
   # documents: retrieval & sampling
-  n_retrieved_documents: 100
+  n_retrieved_documents: 300
   n_documents: 10
 
   # document sampler
