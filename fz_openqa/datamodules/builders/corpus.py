@@ -15,7 +15,7 @@ from datasets import load_dataset
 from loguru import logger
 
 from ..pipelines.preprocessing import FormatAndTokenize
-from ..pipelines.preprocessing.text import AppendDot
+from ..pipelines.preprocessing.text import AppendSuffix
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
 from ..utils.transformations import set_index_column
 from .adapters import DATASET_ADAPTERS
@@ -303,7 +303,7 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         return Sequential(
-            AppendDot(text_fields="title", update=True),
+            AppendSuffix(text_fields="title", update=True),
             FormatAndTokenize(
                 prefix=None,
                 key="title",

@@ -98,9 +98,10 @@ class ReinforceGradients(Gradients):
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
 
         # normalize the scores
-        reader_score = self.max_normalize(reader_score)
-        retriever_score = self.max_normalize(retriever_score)
-        proposal_score = self.max_normalize(proposal_score)
+        # todo: remove?
+        # reader_score = self.max_normalize(reader_score)
+        # retriever_score = self.max_normalize(retriever_score)
+        # proposal_score = self.max_normalize(proposal_score)
 
         # rename input variables
         f_theta_ = reader_score
@@ -127,13 +128,15 @@ class ReinforceGradients(Gradients):
 
         # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
         f_phi_ = alpha * f_phi_ + (1 - alpha) * f_psi_
+        # todo: also regularize the reader scores?
+        # todo: mul grads by  `1/alpha`?
+        f_theta_ = alpha * f_theta_
 
         # `log \zeta = f_\phi(d) - f_\psi(d)`
         log_zeta_ = f_phi_ - f_psi_
 
         # importance weights
-        _normalizer = alpha * (log_s_ + log_zeta_).logsumexp(dim=-1, keepdim=True)
-        log_w_ = (log_s_ + alpha * log_zeta_) - _normalizer
+        log_w_ = (log_s_ + log_zeta_).log_softmax(dim=-1)
         log_w_ = log_w_.detach()
 
         # '\nabla p(d | q, a) = `\nabla f_\phi(d) - sum_{d \in S} w(d) \nabla f_\phi(d)`
@@ -228,7 +231,16 @@ class ReinforceGradients(Gradients):
             score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
-            loss = -1 * (score.detach() * h).sum(-1)
+            loss = -1 / alpha * (score.detach() * h).sum(-1)
+
+        elif self.expr == "A3":
+            reader_weight = log_W.exp()
+            retriever_weight = log_W_hat.exp()
+            if log_b is not None:
+                raise NotImplementedError("Baseline not implemented for A3")
+            retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
+            reader_loss = (reader_weight.detach() * log_p_ast_D).sum(-1)
+            loss = -1 / alpha * (retriever_loss + reader_loss)
 
         elif self.expr in {"B", "B-zero"}:
             weight = (log_W + log_p_ast_D - log_p_ast.unsqueeze(-1)).exp()
@@ -282,15 +294,6 @@ class ReinforceGradients(Gradients):
             "_retriever_reading_logits_": retriever_score.sum(-1).detach(),
             **diagnostics,
         }
-
-    @staticmethod
-    @torch.no_grad()
-    def ess_diagnostics(diagnostics, log_W, key="ess"):
-        K = log_W.size(-1)
-        log_ess = 2 * log_W.logsumexp(dim=-1) - (2 * log_W).logsumexp(dim=-1)
-        diagnostics[f"{key}/mean"] = log_ess.exp().mean()
-        diagnostics[f"{key}/ratio-mean"] = log_ess.exp().mean() / K
-        diagnostics[f"{key}/max"] = log_W.max().exp()
 
     @staticmethod
     @torch.no_grad()

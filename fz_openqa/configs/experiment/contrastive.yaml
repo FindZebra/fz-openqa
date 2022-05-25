@@ -5,12 +5,19 @@ defaults:
   - override /model/module/reader_head: none
   - override /model/module/gradients: contrastive
 
+base:
+  batch_size: 32
+
 trainer:
   max_steps: 29_900
+  check_val_every_n_epoch: 2
+
 
 model:
+  optimizer_params:
+    lr: 1e-5
   module:
-    max_batch_size: 160 # chunk size for BERT during evaluation
+    max_batch_size: 200 # chunk size for BERT during evaluation
     share_documents_across_batch: false
     retriever_head:
       target_scale_init: 0.1
@@ -19,17 +26,18 @@ model:
       agg: prob
 
   parameters:
-    alpha: 1
+    alpha: 0
     reader_kl_weight: 0
     retriever_kl_weight: 0
 
 
 datamodule:
+  n_documents: 16
 
   sampler:
     total:
       train: ${datamodule.n_documents}
-      validation: ${datamodule.n_retrieved_documents}
+      validation: ${int_mul:2,${datamodule.n_documents}} # ${datamodule.n_retrieved_documents}
       test: ${datamodule.n_retrieved_documents}
     temperature: 1
     largest:

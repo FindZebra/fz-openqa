@@ -118,15 +118,21 @@ class FormatAndTokenize(Sequential):
         )
 
 
-class AppendDot(Pipe):
-    def __init__(self, text_fields: str | List[str], **kwargs):
+class AppendSuffix(Pipe):
+    def __init__(self, text_fields: str | List[str], suffix: str = ". ", **kwargs):
         super().__init__(**kwargs)
         if isinstance(text_fields, str):
             text_fields = [text_fields]
         self.text_fields = text_fields
+        self.suffix = suffix
 
     def add_dot(self, x: str) -> str:
-        return x + "."
+        if x is not None and len(x):
+            return f"{x}{self.suffix}"
+        elif x is None:
+            return ""
+        else:
+            return x
 
     def _call_batch(self, batch: Batch, text_fields: str = "title", **kwargs) -> Batch:
         out = {}

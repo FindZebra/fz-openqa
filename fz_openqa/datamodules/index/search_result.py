@@ -231,6 +231,7 @@ class SearchResult:
         return self
 
     def union(self, other: "SearchResult") -> "SearchResult":
+
         if not isinstance(other, SearchResult):
             raise TypeError(f"Unsupported type: {type(other)}")
         if len(self) != len(other):
@@ -241,6 +242,12 @@ class SearchResult:
         new_k = self.k + other.k
         new_index = concat_arrays(self.index, other.index, dim=1)
         new_index = unique_second_dim(new_index, length=new_k, fill_token=-1)
+
+        # todo: test this
+        # todo: add scoores
+        # sum the token scores for each pid
+        # q_sum_scores = torch.zeros_like(q_unique_pids, dtype=qscores.dtype)
+        # q_sum_scores.index_add_(0, upids_inv, qscores)
 
         return SearchResult(index=new_index, score=None, tokens=None, k=new_k)
 

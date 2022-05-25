@@ -1,17 +1,27 @@
 # @package _global_
 
 defaults:
+  - override /model/module/reader_head: dpr
   - override /model/module/retriever_head: dpr
 
 model:
   metric_size: 768
   module:
-    retriever_head:
-      output_size: null
+    reader_head:
+      output_size: ${model.metric_size}
       use_soft_score: false
       compute_agg_score: false
-      normalize: true
+      normalize: false
       scale_init: 1
-      target_scale_init: 1
+      target_scale_init: 0.1
       learn_scale: false
-      auto_scale: false
+      auto_scale: true
+    retriever_head:
+      output_size: ${model.metric_size}
+      use_soft_score: false
+      compute_agg_score: false
+      normalize: false
+      scale_init: 1
+      target_scale_init: 0.1
+      learn_scale: false
+      auto_scale: true

@@ -3,29 +3,42 @@
 #SBATCH --output=./slurm/%j.out
 #SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
-#SBATCH --time=7-00:00:00
+#SBATCH --time=3-00:00:00
 
+DSET_NAME=$1
+CORPUS_NAME=$2
+GRADIENTS=$3
+
+echo "===================================="
+echo "DSET_NAME    = ${DSET_NAME}"
+echo "CORPUS_NAME  = ${CORPUS_NAME}"
+echo "GRADIENTS    = ${GRADIENTS}"
+echo "===================================="
 # variables
 setup_with_model=false
 
 # display basic info
 hostname
 echo $CUDA_VISIBLE_DEVICES
-echo "======================"
+echo "===================================="
 poetry run gpustat --debug
 echo "====== starting experiment ========="
 
 # startup elastic search
 if [ "$setup_with_model" = false ]
 then
-    elasticsearch --quiet &
+    ES_JAVA_OPTS="-Xms4g -Xmx32" elasticsearch --quiet &
 fi
 
 # run the model
 poetry run python run.py +experiment=option_retriever +environ=diku \
-  base.device_batch_size=2 \
+  +patch=dpr \
+  model/module/gradients=${GRADIENTS} \
+  base.device_batch_size=1 \
   base.infer_batch_mul=10 \
-  base.eval_device_batch_size=1 \
+  datamodule.dset_name=${DSET_NAME} \
+  datamodule.corpus_name=${CORPUS_NAME} \
+  base.eval_device_batch_size=4 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
