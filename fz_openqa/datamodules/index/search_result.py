@@ -249,9 +249,13 @@ class SearchResult:
         new_score = []
         new_index = []
         for i in range(len(self.score)):
-            # get scores for index i
+            # get scores for index i and substract the minimum values
             scores_a_i = to_torch(self.score[i])
-            scores_b_i = to_torch(other.score[i])
+            min_score_a_i = scores_a_i[~scores_a_i.isinf()].min()
+            scores_a_i = scores_a_i - min_score_a_i
+            scores_b_i = to_torch(other.score[i]) - min_score_a_i
+            min_score_b_i = scores_b_i[~scores_b_i.isinf()].min()
+            scores_b_i = scores_b_i - min_score_b_i
             scores_i = torch.cat([scores_a_i, scores_b_i])
 
             # get indices for index i
@@ -264,6 +268,7 @@ class SearchResult:
             unique_scores = torch.zeros_like(
                 unique_indices, dtype=scores_i.dtype, device=scores_i.device
             )
+            unique_scores += min_score_a_i + min_score_b_i
             unique_scores.index_add_(0, u_inv, scores_i)
 
             # sort the indices and scores
