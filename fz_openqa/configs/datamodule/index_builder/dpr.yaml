@@ -4,24 +4,30 @@ defaults:
 # define the engines
 engines:
   es:
-    k: ${datamodule.n_retrieved_documents}
+    k: 1000
     max_batch_size: 100
     verbose: false
-    merge_previous_results: false
+    merge_previous_results: true
     config:
-      es_temperature: 1
+      es_temperature: 10.
       auxiliary_weight: 0
       filter_with_doc_ids: false
   faiss:
-    k: ${datamodule.n_retrieved_documents}
+    k: 1000
     max_batch_size: 512
     verbose: false
-    merge_previous_results: false
+    merge_previous_results: true
     config:
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
       metric_type: ${model.metric_type}
       nprobe: 32
+  topk:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 10
+    verbose: false
+    merge_previous_results: false
+    config: { }
 
 # logging
 id: dpr

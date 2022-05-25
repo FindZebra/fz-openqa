@@ -65,7 +65,7 @@ model:
   parameters:
     alpha:
       mode: cosine
-      num_steps: ${int_div:${model.period},2}
+      num_steps: ${model.period}
       initial_value: 1e-3
       final_value: 1
     reader_kl_weight: 0

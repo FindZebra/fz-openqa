@@ -231,7 +231,16 @@ class ReinforceGradients(Gradients):
             score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
-            loss = -1 * (score.detach() / alpha * h).sum(-1)
+            loss = -1 / alpha * (score.detach() * h).sum(-1)
+
+        elif self.expr == "A3":
+            reader_weight = log_W.exp()
+            retriever_weight = log_W_hat.exp()
+            if log_b is not None:
+                raise NotImplementedError("Baseline not implemented for A3")
+            retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
+            reader_loss = (reader_weight.detach() * log_p_ast_D).sum(-1)
+            loss = -1 / alpha * (retriever_loss + reader_loss)
 
         elif self.expr in {"B", "B-zero"}:
             weight = (log_W + log_p_ast_D - log_p_ast.unsqueeze(-1)).exp()
