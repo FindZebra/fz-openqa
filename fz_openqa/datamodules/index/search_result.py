@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from functools import partial
 from random import randint
@@ -103,7 +104,7 @@ def masked_fill(
         if has_neg_index:
 
             def _replace(x):
-                if x < 0:
+                if condition(x):
                     if isinstance(new_value, tuple):
                         return randint(*new_value)
                     else:
@@ -214,7 +215,9 @@ class SearchResult:
             raise TypeError(f"Unsupported type: {type(self.score)}")
 
     def __repr__(self):
-        return f"{type(self).__name__}(score={self.score.shape}, index={self.index.shape})"
+        score_shape = FormatArray(OutputFormat.NUMPY)(self.score).shape
+        index_shape = FormatArray(OutputFormat.NUMPY)(self.index).shape
+        return f"{type(self).__name__}(score={score_shape}, index={index_shape})"
 
     def _fill_rdn(self, args) -> Tuple[int, float]:
         """replace negative index values"""
@@ -230,7 +233,7 @@ class SearchResult:
         self.score = formatter(self.score)
         return self
 
-    def union(self, other: "SearchResult") -> "SearchResult":
+    def union(self, other: "SearchResult", new_size: Optional[int] = None) -> "SearchResult":
 
         if not isinstance(other, SearchResult):
             raise TypeError(f"Unsupported type: {type(other)}")
@@ -239,17 +242,47 @@ class SearchResult:
                 f"Search results must have the same length, but {len(self)} != {len(other)}"
             )
 
-        new_k = self.k + other.k
-        new_index = concat_arrays(self.index, other.index, dim=1)
-        new_index = unique_second_dim(new_index, length=new_k, fill_token=-1)
+        to_torch = FormatArray(OutputFormat.TORCH)
+        total_size = new_size or self.k + other.k
 
-        # todo: test this
-        # todo: add scoores
         # sum the token scores for each pid
-        # q_sum_scores = torch.zeros_like(q_unique_pids, dtype=qscores.dtype)
-        # q_sum_scores.index_add_(0, upids_inv, qscores)
+        new_score = []
+        new_index = []
+        for i in range(len(self.score)):
+            # get scores for index i
+            scores_a_i = to_torch(self.score[i])
+            scores_b_i = to_torch(other.score[i])
+            scores_i = torch.cat([scores_a_i, scores_b_i])
 
-        return SearchResult(index=new_index, score=None, tokens=None, k=new_k)
+            # get indices for index i
+            indices_a_i = to_torch(self.index[i])
+            indices_b_i = to_torch(other.index[i])
+            indices_i = torch.cat([indices_a_i, indices_b_i])
+
+            # ge the unique indices
+            unique_indices, u_inv = torch.unique(indices_i, return_inverse=True)
+            unique_scores = torch.zeros_like(
+                unique_indices, dtype=scores_i.dtype, device=scores_i.device
+            )
+            unique_scores.index_add_(0, u_inv, scores_i)
+
+            # sort the indices and scores
+            unique_scores, idx = torch.sort(unique_scores, descending=True)
+            unique_indices = unique_indices[idx]
+
+            # pad / truncate the results
+            unique_indices = pad_to_length(unique_indices, length=total_size, fill_token=-1)
+            unique_scores = pad_to_length(unique_scores, length=total_size, fill_token=-math.inf)
+
+            # append
+            new_score.append(unique_scores)
+            new_index.append(unique_indices)
+
+        # stack and return
+        new_score = torch.stack(new_score, dim=0)
+        new_index = torch.stack(new_index, dim=0)
+
+        return SearchResult(index=new_index, score=new_score, tokens=None, k=total_size)
 
     def __or__(self, other: "SearchResult") -> "SearchResult":
         return self.union(other)
