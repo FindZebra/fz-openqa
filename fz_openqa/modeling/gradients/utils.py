@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Iterable
 from typing import Optional
 
+import rich
 import torch
 from torch import Tensor
 
@@ -32,12 +34,29 @@ def batch_cartesian_product(
         max_size = None
     index = torch.arange(n_dims, device=x0.device)
     index = torch.cartesian_prod(*(index for _ in range(n_vecs))).permute(1, 0)
-    if max_size is not None and max_size < index.shape[1]:
-        perm = torch.randperm(index.size(1), device=x0.device)
-        perm = perm[:max_size]
-        perm = perm[None, :].expand(n_vecs, -1)
-        index = index.gather(index=perm, dim=1)
+    index_size = index.shape[1]
+
+    # expand the index across the first dimension
     index = index[None, :, :].expand(bs, *index.shape)
+
+    # resample the index if the output size is larger than max_size
+    # Only the `max_size` max. values for the first input are used
+    if max_size is not None and max_size < index_size:
+        warnings.warn(
+            f"The output size is larger than {max_size}, "
+            f"taking the {max_size} top values according "
+            f"to the first input"
+        )
+        x0_fp16 = x0.half()
+        ref_scores = x0_fp16.gather(dim=2, index=index)
+        ref_scores = ref_scores.sum(dim=1, keepdims=True)
+        topk_indices = ref_scores.argsort(dim=-1, descending=True)
+
+        topk_indices = topk_indices[..., :max_size]
+        topk_indices = topk_indices.expand(-1, index.shape[1], topk_indices.shape[2])
+        index = index.gather(index=topk_indices, dim=-1)
+
+    # reindex all the inputs
     for y in (x0, *xs):
         if y is not None:
             bs, n_vecs, n_dims, *dims = y.shape

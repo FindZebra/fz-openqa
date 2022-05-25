@@ -56,8 +56,8 @@ class InBatchGradients(Gradients):
 
         # repeat the scores for all combinations of documents:
         # `D \in D_1 \times D_2 \times ... \times D_N`
-        expanded_reader_score, expanded_retriever_score = batch_cartesian_product(
-            reader_score, retriever_score
+        expanded_retriever_score, expanded_reader_score = batch_cartesian_product(
+            retriever_score, reader_score
         )
         # partial answer log-likelihood `\log p(a | q, D[\sigma], A)` for `\sigma \in S(M)`
         logp_a__d = expanded_reader_score.log_softmax(dim=1)
