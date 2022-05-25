@@ -157,7 +157,6 @@ class ReinforceGradients(Gradients):
         f_phi, f_theta, f_psi, log_s, log_w, log_p_d__a = batch_cartesian_product(
             *args, max_size=self.cartesian_max_size
         )
-        rich.print(f">> f_phi_: {f_phi_.shape} -> f_phi: {f_phi.shape}")
 
         # reader likelihood `log p(a | d, q)`
         log_p_a__d = f_theta.log_softmax(dim=1)
