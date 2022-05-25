@@ -231,6 +231,12 @@ class FaissVectorBase(VectorBase):
         if self.keep_on_cpu:
             return
 
+        try:
+            if isinstance(self.index, (faiss.GpuIndex)):
+                return
+        except Exception as e:
+            logger.warning(f"Couldn't check if the index was a GPU index: {e}")
+
         if devices is None:
             devices = list(range(faiss.get_num_gpus()))
 
