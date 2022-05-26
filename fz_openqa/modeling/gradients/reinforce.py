@@ -166,17 +166,20 @@ class ReinforceGradients(Gradients):
         # `log \hat{\zeta} = \log p(a | d, q) + log \zeta`
         log_Zeta = f_phi.sum(1) - f_psi.sum(1)
         log_S = log_s.sum(dim=1)
-        log_Zeta_hat = log_S + log_Zeta + log_p_ast_D
+        log_Zeta_hat = (log_S + log_Zeta).unsqueeze(1) + log_p_a__d
+        log_Zeta_hat_ast = log_Zeta_hat.gather(dim=1, index=targets_).squeeze(1)
         # log ESS without alpha
-        self.ess_diagnostics(diagnostics, log_Zeta_hat.log_softmax(dim=-1), key="ess-posterior")
+        self.ess_diagnostics(diagnostics, log_Zeta_hat_ast.log_softmax(dim=-1), key="ess-posterior")
 
         # `\hat{w} \propto S(D) \Zeta(D) p(a_st | Q, D)`
         log_Zeta_hat = (1 - alpha) * log_Zeta_hat
+        log_Zeta_hat_ast = (1 - alpha) * log_Zeta_hat_ast
         log_W_hat = log_Zeta_hat.log_softmax(dim=-1)
-        self.ess_diagnostics(diagnostics, log_W_hat, key="ess-posterior-alpha")
+        log_W_hat_ast = log_Zeta_hat_ast.log_softmax(dim=-1)
+        self.ess_diagnostics(diagnostics, log_W_hat_ast, key="ess-posterior-alpha")
 
         # compute the log-likelihood estimate
-        log_p_a = 1 / (1 - alpha) * log_Zeta_hat.logsumexp(dim=-1)
+        log_p_a = 1 / (1 - log_W_hat) * log_Zeta_hat.logsumexp(dim=-1)
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
         # todo: check this
         lb_p_a = (log_W.unsqueeze(1) + log_p_a__d).mean(dim=-1)
@@ -234,7 +237,7 @@ class ReinforceGradients(Gradients):
 
         elif self.expr == "A2":
             h = log_p_ast_D + log_p_D__A
-            score = log_W_hat.exp()
+            score = log_W_hat_ast.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
             loss = -1 * (score.detach() * h).sum(-1)
