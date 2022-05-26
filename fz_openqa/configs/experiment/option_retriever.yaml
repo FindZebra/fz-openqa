@@ -48,7 +48,7 @@ model:
   # global model configuration
   metric_size: 64
   metric_type: inner_product
-  period: 5_000
+  period: 10_000
 
   # optimizer configuration
   ema_decay: null
@@ -63,11 +63,12 @@ model:
 
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
-    alpha:
-      mode: cosine
-      num_steps: ${model.period}
-      initial_value: 1e-3
-      final_value: 1
+    alpha: 0.5
+#    alpha:
+#      mode: cosine
+#      num_steps: ${model.period}
+#      initial_value: 0.999
+#      final_value: 0
     reader_kl_weight: 0
     proposal_kl_weight: 0
     retriever_kl_weight: 0
@@ -113,7 +114,6 @@ model:
       use_baseline: false # todo
       expr: A2
       cartesian_max_size: ${eval:"1<<20"}
-      alpha_baseline: uniform
 
 
 datamodule:

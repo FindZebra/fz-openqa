@@ -28,7 +28,6 @@ class ReinforceGradients(Gradients):
         space: Space = Space.EXP,
         max_baseline_samples: int = 3,
         cartesian_max_size: int = None,
-        alpha_baseline: str = "uniform",
         expr: str = "B",
         **kwargs,
     ):
@@ -39,7 +38,6 @@ class ReinforceGradients(Gradients):
         self.log_w_max = math.log(w_max) if w_max is not None else float("inf")
         self.max_baseline_samples = max_baseline_samples
         self.cartesian_max_size = cartesian_max_size
-        self.alpha_baseline = alpha_baseline
         self.expr = expr
 
         logger.info(
@@ -93,13 +91,17 @@ class ReinforceGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
-        alpha = kwargs.get("alpha", 1.0)
+        alpha = kwargs.get("alpha", 0.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
         proposal_kl_weight = kwargs.get("proposal_kl_weight", None)
         agg_retriever_kl_weight = kwargs.get("agg_retriever_kl_weight", None)
         maxsim_retriever_kl_weight = kwargs.get("maxim_retriever_kl_weight", None)
         maxsim_reader_kl_weight = kwargs.get("maxsim_reader_kl_weight", None)
+
+        # set the parameters for the evaluation mode
+        if not self.training:
+            alpha = 0
 
         # normalize the scores
         # todo: remove?
@@ -130,18 +132,6 @@ class ReinforceGradients(Gradients):
         assert log_s_ is not None
         assert targets is not None
 
-        # alpha regularization: f_\phi = \alpha f_\phi + (1-\alpha) f_\psi
-        f_phi_ = alpha * f_phi_
-        if self.alpha_baseline == "proposal":
-            f_phi_ = f_phi_ + (1 - alpha) * f_psi_
-        elif self.alpha_baseline == "uniform":
-            pass
-        else:
-            raise AttributeError(f"Unknown alpha_baseline = {self.alpha_baseline}")
-        # todo: also regularize the reader scores?
-        # todo: mul grads by  `1/alpha`?
-        f_theta_ = alpha * f_theta_
-
         # `log \zeta = f_\phi(d) - f_\psi(d)`
         log_zeta_ = f_phi_ - f_psi_
 
@@ -168,14 +158,6 @@ class ReinforceGradients(Gradients):
         log_W = log_w.sum(dim=1)
         self.ess_diagnostics(diagnostics, log_W)
 
-        # compute the log-likelihood estimate
-        log_p_a = (log_W.unsqueeze(1) + log_p_a__d).logsumexp(dim=-1)
-        log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
-        lb_p_a = (log_W.unsqueeze(1) + log_p_a__d).sum(dim=-1)
-        lb_p_ast = lb_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
-        diagnostics["reader/lb"] = lb_p_ast
-        diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
-
         # log p(a_st | q, A, D)
         targets_ = targets.view(targets.size(0), 1, 1)
         targets_ = targets_.expand(targets.size(0), 1, log_p_a__d.size(2))
@@ -185,10 +167,22 @@ class ReinforceGradients(Gradients):
         log_Zeta = f_phi.sum(1) - f_psi.sum(1)
         log_S = log_s.sum(dim=1)
         log_Zeta_hat = log_S + log_Zeta + log_p_ast_D
+        # log ESS without alpha
+        self.ess_diagnostics(diagnostics, log_Zeta_hat.log_softmax(dim=-1), key="ess-posterior")
+
         # `\hat{w} \propto S(D) \Zeta(D) p(a_st | Q, D)`
+        log_Zeta_hat = (1 - alpha) * log_Zeta_hat
         log_W_hat = log_Zeta_hat.log_softmax(dim=-1)
-        log_W_hat = log_W_hat.detach()
-        self.ess_diagnostics(diagnostics, log_W_hat, key="ess-posterior")
+        self.ess_diagnostics(diagnostics, log_W_hat, key="ess-posterior-alpha")
+
+        # compute the log-likelihood estimate
+        log_p_a = 1 / (1 - alpha) * log_Zeta_hat.logsumexp(dim=-1)
+        log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+        # todo: check this
+        lb_p_a = (log_W.unsqueeze(1) + log_p_a__d).mean(dim=-1)
+        lb_p_ast = lb_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
+        diagnostics["reader/lb"] = lb_p_ast
+        diagnostics["reader/kl_lb"] = log_p_ast - lb_p_ast
 
         # compute KL divergence w.r.t to a uniform prior (regularization)
         kl_reader = kl_divergence(log_p_a, dim=1)
@@ -243,7 +237,7 @@ class ReinforceGradients(Gradients):
             score = log_W_hat.exp()
             if log_b is not None:
                 raise NotImplementedError("Baseline not implemented for A2")
-            loss = -1 / alpha * (score.detach() * h).sum(-1)
+            loss = -1 * (score.detach() * h).sum(-1)
 
         elif self.expr == "A3":
             reader_weight = log_W.exp()
@@ -252,7 +246,7 @@ class ReinforceGradients(Gradients):
                 raise NotImplementedError("Baseline not implemented for A3")
             retriever_loss = (retriever_weight.detach() * log_p_D__A).sum(-1)
             reader_loss = (reader_weight.detach() * log_p_ast_D).sum(-1)
-            loss = -1 / alpha * (retriever_loss + reader_loss)
+            loss = -1 * (retriever_loss + reader_loss)
 
         elif self.expr in {"B", "B-zero"}:
             weight = (log_W + log_p_ast_D - log_p_ast.unsqueeze(-1)).exp()
