@@ -326,6 +326,7 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
             search_results = search_results.union(prev_search_results, new_size=self.merge_max_size)
 
         # format the output
+        search_results = search_results.to(output_format=OutputFormat.NUMPY)
         output = {
             self.output_index_key: search_results.index,
             self.output_score_key: search_results.score,
