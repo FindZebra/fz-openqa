@@ -179,7 +179,7 @@ class ReinforceGradients(Gradients):
         self.ess_diagnostics(diagnostics, log_W_hat_ast, key="ess-posterior-alpha")
 
         # compute the log-likelihood estimate
-        log_p_a = 1 / (1 - log_W_hat) * log_Zeta_hat.logsumexp(dim=-1)
+        log_p_a = 1 / (1 - alpha) * log_Zeta_hat.logsumexp(dim=-1)
         log_p_ast = log_p_a.gather(dim=1, index=targets.unsqueeze(1)).squeeze(1)
         # todo: check this
         lb_p_a = (log_W.unsqueeze(1) + log_p_a__d).mean(dim=-1)
