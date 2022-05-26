@@ -15,12 +15,6 @@ echo "======================"
 poetry run gpustat --debug
 echo "====== starting experiment ========="
 
-# startup elastic search
-if [ "$setup_with_model" = false ]
-then
-    elasticsearch --quiet &
-fi
-
 # run the model
 poetry run python run.py \
   +experiment=option_retriever +environ=diku +patch=race \
@@ -29,5 +23,5 @@ poetry run python run.py \
   base.infer_batch_mul=100 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
-  +kill_es=true \
+  +spawn_es=true \
   logger.wandb.name=${NAME}

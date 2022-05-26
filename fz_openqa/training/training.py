@@ -30,6 +30,7 @@ from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
+from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -77,64 +78,65 @@ def train(config: DictConfig) -> Optional[float]:
     if "seed" in config:
         seed_everything(config.base.seed, workers=True)
 
-    # only preprocess the data if there is no trainer
-    if config.get("trainer", None) is None:
+    with ElasticSearchInstance(
+        disable=not config.get("spawn_es", False), stdout=open("es.stdout.log", "w")
+    ):
+
+        # only preprocess the data if there is no trainer
+        if config.get("trainer", None) is None:
+            log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
+            datamodule: DataModule = instantiate(config.datamodule)
+            # datamodule.prepare_data()
+            datamodule.setup()
+            return
+
+        # Init Lightning Module
+        model = instantiate_model(
+            config,
+            checkpoint_manager=checkpoint_manager,
+            restore_from_checkpoint=config.get("restore_from_checkpoint", False),
+        )
+
+        # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
+        callbacks: List[Callback] = []
+        if config.get("callbacks", None):
+            for cid, cb_conf in config["callbacks"].items():
+                if cb_conf is not None and "_target_" in cb_conf:
+                    log.info(f"Instantiating callback <{cb_conf._target_}>")
+                    callback = instantiate(cb_conf)
+                    callbacks.append(callback)
+                else:
+                    log.warning(f"Skipping callback {cid}: <{cb_conf}>")
+
+        # Init Lightning loggers
+        logger: List[LightningLoggerBase] = []
+        if config.get("logger", None):
+            for _, lg_conf in config["logger"].items():
+                if "_target_" in lg_conf:
+                    log.info(f"Instantiating logger <{lg_conf._target_}>")
+                    logger.append(instantiate(lg_conf))
+
+        # Init Lightning trainer
+        log.info(f"Instantiating trainer <{config.trainer._target_}>")
+        # todo: resume trainer from checkpoint with state (require updating Lightning)
+        trainer: Trainer = instantiate(
+            config.trainer,
+            callbacks=callbacks,
+            logger=logger,
+        )
+
+        # instantiate the datamodule
         log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
         datamodule: DataModule = instantiate(config.datamodule)
+        setup_model = instantiate_setup_model(
+            config.get("setup_with_model", None), main_model=model
+        )
         # datamodule.prepare_data()
-        datamodule.setup()
-        return
-
-    # Init Lightning Module
-    model = instantiate_model(
-        config,
-        checkpoint_manager=checkpoint_manager,
-        restore_from_checkpoint=config.get("restore_from_checkpoint", False),
-    )
-
-    # Init Lightning callbacks, attach the datamodule and the model tot he IndexOpenQa callback
-    callbacks: List[Callback] = []
-    if config.get("callbacks", None):
-        for cid, cb_conf in config["callbacks"].items():
-            if cb_conf is not None and "_target_" in cb_conf:
-                log.info(f"Instantiating callback <{cb_conf._target_}>")
-                callback = instantiate(cb_conf)
-                callbacks.append(callback)
-            else:
-                log.warning(f"Skipping callback {cid}: <{cb_conf}>")
-
-    # Init Lightning loggers
-    logger: List[LightningLoggerBase] = []
-    if config.get("logger", None):
-        for _, lg_conf in config["logger"].items():
-            if "_target_" in lg_conf:
-                log.info(f"Instantiating logger <{lg_conf._target_}>")
-                logger.append(instantiate(lg_conf))
-
-    # Init Lightning trainer
-    log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    # todo: resume trainer from checkpoint with state (require updating Lightning)
-    trainer: Trainer = instantiate(
-        config.trainer,
-        callbacks=callbacks,
-        logger=logger,
-    )
-
-    # instantiate the datamodule
-    log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: DataModule = instantiate(config.datamodule)
-    setup_model = instantiate_setup_model(config.get("setup_with_model", None), main_model=model)
-    # datamodule.prepare_data()
-    datamodule.setup(trainer=trainer, model=setup_model)
-    if config.verbose:
-        rich.print(datamodule.dataset)
-        pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
-        datamodule.display_samples(n_samples=1)
-
-    # potentially kill elastic search
-    if config.get("kill_es", False):
-        log.info("Killing elasticsearch.")
-        os.system("pkill -f elasticsearch")
+        datamodule.setup(trainer=trainer, model=setup_model)
+        if config.verbose:
+            rich.print(datamodule.dataset)
+            pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
+            datamodule.display_samples(n_samples=1)
 
     # Log config to all lightning loggers
     train_utils.log_hyperparameters(
@@ -165,6 +167,7 @@ def train(config: DictConfig) -> Optional[float]:
             update_freq=dataset_update_freq,
             test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
+            spawn_es=config.get("spawn_es", False),
             **dataset_update.get("builder_args", {}),
         )
     else:
@@ -303,6 +306,7 @@ def train_with_dataset_updates(
     load_best_model: bool = False,
     index_on_first_step: bool = False,
     keep_in_memory: bool = False,
+    spawn_es: bool = False,
     **kwargs,
 ) -> LightningModule:
     """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
@@ -322,6 +326,7 @@ def train_with_dataset_updates(
                     trainer=trainer,
                     keep_in_memory=keep_in_memory,
                     dataset_iter=dataset_iter,
+                    spawn_es=spawn_es,
                     **kwargs,
                 )
                 if test_every_update:
@@ -372,7 +377,9 @@ def train_with_dataset_updates(
     else:
         log.info("No checkpoint found. Using the last model.")
 
-    update_dataset(datamodule, model=model, trainer=trainer, splits=[Split.TEST], **kwargs)
+    update_dataset(
+        datamodule, model=model, trainer=trainer, splits=[Split.TEST], spawn_es=spawn_es, **kwargs
+    )
 
     return model
 
@@ -392,15 +399,19 @@ def update_dataset(
     trainer: Trainer,
     keep_in_memory=True,
     dataset_iter: int = 0,
+    spawn_es: bool = False,
     **kwargs,
 ):
     log.info("Updating dataset...")
-    start_time = time.time()
-    datamodule.update_dataset(model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs)
-    # datamodule.display_samples(n_samples=1)
-    elapsed_time = time.time() - start_time
-    log.info(f"Dataset updated in {elapsed_time:.2f}s")
-    trainer.logger.log_metrics(
-        {"dataset_update/step": dataset_iter, "dataset_update/time": elapsed_time},
-        step=trainer.global_step,
-    )
+    with ElasticSearchInstance(disable=not spawn_es, stdout=open("es.stdout.log", "w")):
+        start_time = time.time()
+        datamodule.update_dataset(
+            model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs
+        )
+        # datamodule.display_samples(n_samples=1)
+        elapsed_time = time.time() - start_time
+        log.info(f"Dataset updated in {elapsed_time:.2f}s")
+        trainer.logger.log_metrics(
+            {"dataset_update/step": dataset_iter, "dataset_update/time": elapsed_time},
+            step=trainer.global_step,
+        )

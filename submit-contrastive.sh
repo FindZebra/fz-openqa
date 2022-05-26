@@ -15,12 +15,6 @@ echo "======================"
 poetry run gpustat --debug
 echo "====== starting experiment ========="
 
-# startup elastic search
-if [ "$setup_with_model" = false ]
-then
-    elasticsearch --quiet &
-fi
-
 # run the model
 poetry run python run.py +experiment=contrastive +environ=diku \
   +patch=dpr \
@@ -31,4 +25,4 @@ poetry run python run.py +experiment=contrastive +environ=diku \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
-  +kill_es=true
+  +spawn_es=true

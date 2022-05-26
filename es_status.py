@@ -7,8 +7,12 @@ import time
 import socket
 
 
-def ping_es(host, **kwargs):
-    return Elasticsearch(hosts=[host]).ping(**kwargs)
+def ping_es(host=None, **kwargs):
+    if host is None:
+        hosts = None
+    else:
+        hosts = [host]
+    return Elasticsearch(hosts=hosts).ping(**kwargs)
 
 
 if __name__ == "__main__":
