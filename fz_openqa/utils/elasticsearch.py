@@ -16,6 +16,9 @@ class ElasticSearchInstance(object):
 
     def __enter__(self):
         # make a database connection and return it
+        if ping_es():
+            logger.info("Elasticsearch is already running")
+            return
 
         if not self.disable:
             logger.info("Spawning ElasticSearch process")

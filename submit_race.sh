@@ -23,5 +23,4 @@ poetry run python run.py \
   base.infer_batch_mul=100 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
-  +spawn_es=true \
   logger.wandb.name=${NAME}

@@ -24,5 +24,4 @@ poetry run python run.py +experiment=contrastive +environ=diku \
   base.eval_device_batch_size=2 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
-  +setup_with_model=${setup_with_model} \
-  +spawn_es=true
+  +setup_with_model=${setup_with_model}
