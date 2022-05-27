@@ -106,7 +106,7 @@ class RenyiGradients(Gradients):
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
         log_p_A__D_Q = g_theta.log_softmax(dim=1)
-        log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded)
+        log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
