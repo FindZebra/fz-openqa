@@ -115,7 +115,7 @@ class RenyiGradients(Gradients):
         # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `a` and in `a_target`
         log_v = log_Zeta - (log_S + log_Zeta).logsumexp(dim=-1, keepdims=True)
         log_w_A = log_p_A__D_Q + log_v[:, None, :]
-        log_w_a = log_w_A.gather(1, index=targets_expanded)
+        log_w_a = log_w_A.gather(1, index=targets_expanded).squeeze(1)
         self.ess_diagnostics(diagnostics, log_w_a)
         if alpha != 0:
             self.ess_diagnostics(diagnostics, (1 - alpha) * log_w_a, key="ess-alpha")
@@ -123,8 +123,8 @@ class RenyiGradients(Gradients):
         # compute the Renyi bound for alpha and alpha=0, in all `a` and in `a_target`
         L_A_alpha = 1 / (1 - alpha) * (log_S[:, None, :] + (1 - alpha) * log_w_A).logsumexp(dim=-1)
         L_A_zero = (log_S[:, None, :] + log_w_A).logsumexp(dim=-1)
-        L_a_alpha = L_A_alpha.gather(1, index=targets[:, None])
-        L_a_zero = L_A_zero.gather(1, index=targets[:, None])
+        L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+        L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the gradient
         log_w = log_S + (1 - alpha) * (log_Zeta + log_p_a__D_Q)
@@ -153,7 +153,7 @@ class RenyiGradients(Gradients):
         return {
             "loss": loss,
             "reader/entropy": -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean().detach(),
-            "reader/entropy-alpha": -(L_a_alpha.exp() * L_a_alpha).sum(dim=1).mean().detach(),
+            "reader/entropy-alpha": -(L_A_alpha.exp() * L_A_alpha).sum(dim=1).mean().detach(),
             "reader/logp": L_a_zero.detach(),
             "reader/logp-alpha": L_a_alpha.detach(),
             "reader/logp-alpha-diff": (L_a_zero - L_a_alpha).detach(),
