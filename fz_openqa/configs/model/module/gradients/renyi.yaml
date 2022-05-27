@@ -1,0 +1,3 @@
+_target_: fz_openqa.modeling.gradients.RenyiGradients
+cartesian_max_size: null
+_id: "renyi"

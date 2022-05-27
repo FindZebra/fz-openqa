@@ -6,7 +6,7 @@ defaults:
   - override /model/bert: pubmed
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
-  - override /model/module/gradients: reinforce
+  - override /model/module/gradients: renyi
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
@@ -111,8 +111,6 @@ model:
       share_parameters: true
       bias: false
     gradients:
-      use_baseline: false # todo
-      expr: A2
       cartesian_max_size: ${eval:"1<<20"}
 
 
