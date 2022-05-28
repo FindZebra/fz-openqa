@@ -129,7 +129,8 @@ class RenyiGradients(Gradients):
         # compute the gradient
         log_w = log_S + (1 - alpha) * (log_Zeta + log_p_a__D_Q)
         w = log_w.softmax(dim=-1)
-        grad_L_a_alpha = (w.detach() * (log_p_a__D_Q + diff_log_p_D__Q.sum(1))).sum(dim=-1)
+        log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
+        grad_L_a_alpha = (w.detach() * log_p_a_D__q).sum(dim=-1)
 
         # compute the loss
         loss = -1 * grad_L_a_alpha
