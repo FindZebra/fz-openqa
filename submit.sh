@@ -8,7 +8,7 @@
 DSET_NAME=$1
 CORPUS_NAME=$2
 GRADIENTS=$3
-ALPHA=$1
+ALPHA=$4
 
 echo "===================================="
 echo "DSET_NAME    = ${DSET_NAME}"
@@ -21,12 +21,13 @@ echo "===================================="
 setup_with_model=false
 
 # set the argument for alpha
-if [ "${ALPHA}" == "" ]
+if [ "${ALPHA}" != "" ]
 then
      ALPHA_ARG="model.parameters.alpha=${ALPHA}"
 else
      ALPHA_ARG=""
 fi
+echo "ALPHA_ARG     = ${ALPHA_ARG}"
 
 
 # display basic info
