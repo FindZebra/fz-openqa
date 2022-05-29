@@ -1,6 +1,7 @@
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 from torch import Tensor
 
@@ -65,6 +66,7 @@ class RenyiGradients(Gradients):
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
 
         # rename input variables
+        beta = 1 - alpha
         g_theta_ = reader_score
         f_theta_ = retriever_score
         f_phi_ = proposal_score
@@ -91,7 +93,8 @@ class RenyiGradients(Gradients):
         log_zeta_ = f_theta_ - f_phi_
 
         # compute the dfferentiable estimate of `\log p(d | q)`
-        w = (log_s_ + log_zeta_).softmax(dim=-1)
+        log_s_norm_ = log_s_.log_softmax(dim=-1)
+        w = (log_s_norm_ + log_zeta_).softmax(dim=-1)
         diff_log_p_D__Q_ = f_theta_ - (w.detach() * f_theta_).sum(dim=-1, keepdims=True)
 
         # compute the cartesian product of all variables
@@ -110,24 +113,28 @@ class RenyiGradients(Gradients):
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
+        log_S_norm = log_S.log_softmax(dim=-1)
         log_Zeta = log_zeta.sum(1)
 
-        # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `a` and in `a_target`
-        log_v = log_Zeta - (log_S + log_Zeta).logsumexp(dim=-1, keepdims=True)
+        # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `A` and in `a`
+        log_v = log_Zeta - (log_S_norm + log_Zeta).logsumexp(dim=-1, keepdims=True)
         log_w_A = log_p_A__D_Q + log_v[:, None, :]
         log_w_a = log_w_A.gather(1, index=targets_expanded).squeeze(1)
         self.ess_diagnostics(diagnostics, log_w_a)
         if alpha != 0:
-            self.ess_diagnostics(diagnostics, (1 - alpha) * log_w_a, key="ess-alpha")
+            self.ess_diagnostics(diagnostics, beta * log_w_a, key="ess-alpha")
 
-        # compute the Renyi bound for alpha and alpha=0, in all `a` and in `a_target`
-        L_A_alpha = 1 / (1 - alpha) * (log_S[:, None, :] + (1 - alpha) * log_w_A).logsumexp(dim=-1)
-        L_A_zero = (log_S[:, None, :] + log_w_A).logsumexp(dim=-1)
+        # compute the Renyi bound in `A` and in `a`
+        r = 1.0 / beta
+        L_A_alpha = r * (log_S_norm[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
         L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+        # compute the Renyi bound for alpha=0 in `A` and in `a`
+        log_w_A_zero = (log_S + log_Zeta).log_softmax(dim=-1)
+        L_A_zero = (log_w_A_zero[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
         L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the gradient
-        log_w = log_S + (1 - alpha) * (log_Zeta + log_p_a__D_Q)
+        log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
         w = log_w.softmax(dim=-1)
         log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
         grad_L_a_alpha = (w.detach() * log_p_a_D__q).sum(dim=-1)
@@ -136,7 +143,7 @@ class RenyiGradients(Gradients):
         loss = -1 * grad_L_a_alpha
 
         # compute the terms for regularization and diagnostics
-        kl_reader = kl_divergence(L_A_zero, dim=1)
+        kl_reader = kl_divergence(L_A_alpha, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader.mean()
         kl_retriever = kl_divergence(f_phi_, dim=2).sum(1)
         diagnostics["retriever/kl_uniform"] = kl_retriever.mean()
@@ -151,13 +158,26 @@ class RenyiGradients(Gradients):
             self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
         )
 
+        LA_normed = L_A_zero.log_softmax(dim=1)
+        H_zero = -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean().detach()
+        H_alpha = -(LA_normed.exp() * LA_normed).sum(dim=1).mean().detach()
+        kl_alpha = kl_divergence(L_A_alpha, q_logits=L_A_zero, dim=1)
+
+        # measure aggrement
+        pred_zero = L_A_zero.argmax(dim=1)
+        pred_alpha = L_A_alpha.argmax(dim=1)
+        aggreement_alpha = (pred_zero == pred_alpha).float().mean()
+        accuracy_alpha = (targets == pred_alpha).float().mean()
+
         return {
             "loss": loss,
-            "reader/entropy": -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean().detach(),
-            "reader/entropy-alpha": -(L_A_alpha.exp() * L_A_alpha).sum(dim=1).mean().detach(),
+            "reader/Accuracy-alpha": accuracy_alpha,
+            "reader/entropy": H_zero,
+            "reader/entropy-alpha": H_alpha,
             "reader/logp": L_a_zero.detach(),
             "reader/logp-alpha": L_a_alpha.detach(),
-            "reader/logp-alpha-diff": (L_a_zero - L_a_alpha).detach(),
+            "reader/kl_alpha": kl_alpha.detach(),
+            "reader/aggree_alpha": aggreement_alpha.detach(),
             "_reader_logits_": L_A_zero.detach(),
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),

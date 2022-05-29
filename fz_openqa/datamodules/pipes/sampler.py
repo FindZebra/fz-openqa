@@ -59,7 +59,13 @@ class Sampler(Pipe):
         )
 
         # re-index and return
-        return {k: reindex(v, sampled_index) for k, v in batch.items()}
+        output = {k: reindex(v, sampled_index) for k, v in batch.items()}
+
+        # todo: temporary trick
+        log_w = -math.log(total) + np.zeros_like(sampled_index, dtype=np.float)
+        output[f"{self.field}.proposal_log_weight"] = torch.from_numpy(log_w)
+
+        return output
 
     def _sample(
         self,
