@@ -32,7 +32,7 @@ base:
   target_metric: validation/reader/Accuracy
   target_mode: max
   exp_info: "--"
-  batch_size: 64
+  batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
   infer_batch_mul: 300
@@ -40,7 +40,7 @@ base:
 trainer:
   gradient_clip_val: 0.5 # 2.0 might be unstable
   accumulate_grad_batches: ${base.accumulate_grad_batches}
-  check_val_every_n_epoch: 2
+  check_val_every_n_epoch: 1
   precision: 32
   max_steps: 100_000 # set 29_900 for the final exps
 
@@ -52,11 +52,11 @@ model:
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: 1_000 # Colbert uses no warmup
-  num_training_steps: ${int_mul:2,${model.period}}
+  num_lr_warmup_steps: 1_00 # 0 # Colbert uses no warmup
+  num_training_steps: 1_000_000 #${int_mul:2,${model.period}}
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 3e-6
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -151,14 +151,14 @@ datamodule:
 
   # documents: retrieval & sampling
   n_retrieved_documents: 100
-  n_documents: 10
+  n_documents: 16
 
   # document sampler
   sampler:
     total:
       train: ${datamodule.n_documents}
-      validation: ${int_mul:2,${datamodule.n_documents}}
-      test: ${int_mul:2,${datamodule.n_documents}}
+      validation: ${datamodule.n_documents}
+      test: ${datamodule.n_documents}
     temperature: 1
     largest:
       train: false
