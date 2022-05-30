@@ -9,23 +9,26 @@ defaults:
   - override /model/bert: pubmed_multiple_choice
   - override /datamodule/index_builder: elasticsearch
   - override /datamodule/builder/analytics: none
+  - override /datamodule/transform: view_reader_stack
   - override /callbacks:
       - checkpoint
       - progress_bar
       - lr_monitor
 
 base:
-  seed: 1 #${seed}
+  seed: 1
   target_metric: validation/reader/Accuracy
   target_mode: max
   exp_info: "--"
   batch_size: 32
   device_batch_size: 1
-  eval_device_batch_size: 8
+  eval_device_batch_size: 24
   infer_batch_mul: 100
 
 
 trainer:
+  min_epochs: 1
+  max_epochs: 30
   max_steps: 30000 # maybe  use fewer steps
   accumulate_grad_batches:  ${base.accumulate_grad_batches}
   val_check_interval: 1.0
@@ -38,6 +41,14 @@ model:
   num_training_steps: 100_000 # learning rate is decay from 1 to 0 during these steps
 
 datamodule:
+  builder:
+    dataset_builder:
+      dset_name: medqa-us
+      max_length: 312
+    corpus_builder:
+      dset_name: medqa
+  dset_name: medqa-us
+  corpus_name: medqa
   dataset_update: null # don't update dataset
   num_proc: 4
   num_workers: 4
@@ -70,8 +81,7 @@ datamodule:
     auxiliary_weight: 2. # boost the answer options by a factor (5 = 1 + 4)
 
 
-
 logger:
   wandb:
    name: null
-   group: baseline-reader-us # name your experiment here
+   group: baseline-reader-us-stack # name your experiment here
