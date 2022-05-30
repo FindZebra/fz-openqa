@@ -167,6 +167,7 @@ def train(config: DictConfig) -> Optional[float]:
             update_freq=dataset_update_freq,
             test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
+            reset_parameters=dataset_update.get("reset_parameters", False),
             spawn_es=config.get("spawn_es", False),
             **dataset_update.get("builder_args", {}),
         )
@@ -302,6 +303,7 @@ def train_with_dataset_updates(
     trainer: Trainer,
     update_freq: int,
     reset_optimizer: bool = False,
+    reset_parameters: bool = False,
     test_every_update: bool = True,
     load_best_model: bool = False,
     index_on_first_step: bool = False,
@@ -366,6 +368,13 @@ def train_with_dataset_updates(
             # set in the beginning of `trainer.fit()`
             if not reset_optimizer:
                 set_model_opt_states(model)
+            if reset_parameters:
+                try:
+                    param_names = list(model._params.parameters.keys())
+                    log.info(f"Resetting model parameter schedules {param_names}")
+                    model._params.reset()
+                except Exception as exc:
+                    log.error(f"Couldn't reset parameters: {exc}")
         except KeyboardInterrupt:
             log.info("Training interrupted.")
             break
