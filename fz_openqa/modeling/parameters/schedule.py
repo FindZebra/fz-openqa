@@ -7,6 +7,9 @@ class Schedule(object):
     def __init__(self, *, num_warmup_steps: int = 0, num_steps: int = None):
         self.num_warmup_steps = num_warmup_steps
         self.num_steps = num_steps
+        self.reset()
+
+    def reset(self):
         self._step = 0
 
     def step(self):

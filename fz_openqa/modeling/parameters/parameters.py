@@ -46,3 +46,7 @@ class Parameters:
 
     def __getitem__(self, item):
         return self.parameters[item]()
+
+    def reset(self):
+        for k, v in self.parameters.items():
+            v.reset()

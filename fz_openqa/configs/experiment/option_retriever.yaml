@@ -119,6 +119,7 @@ datamodule:
   dataset_update:
     freq: ${model.period}
     reset_optimizer: true # TODO !!
+    reset_parameters: true
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       # relevance_classifier: null
