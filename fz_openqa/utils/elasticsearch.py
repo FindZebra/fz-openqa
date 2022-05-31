@@ -8,7 +8,7 @@ from es_status import ping_es
 
 
 class ElasticSearchInstance(object):
-    TIMEOUT = 120
+    TIMEOUT = 600
 
     def __init__(self, disable: bool = False, **kwargs):
         self.disable = disable
