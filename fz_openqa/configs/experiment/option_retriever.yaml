@@ -48,11 +48,11 @@ model:
   # global model configuration
   metric_size: 64
   metric_type: inner_product
-  period: 10_000
+  period: 5_000
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: 1_00 # 0 # Colbert uses no warmup
+  num_lr_warmup_steps: 100 # 0 # Colbert uses no warmup
   num_training_steps: 1_000_000 #${int_mul:2,${model.period}}
   optimizer: adamw
   optimizer_params:
@@ -66,7 +66,7 @@ model:
     # alpha: 0.5
     alpha:
       mode: cosine
-      num_steps: ${int_div:${model.period},2}
+      num_steps: model.period
       initial_value: 0.999
       final_value: 0
     reader_kl_weight: 0
@@ -119,7 +119,7 @@ datamodule:
   dataset_update:
     freq: ${model.period}
     reset_optimizer: true # TODO !!
-    reset_parameters: true
+    reset_parameters: true  # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
       # relevance_classifier: null
