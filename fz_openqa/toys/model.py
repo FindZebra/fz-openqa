@@ -37,34 +37,39 @@ class Encoder(nn.Module):
 
 
 def cast_to_device(y: T, device: torch.device) -> T:
+    if device is None:
+        return y
+
     if isinstance(y, Tensor):
-        y = y.to(device)
+        if y.device != device:
+            y = y.to(device)
     elif isinstance(y, (list, tuple)):
-        y = [y_.to(device) for y_ in y]
+        y = [cast_to_device(y_, device) for y_ in y]
     elif isinstance(y, dict):
-        y = {k: v.to(device) for k, v in y.items()}
+        y = {k: cast_to_device(v, device) for k, v in y.items()}
+    elif isinstance(y, (float, int, str)):
+        pass
     else:
         raise TypeError(f"Unexpected type {type(y)}")
 
     return y
 
 
-def process_by_chunk(fn, x, chunksize=None, with_device: Optional[torch.device] = None, **kwargs):
-    in_device = x.device
+def process_by_chunk(fn, *xs, chunksize=None, with_device: Optional[torch.device] = None, **kwargs):
+    xs = list(xs)
+    in_device = xs[0].device
 
     if chunksize is None:
-        if with_device is not None and x.device != with_device:
-            x = cast_to_device(x, with_device)
-        y = fn(x, **kwargs)
+        xs = [cast_to_device(x, with_device) for x in xs]
+        y = fn(*xs, **kwargs)
         y = cast_to_device(y, in_device)
         return y
 
     output = None
-    for i in range(0, len(x), chunksize):
-        x_chunk = x[i : i + chunksize]
-        if with_device is not None and x.device != with_device:
-            x_chunk = cast_to_device(x_chunk, with_device)
-        y = fn(x_chunk, **kwargs)
+    for i in range(0, len(xs[0]), chunksize):
+        xs_chunk = [x[i : i + chunksize] for x in xs]
+        xs_chunk = cast_to_device(xs_chunk, with_device)
+        y = fn(*xs_chunk, **kwargs)
         y = cast_to_device(y, in_device)
 
         if output is None:

@@ -4,6 +4,7 @@ from typing import Dict
 from typing import List
 
 import numpy as np
+import rich
 import torch
 from torchvision import datasets
 
@@ -87,6 +88,11 @@ def generate_toy_datasets(*, labels: List[int] = -1, noise_level: float = 0, **d
         ).data
         for i in range(10)
     }
+
+    knowledge_labels = {
+        i: torch.full((k.shape[0],), i, dtype=torch.long) for i, k in knowledge.items()
+    }
+
     test_data = {
         i: ClassDataset(i, None, train=False, noise_level=0, **dataset_kwargs).data for i in labels
     }
@@ -95,11 +101,14 @@ def generate_toy_datasets(*, labels: List[int] = -1, noise_level: float = 0, **d
     train_data, train_labels = concatenate(train_data, labels)
     test_data, test_labels = concatenate(test_data, labels)
 
-    # concatenate the knowledge base
-    knowledge = torch.cat(list(knowledge.values()), dim=0)
+    # concatenate the knowledge bases
+    ids = list(knowledge.keys())
+    knowledge = torch.cat([knowledge[i] for i in ids], dim=0)
+    knowledge_labels = torch.cat([knowledge_labels[i] for i in ids], dim=0)
 
     return {
         "train": {"targets": train_labels, "data": train_data},
         "test": {"targets": test_labels, "data": test_data},
         "knowledge": knowledge,
+        "knowledge_labels": knowledge_labels,
     }

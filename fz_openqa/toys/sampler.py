@@ -69,7 +69,9 @@ class ToySampler:
         self,
         data: Dict[str, torch.Tensor],
         targets: Dict[str, torch.Tensor],
+        labels: torch.Tensor,
         knowledge: torch.Tensor,
+        knowledge_labels: torch.Tensor,
         s_range=None,
         batch_size: int = 32,
         n_samples: int = 10,
@@ -79,6 +81,8 @@ class ToySampler:
         device: str = "cpu",
         sample_device: str = "cpu",
         sample_chunksize: int = 10,
+        supervised_weight: float = 10.0,
+        supervised_ratio: float = 0.5,
     ):
         self.device = torch.device(device)
         self.sample_device = torch.device(sample_device)
@@ -86,7 +90,9 @@ class ToySampler:
         self.n_classes = n_classes
         self.data = data
         self.targets = targets
+        self.labels = labels
         self.knowledge = knowledge
+        self.knowledge_labels = knowledge_labels
         self.chunksize = chunksize
         self.sample_chunksize = sample_chunksize
         self.scores = {k: None for k in data.keys()}
@@ -96,6 +102,8 @@ class ToySampler:
             sampler
         ]
         self.sampled_data = {k: None for k in data.keys()}
+        self.supervised_weight = supervised_weight
+        self.supervised_ratio = supervised_ratio
 
     @torch.no_grad()
     def index(self, model: ToyOptionRetriever = None):
@@ -114,15 +122,29 @@ class ToySampler:
                     data,
                     model=model,
                     h_knowledge=h_knowledge,
+                    h_labels=self.knowledge_labels,
                     chunksize=self.chunksize,
                 )
                 self.scores[split] = score.to(self.device)
 
     def _compute_score_for_split(
-        self, data: torch.Tensor, *, model: ToyOptionRetriever, h_knowledge: torch.Tensor
+        self,
+        data: torch.Tensor,
+        *,
+        model: ToyOptionRetriever,
+        h_knowledge: torch.Tensor,
+        h_labels: torch.Tensor = None,
     ):
         h_dataset = model.process_query(data)["retriever"]
         scores = model.score(hq=h_dataset, hd=h_knowledge)
+
+        # add the supervised scores
+        supervised_scores = (self.labels[None, :, None] == h_labels[None, None, :]).float()
+        supervised_scores *= self.supervised_weight
+        if self.supervised_ratio != 0:
+            t = self.supervised_ratio
+            scores = (1 - t) * scores + t * supervised_scores
+
         # normalize scores
         if self.s_range is not None:
             s_max = scores.max(dim=-1, keepdim=True).values

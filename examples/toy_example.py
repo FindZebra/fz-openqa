@@ -27,7 +27,7 @@ from fz_openqa.utils import maybe_instantiate
 sys.path.append(str(Path(__file__).parent.parent))
 
 from fz_openqa import configs
-from fz_openqa.modeling.gradients import InBatchGradients, ContrastiveGradients
+from fz_openqa.modeling.gradients import InBatchGradients, ContrastiveGradients, RenyiGradients
 from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.toys.dataset import generate_toy_datasets
@@ -86,7 +86,8 @@ def run(config: DictConfig) -> None:
         logger.log_hyperparams(config_)
     else:
         logger = None
-    datasets, knowledge = load_datasets(config)
+    datasets, knowledge, knowledge_labels = load_datasets(config)
+
     model = ToyOptionRetriever(
         hidden=config.hidden_size,
         output_size=config.output_size,
@@ -109,12 +110,15 @@ def run(config: DictConfig) -> None:
         "reinforce_b_zero": (ReinforceGradients, {"expr": "B-zero", **reinforce_args}),
         "reinforce_c": (ReinforceGradients, {"expr": "C", **reinforce_args}),
         "contrastive": (ContrastiveGradients, {}),
+        "renyi": (RenyiGradients, {}),
     }[config.estimator]
     estimator = estimator_cls(**estimator_args)
     sampler = ToySampler(
         data={k: v["data"] for k, v in datasets.items()},
         targets={k: v["targets"] for k, v in datasets.items()},
+        labels=torch.tensor(config.labels),
         knowledge=knowledge,
+        knowledge_labels=knowledge_labels,
         s_range=None,
         batch_size=config.batch_size,
         n_samples=config.n_samples,
@@ -122,6 +126,8 @@ def run(config: DictConfig) -> None:
         n_classes=len(config.labels),
         chunksize=config.max_chunksize,
         sample_device=config.device,
+        supervised_weight=config.supervised_weight,
+        supervised_ratio=config.supervised_ratio,
     )
 
     # parameters
@@ -323,7 +329,8 @@ def load_datasets(config):
                 rich.print(f"{key}/{subkey}: {w.shape}")
 
     knowledge = datasets.pop("knowledge")
-    return datasets, knowledge
+    knowledge_labels = datasets.pop("knowledge_labels")
+    return datasets, knowledge, knowledge_labels
 
 
 @torch.no_grad()
@@ -397,6 +404,7 @@ def log_predictions(batch, diagnostics, output, idx: int = 0, labels=None):
     d = batch["evidence"][idx]
     m, n, *dims = d.shape
     pids = output["retriever_score"][idx].argsort(dim=-1, descending=True)
+    # pids = batch["proposal_score"][idx].argsort(dim=-1, descending=True)
     pids = pids.view(m, n, *(1 for _ in dims)).expand_as(d)
     d = d.gather(1, index=pids)
     # d = d.transpose(1, 0).contiguous()
