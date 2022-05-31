@@ -8,13 +8,15 @@
 DSET_NAME=$1
 CORPUS_NAME=$2
 GRADIENTS=$3
-ALPHA=$4
+TEMPERATURE=$4
+ALPHA=""
 
 echo "===================================="
 echo "DSET_NAME    = ${DSET_NAME}"
 echo "CORPUS_NAME  = ${CORPUS_NAME}"
 echo "GRADIENTS    = ${GRADIENTS}"
 echo "ALPHA        = ${ALPHA}"
+echo "TEMPERATURE  = ${TEMPERATURE}"
 echo "===================================="
 
 # variables
@@ -28,6 +30,13 @@ else
      ALPHA_ARG=""
 fi
 echo "ALPHA_ARG     = ${ALPHA_ARG}"
+if [ "${TEMPERATURE}" != "" ]
+then
+     TEMPERATURE_ARG="datamodule.index_builder.engines.es.config.es_temperature=${TEMPERATURE}"
+else
+     TEMPERATURE_ARG=""
+fi
+echo "TEMPERATURE_ARG= ${TEMPERATURE_ARG}"
 
 
 # display basic info
@@ -49,4 +58,5 @@ poetry run python run.py +experiment=option_retriever +environ=diku \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
-  ${ALPHA_ARG}
+  ${ALPHA_ARG} \
+  ${TEMPERATURE_ARG}

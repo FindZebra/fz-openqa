@@ -85,7 +85,7 @@ def retriever_diagnostics(
             output["retriever/kl_div"] = kl_div.mean()
 
             if alpha is not None:
-                reg_log_probs = alpha * retriever_log_probs + (1 - alpha) * proposal_log_probs
+                reg_log_probs = (1 - alpha) * retriever_log_probs + alpha * proposal_log_probs
                 reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
                 output["retriever/entropy_alpha"] = reg_entropy.mean()
 
