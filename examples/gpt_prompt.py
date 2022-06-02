@@ -1,91 +1,135 @@
-import math
+import logging
+import os
+import string
+import sys
+import time
+from pathlib import Path
 
-import openai
+from tqdm import tqdm
+
+from fz_openqa.utils.openai import AnsweringModel
+from fz_openqa.utils.openai import MultipleChoiceTemplate
+
+sys.path.append(Path(__file__).parent.parent.as_posix())
+
+import datasets
+import hydra
 import rich
+from omegaconf import DictConfig
 
-openai.api_key = ...
+from fz_openqa import configs
+from fz_openqa.datamodules.builders.qa import QaBuilder
+from fz_openqa.datamodules.builders.preprocessing.entity import EntityPreprocessing
 
-engine = "text-ada-001"
-# engine = "text-davinci-002"
-# engine = "text-curie-001"
-
-
-def extract_answer(answer_text, options):
-    def safe_index(txt, value, default_index):
-        if value in txt:
-            return txt.index(value)
-        else:
-            return default_index
-
-    indices = [(o, safe_index(answer_text, o, None)) for o in options]
-    indices = list(filter(lambda x: x[1] is not None, indices))
-    if len(indices):
-        return min(indices, key=lambda x: x[1])[0]
-    else:
-        return None
+from loguru import logger
 
 
-prompt = """
-Q: A 27-year-old male presents to urgent care complaining of pain with urination. He reports that the pain started 3 days ago. He has never experienced these symptoms before. He denies gross hematuria or pelvic pain. He is sexually active with his girlfriend, and they consistently use condoms. When asked about recent travel, he admits to recently returning from a boys’ trip” in Cancun where he had unprotected sex 1 night with a girl he met at a bar. The patients medical history includes type I diabetes that is controlled with an insulin pump. His mother has rheumatoid arthritis. The patients temperature is 99 F (37.2 C), blood pressure is 112/74 mmHg, and pulse is 81/min. On physical examination, there are no lesions of the penis or other body rashes. No costovertebral tenderness is appreciated. A urinalysis reveals no blood, glucose, ketones, or proteins but is positive for leukocyte esterase. A urine microscopic evaluation shows a moderate number of white blood cells but no casts or crystals. A urine culture is negative. Which of the following is the most likely cause for the patient’s symptoms?
-Answer options:
-A) Chlamydia trachomatis
-B) Systemic lupus erythematosus
-C) Mycobacterium tuberculosis
-D) Treponema pallidum
-
-A: Let's think step by step like a medical expert.
-"""  # noqa
-
-response = openai.Completion.create(
-    engine=engine,
-    prompt=prompt,
-    # suffix="the answer is  option (A) Chlamydia trachomatis.",
-    temperature=0,
-    max_tokens=300,
-    top_p=1,
-    logprobs=5,
-    frequency_penalty=0.0,
-    presence_penalty=0.0,
-    stop=["<|endoftext|>"],
+@hydra.main(
+    config_path=str(Path(configs.__file__).parent),
+    config_name="script_config.yaml",
 )
+def run(config: DictConfig) -> None:
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    datasets.set_caching_enabled(True)
+    logging.getLogger("openai").setLevel(logging.WARNING)
 
-j = 0
-rich.print("# step 1: reasoning")
-answer = response["choices"][0]["text"]
-log_probs = response["choices"][0]["logprobs"]
-# rich.print(f"> Answer: {answer}")
+    # preprocessing
+    preprocessing_op = config.get("preprocessing", None)
+    if isinstance(preprocessing_op, str):
+        preprocessing_op = {"entity": EntityPreprocessing}[preprocessing_op]()
 
-tkens = log_probs["tokens"]
-tkens_logprobs = log_probs["token_logprobs"]
-rich.print(f"> {''.join(tkens)}: {sum(tkens_logprobs)}")
+    # initialize the data module
+    builder = QaBuilder(
+        tokenizer=None,
+        use_subset=config.get("use_subset", True),
+        cache_dir=config.sys.cache_dir,
+        num_proc=config.get("num_proc", 2),
+        dset_name=config.get("dset_name", "medqa-us"),
+        preprocessing_op=preprocessing_op,
+    )
+    builder.subset_size = [3, 3, 3]
+    dataset = builder()
+    rich.print(dataset)
 
-rich.print("# step 2: extraction")
-prompt += answer.split("<|endoftext|>")[0] + " Therefore, among A through D, the answer is "
+    # setting up OpenAI API
+    engine = config.get("engine", "text-davinci-002")
+    model = AnsweringModel(
+        engine=engine,
+        prompt_mode="chain_of_thought",
+        template=MultipleChoiceTemplate(),
+    )
 
-response = openai.Completion.create(
-    engine=engine,
-    prompt=prompt,
-    # suffix="the answer is  option (A) Chlamydia trachomatis.",
-    temperature=0,
-    max_tokens=300,
-    top_p=1,
-    logprobs=5,
-    frequency_penalty=0.0,
-    presence_penalty=0.0,
-    stop=["."],
-)
+    output_dir = Path(os.getcwd()) / "output"
+    output_dir.mkdir(exist_ok=True, parents=True)
 
-answer = response["choices"][0]["text"]
-log_probs = response["choices"][0]["logprobs"]
-# rich.print(f"> Answer: {answer}")
+    rich.print(f">> Logging to {output_dir}")
+    rate_limit = 2
+    t0 = time.time()
+    splits = ["test"]
+    results = {}
+    for split in splits:
+        dset = dataset[split]
+        total = 0
+        np = 0
+        indices = list(range(len(dset)))
+        rgn = np.random.RandomState(0)
+        rgn.shuffle(indices)
+        for i, row_idx in (
+            pbar := tqdm(enumerate(indices), unit=" questions", total=len(indices))
+        ) :
+            row = dset[row_idx]
+            # header = f" Question {row_idx + 1} "
+            # rich.print(f"[blue]{header:=^60}")
+            question = row["question.text"]
+            options = row["answer.text"]
+            answer_idx = row["answer.target"].item()
+            answer = string.ascii_uppercase[answer_idx]
+            # rich.print(f"Question: {question}")
+            # rich.print(f"Options: {options}")
+            # rich.print(f"Answer: {answer}")
 
-tkens = log_probs["tokens"]
-tkens_logprobs = log_probs["token_logprobs"]
-rich.print(f"> {''.join(tkens)}: {sum(tkens_logprobs)}")
-prompt += answer.split("<|endoftext|>")[0]
+            model_answer, meta = model(question, options)
+            try:
+                model_answer_idx = string.ascii_uppercase.index(model_answer)
+            except Exception as exc:
+                logger.warning(f"{exc}")
+                model_answer_idx = -1
+            # prefix = "[green] (V)" if model_answer == answer else "[red] (X)"
+            # rich.print(f"{prefix} Model answer: {model_answer} ({meta['answer']}).
+            # Reasoning: \n{meta['reasoning']}")
+
+            # update the tracking of the accuracy
+            total += 1
+            if model_answer_idx == answer_idx:
+                np += 1
+            pbar.set_description(f"({split}) Accuracy: {np / total:.2f}")
+
+            with open(output_dir / f"{split}_{row_idx}.txt", "w") as f:
+                outcome = "correct" if model_answer == answer else "incorrect"
+                formatted_options = ",".join(
+                    [f"{string.ascii_uppercase[i]}) {option}" for i, option in enumerate(options)]
+                )
+                output_str = f"""\
+                Outcome: {outcome}\n
+                Question ({split}#{row_idx}): {question}\n
+                Options: {formatted_options}\n
+                Answer: {answer}: {options[answer_idx]}\n
+                Model answer: {model_answer}) {options[model_answer_idx]}\n\n
+                Reasoning: \n{meta['completed_prompt']}
+                """
+                f.write(output_str)
+
+            if time.time() - t0 < rate_limit:
+                t = rate_limit - (time.time() - t0)
+                time.sleep(max(t, 0))
+            t0 = time.time()
+
+        results[split] = np / total
+
+    for split, accuracy in results.items():
+        rich.print(f">> {split}: {accuracy:.3%}")
+    rich.print(f">> Logged to {output_dir}")
 
 
-rich.print("[green]=== full output ===")
-rich.print(prompt)
-
-rich.print(f"[magenta] Extracted answer: {extract_answer(answer, options=['A', 'B', 'C', 'D'])}")
+if __name__ == "__main__":
+    run()

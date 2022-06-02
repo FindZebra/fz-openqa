@@ -93,7 +93,8 @@ class RenyiGradients(Gradients):
         log_zeta_ = f_theta_ - f_phi_
 
         # compute the dfferentiable estimate of `\log p(d | q)`
-        w = (log_s_ + log_zeta_).softmax(dim=-1)
+        log_s_norm_ = log_s_.log_softmax(dim=-1)
+        w = (log_s_norm_ + log_zeta_).softmax(dim=-1)
         diff_log_p_D__Q_ = f_theta_ - (w.detach() * f_theta_).sum(dim=-1, keepdims=True)
 
         # compute the cartesian product of all variables
