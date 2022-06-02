@@ -53,7 +53,7 @@ model:
   # optimizer configuration
   ema_decay: null
   num_lr_warmup_steps: 100 # 0 # Colbert uses no warmup
-  num_training_steps: 1_000_000 #${int_mul:2,${model.period}}
+  num_training_steps: ${int_mul:2,${model.period}}
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
