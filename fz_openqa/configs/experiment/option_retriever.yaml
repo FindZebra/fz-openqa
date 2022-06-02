@@ -52,7 +52,7 @@ model:
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: ${model.period} # 0 # Colbert uses no warmup
+  num_lr_warmup_steps: 100 # 0 # Colbert uses no warmup
   num_training_steps: 1_000_000 #${int_mul:2,${model.period}}
   optimizer: adamw
   optimizer_params:
@@ -118,7 +118,7 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: ${model.period}
-    reset_optimizer: false # TODO !!
+    reset_optimizer: true # TODO !!
     reset_parameters: false  # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:

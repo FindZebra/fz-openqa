@@ -126,7 +126,10 @@ class RenyiGradients(Gradients):
 
         # compute the Renyi bound in `A` and in `a`
         r = 1.0 / beta
-        L_A_alpha = r * (log_S_norm[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
+        # todo[w_S]  L_A_alpha = r * (log_S_norm[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
+        # todo[w_S]  L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+        log_w_A_alpha = (log_S + log_Zeta).log_softmax(dim=-1)
+        L_A_alpha = r * (beta * log_w_A_alpha[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
         L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
         # compute the Renyi bound for alpha=0 in `A` and in `a`
         log_w_A_zero = (log_S + log_Zeta).log_softmax(dim=-1)
@@ -134,7 +137,8 @@ class RenyiGradients(Gradients):
         L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the gradient
-        log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
+        # todo[w_S] log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
+        log_w = beta * (log_S + log_Zeta + log_p_a__D_Q)
         w = log_w.softmax(dim=-1)
         log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
         grad_L_a_alpha = (w.detach() * log_p_a_D__q).sum(dim=-1)
