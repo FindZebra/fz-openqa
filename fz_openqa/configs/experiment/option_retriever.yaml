@@ -53,10 +53,10 @@ model:
   # optimizer configuration
   ema_decay: null
   num_lr_warmup_steps: 100 # 0 # Colbert uses no warmup
-  num_training_steps: ${int_mul:2,${model.period}}
+  num_training_steps: 1_000_000
   optimizer: adamw
   optimizer_params:
-    lr: 1e-5
+    lr: 3e-6
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -65,7 +65,7 @@ model:
   parameters:
     # alpha: 0.5
     alpha:
-      mode: cosine
+      mode: linear
       num_steps: ${model.period}
       initial_value: 0.999
       final_value: 0
