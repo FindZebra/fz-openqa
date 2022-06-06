@@ -10,7 +10,7 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
-  - override /datamodule/transform: option_dropout
+  - override /datamodule/transform: option_binarized
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
   - override /datamodule/dataset_transform: none
@@ -52,7 +52,7 @@ model:
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: 500 # 0 # Colbert uses no warmup
+  num_lr_warmup_steps: ${int_div:${model.period},10} # 0 # Colbert uses no warmup
   num_training_steps: ${int_mul:${model.period},2}
   optimizer: adamw
   optimizer_params:

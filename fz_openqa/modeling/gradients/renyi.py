@@ -4,12 +4,14 @@ from typing import Optional
 import rich
 import torch
 import torch.nn.functional as F
+from torch import nn
 from torch import Tensor
 
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class RenyiGradients(Gradients):
@@ -21,6 +23,10 @@ class RenyiGradients(Gradients):
     ):
         super().__init__(*args, **kwargs)
         self.cartesian_max_size = cartesian_max_size
+        # self.mu = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+        # self.is_initialized = nn.Parameter(torch.tensor(0), requires_grad=False)
+        self.register_buffer("mu", torch.tensor(0.0))
+        self.register_buffer("is_initialized", torch.tensor(0))
 
     def __call__(
         self,
@@ -74,6 +80,12 @@ class RenyiGradients(Gradients):
         log_s_ = proposal_log_weight
         n_options = f_theta_.shape[1]
         is_binary = n_options == 1
+        targets = targets.long()
+
+        # initialize the bias
+        if self.training and self.is_initialized < 1:
+            self.is_initialized.data += 1
+            self.mu.data = torch.mean(g_theta_).data
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
@@ -114,11 +126,19 @@ class RenyiGradients(Gradients):
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
         if is_binary:
-            log_p_A__D_Q = F.binary_cross_entropy_with_logits(g_theta)
-            log_p_a__D_Q = log_p_A__D_Q.squeeze(1)
+            g_theta = g_theta.expand(-1, 2, -1)
+            g_theta = g_theta - self.mu
+            targets_expanded_ = torch.zeros_like(g_theta)
+            targets_expanded_[:, 1] = 1
+            log_p_A__D_Q = -F.binary_cross_entropy_with_logits(
+                g_theta, targets_expanded_, reduction="none"
+            )
+            # rich.print(f">> mu:{self.mu},
+            # log_p_A__D_Q: {log_p_A__D_Q.shape}\n{log_p_A__D_Q.exp()}")
         else:
             log_p_A__D_Q = g_theta.log_softmax(dim=1)
-            log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
+
+        log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
@@ -174,17 +194,17 @@ class RenyiGradients(Gradients):
         )
 
         LA_normed = L_A_zero.log_softmax(dim=1)
-        H_zero = -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean()
-        H_alpha = -(LA_normed.exp() * LA_normed).sum(dim=1).mean()
+        H_zero = entropy(L_A_zero, dim=1).mean()
+        H_alpha = entropy(LA_normed, dim=1).mean()
         kl_alpha = kl_divergence(L_A_alpha, q_logits=L_A_zero, dim=1)
 
-        # measure aggrement
+        # measure agreement
         pred_zero = L_A_zero.argmax(dim=1)
         pred_alpha = L_A_alpha.argmax(dim=1)
-        aggreement_alpha = (pred_zero == pred_alpha).float().mean()
+        agreement_alpha = (pred_zero == pred_alpha).float().mean()
         accuracy_alpha = (targets == pred_alpha).float().mean()
 
-        return {
+        output = {
             "loss": loss,
             "reader/Accuracy-alpha": accuracy_alpha,
             "reader/entropy": H_zero,
@@ -192,11 +212,19 @@ class RenyiGradients(Gradients):
             "reader/logp": L_a_zero.detach(),
             "reader/logp-alpha": L_a_alpha.detach(),
             "reader/kl_alpha": kl_alpha.detach(),
-            "reader/aggree_alpha": aggreement_alpha.detach(),
+            "reader/agree_alpha": agreement_alpha.detach(),
             "_reader_logits_": L_A_zero.detach(),
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
-            "_retriever_reading_logits_": retriever_score.sum(-1).detach(),
             **diagnostics,
         }
+
+        if not is_binary:
+            output["_retriever_reading_logits_"] = retriever_score.sum(-1).detach()
+
+        return output
+
+
+def entropy(logp, dim=1):
+    return -(logp.exp() * logp).sum(dim=dim)

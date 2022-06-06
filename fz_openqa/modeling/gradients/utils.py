@@ -30,6 +30,10 @@ def batch_cartesian_product(
     """
     x0, *xs = inputs
     bs, n_vecs, n_dims, *_ = x0.shape
+    if n_vecs == 1:
+        for y in (x0, *xs):
+            yield y
+        return
     if max_size is not None and max_size < n_dims:
         max_size = None
     index = torch.arange(n_dims, device=x0.device)
