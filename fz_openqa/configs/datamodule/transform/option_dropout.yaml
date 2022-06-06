@@ -10,4 +10,5 @@ keys:
   - document.proposal_rank
   - document.match_score
   - document.row_idx
+  - document.proposal_log_weight
 update: true

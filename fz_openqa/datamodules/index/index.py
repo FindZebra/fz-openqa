@@ -48,6 +48,7 @@ ALLOWED_COLUMNS_NESTING = [
     "question.input_ids",
     "question.attention_mask",
     "question.text",
+    "question.metamap",
     "question.answer_text",
     "document.row_idx",
     "document.proposal_score",

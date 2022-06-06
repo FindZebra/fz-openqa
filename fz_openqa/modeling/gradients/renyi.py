@@ -3,6 +3,7 @@ from typing import Optional
 
 import rich
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
 from fz_openqa.modeling.gradients.base import Gradients
@@ -71,6 +72,8 @@ class RenyiGradients(Gradients):
         f_theta_ = retriever_score
         f_phi_ = proposal_score
         log_s_ = proposal_log_weight
+        n_options = f_theta_.shape[1]
+        is_binary = n_options == 1
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
@@ -110,8 +113,12 @@ class RenyiGradients(Gradients):
         targets_expanded = targets_expanded.expand(targets.size(0), 1, log_zeta.size(2))
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
-        log_p_A__D_Q = g_theta.log_softmax(dim=1)
-        log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
+        if is_binary:
+            log_p_A__D_Q = F.binary_cross_entropy_with_logits(g_theta)
+            log_p_a__D_Q = log_p_A__D_Q.squeeze(1)
+        else:
+            log_p_A__D_Q = g_theta.log_softmax(dim=1)
+            log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
@@ -132,7 +139,7 @@ class RenyiGradients(Gradients):
         L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
         # log_w_A_alpha = (log_S + log_Zeta).log_softmax(dim=-1)
         # L_A_alpha = r * (beta * log_w_A_alpha[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
-        L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+        # L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
         # compute the Renyi bound for alpha=0 in `A` and in `a`
         log_w_A_zero = (log_S + log_Zeta).log_softmax(dim=-1)
         L_A_zero = (log_w_A_zero[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
@@ -147,6 +154,8 @@ class RenyiGradients(Gradients):
 
         # compute the loss
         loss = -1 * grad_L_a_alpha
+
+        # todo. binarized: refactor KL divergence and Entropy
 
         # compute the terms for regularization and diagnostics
         kl_reader = kl_divergence(L_A_alpha, dim=1)
@@ -165,8 +174,8 @@ class RenyiGradients(Gradients):
         )
 
         LA_normed = L_A_zero.log_softmax(dim=1)
-        H_zero = -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean().detach()
-        H_alpha = -(LA_normed.exp() * LA_normed).sum(dim=1).mean().detach()
+        H_zero = -(L_A_zero.exp() * L_A_zero).sum(dim=1).mean()
+        H_alpha = -(LA_normed.exp() * LA_normed).sum(dim=1).mean()
         kl_alpha = kl_divergence(L_A_alpha, q_logits=L_A_zero, dim=1)
 
         # measure aggrement

@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 from datasets import Dataset
 from elasticsearch import Elasticsearch
 from loguru import logger
@@ -40,8 +41,6 @@ class ElasticsearchEngine(IndexEngine):
     _max_num_proc: int = None
 
     _instance: Elasticsearch
-    index_columns: List[str] = ["document.row_idx", "document.text", "document.idx"]
-    query_columns: List[str] = ["question.text", "question.answer_text", "question.document_idx"]
     no_fingerprint: List[str] = IndexEngine.no_fingerprint + [
         "_instance",
         "timeout",
@@ -62,12 +61,27 @@ class ElasticsearchEngine(IndexEngine):
         "index_key": "document.row_idx",
         "index_text_key": "document.text",
         "index_doc_id_key": "document.idx",
+        "query_text_key": "question.text",
+        "query_answer_text_key": "question.answer_text",
+        "query_doc_id_key": "question.document_idx",
         "ingest_batch_size": 1000,
         "auxiliary_weight": 0,
         "es_temperature": 1.0,
         "es_logging_level": "error",
         "filter_with_doc_ids": False,
     }
+
+    @property
+    def index_columns(self):
+        # todo: replace class attribute
+        return [self.config[c] for c in ["index_key", "index_text_key", "index_doc_id_key"]]
+
+    @property
+    def query_columns(self):
+        # todo: replace class attribute
+        return [
+            self.config[c] for c in ["query_text_key", "query_answer_text_key", "query_doc_id_key"]
+        ]
 
     def _build(
         self,

@@ -12,6 +12,7 @@ from loguru import logger
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
 from ..pipes.answer_options import InferTokenTypeIds
+from ..pipes.control.batch_condition import HasKeys
 from ..pipes.control.condition import In
 from ..pipes.min_length import MinLength
 from ..pipes.nesting import ApplyAsFlatten
@@ -85,6 +86,7 @@ class QaBuilder(HfDatasetBuilder):
         "answer.attention_mask",
         "answer.target",
         "question.text",
+        "question.metamap",
         "question.input_ids",
         "question.attention_mask",
     ]
@@ -341,7 +343,7 @@ class ConcatQaBuilder(QaBuilder):
 
     def get_concat_qa_pipe(self):
         # register features that also need to be expanded to match the concatenated shape
-        additional_question_features = ["question.document_idx"]
+        additional_question_features = ["question.document_idx", "question.metamap"]
 
         # register the tokens that prefix the question
         q_start_tokens = []
@@ -366,10 +368,24 @@ class ConcatQaBuilder(QaBuilder):
                 update=True,
                 input_filter=In(["question.text", *additional_question_features]),
             ),
+            # concat the answer text with the question
             ApplyAsFlatten(
                 ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
                 level=1,
                 input_filter=In(["question.text", "answer.text"]),
+                update=True,
+            ),
+            # concat the answer text with the metamap question
+            Gate(
+                HasKeys(keys=["question.metamap"]),
+                ApplyAsFlatten(
+                    ConcatTextFields(
+                        keys=["answer.text", "question.metamap"], new_key="question.metamap"
+                    ),
+                    level=1,
+                    input_filter=In(["question.metamap", "answer.text"]),
+                    update=True,
+                ),
                 update=True,
             ),
             RenameKeys({"answer.text": "question.answer_text"}),

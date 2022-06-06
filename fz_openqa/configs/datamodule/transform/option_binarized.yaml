@@ -1,0 +1,4 @@
+defaults:
+  - option_dropout
+
+_target_: fz_openqa.datamodules.pipes.OptionBinarized
