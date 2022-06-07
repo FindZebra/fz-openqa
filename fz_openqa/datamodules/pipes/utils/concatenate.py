@@ -205,7 +205,7 @@ def stack_questions_and_documents(batch: Batch, *, pad_token_id: int, max_length
     for key in ["input_ids", "attention_mask"]:
         padded_batch[key] = einops.rearrange(
             padded_batch[key],
-            "(bs n_opts n_docs) ... -> (bs n_docs) n_opts ...",
+            "(bs n_opts n_docs) ... -> bs n_opts n_docs ...",
             bs=bs,
             n_opts=n_opts,
             n_docs=n_docs,

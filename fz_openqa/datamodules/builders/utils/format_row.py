@@ -140,9 +140,14 @@ def format_row_nested_questions_with_docs(
 
     repr = f"* Question #{row.get('question.idx', None)}\n"
     idx = row["answer.target"]
+    question_keys = [key for key in ["question.input_ids", "qad.input_ids"] if key in row]
+    if len(question_keys) == 0:
+        raise ValueError(f"No question keys found: keys={[row.keys()]}")
+    else:
+        question_key = question_keys[0]
 
     # for each question-answer pair
-    for i, an in enumerate(row["question.input_ids"]):
+    for i, an in enumerate(row[question_key]):
         locator = f"Option #{i + 1} (Q#{row.get('question.idx', None)})"
         repr += get_separator("-") + "\n"
         repr += f"|-* {locator}\n"

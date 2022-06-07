@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import rich
 from omegaconf import DictConfig
 from transformers import BertPreTrainedModel
 
@@ -9,6 +10,7 @@ from fz_openqa.utils import maybe_instantiate
 def instantiate_bert_model_with_config(
     bert: DictConfig | BertPreTrainedModel,
 ) -> BertPreTrainedModel:
+
     if isinstance(bert, (dict, DictConfig)) and "config" in bert.keys():
         bert_config = bert.pop("config", {})
         if len(bert_config) > 0:

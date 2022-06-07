@@ -2,14 +2,13 @@ from enum import Enum
 from typing import Any
 from typing import Optional
 
+import einops
 import rich
 from datasets import Split
 from torch import Tensor
 
 from ...utils.pretty import pprint_batch
 from .base import Module
-from .utils.concatenate import concat_questions_and_documents
-from .utils.concatenate import stack_questions_and_documents
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -72,18 +71,36 @@ class MedQaReader(Module):
                     rich.print(f"[cyan] {decoded}")
             exit()
 
-        return self.bert(
+        # forward pass
+        output = self.bert(
             batch["qad.input_ids"],
             batch["qad.attention_mask"],
             labels=targets,
             return_dict=True,
         )
+        return output
 
     def _step(self, batch: Batch, **kwargs: Any) -> Batch:
 
-        answer_targets: Tensor = batch["answer.target"]
+        # prepare data for the answering model
+        questions = batch["qad.input_ids"]
+        input_shape = questions.shape
+        MODE = {3: "concat", 4: "stack"}[len(input_shape)]
+        if MODE == "stack":
+            bs, n_opts, n_docs, seq_len = questions.shape
+            batch["answer.target"] = batch["answer.target"].view(bs, 1).expand(bs, n_docs).view(-1)
+            for key in ["qad.input_ids", "qad.attention_mask"]:
+                batch[key] = einops.rearrange(
+                    batch[key],
+                    "bs n_opts n_docs ... -> (bs n_docs) n_opts ...",
+                    bs=bs,
+                    n_opts=n_opts,
+                    n_docs=n_docs,
+                )
+                batch[key] = batch[key].contiguous()
 
         # forward pass through the reader model
+        answer_targets: Tensor = batch["answer.target"]
         outputs = self._forward(batch, targets=answer_targets, **kwargs)
 
         return {

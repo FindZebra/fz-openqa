@@ -22,7 +22,7 @@ base:
   exp_info: "--"
   batch_size: 32
   device_batch_size: 1
-  eval_device_batch_size: 24
+  eval_device_batch_size: 24 # <- looks very large
   infer_batch_mul: 100
 
 

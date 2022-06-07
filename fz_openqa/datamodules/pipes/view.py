@@ -1,16 +1,15 @@
+from copy import copy
 from enum import Enum
 from functools import partial
 from typing import List
 from typing import Optional
 
-import rich
 from transformers import PreTrainedTokenizer
 
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.utils.concatenate import concat_questions_and_documents
 from fz_openqa.datamodules.pipes.utils.concatenate import stack_questions_and_documents
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class ViewFormat(Enum):
@@ -59,9 +58,11 @@ class View(Pipe):
         super(View, self).__init__(**kwargs)
 
     def _call_batch(self, batch: Batch, idx: Optional[List[int]] = None, **kwargs) -> Batch:
+        batch = copy(batch)
         out = self.op(batch)
         out = {f"{self.output_field}.{k}": v for k, v in out.items()}
         for key in self.additional_columns:
             if key in batch.keys():
                 out[key] = batch[key]
+
         return out
