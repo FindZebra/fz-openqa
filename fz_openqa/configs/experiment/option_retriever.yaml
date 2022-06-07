@@ -10,7 +10,7 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
-  - override /datamodule/transform: option_binarized
+  - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
   - override /datamodule/dataset_transform: none
@@ -41,7 +41,7 @@ trainer:
   gradient_clip_val: 0.5 # 2.0 might be unstable
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
-  precision: 16
+  precision: 32
   max_steps: 100_000 # set 29_900 for the final exps
 
 model:
@@ -66,7 +66,7 @@ model:
     # alpha: 0.5
     alpha:
       mode: cosine
-      num_steps: ${model.period} # todo: try longer?
+      num_steps: ${int_div:${model.period},2}
       initial_value: 0.999
       final_value: 0
     reader_kl_weight: 0
@@ -152,7 +152,7 @@ datamodule:
 
   # documents: retrieval & sampling
   n_retrieved_documents: 100
-  n_documents: 40
+  n_documents: 16
 
   # document sampler
   sampler:
