@@ -65,9 +65,9 @@ model:
   parameters:
     # alpha: 0.5
     alpha:
-      mode: cosine
+      mode: linear
       num_steps: ${int_div:${model.period},2}
-      initial_value: 0.999
+      initial_value: 0 # 0.999 todo
       final_value: 0
     reader_kl_weight: 0
     proposal_kl_weight: 0
@@ -76,6 +76,7 @@ model:
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     agg_retriever_kl_weight: 0
+    eval_alpha: -1
 
   # Module definition
   module:

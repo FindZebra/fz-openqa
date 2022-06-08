@@ -1,17 +1,14 @@
 from typing import Dict
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
-from torch import nn
 from torch import Tensor
 
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class RenyiGradients(Gradients):
@@ -71,6 +68,7 @@ class RenyiGradients(Gradients):
         alpha = kwargs.get("alpha", 0.0)
         reader_kl_weight = kwargs.get("reader_kl_weight", None)
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+        eval_alpha = kwargs.get("eval_alpha", None)
 
         # rename input variables
         beta = 1 - alpha
@@ -103,6 +101,10 @@ class RenyiGradients(Gradients):
         assert f_phi_ is not None
         assert log_s_ is not None
         assert targets is not None
+
+        # evaluation temperature
+        if not self.training and eval_alpha is not None:
+            alpha = eval_alpha
 
         # compute `\zeta = \exp f_\theta - f_\phi`
         log_zeta_ = f_theta_ - f_phi_
@@ -181,8 +183,6 @@ class RenyiGradients(Gradients):
         # compute the loss
         loss = -1 * grad_L_a_alpha
 
-        # todo. binarized: refactor KL divergence and Entropy
-
         # compute the terms for regularization and diagnostics
         kl_reader = kl_divergence(L_A_alpha, dim=1)
         diagnostics["reader/kl_uniform"] = kl_reader.mean()
@@ -219,7 +219,7 @@ class RenyiGradients(Gradients):
             "reader/logp-alpha": L_a_alpha.detach(),
             "reader/kl_alpha": kl_alpha.detach(),
             "reader/agree_alpha": agreement_alpha.detach(),
-            "_reader_logits_": L_A_zero.detach(),
+            "_reader_logits_": L_A_alpha.detach(),  # <- use L_alpha for the accuracy
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
