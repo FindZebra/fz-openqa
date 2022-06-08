@@ -52,11 +52,11 @@ model:
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: ${int_div:${model.period},10} # 0 # Colbert uses no warmup
+  num_lr_warmup_steps: 100_000 #${int_div:${model.period},10} # 0 # Colbert uses no warmup
   num_training_steps: ${int_mul:${model.period},2}
   optimizer: adamw
   optimizer_params:
-    lr: 6e-6
+    lr: 3e-6
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -76,7 +76,7 @@ model:
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     agg_retriever_kl_weight: 0
-    eval_alpha: -1
+    eval_alpha: null # todo -1
 
   # Module definition
   module:

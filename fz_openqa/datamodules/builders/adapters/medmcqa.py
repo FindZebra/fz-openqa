@@ -19,7 +19,10 @@ class NestColumns:
 
 class MedMCQAAdapter(DatasetAdapter):
     def __call__(self, dataset: DatasetDict, **kwargs) -> (DatasetDict, Dataset):
-        return DatasetDict({split: self.format(dset) for split, dset in dataset.items()}), None
+        return (
+            DatasetDict({split: self.format(dset, **kwargs) for split, dset in dataset.items()}),
+            None,
+        )
 
     def format(self, dataset: Dataset, **kwargs) -> Dataset:
         # nest the answer options
