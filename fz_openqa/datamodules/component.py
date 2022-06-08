@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from copy import deepcopy
+from numbers import Number
 from typing import Any
 from typing import Dict
 from typing import List
@@ -158,8 +159,15 @@ class Component:
         data = self.to_json_struct(fingerprint_mode=True)
 
         def maybe_get_fingerprint(v: Any, key: str) -> str:
-            """return the fingerprint, excepts if key==__name__"""
+            """
+            return the fingerprint, excepts
+            if key==__name__ or if v is a string or a number
+            """
             if key == "__name__":
+                return v
+            elif isinstance(v, Number):
+                return str(v)
+            elif isinstance(v, str) and len(v) < 32:
                 return v
             else:
                 return get_fingerprint(v)
