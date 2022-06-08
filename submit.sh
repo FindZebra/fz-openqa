@@ -50,11 +50,8 @@ echo "====== starting experiment ========="
 poetry run python run.py +experiment=option_retriever +environ=diku \
   +patch=dpr \
   model/module/gradients=${GRADIENTS} \
-  base.device_batch_size=1 \
-  base.infer_batch_mul=10 \
   datamodule.dset_name=${DSET_NAME} \
   datamodule.corpus_name=${CORPUS_NAME} \
-  base.eval_device_batch_size=4 \
   trainer.precision=32 \
   datamodule.num_workers=8 \
   +setup_with_model=${setup_with_model} \
