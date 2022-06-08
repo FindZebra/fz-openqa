@@ -10,10 +10,13 @@ from typing import List
 from typing import Optional
 
 import numpy as np
+import omegaconf
 import torch
 from datasets import Dataset
 from hydra.utils import instantiate
 from loguru import logger
+from omegaconf import DictConfig
+from omegaconf import ListConfig
 
 from fz_openqa.datamodules.index.engines.vector_base.utils.faiss import TensorLike
 from fz_openqa.datamodules.index.search_result import SearchResult
@@ -88,10 +91,16 @@ class IndexEngine(Pipe, metaclass=abc.ABCMeta):
                         f"Unknown config argument `{key}`. "
                         f"The valid arguments are: {self.default_config}"
                     )
-                self.config[key] = value
+                self.config[key] = self.cast_attr(value)
 
         # set the path where to solve the configuration and data
         self.path = None if path is None else Path(path)
+
+    @staticmethod
+    def cast_attr(x: Any):
+        if isinstance(x, (ListConfig, DictConfig)):
+            return omegaconf.OmegaConf.to_container(x)
+        return x
 
     @property
     def name(self) -> str:

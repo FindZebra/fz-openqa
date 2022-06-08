@@ -210,11 +210,21 @@ class ElasticsearchEngine(IndexEngine):
             k=k,
         )
 
+    @staticmethod
+    def _get_value(batch: Dict, column: List | str):
+        if isinstance(column, str):
+            column = [column]
+        for c in column:
+            if c in batch:
+                return batch[c]
+
+        return None
+
     def _search_chunk(
         self, batch: Batch, idx: Optional[List[int]] = None, **kwargs
     ) -> SearchResult:
 
-        args = [batch.get(key, None) for key in self.query_columns]
+        args = [self._get_value(batch, key) for key in self.query_columns]
 
         # check the arguments
         if self.config["auxiliary_weight"] > 0 and args[1] is None:
