@@ -26,7 +26,8 @@ def run(config: DictConfig) -> None:
     datasets.set_caching_enabled(True)
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+    bert_id = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # preprocessing
     preprocessing_op = config.get("preprocessing", None)

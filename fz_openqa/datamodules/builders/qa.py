@@ -20,6 +20,7 @@ from ..pipes.nesting import Expand
 from ..pipes.nesting import Nested
 from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
+from ..utils.dataset import keep_only_columns
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from .preprocessing import DatasetPreprocessing
@@ -47,6 +48,7 @@ QA_DATASETS = {
     "race": ("race", "all"),
     "race-hard": ("race", "hard"),
     "race-middle": ("race", "middle"),
+    "medmcqa": ("medmcqa", None),
 }
 
 
@@ -157,9 +159,28 @@ class QaBuilder(HfDatasetBuilder):
         if len(dsets) == 1:
             return dsets[0]
         else:
+            # check that all datasets have the same splits
+            splits = set(dsets[0].keys())
+            if not all(set(dset.keys()) == splits for dset in dsets):
+                raise ValueError(
+                    f"Datasets do not all have the same splits. "
+                    f"Found {[set(dset.keys()) for dset in dsets]}"
+                )
+
+            # only keep the columns that appear in all datasets
+            shared_columns = set.intersection(
+                *(set(ds.column_names) for dset in dsets for ds in dset.values())
+            )
+            dsets = [keep_only_columns(dset, list(shared_columns)) for dset in dsets]
+
+            # concatenate and add the `dataset.idx` column
             dsets_dict = DatasetDict()
-            for split in dsets[0].keys():
-                split_dsets = concatenate_datasets([d[split] for d in dsets])
+            for split in splits:
+                split_dsets = [d[split] for d in dsets]
+                split_dsets = [
+                    d.add_column("dataset.idx", [i] * len(d)) for i, d in enumerate(split_dsets)
+                ]
+                split_dsets = concatenate_datasets(split_dsets)
                 dsets_dict[split] = split_dsets
 
             return dsets_dict
