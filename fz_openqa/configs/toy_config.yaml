@@ -7,7 +7,7 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-version: 50
+version: 51
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
@@ -15,7 +15,7 @@ seed: null
 wandb: true
 wandb_name: null
 device: cuda
-num_epochs: 20
+num_epochs: 10
 batch_size: 64
 num_workers: 2
 pin_memory: true
@@ -36,14 +36,15 @@ supervised_weight: 5.
 labels: [ 1, 7, 5, 9 ]
 
 
-alpha: 0
+alpha: 1
 parameters:
   reader_kl_weight: 0
   retriever_kl_weight: 0
   alpha:
     mode: cosine
     num_steps: 1000
+    num_warmup_steps: 100
     initial_value: ${alpha}
     final_value: 0
-  eval_alpha: null
+  eval_alpha: -1
   gamma: 0

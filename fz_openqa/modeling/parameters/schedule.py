@@ -30,7 +30,7 @@ class LinearSchedule(Schedule):
         if self._step < self.num_warmup_steps:
             return self.initial_value
         else:
-            x = self._step - self.num_warmup_steps
+            x = max(self._step - self.num_warmup_steps, 0)
             M = self.num_steps - self.num_warmup_steps
             delta = self.final_value - self.initial_value
             u = min(1.0, x / M)

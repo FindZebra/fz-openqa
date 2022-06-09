@@ -189,17 +189,27 @@ class RenyiGradients(Gradients):
         L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the Renyi bound for alpha=1 in `A` and in `a`
-        # log_w_A_one = log_S  # todo
-        # L_A_one = (log_w_A_one[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
-        # L_a_one = L_A_one.gather(1, index=targets[:, None]).squeeze(1)
+        L_A_one = (log_S[:, None, :].exp() + log_p_A__D_Q).sum(dim=-1)
+        L_a_one = L_A_one.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the Renyi bound in `A` and in `a`
-        r = 1.0 / beta
-        L_A_alpha = r * (log_S[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
-        L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
-        # log_w_A_alpha = (log_S + log_Zeta).log_softmax(dim=-1)
-        # L_A_alpha = r * (beta * log_w_A_alpha[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
-        # L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+        if alpha == 0:
+            L_A_alpha = L_A_zero
+            L_a_alpha = L_a_zero
+        elif alpha == 1:
+            L_A_alpha = L_A_one
+            L_a_alpha = L_a_one
+        else:
+            # do a linear interpolation for `Beta < eps` to guarantee numerical stability
+            eps = 1e-1
+            beta_ = max(eps, beta)
+            r = 1.0 / beta_
+            L_A_alpha = r * (log_S[:, None, :] + beta_ * log_w_A).logsumexp(dim=-1)
+            if beta < eps:
+                u = (eps - beta) / eps
+                L_A_alpha = (1 - u) * L_A_alpha + u * L_A_zero
+
+            L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the gradient
         log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
@@ -230,7 +240,6 @@ class RenyiGradients(Gradients):
         LA_normed = L_A_zero.log_softmax(dim=1)
         H_zero = entropy(L_A_zero, dim=1).mean()
         H_alpha = entropy(LA_normed, dim=1).mean()
-        kl_alpha = kl_divergence(L_A_alpha, q_logits=L_A_zero, dim=1)
 
         # measure agreement
         pred_zero = L_A_zero.argmax(dim=1)
@@ -244,10 +253,10 @@ class RenyiGradients(Gradients):
             "reader/entropy": H_zero,
             "reader/entropy-alpha": H_alpha,
             "reader/logp": L_a_zero.detach(),
+            "reader/kl_p_q": (L_a_zero - L_a_one).detach(),
             "reader/logp-alpha": L_a_alpha.detach(),
-            "reader/kl_alpha": kl_alpha.detach(),
             "reader/agree_alpha": agreement_alpha.detach(),
-            "_reader_logits_": L_A_alpha.detach(),  # <- use L_alpha for the accuracy
+            "_reader_logits_": L_A_zero.detach(),  # <- use L_alpha for the accuracy
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),

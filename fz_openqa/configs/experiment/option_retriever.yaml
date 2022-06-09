@@ -67,7 +67,8 @@ model:
     alpha:
       mode: linear
       num_steps: ${model.period}
-      initial_value: 0.999 # todo
+      num_warmup_steps: ${int_div:${model.period},5}
+      initial_value: 1 # todo
       final_value: 0
     reader_kl_weight: 0
     proposal_kl_weight: 0
