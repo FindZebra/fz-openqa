@@ -7,7 +7,7 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-version: 48
+version: 50
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
@@ -45,4 +45,5 @@ parameters:
     num_steps: 1000
     initial_value: ${alpha}
     final_value: 0
+  eval_alpha: null
   gamma: 0

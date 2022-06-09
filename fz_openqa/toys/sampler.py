@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections import namedtuple
+from functools import partial
 from typing import Dict
 
 import rich
@@ -98,9 +99,11 @@ class ToySampler:
         self.scores = {k: None for k in data.keys()}
         self.batch_size = batch_size
         self.n_samples = n_samples
-        self.sampler = {"priority": PrioritySampler.sample, "weighted_mc": weighted_mc_sample}[
-            sampler
-        ]
+        self.sampler = {
+            "priority": partial(PrioritySampler.sample, mode="uniform"),
+            "priority_exp": partial(PrioritySampler.sample, mode="exponential"),
+            "weighted_mc": weighted_mc_sample,
+        }[sampler]
         self.sampled_data = {k: None for k in data.keys()}
         self.supervised_weight = supervised_weight
         self.supervised_ratio = supervised_ratio
