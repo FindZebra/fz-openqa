@@ -3,12 +3,31 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from torch import Tensor
 
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
+
+
+def cleanup_nans(score, key):
+    nan_count = score.isnan().float().sum()
+    if nan_count > 0:
+        no_nans = score[~score.isnan()]
+        score_mean = no_nans.mean().detach()
+        logger.warning(
+            f"> {key:10s}: {nan_count} NaNs "
+            f"({nan_count / score.numel():.2%}), "
+            f"mean={score_mean:.1f} "
+            f"range=[{no_nans.min():.1f}-{no_nans.max():.1f}]"
+        )
+
+        # replace NaNs
+        score[score.isnan()] = score_mean
+
+    return nan_count
 
 
 class RenyiGradients(Gradients):
@@ -106,6 +125,16 @@ class RenyiGradients(Gradients):
         if not self.training and eval_alpha is not None:
             alpha = eval_alpha
 
+        nans_info = {
+            f"nans/{key}": cleanup_nans(score, key)
+            for key, score in [
+                ("f_theta", f_theta_),
+                ("g_theta", g_theta_),
+                ("f_phi", f_phi_),
+                ("log_s", log_s_),
+            ]
+        }
+
         # compute `\zeta = \exp f_\theta - f_\phi`
         log_zeta_ = f_theta_ - f_phi_
 
@@ -144,11 +173,10 @@ class RenyiGradients(Gradients):
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
-        log_S_norm = log_S.log_softmax(dim=-1)
         log_Zeta = log_zeta.sum(1)
 
         # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `A` and in `a`
-        log_v = log_Zeta - (log_S_norm + log_Zeta).logsumexp(dim=-1, keepdims=True)
+        log_v = log_Zeta - (log_S + log_Zeta).logsumexp(dim=-1, keepdims=True)
         log_w_A = log_p_A__D_Q + log_v[:, None, :]
         log_w_a = log_w_A.gather(1, index=targets_expanded).squeeze(1)
         self.ess_diagnostics(diagnostics, log_w_a)
@@ -167,7 +195,7 @@ class RenyiGradients(Gradients):
 
         # compute the Renyi bound in `A` and in `a`
         r = 1.0 / beta
-        L_A_alpha = r * (log_S_norm[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
+        L_A_alpha = r * (log_S[:, None, :] + beta * log_w_A).logsumexp(dim=-1)
         L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
         # log_w_A_alpha = (log_S + log_Zeta).log_softmax(dim=-1)
         # L_A_alpha = r * (beta * log_w_A_alpha[:, None, :] + log_p_A__D_Q).logsumexp(dim=-1)
@@ -224,6 +252,7 @@ class RenyiGradients(Gradients):
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
             **diagnostics,
+            **nans_info,
         }
 
         if not is_binary:

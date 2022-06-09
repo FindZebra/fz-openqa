@@ -15,7 +15,7 @@ model:
       scale_init: 1
       target_scale_init: 0.1
       learn_scale: false
-      auto_scale: true # todo
+      auto_scale: false # todo
     retriever_head:
       output_size: ${model.metric_size}
       use_soft_score: false
@@ -24,4 +24,4 @@ model:
       scale_init: 1
       target_scale_init: 0.1
       learn_scale: false
-      auto_scale: true # todo
+      auto_scale: false # todo

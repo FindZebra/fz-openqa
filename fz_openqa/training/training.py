@@ -168,6 +168,7 @@ def train(config: DictConfig) -> Optional[float]:
             test_every_update=dataset_update.get("test_every_update", False),
             reset_optimizer=dataset_update.get("reset_optimizer", True),
             reset_parameters=dataset_update.get("reset_parameters", False),
+            load_best_model=config.get("test_with_best_model", True),
             spawn_es=config.get("spawn_es", False),
             **dataset_update.get("builder_args", {}),
         )

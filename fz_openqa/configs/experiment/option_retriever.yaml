@@ -4,8 +4,8 @@ defaults:
   - base
   - override /model: option_retriever
   - override /model/bert: pubmed
-  - override /model/module/retriever_head: colbert
-  - override /model/module/reader_head: colbert
+  - override /model/module/retriever_head: dpr
+  - override /model/module/reader_head: dpr
   - override /model/module/gradients: renyi
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
@@ -38,25 +38,25 @@ base:
   infer_batch_mul: 300
 
 trainer:
-  gradient_clip_val: 0.5 # 2.0 might be unstable
+  gradient_clip_val: 0.5 # 2.0 might be unstable # todo
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
-  precision: 32
-  max_steps: 100_000 # set 29_900 for the final exps
+  precision: 16
+  max_steps: ${int_mul:${model.period},6}  # set 29_900 for the final exps
 
 model:
   # global model configuration
-  metric_size: 64
+  metric_size: 768
   metric_type: inner_product
   period: 5_000
 
   # optimizer configuration
   ema_decay: null
-  num_lr_warmup_steps: ${int_div:${model.period},10} # 0 # Colbert uses no warmup
-  num_training_steps: 100_000 #${int_mul:${model.period},2}
+  num_lr_warmup_steps: ${model.period} # 0 # Colbert uses no warmup
+  num_training_steps: ${int_mul:${trainer.max_steps},1.2}
   optimizer: adamw
   optimizer_params:
-    lr: 3e-6
+    lr: 1e-5
     weight_decay: 1e-3
     # correct_bias: false # todo: remove and use torch's AdamW
     eps: 1e-8 # as in the Colbert repo
@@ -66,8 +66,8 @@ model:
     # alpha: 0.5
     alpha:
       mode: linear
-      num_steps: ${int_div:${model.period},2}
-      initial_value: 0 # 0.999 todo
+      num_steps: ${model.period}
+      initial_value: 0.999 # todo
       final_value: 0
     reader_kl_weight: 0
     proposal_kl_weight: 0
@@ -76,7 +76,7 @@ model:
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     agg_retriever_kl_weight: 0
-    eval_alpha: null # todo -1
+    eval_alpha: -1
 
   # Module definition
   module:
@@ -92,24 +92,21 @@ model:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
       id: retriever
-      use_soft_score: false
-      compute_agg_score: true
-      normalize: true
+      normalize: false
+      scale_init: 1
       target_scale_init: 0.1
-      learn_scale: true
-      auto_scale: true
-      share_parameters: true
+      learn_scale: false
+      auto_scale: false
       bias: false
     reader_head:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
       id: reader
-      use_soft_score: true
       normalize: false
+      scale_init: 1
       target_scale_init: 0.1
-      learn_scale: true
-      auto_scale: true
-      share_parameters: true
+      learn_scale: false
+      auto_scale: false
       bias: false
     gradients:
       cartesian_max_size: ${eval:"1<<20"}
@@ -119,7 +116,7 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: ${model.period}
-    reset_optimizer: true # TODO !!
+    reset_optimizer: false # TODO !!
     reset_parameters: false  # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
