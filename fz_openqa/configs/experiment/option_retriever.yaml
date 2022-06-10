@@ -11,7 +11,7 @@ defaults:
   - override /model/module/gradients: renyi
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
-  - override /datamodule/sampler: priority_exp
+  - override /datamodule/sampler: priority
   - override /datamodule/transform: none
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none

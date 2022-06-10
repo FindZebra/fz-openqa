@@ -20,22 +20,22 @@ from fz_openqa.utils.git import git_revision_short_hash
 def int_div(a, *b):
     y = a
     for x in b:
-        y = y // x
-    return y
+        y = y / x
+    return int(y)
 
 
 def int_mul(a, *b):
-    y = int(a)
+    y = a
     for x in b:
-        y *= int(x)
-    return y
+        y *= x
+    return int(y)
 
 
 def int_max(a, *b):
-    y = int(a)
+    y = a
     for x in b:
         y = max(x, y)
-    return y
+    return int(y)
 
 
 N_GPUS = torch.cuda.device_count()
