@@ -1,5 +1,7 @@
 defaults:
   - module: ???
+  - optimizer: adamw
+  - lr_scheduler: linear
   - bert: bio_bert.yaml
 
 _target_: fz_openqa.modeling.Model

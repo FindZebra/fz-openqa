@@ -4,6 +4,8 @@ defaults:
   - base
   - override /model: option_retriever
   - override /model/bert: pubmed
+  - override /model/optimizer: adamw
+  - override /model/lr_scheduler: linear
   - override /model/module/retriever_head: dpr
   - override /model/module/reader_head: dpr
   - override /model/module/gradients: renyi
@@ -51,23 +53,21 @@ model:
   period: 5_000
 
   # optimizer configuration
-  ema_decay: null
-  num_lr_warmup_steps: ${model.period} # 0 # Colbert uses no warmup
-  num_training_steps: ${trainer.max_steps},
-  optimizer: adamw
-  optimizer_params:
-    lr: 1e-5
+  optimizer:
+    lr: 6e-6
     weight_decay: 1e-3
-    # correct_bias: false # todo: remove and use torch's AdamW
-    eps: 1e-8 # as in the Colbert repo
+    eps: 1e-8
+  lr_scheduler:
+    num_warmup_steps: ${int_mul:${model.period},0.3}
+    num_training_steps: ${int_mul:${model.period},1.2}
+
 
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
-    # alpha: 0.5
     alpha:
       mode: linear
       num_steps: ${model.period}
-      temperature: 5.0
+      temperature: 3.0
       initial_value: 1
       final_value: 0
     reader_kl_weight: 0
@@ -117,7 +117,7 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: ${model.period}
-    reset_optimizer: false # TODO !!
+    reset_optimizer: true # TODO !!
     reset_parameters: false  # TODO !!
     test_every_update: false # might cause a bug with checkpointing
     builder_args:
@@ -172,8 +172,8 @@ datamodule:
     dataset_builder:
       dset_name: ${datamodule.dset_name}
       query_expansion: null
-      n_query_tokens: 1 # todo!!! (10)
-      n_answer_tokens: 1 # previous exps: 10
+      n_query_tokens: 1
+      n_answer_tokens: 1
       max_length: 312
     corpus_builder:
       dset_name: ${datamodule.corpus_name}
