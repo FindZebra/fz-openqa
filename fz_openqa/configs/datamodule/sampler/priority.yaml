@@ -5,3 +5,4 @@ proposal_score_key: proposal_score
 field: document
 largest: false
 temperature: 1.0
+mode: uniform

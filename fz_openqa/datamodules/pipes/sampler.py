@@ -268,9 +268,10 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
-    def __init__(self, *args, from_uniform: bool = False, **kwargs):
+    def __init__(self, *args, from_uniform: bool = False, mode="uniform", **kwargs):
         super().__init__(*args, **kwargs)
         self.from_uniform = from_uniform
+        self.mode = mode
         if from_uniform:
             loguru.logger.info(
                 f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
@@ -290,7 +291,9 @@ class PrioritySampler(Sampler):
         # batch[self.proposal_score_key] = logits
 
         # sample
-        z, log_w = self.sample(logits, total, largest=largest, from_uniform=self.from_uniform)
+        z, log_w = self.sample(
+            logits, total, largest=largest, from_uniform=self.from_uniform, mode=self.mode
+        )
         # proposal_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
 
         # re-index and return
@@ -319,7 +322,10 @@ class PrioritySampler(Sampler):
         """
 
         assert mode in {"uniform", "exponential"}
+
+        logits = PrioritySampler.clip_logits(logits, dim=-1)
         log_pz = logits.log_softmax(dim=-1)
+
         N = log_pz.shape[-1]
         if mode == "uniform":
             if largest:
@@ -354,6 +360,11 @@ class PrioritySampler(Sampler):
         else:
             raise ValueError(f"Unknown mode {mode}")
 
+        # warn if NaNs are found
+        n_nans = log_qz[log_qz.isnan()].sum()
+        if n_nans > 0:
+            loguru.logger.warning(f"Found {n_nans} NaNs in log_qz")
+
         # compute the log weights, and handle replacing the base distribution with u(z)
         if from_uniform:
             warnings.warn(
@@ -366,3 +377,13 @@ class PrioritySampler(Sampler):
         log_weight = log_pz - log_qz
 
         return z, log_weight
+
+    @staticmethod
+    def clip_logits(logits, dim=-1):
+        # scale the logits
+        M = logits.max(dim=dim, keepdim=True).values
+        logits = logits - M
+
+        # clip log_pz for numerical stability
+        value_range = {torch.float16: 1e5}.get(logits.dtype, 1e8)
+        return logits.clamp(min=-value_range)

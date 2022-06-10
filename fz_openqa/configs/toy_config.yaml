@@ -8,7 +8,7 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-version: 65
+version: 66
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
