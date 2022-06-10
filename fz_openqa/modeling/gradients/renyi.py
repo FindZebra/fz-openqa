@@ -1,6 +1,7 @@
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from loguru import logger
@@ -89,6 +90,10 @@ class RenyiGradients(Gradients):
         retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
         eval_alpha = kwargs.get("eval_alpha", None)
 
+        # evaluation temperature
+        if not self.training and eval_alpha is not None:
+            alpha = eval_alpha
+
         # rename input variables
         beta = 1 - alpha
         g_theta_ = reader_score
@@ -121,10 +126,7 @@ class RenyiGradients(Gradients):
         assert log_s_ is not None
         assert targets is not None
 
-        # evaluation temperature
-        if not self.training and eval_alpha is not None:
-            alpha = eval_alpha
-
+        # count and replace NaNs in the scores
         nans_info = {
             f"nans/{key}": cleanup_nans(score, key)
             for key, score in [
@@ -146,8 +148,8 @@ class RenyiGradients(Gradients):
         diff_log_p_D__Q_ = f_theta_ - (w.detach() * f_theta_).sum(dim=-1, keepdims=True)
 
         # compute the cartesian product of all variables
-        args = log_zeta_, g_theta_, log_s_, diff_log_p_D__Q_
-        log_zeta, g_theta, log_s, diff_log_p_D__Q = batch_cartesian_product(
+        args = f_theta_, log_zeta_, g_theta_, log_s_, diff_log_p_D__Q_
+        f_theta, log_zeta, g_theta, log_s, diff_log_p_D__Q = batch_cartesian_product(
             *args, max_size=self.cartesian_max_size
         )
 
@@ -195,21 +197,20 @@ class RenyiGradients(Gradients):
         # compute the Renyi bound in `A` and in `a`
         if alpha == 0:
             L_A_alpha = L_A_zero
-            L_a_alpha = L_a_zero
+            # L_a_alpha = L_a_zero
         elif alpha == 1:
             L_A_alpha = L_A_one
-            L_a_alpha = L_a_one
+            # L_a_alpha = L_a_one
         else:
             # do a linear interpolation for `Beta < eps` to guarantee numerical stability
-            eps = 1e-1
+            eps = 1e-2
             beta_ = max(eps, beta)
-            r = 1.0 / beta_
-            L_A_alpha = r * (log_S[:, None, :] + beta_ * log_w_A).logsumexp(dim=-1)
+            L_A_alpha = (1.0 / beta_) * (log_S[:, None, :] + beta_ * log_w_A).logsumexp(dim=-1)
             if beta < eps:
                 u = (eps - beta) / eps
                 L_A_alpha = (1 - u) * L_A_alpha + u * L_A_zero
 
-            L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
+            # L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the gradient
         log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
@@ -237,7 +238,8 @@ class RenyiGradients(Gradients):
             self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
         )
 
-        LA_normed = L_A_zero.log_softmax(dim=1)
+        LA_normed = L_A_alpha.log_softmax(dim=1)
+        La_normed = LA_normed.gather(1, index=targets[:, None]).squeeze(1)
         H_zero = entropy(L_A_zero, dim=1).mean()
         H_alpha = entropy(LA_normed, dim=1).mean()
 
@@ -247,19 +249,29 @@ class RenyiGradients(Gradients):
         agreement_alpha = (pred_zero == pred_alpha).float().mean()
         accuracy_alpha = (targets == pred_alpha).float().mean()
 
+        # In-batch approx. bound
+        L_inbatch = (f_theta.log_softmax(dim=-1) + g_theta.log_softmax(dim=1)).logsumexp(dim=-1)
+        pred_inbatch = L_inbatch.argmax(dim=1)
+        agreement_inbatch = (pred_zero == pred_inbatch).float().mean()
+        accuracy_inbatch = (targets == pred_inbatch).float().mean()
+
         output = {
             "loss": loss,
-            "reader/Accuracy-alpha": accuracy_alpha,
             "reader/entropy": H_zero,
-            "reader/entropy-alpha": H_alpha,
             "reader/logp": L_a_zero.detach(),
             "reader/kl_p_q": (L_a_zero - L_a_one).detach(),
-            "reader/logp-alpha": L_a_alpha.detach(),
-            "reader/agree_alpha": agreement_alpha.detach(),
             "_reader_logits_": L_A_zero.detach(),  # <- use L_alpha for the accuracy
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
+            # alpha diagnostics
+            "reader/Accuracy-alpha": accuracy_alpha,
+            "reader/entropy-alpha": H_alpha,
+            "reader/logp-alpha": La_normed.detach(),
+            "reader/agree_alpha": agreement_alpha.detach(),
+            # in-batch diagnostics
+            "reader/agree-inbatch": agreement_inbatch,
+            "reader/Accuracy-inbatch": accuracy_inbatch,
             **diagnostics,
             **nans_info,
         }

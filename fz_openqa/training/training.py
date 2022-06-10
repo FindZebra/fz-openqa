@@ -317,7 +317,7 @@ def train_with_dataset_updates(
     trainer.fit_loop.max_steps = min(update_freq, max_steps)
     dataset_iter = 0
     trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
-    while trainer.global_step < max_steps:
+    while trainer.global_step < max_steps - 1:
 
         # update the dataset
         try:

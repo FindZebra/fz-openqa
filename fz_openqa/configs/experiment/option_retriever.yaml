@@ -42,7 +42,7 @@ trainer:
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
   precision: 16
-  max_steps: ${int_mul:${model.period},6}  # set 29_900 for the final exps
+  max_steps: ${int_mul:${model.period},6}
 
 model:
   # global model configuration
@@ -53,7 +53,7 @@ model:
   # optimizer configuration
   ema_decay: null
   num_lr_warmup_steps: ${model.period} # 0 # Colbert uses no warmup
-  num_training_steps: ${int_mul:${trainer.max_steps},1.2}
+  num_training_steps: ${trainer.max_steps},
   optimizer: adamw
   optimizer_params:
     lr: 1e-5
@@ -67,8 +67,8 @@ model:
     alpha:
       mode: linear
       num_steps: ${model.period}
-      num_warmup_steps: ${int_div:${model.period},5}
-      initial_value: 1 # todo
+      temperature: 5.0
+      initial_value: 1
       final_value: 0
     reader_kl_weight: 0
     proposal_kl_weight: 0
@@ -77,7 +77,7 @@ model:
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     agg_retriever_kl_weight: 0
-    eval_alpha: -1
+    eval_alpha: -3
 
   # Module definition
   module:

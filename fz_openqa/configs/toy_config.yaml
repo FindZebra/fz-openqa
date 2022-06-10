@@ -1,13 +1,14 @@
 # @package _global_
 
 defaults:
+  - _self_
   - sys: local
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
 
-version: 51
+version: 65
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
@@ -41,10 +42,10 @@ parameters:
   reader_kl_weight: 0
   retriever_kl_weight: 0
   alpha:
-    mode: cosine
+    mode: linear
     num_steps: 1000
-    num_warmup_steps: 100
+    temperature: 5.0
     initial_value: ${alpha}
     final_value: 0
-  eval_alpha: -1
+  eval_alpha: -3
   gamma: 0

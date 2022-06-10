@@ -183,6 +183,7 @@ def run(config: DictConfig) -> None:
                 "pin_memory": config.pin_memory,
             },
             labels=config.labels,
+            parameters=parameters,
         )
 
         train_loader = DataLoader(
@@ -261,6 +262,7 @@ def run(config: DictConfig) -> None:
                         "pin_memory": config.pin_memory,
                     },
                     labels=config.labels,
+                    parameters=parameters,
                 )
 
                 # print gradients and reset
@@ -344,6 +346,7 @@ def evaluate(
     epoch=None,
     loader_kwargs=None,
     labels=None,
+    parameters=None,
 ):
     model.eval()
     test_accuracy = Accuracy().to(device)
@@ -365,6 +368,7 @@ def evaluate(
             targets=batch["target"],
             proposal_score=batch["proposal_score"],
             proposal_log_weight=batch["proposal_log_weight"],
+            **parameters(),
         )
 
         # update accuracy
