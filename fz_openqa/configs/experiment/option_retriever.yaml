@@ -65,9 +65,9 @@ model:
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
     alpha:
-      mode: linear
+      mode: coosine
       num_steps: ${model.period}
-      temperature: 3.0
+      temperature: 1.0
       initial_value: 1
       final_value: 0
     reader_kl_weight: 0
