@@ -54,12 +54,12 @@ model:
 
   # optimizer configuration
   optimizer:
-    lr: 6e-6
+    lr: 3e-6
     weight_decay: 1e-3
     eps: 1e-8
   lr_scheduler:
-    num_warmup_steps: ${int_mul:${model.period},0.3}
-    num_training_steps: ${int_mul:${model.period},1.2}
+    num_warmup_steps: ${int_mul:${model.period},0.1}
+    num_training_steps: 1_000_000 # constant learning rate
 
 
   # model parameter, passed to the model's `forward()` and `step()` methods
@@ -77,7 +77,7 @@ model:
     maxim_retriever_kl_weight: null
     maxim_reader_kl_weight: null
     agg_retriever_kl_weight: 0
-    eval_alpha: -3
+    eval_alpha: -1
 
   # Module definition
   module:
