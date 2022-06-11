@@ -65,7 +65,7 @@ model:
   # model parameter, passed to the model's `forward()` and `step()` methods
   parameters:
     alpha:
-      mode: coosine
+      mode: cosine
       num_steps: ${model.period}
       temperature: 1.0
       initial_value: 1
