@@ -1,7 +1,6 @@
 from typing import Dict
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from loguru import logger
@@ -17,12 +16,21 @@ def cleanup_nans(score, key):
     nan_count = score.isnan().float().sum()
     if nan_count > 0:
         no_nans = score[~score.isnan()]
-        score_mean = no_nans.mean().detach()
+
+        if no_nans.numel() > 0:
+            score_mean = no_nans.mean().detach()
+            non_nan_min = no_nans.min()
+            non_nan_max = no_nans.max()
+        else:
+            score_mean = 0
+            non_nan_min = -0
+            non_nan_max = 0
+
         logger.warning(
             f"> {key:10s}: {nan_count} NaNs "
             f"({nan_count / score.numel():.2%}), "
             f"mean={score_mean:.1f} "
-            f"range=[{no_nans.min():.1f}-{no_nans.max():.1f}]"
+            f"range=[{non_nan_min:.1f}-{non_nan_max:.1f}]"
         )
 
         # replace NaNs
@@ -127,15 +135,19 @@ class RenyiGradients(Gradients):
         assert targets is not None
 
         # count and replace NaNs in the scores
-        nans_info = {
-            f"nans/{key}": cleanup_nans(score, key)
-            for key, score in [
-                ("f_theta", f_theta_),
-                ("g_theta", g_theta_),
-                ("f_phi", f_phi_),
-                ("log_s", log_s_),
-            ]
-        }
+        try:
+            nans_info = {
+                f"nans/{key}": cleanup_nans(score, key)
+                for key, score in [
+                    ("f_theta", f_theta_),
+                    ("g_theta", g_theta_),
+                    ("f_phi", f_phi_),
+                    ("log_s", log_s_),
+                ]
+            }
+        except Exception as e:
+            logger.error(e)
+            nans_info = {}
 
         # compute `\zeta = \exp f_\theta - f_\phi`
         log_zeta_ = f_theta_ - f_phi_
