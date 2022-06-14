@@ -132,7 +132,9 @@ datamodule:
 
   # dataset builder
   dset_name: medqa-us
+  dset_max_length: 312
   corpus_name: medqa
+  corpus_max_length: 200
   use_subset: false
   corpus_subset: false
   num_proc: 8
@@ -174,11 +176,11 @@ datamodule:
       query_expansion: null
       n_query_tokens: 1
       n_answer_tokens: 1
-      max_length: 312
+      max_length: ${datamodule.dset_max_length}
     corpus_builder:
       dset_name: ${datamodule.corpus_name}
       use_subset: ${datamodule.corpus_subset}
-      passage_length: 200
+      passage_length: ${datamodule.corpus_max_length}
       passage_stride: 100
       append_document_title: true
 
