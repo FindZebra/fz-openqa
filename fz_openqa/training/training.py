@@ -53,7 +53,7 @@ def train(config: DictConfig) -> Optional[float]:
         # datasets.disable_progress_bar()
 
     # set verbosity
-    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
+    logging.getLogger("elasticsearch").setLevel(logging.ERROR)
     datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     # avoid "too many open files" error
     sharing_strategy = config.get("base.sharing_strategy", "file_system")
