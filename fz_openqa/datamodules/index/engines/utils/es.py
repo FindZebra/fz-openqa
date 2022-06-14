@@ -1,3 +1,4 @@
+import math
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -29,8 +30,16 @@ def es_search_bulk(
 
     request = []
     for i, query in enumerate(queries):
+        use_aux_queries = auxiliary_queries is not None and auxiliary_weight > 0
         should_query_parts = []
         filter_query = []
+
+        # measure the query and the auxiliary query
+        query_length = len(query.split(" "))
+        if auxiliary_queries is not None:
+            aux_query_length = len(auxiliary_queries[i].split(" "))
+        else:
+            aux_query_length = None
 
         # this is the main query
         should_query_parts.append(
@@ -46,14 +55,18 @@ def es_search_bulk(
         )
 
         # this is an additional query term using the auxiliary_queries (answer option)
-        if auxiliary_queries is not None and auxiliary_weight > 0:
+        if use_aux_queries:
+            if auxiliary_weight > 0:
+                aux_weight_i = math.log(1 + auxiliary_weight * query_length / aux_query_length)
+            else:
+                aux_weight_i = 0
             should_query_parts.append(
                 {
                     "match": {
                         "text": {
                             "query": auxiliary_queries[i],
                             "operator": "or",
-                            "boost": auxiliary_weight,
+                            "boost": aux_weight_i,
                         }
                     }
                 },

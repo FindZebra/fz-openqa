@@ -61,7 +61,7 @@ def run(config):
     print_config(config)
     # set the context
     datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
@@ -96,11 +96,6 @@ def run(config):
                 "max_batch_size": 100,
                 "config": {
                     "index_factory": "IVF1000,Flat",
-                    "train_size": 5_000_000,
-                    "dimension": hidden_size,
-                    "p": 16,
-                    "max_bs": 1 << 11,
-                    "tempmem": -1,
                 },
             },
         ]
@@ -119,7 +114,7 @@ def run(config):
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # define the medqa builder
-    concat_dset = config.get("concat_qa", False)
+    concat_dset = config.get("concat_qa", True)
     QaBuilderCls = ConcatQaBuilder if concat_dset else QaBuilder
     dataset_builder = QaBuilderCls(
         dset_name=config.get("dset_name", "medqa-us"),
@@ -152,7 +147,7 @@ def run(config):
                 "verbose": False,
                 "config": {
                     "es_temperature": 10.0,
-                    "auxiliary_weight": 2.0 if concat_dset else 0,
+                    "auxiliary_weight": 0.1 if concat_dset else 0,
                     "filter_with_doc_ids": False,
                 },
             },

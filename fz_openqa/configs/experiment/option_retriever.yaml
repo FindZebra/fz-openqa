@@ -197,7 +197,7 @@ datamodule:
       es:
         config:
           es_temperature: 10.
-          auxiliary_weight: 2. # todo: 0, 1
+          auxiliary_weight: 0.1
           query_text_key: [question.metamap, question.text]
 
 
