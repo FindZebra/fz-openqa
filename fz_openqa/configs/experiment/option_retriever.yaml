@@ -44,7 +44,7 @@ trainer:
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
   precision: 16
-  max_steps: ${int_mul:${model.period},10}
+  max_steps: ${int_mul:${model.period},6}
 
 model:
   # global model configuration
@@ -202,4 +202,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F4-${hostname:}-{model.bert}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
+    name: ytxn-F4-${hostname:}-${model.bert}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${base.seed}
