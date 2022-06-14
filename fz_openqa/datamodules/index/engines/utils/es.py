@@ -57,7 +57,9 @@ def es_search_bulk(
         # this is an additional query term using the auxiliary_queries (answer option)
         if use_aux_queries:
             if auxiliary_weight > 0:
-                aux_weight_i = math.log(1 + auxiliary_weight * query_length / aux_query_length)
+                aux_weight_i = query_length / aux_query_length
+                aux_weight_i = max(aux_weight_i, 1e-2)
+                aux_weight_i = auxiliary_weight * math.log(1 + aux_weight_i)
                 aux_weight_i = max(aux_weight_i, 0)
             else:
                 aux_weight_i = 0

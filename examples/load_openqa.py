@@ -147,7 +147,7 @@ def run(config):
                 "verbose": False,
                 "config": {
                     "es_temperature": 10.0,
-                    "auxiliary_weight": 0.1 if concat_dset else 0,
+                    "auxiliary_weight": 0.5 if concat_dset else 0,
                     "filter_with_doc_ids": False,
                 },
             },
@@ -188,7 +188,7 @@ def run(config):
         model=model if setup_with_model else None,
         trainer=trainer,
     )
-    dm.display_samples(n_samples=3)
+    dm.display_samples(n_samples=10)
 
     # access dataset
     rich.print(dm.dataset)
