@@ -38,6 +38,10 @@ def int_max(a, *b):
     return int(y)
 
 
+def cleanup_bert_name(name):
+    return name.split("/")[-1]
+
+
 N_GPUS = torch.cuda.device_count()
 GIT_HASH = git_revision_hash()
 GIT_HASH_SHORT = git_revision_short_hash()
@@ -53,6 +57,7 @@ OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
 OmegaConf.register_new_resolver("git_hash", lambda *_: GIT_HASH)
 OmegaConf.register_new_resolver("git_hash_short", lambda *_: GIT_HASH_SHORT)
 OmegaConf.register_new_resolver("eval", lambda x: eval(x))
+OmegaConf.register_new_resolver("cleanup_bert_name", cleanup_bert_name)
 
 
 def run_experiment_with_config(config: DictConfig):
