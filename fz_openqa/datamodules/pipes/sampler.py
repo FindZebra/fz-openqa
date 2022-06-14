@@ -16,6 +16,7 @@ from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
+from ...modeling.gradients.renyi import cleanup_nans
 from .base import Pipe
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
@@ -268,6 +269,8 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
+    MAX_LOG_RANGE: float = 1e4
+
     def __init__(self, *args, from_uniform: bool = False, mode="uniform", **kwargs):
         super().__init__(*args, **kwargs)
         self.from_uniform = from_uniform
@@ -380,10 +383,11 @@ class PrioritySampler(Sampler):
 
     @staticmethod
     def clip_logits(logits, dim=-1):
+        cleanup_nans(logits, "PrioritySampler.clip_logits")
+
         # scale the logits
         M = logits.max(dim=dim, keepdim=True).values
         logits = logits - M
 
         # clip log_pz for numerical stability
-        value_range = {torch.float16: 1e5}.get(logits.dtype, 1e8)
-        return logits.clamp(min=-value_range)
+        return M + logits.clamp(min=-PrioritySampler.MAX_LOG_RANGE)
