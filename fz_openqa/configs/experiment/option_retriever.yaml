@@ -197,11 +197,11 @@ datamodule:
       es:
         config:
           es_temperature: 10.
-          auxiliary_weight: 1.0
+          auxiliary_weight: 2.0
           query_text_key: question.text
 
 
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F4-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-opt-retriever-${model.module.gradients._id}-${model.module.retriever_head._id}-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${base.seed}
+    name: ytxn-F4-${hostname:}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${base.seed}

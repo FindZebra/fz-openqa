@@ -1,8 +1,6 @@
 import os
 import sys
 
-from fz_openqa.datamodules.pipelines.collate.field import CollateField
-
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -30,7 +28,6 @@ from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.pipes import ExactMatch, PrioritySampler
-from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
@@ -147,7 +144,7 @@ def run(config):
                 "verbose": False,
                 "config": {
                     "es_temperature": 10.0,
-                    "auxiliary_weight": 0.5 if concat_dset else 0,
+                    "auxiliary_weight": config.get("aux_weight", 1.0) if concat_dset else 0,
                     "filter_with_doc_ids": False,
                 },
             },

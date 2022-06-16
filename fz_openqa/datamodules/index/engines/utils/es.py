@@ -35,11 +35,13 @@ def es_search_bulk(
         filter_query = []
 
         # measure the query and the auxiliary query
-        query_length = len(query.split(" "))
+        #  query_length = len(query.split(" "))
         if auxiliary_queries is not None:
-            aux_query_length = len(auxiliary_queries[i].split(" "))
+            aux_query = auxiliary_queries[i]
+            # aux_query_length = len(aux_query.split(" "))
         else:
-            aux_query_length = None
+            aux_query = None
+            # aux_query_length = None
 
         # this is the main query
         should_query_parts.append(
@@ -57,17 +59,18 @@ def es_search_bulk(
         # this is an additional query term using the auxiliary_queries (answer option)
         if use_aux_queries:
             if auxiliary_weight > 0:
-                aux_weight_i = query_length / aux_query_length
-                aux_weight_i = max(aux_weight_i, 1e-2)
-                aux_weight_i = auxiliary_weight * math.log(1 + aux_weight_i)
-                aux_weight_i = max(aux_weight_i, 0)
+                # #aux_weight_i = query_length / aux_query_length
+                # aux_weight_i = max(aux_weight_i, 1e-2)
+                # aux_weight_i = auxiliary_weight * math.log(1 + aux_weight_i)
+                # aux_weight_i = max(aux_weight_i, 0)
+                aux_weight_i = auxiliary_weight
             else:
                 aux_weight_i = 0
             should_query_parts.append(
                 {
                     "match": {
                         "text": {
-                            "query": auxiliary_queries[i],
+                            "query": aux_query,
                             "operator": "or",
                             "boost": aux_weight_i,
                         }
