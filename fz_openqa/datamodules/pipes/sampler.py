@@ -387,6 +387,7 @@ class PrioritySampler(Sampler):
 
         # scale the logits
         M = logits.max(dim=dim, keepdim=True).values
+        M[M.isinf()] = 0.0
         logits = logits - M
 
         # clip log_pz for numerical stability

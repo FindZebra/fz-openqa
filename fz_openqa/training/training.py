@@ -27,6 +27,7 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.trainer.states import TrainerStatus
 
 from fz_openqa.datamodules import DataModule
+from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
