@@ -106,14 +106,12 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         ]
 
     def _generate_examples(self, output_dir: str):
-        # enter the subdirectory
-        files = list(Path(output_dir).iterdir())
-        rich.print(f">> Found {len(files)} files in {output_dir}: {files[:10]}")
-
         # move in the subdirectory
-        path = [
+        paths = [
             p for p in Path(output_dir).iterdir() if p.is_dir() and p.name.startswith("med_x_wiki")
-        ][0]
+        ]
+        assert len(paths) == 1, f"Found {len(paths)} directories in {output_dir}: {paths}"
+        path = paths[0]
 
         # list files
         data_files = [os.path.join(path, p) for p in os.listdir(path) if re.findall(TXT_PATTERN, p)]
