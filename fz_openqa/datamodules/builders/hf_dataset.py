@@ -11,8 +11,6 @@ from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
 from loguru import logger
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
@@ -105,8 +103,6 @@ class HfDatasetBuilder(DatasetBuilder):
         super().__init__(cache_dir=cache_dir, **kwargs)
 
         self.cache_dir = cache_dir
-        if isinstance(subset_size, DictConfig):
-            subset_size = OmegaConf.to_container(subset_size)
         self.subset_size = subset_size
         self.num_proc = num_proc
         self.verbose = verbose
