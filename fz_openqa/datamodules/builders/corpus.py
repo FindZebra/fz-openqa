@@ -81,7 +81,6 @@ class CorpusBuilder(HfDatasetBuilder):
         "document.input_ids",
         "document.attention_mask",
     ]
-    subset_size: List[int] = [1]
     column_names = [
         "document.text",
         "document.input_ids",

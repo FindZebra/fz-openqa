@@ -1,7 +1,7 @@
 _target_: ???
 
 max_length: null
-use_subset: ${datamodule.use_subset}
+subset_size: ${datamodule.subset_size}
 
 # global
 tokenizer: ${datamodule.tokenizer}

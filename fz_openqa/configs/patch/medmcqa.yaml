@@ -1,0 +1,9 @@
+# @package _global_
+
+
+datamodule:
+  dset_name: medmcqa
+  subset_size:
+    train: 10_000
+    validation: 1_000
+    test: 1_000
