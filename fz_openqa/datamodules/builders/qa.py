@@ -75,9 +75,6 @@ class QaBuilder(HfDatasetBuilder):
         "document.proposal_score",
     ]
 
-    # number of data points per subset train/val/test
-    subset_size = [1000, 100, 100]
-
     # number of options
     n_options = 4
 

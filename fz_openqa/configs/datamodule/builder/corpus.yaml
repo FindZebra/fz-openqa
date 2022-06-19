@@ -4,7 +4,7 @@ defaults:
 _target_: fz_openqa.datamodules.builders.CorpusBuilder
 dset_name: medqa
 max_length: null
-use_subset: false
+subset_size: ${datamodule.corpus_subset_size}
 passage_length: 200
 passage_stride: 100
 append_document_title: true

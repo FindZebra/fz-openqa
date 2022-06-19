@@ -23,7 +23,8 @@ drop_last: False
 # global: dataset preprocessing
 add_encoding_tokens: true
 add_special_tokens: true
-use_subset: false
+subset_size: null
+corpus_subset_size: null
 num_proc: 4
 cache_dir: ${sys.shared_cache_dir}
 

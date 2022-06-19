@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
+import numpy as np
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -12,17 +15,33 @@ from ...utils.fingerprint import get_fingerprint
 from .typing import HfDataset
 
 
-def take_subset(dataset: HfDataset, subset_size: List[int]) -> HfDataset:
+def take_subset(
+    dataset: HfDataset, subset_size: float | int | Dict[Split, float] | Dict[Split, int]
+) -> HfDataset:
     """Take a subset of the dataset and return."""
-    if isinstance(dataset, DatasetDict):
-        return DatasetDict(
-            {k: dset.select(range(n)) for n, (k, dset) in zip(subset_size, dataset.items())}
-        )
-    elif isinstance(dataset, Dataset):
-        size = next(iter(subset_size))
-        return dataset.select(range(size))
+    if isinstance(dataset, Dataset):
+        if not isinstance(subset_size, (float, int)):
+            raise ValueError(f"subset_size must be a float or int, got {type(subset_size)}")
+
+        # take a fraction of the dataset
+        if isinstance(subset_size, float) and 0 <= subset_size <= 1:
+            subset_size = int(subset_size * len(dataset))
+
+        # select subset and return
+        rgn = np.random.RandomState(0)
+        indices = rgn.choice(len(dataset), subset_size, replace=False)
+        return dataset.select(indices)
+
+    elif isinstance(dataset, DatasetDict):
+        if isinstance(subset_size, (float, int)):
+            subset_size = {split: subset_size for split in dataset.keys()}
+        elif not isinstance(subset_size, dict):
+            raise TypeError(
+                f"subset_size must be a float, int or dict, " f"got {type(subset_size)}"
+            )
+        return DatasetDict({split: take_subset(ds, subset_size) for split, ds in dataset.items()})
     else:
-        raise NotImplementedError
+        raise TypeError(f"dataset must be a Dataset or DatasetDict, got {type(dataset)}")
 
 
 def format_size_difference(original_size: Dict[str, int], new_dataset: DatasetDict) -> str:

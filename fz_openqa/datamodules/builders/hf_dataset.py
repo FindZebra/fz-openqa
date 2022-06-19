@@ -9,6 +9,7 @@ from typing import Optional
 
 from datasets import DatasetDict
 from datasets import load_dataset
+from datasets import Split
 from loguru import logger
 from transformers import PreTrainedTokenizerFast
 
@@ -82,9 +83,6 @@ class HfDatasetBuilder(DatasetBuilder):
     # tensors in the preprocessing function
     pt_attributes = ["input_ids", "attention_mask"]
 
-    # number of data points per subset train/val/test
-    subset_size = [100, 10, 10]
-
     # output columns
     column_names = ["input_ids", "attention_mask"]
 
@@ -96,7 +94,7 @@ class HfDatasetBuilder(DatasetBuilder):
         add_special_tokens: bool = True,
         cache_dir: str = "cache/",
         max_length: Optional[int] = 512,
-        use_subset: bool = False,
+        subset_size: Optional[float | int | Dict[Split, float] | Dict[Split, int]] = None,
         num_proc: int = 1,
         verbose: bool = False,
         text_formatter: Optional[TextFormatter] = None,
@@ -105,7 +103,7 @@ class HfDatasetBuilder(DatasetBuilder):
         super().__init__(cache_dir=cache_dir, **kwargs)
 
         self.cache_dir = cache_dir
-        self.use_subset = use_subset
+        self.subset_size = subset_size
         self.num_proc = num_proc
         self.verbose = verbose
 
@@ -150,7 +148,7 @@ class HfDatasetBuilder(DatasetBuilder):
     def load_and_filter_dataset(self) -> HfDataset:
         dataset: HfDataset = self.load_base_dataset()
         dataset = self.filter_dataset(dataset)
-        if self.use_subset:
+        if self.subset_size is not None:
             dataset = take_subset(dataset, self.subset_size)
         return dataset
 
