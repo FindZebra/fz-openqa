@@ -9,7 +9,6 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
-import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -20,7 +19,12 @@ from rich.progress import track
 
 from fz_openqa.datamodules.builders import DatasetBuilder
 from fz_openqa.datamodules.builders import QaBuilder
-from fz_openqa.datamodules.builders.utils.gdrive import Gdrive
+
+try:
+    from fz_openqa.datamodules.builders.utils.gdrive import Gdrive
+except ImportError as exc:
+    log.warning(f"Gdrive not installed: {exc}")
+    Gdrive = None
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.query_wiki_api import QueryWikiAPI
 from fz_openqa.datamodules.utils.dataset import get_column_names
@@ -78,7 +82,7 @@ class FlattenWikiPages(Pipe):
     to the flatten structured B: {'question.idx: [1,1,1,2,2,2], 'wiki.pages':[a,b,c,x,y,z]}"""
 
     def __init__(
-        self, wiki_page_key: str = "wiki.query", index_key: str = "question.idx", **kwargs
+        self, wiki_page_key: str = "wiki.query", index_key: str = "question.row_idx", **kwargs
     ):
         super().__init__(**kwargs)
         self.wiki_page_key = wiki_page_key
@@ -176,15 +180,18 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         log.info(f"Instantiating {self.dataset_builder.__module__}..")
         dataset = self.dataset_builder(format=None, tokenizer=None)
 
+        # make sure that all question.row_idx are unique
+        for split, dset in dataset.items():
+            assert len(dset) == len(set(dset["question.row_idx"]))
+
         # process the whole dataset (extract wikipedia pages)
         dataset = self.extract_page_titles(dataset=dataset)
-        rich.print(f"[red] {dataset.column_names}")
         # build Wikipedia corpus to output
         dataset = self.build_wiki_corpus(dataset=dataset)
 
         # write to disk
         if self.output_dir is not None:
-            log.info(f"Save the dataset to file n_files={len(dataset)}")
+            log.info(f"Save the dataset ({len(dataset)} rows) to {self.output_dir}")
             self.save_to_txt(output_dir=self.output_dir, dataset=dataset)
             # dataset.save_to_disk(str(self.output_file))
 
@@ -220,7 +227,8 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
         if not Path(output_dir).is_dir():
             os.mkdir(output_dir)
-        for row in dataset:
+
+        for row in track(dataset, description="Saving to disk"):
             if isinstance(row["text"], str):
                 lines = [row["title"], row["text"]]
                 file_name = slugify(row["title"])
@@ -229,26 +237,24 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
 
     def extract_page_titles(self, dataset: DatasetDict) -> DatasetDict:
         """Extracts a list of Wikipedia pages for each question.
-        Only keep "wiki.query" and "question.idx" """
+        Only keep "wiki.query" and "question.row_idx" """
         dataset = dataset.map(
             self.query_articles,
             **self.map_kwargs,
             desc="Search for Wikipedia pages",
         )
-        rich.print(f"[red] {dataset.column_names}")
         # drop unnecessary columns
         columns = get_column_names(dataset)
-        cols_to_remove = [c for c in columns if c not in ["wiki.query", "question.idx"]]
+        cols_to_remove = [c for c in columns if c not in ["wiki.query", "question.row_idx"]]
         return dataset.remove_columns(cols_to_remove)
 
     def build_wiki_corpus(self, dataset: DatasetDict) -> Dataset:
         """Builds the Wikipedia Corpus based on extracted Wikipedia pages"""
-        rich.print(f"[red] {dataset.column_names}")
         # step 1: flatten the nested list of pages
         dataset = dataset.map(
             FlattenWikiPages(),
             **self.map_kwargs,
-            desc="Extracting Wikipedia pages",
+            desc="Flatten Wikipedia pages",
         )
 
         # step 2: add the split column and concatenate the dataset splits
@@ -264,7 +270,6 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         # step 3.1: reduce the dataset per page name
         # I don't think we can use Datasets for that step unfortunately
         # todo: investigate why the fingerprint is not deterministic
-        rich.print(f"[magenta]# fingerprint={dataset._fingerprint}")
         cache_file = self.cache_dir / f"{dataset._fingerprint}.jsonl"
         if not cache_file.exists():
 
@@ -272,13 +277,13 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
             for row in track(dataset, description="Iterating through the dataset"):
                 page = row["wiki.query"]
                 split = row["split"]
-                qst_idx = row["question.idx"]
+                qst_idx = row["question.row_idx"]
 
                 if page not in reduced_dataset:
-                    reduced_dataset[page] = {"split": [], "question.idx": []}
+                    reduced_dataset[page] = {"split": [], "question.row_idx": []}
 
                 reduced_dataset[page]["split"].append(split)
-                reduced_dataset[page]["question.idx"].append(qst_idx)
+                reduced_dataset[page]["question.row_idx"].append(qst_idx)
 
             # step 3.2: save to file and load as Dataset
             # (if we load from the dataset from memory, it stays in memory, so we need to cache it)
@@ -304,7 +309,7 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         return dataset.rename_columns(
             {
                 "split": "question.split",
-                "question.idx": "question.idx",
+                "question.row_idx": "question.row_idx",
                 "wiki.query": "query",
                 "wiki.title": "title",
                 "wiki.text": "text",
