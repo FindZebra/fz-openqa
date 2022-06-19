@@ -35,11 +35,14 @@ def take_subset(
     elif isinstance(dataset, DatasetDict):
         if isinstance(subset_size, (float, int)):
             subset_size = {split: subset_size for split in dataset.keys()}
+
         elif not isinstance(subset_size, (DatasetDict, DictConfig)):
             raise TypeError(
                 f"subset_size must be a float, int or dict, " f"got {type(subset_size)}"
             )
-        return DatasetDict({split: take_subset(ds, subset_size) for split, ds in dataset.items()})
+        return DatasetDict(
+            {split: take_subset(ds, subset_size[split]) for split, ds in dataset.items()}
+        )
     else:
         raise TypeError(f"dataset must be a Dataset or DatasetDict, got {type(dataset)}")
 
