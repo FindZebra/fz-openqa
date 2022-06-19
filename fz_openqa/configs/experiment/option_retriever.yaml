@@ -201,4 +201,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F4-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    name: ytxn-F5-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
