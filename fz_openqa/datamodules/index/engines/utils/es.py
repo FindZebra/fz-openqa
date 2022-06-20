@@ -1,4 +1,5 @@
 import math
+import string
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -9,6 +10,16 @@ from elasticsearch import Elasticsearch
 from elasticsearch import helpers as es_helpers
 from elasticsearch import RequestError
 from loguru import logger
+
+
+def tokenize(text: str) -> List[str]:
+    """
+    Filter Punctuation
+    """
+    tokens = text.split(" ")
+    tokens = [token.translate(str.maketrans("", "", string.punctuation)) for token in tokens]
+    tokens = [token for token in tokens if token.strip() != ""]
+    return tokens
 
 
 def es_search_bulk(
@@ -35,13 +46,13 @@ def es_search_bulk(
         filter_query = []
 
         # measure the query and the auxiliary query
-        #  query_length = len(query.split(" "))
+        query_length = len(tokenize(query))
         if auxiliary_queries is not None:
             aux_query = auxiliary_queries[i]
-            # aux_query_length = len(aux_query.split(" "))
+            aux_query_length = len(tokenize(aux_query))
         else:
             aux_query = None
-            # aux_query_length = None
+            aux_query_length = None
 
         # this is the main query
         should_query_parts.append(
@@ -58,12 +69,11 @@ def es_search_bulk(
 
         # this is an additional query term using the auxiliary_queries (answer option)
         if use_aux_queries:
-            if auxiliary_weight > 0:
-                # #aux_weight_i = query_length / aux_query_length
-                # aux_weight_i = max(aux_weight_i, 1e-2)
-                # aux_weight_i = auxiliary_weight * math.log(1 + aux_weight_i)
-                # aux_weight_i = max(aux_weight_i, 0)
-                aux_weight_i = auxiliary_weight
+            if auxiliary_weight > 0 and aux_query_length > 0:
+                r = query_length / aux_query_length
+                aux_weight_i = max(r, 1)
+                aux_weight_i = auxiliary_weight * math.log(aux_weight_i)
+                aux_weight_i = max(aux_weight_i, 0)
             else:
                 aux_weight_i = 0
             should_query_parts.append(

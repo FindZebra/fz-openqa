@@ -155,7 +155,7 @@ datamodule:
 
   # ES parameters
   es_temp: 5.0
-  es_weight: 1.0
+  es_weight: 0.5
 
   # document sampler
   sampler:
