@@ -159,7 +159,12 @@ class WikixMedQaCorpusBuilder(DatasetBuilder):
         self.map_kwargs = {"batched": True, "batch_size": batch_size, "num_proc": num_proc}
 
         log.info("Downloading Wikipedia dump...")
-        self.wikipedia_data = load_dataset("wikipedia", "20200501.en", split="train")
+        self.wikipedia_data = load_dataset(
+            "wikipedia",
+            "20200501.en",
+            split="train",
+            cache_dir=cache_dir,
+        )
         # Index to look up Wikipedia pages and extract page content
         self.wikipedia_index = {
             title: idx for idx, title in enumerate(self.wikipedia_data["title"])
