@@ -153,6 +153,10 @@ datamodule:
   n_retrieved_documents: 100
   n_documents: 16
 
+  # ES parameters
+  es_temp: 5.0
+  es_weight: 1.0
+
   # document sampler
   sampler:
     total:
@@ -193,12 +197,12 @@ datamodule:
     engines:
       es:
         config:
-          es_temperature: 3.
-          auxiliary_weight: 1.0
+          es_temperature: ${datamodule.es_temp}
+          auxiliary_weight: ${datamodule.es_weight}
           query_text_key: question.text
 
 
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F5-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    name: ytxn-F5-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
