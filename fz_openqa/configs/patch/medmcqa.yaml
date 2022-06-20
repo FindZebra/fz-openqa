@@ -3,6 +3,7 @@
 
 datamodule:
   dset_name: medmcqa
+  es_weight: 0.0
   subset_size:
     train: 10_000
     validation: 1_000
