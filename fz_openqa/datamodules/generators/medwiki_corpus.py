@@ -115,7 +115,9 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, output_dir: str):
         # move in the subdirectory
         paths = [
-            p for p in Path(output_dir).iterdir() if p.is_dir() and p.name.startswith("med_x_wiki")
+            p
+            for p in Path(output_dir).iterdir()
+            if p.is_dir() and (p.name.startswith("med_x_wiki") or p.name.startswith("wikipedia"))
         ]
         assert len(paths) == 1, f"Found {len(paths)} directories in {output_dir}: {paths}"
         path = paths[0]
