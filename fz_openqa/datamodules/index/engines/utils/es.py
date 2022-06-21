@@ -31,6 +31,7 @@ def es_search_bulk(
     document_ids: List[int] = None,
     auxiliary_weight: float = 0,
     k: int = 10,
+    request_timeout: int = 600,
 ):
     """
     Batch search in ElasticSearch Index
@@ -106,7 +107,7 @@ def es_search_bulk(
         # append the header and body of the request
         request.extend([{"index": index_name}, r])
 
-    result = es_instance.msearch(body=request, index=index_name, request_timeout=200)
+    result = es_instance.msearch(body=request, index=index_name, request_timeout=request_timeout)
 
     indexes, scores, contents = [], [], []
     for query in result["responses"]:
