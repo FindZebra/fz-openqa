@@ -3,7 +3,6 @@ import re
 from pathlib import Path
 
 import datasets
-import rich
 
 TXT_PATTERN = r"^.*\.txt$"
 
@@ -34,6 +33,7 @@ _URLS = {
     "medqa_x_wiki_corpus_v3_tw.zip",
     "v3": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/"
     "medqa_x_wiki_corpus_v3_us_tw.zip",
+    "v6": "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/medwiki_v6.zip",
 }
 
 
@@ -61,6 +61,13 @@ class MedWikipediaCorpusGenerator(datasets.GeneratorBasedBuilder):
         MedWikipediaCorpusConfig(
             name="v3-tw",
             description="Subset of Wikipedia built for the TW Medqa, 10 queries per option",
+        ),
+        MedWikipediaCorpusConfig(
+            name="v6",
+            description=(
+                "Subset of Wikipedia built for the "
+                "MedQA US+TW and MedMCQA, 10 queries per option"
+            ),
         ),
     ]
     force = False

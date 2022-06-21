@@ -45,7 +45,8 @@ TXT_PATTERN = r"^.*\.txt$"
 
 CORPUS_GENERATORS = {
     "medqa": (meqa_en_corpus.__file__,),
-    "medwiki": (medwiki_corpus.__file__, "v3"),
+    "medwiki": (medwiki_corpus.__file__, "v6"),
+    "medwiki-v6": (medwiki_corpus.__file__, "v6"),
     "medwiki-v1": (medwiki_corpus.__file__, "v1"),
     "medwiki-v2": (medwiki_corpus.__file__, "v2"),
     "medwiki-v3": (medwiki_corpus.__file__, "v3"),
