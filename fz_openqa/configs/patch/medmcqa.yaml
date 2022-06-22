@@ -6,7 +6,4 @@ model:
 
 datamodule:
   dset_name: medmcqa
-  subset_size:
-    train: 50_000
-    validation: 5_000
-    test: 5_000
+  subset_size: null
