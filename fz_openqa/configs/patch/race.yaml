@@ -1,45 +1,26 @@
 # @package _global_
 
 defaults:
-  - override /model/bert: roberta-base #deberta-v3-base
-  - override /datamodule/relevance_classifier: none
-  - override /datamodule/score_transform: none
-
-base:
-  device_batch_size: 2
-  infer_batch_mul: 300
+  - override /model/bert: link
 
 trainer:
-  val_check_interval: 0.5
+  val_check_interval: 0.3
+
+base:
+  device_batch_size: 1
 
 model:
-  num_warmup_steps: 20_000
-  metric_size: 128
-  num_lr_warmup_steps: 1_000
-  module:
-    split_bert_layers: 0
-
-  optimizer_params:
-    lr: 1e-5
+  period: 10_000
 
 # override the builder parameters to use the quality builder
 datamodule:
   dset_name: race
   corpus_name: race
-  n_retrieved_documents: 10
-  n_documents: 4
-
-  # dataset updates
-  dataset_update:
-    freq: ${model.num_warmup_steps}
+  dset_max_length: 160
+  n_retrieved_documents: 100
+  n_documents: 8
 
   builder:
-    # update the builder parameters to use the quality builder
-    dataset_builder:
-      max_length: 64
-      query_expansion: 64
-
-    # Index parameters
     index_builder:
       engines:
         es:
