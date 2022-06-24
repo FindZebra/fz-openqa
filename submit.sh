@@ -3,7 +3,7 @@
 #SBATCH --output=./slurm/%j.out
 #SBATCH --ntasks=1 --cpus-per-task=16 --mem=64G
 #SBATCH -p gpu --gres=gpu:titanrtx:4
-#SBATCH --time=3-00:00:00
+#SBATCH --time=5-00:00:00
 
 echo "$@"
 
