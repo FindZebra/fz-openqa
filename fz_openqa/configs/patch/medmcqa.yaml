@@ -1,9 +1,11 @@
 # @package _global_
 
+trainer:
+  val_check_interval: 0.25
+
+model:
+  period: 10_000
 
 datamodule:
   dset_name: medmcqa
-  subset_size:
-    train: 10_000
-    validation: 1_000
-    test: 1_000
+  subset_size: null
