@@ -351,6 +351,7 @@ class ConcatQaBuilder(QaBuilder):
 
     def get_tokenize_concat_qa_pipe(self):
         # register features that also need to be expanded to match the concatenated shape
+        text_keys = ["question.text", "answer.text"]
         question_features = ["question.text", "question.input_ids", "question.attention_mask"]
         additional_question_features = ["question.document_idx", "question.metamap"]
 
@@ -384,12 +385,12 @@ class ConcatQaBuilder(QaBuilder):
 
         # return the final pipe
         return Sequential(
-            self.text_formatter.copy(text_key=["question.text", "answer.text"], update=True),
+            self.text_formatter.copy(text_key=text_keys, update=True),
             # tokenize the questions and the answers
             Parallel(
                 self.get_question_tokenizer_pipe(),
                 self.get_answer_tokenizer_pipe(),
-                Identity(input_filter=In(additional_question_features)),
+                Identity(input_filter=In([*additional_question_features, *text_keys])),
             ),
             Expand(
                 axis=1,

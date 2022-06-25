@@ -74,13 +74,13 @@ class FormatAndTokenize(Sequential):
             qad_tokens = [qad_tokens]
 
         if add_qad_tokens and qad_tokens is not None:
-            spec_token = "".join(qad_tokens)
-            add_spec_tokens_pipe = Apply(
-                {key: partial(append_prefix, spec_token)},
+            qad_tokens = "".join(qad_tokens)
+            add_qad_tokens_pipe = Apply(
+                {key: partial(append_prefix, qad_tokens)},
                 element_wise=True,
             )
         else:
-            add_spec_tokens_pipe = None
+            add_qad_tokens_pipe = None
 
         # define the text formatter, used to cleanup the raw text
         if text_formatter is not None:
@@ -100,7 +100,7 @@ class FormatAndTokenize(Sequential):
             text_formatter,
             ApplyAsFlatten(
                 Sequential(
-                    add_spec_tokens_pipe,
+                    add_qad_tokens_pipe,
                     TokenizerPipe(
                         tokenizer,
                         max_length=max_length,

@@ -4,11 +4,9 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from tokenizers import AddedToken
 from transformers import PreTrainedTokenizerFast
 
-from ...utils.pretty import pprint_batch
 from .base import Pipe
 from fz_openqa.utils.datastruct import Batch
 
@@ -168,7 +166,6 @@ class ConcatTokenFields(Pipe):
                         f"planned for {length_other_fields}."
                     )
 
-        pprint_batch(output, "output::concat_token_fields")
         return output
 
     @staticmethod

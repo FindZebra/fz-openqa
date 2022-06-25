@@ -85,8 +85,8 @@ class PrintContent(Pipe):
         if isinstance(keys, str):
             keys = [keys]
         self.keys = keys
-        if decode_keys is True:
-            decode_keys = keys
+        if isinstance(decode_keys, bool):
+            decode_keys = keys if decode_keys else []
         if decode_keys is None:
             decode_keys = []
         self.decode_keys = decode_keys

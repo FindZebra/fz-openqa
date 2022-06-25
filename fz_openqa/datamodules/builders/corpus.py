@@ -322,15 +322,33 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
     def get_prefix_tokens(self):
+        """Get the prefix tokens for each passage"""
+        start_token = self.tokenizer.cls_token_id
+        if start_token is None:
+            if self.tokenizer.bos_token != "<|endoftext|>":
+                start_token = self.tokenizer.bos_token_id
+
         if self.add_qad_tokens:
             doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
-            start_tokens = [self.tokenizer.cls_token_id, doc_token_id]
+            start_tokens = [start_token, doc_token_id]
         else:
-            start_tokens = [self.tokenizer.cls_token_id]
-        return start_tokens
+            start_tokens = [start_token]
+
+        return [s for s in start_tokens if s is not None]
 
     def get_suffix_tokens(self):
-        return [self.tokenizer.sep_token_id] if self.add_special_tokens else []
+        """Get the suffix tokens for each passage"""
+        suffix_tokens = []
+        if self.add_special_tokens:
+            end_token = self.tokenizer.sep_token_id
+            if end_token is None:
+                if self.tokenizer.eos_token != "<|endoftext|>":
+                    end_token = self.tokenizer.eos_token_id
+
+            if end_token is not None:
+                suffix_tokens = [end_token]
+
+        return suffix_tokens
 
     def _get_collate_pipe(self) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""

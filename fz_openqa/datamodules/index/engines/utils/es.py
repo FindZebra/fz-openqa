@@ -22,6 +22,18 @@ def tokenize(text: str) -> List[str]:
     return tokens
 
 
+def keep_only_alpha(s):
+    return "".join(filter(str.isalpha, s))
+
+
+def remove_if_is_number(query):
+    only_alpha = keep_only_alpha(query)
+    if len(only_alpha) == 0:
+        return ""
+    else:
+        return query
+
+
 def es_search_bulk(
     es_instance: Elasticsearch,
     *,
@@ -30,6 +42,7 @@ def es_search_bulk(
     auxiliary_queries: List[str] = None,
     document_ids: List[int] = None,
     auxiliary_weight: float = 0,
+    cleanup_numbers_from_aux: bool = True,
     k: int = 10,
     request_timeout: int = 600,
 ):
@@ -50,6 +63,9 @@ def es_search_bulk(
         query_length = len(tokenize(query))
         if auxiliary_queries is not None:
             aux_query = auxiliary_queries[i]
+            # drop query if it contains only numbers
+            if cleanup_numbers_from_aux:
+                aux_query = remove_if_is_number(aux_query)
             aux_query_length = len(tokenize(aux_query))
         else:
             aux_query = None
@@ -68,13 +84,13 @@ def es_search_bulk(
             },
         )
 
-        # this is an additional query term using the auxiliary_queries (answer option)
+        # this is an additional query term based on the auxiliary_queries (answer option)
         if use_aux_queries:
             if auxiliary_weight > 0 and aux_query_length > 0:
                 r = query_length / aux_query_length
                 aux_weight_i = max(r, 1)
                 aux_weight_i = auxiliary_weight * math.log(aux_weight_i)
-                aux_weight_i = max(aux_weight_i, 0)
+                aux_weight_i = 1 + max(aux_weight_i, 0)
             else:
                 aux_weight_i = 0
             should_query_parts.append(
