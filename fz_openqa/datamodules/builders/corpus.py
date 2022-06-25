@@ -279,7 +279,7 @@ class CorpusBuilder(HfDatasetBuilder):
     def get_text_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
-        add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
+        add_qad_tokens = self.to_sentences and self.add_qad_tokens
         add_special_tokens = self.to_sentences and self.add_special_tokens
         return Sequential(
             FormatAndTokenize(
@@ -289,9 +289,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
                 add_special_tokens=add_special_tokens,
-                add_encoding_tokens=add_encoding_tokens,
+                add_qad_tokens=add_qad_tokens,
                 return_offsets_mapping=True,
-                spec_tokens=DOC_TOKEN,
+                qad_tokens=DOC_TOKEN,
                 shape=None,
                 update=True,
                 input_filter=In(["text"]),
@@ -311,9 +311,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
                 add_special_tokens=False,
-                add_encoding_tokens=False,
+                add_qad_tokens=False,
                 return_offsets_mapping=True,
-                spec_tokens=None,
+                qad_tokens=None,
                 shape=None,
                 update=True,
                 input_filter=In(["title"]),
@@ -322,7 +322,7 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
     def get_prefix_tokens(self):
-        if self.add_encoding_tokens:
+        if self.add_qad_tokens:
             doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
             start_tokens = [self.tokenizer.cls_token_id, doc_token_id]
         else:

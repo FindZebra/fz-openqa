@@ -20,7 +20,7 @@ def get_default_config():
         'cache_dir': None,
         'tokenizer': init_pretrained_tokenizer(
             pretrained_model_name_or_path="google/bert_uncased_L-2_H-128_A-2"),
-        'add_encoding_tokens': True,
+        'add_qad_tokens': True,
         'use_subset': True,
         'max_length': 512,
         'num_proc': 2,

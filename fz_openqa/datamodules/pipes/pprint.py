@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import shutil
 from numbers import Number
 from typing import List
 from typing import Optional
@@ -7,7 +10,9 @@ import rich
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
 
+from ...utils.shape import infer_shape
 from .base import Pipe
+from .utils.nesting import flatten_nested
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import Eg
 from fz_openqa.utils.pretty import get_separator
@@ -62,39 +67,54 @@ class PrintBatch(Pipe):
         return examples
 
 
-class PrintText(Pipe):
+class PrintContent(Pipe):
     """
-    Print the batch
+    Print the content of the batch
     """
 
     def __init__(
         self,
-        text_key: str,
-        limit: Optional[int] = None,
+        keys: str | List[str],
+        n: Optional[int] = 3,
+        decode_keys: List[str] | bool = None,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         header: Optional[str] = None,
         **kwargs,
     ):
-        super(PrintText, self).__init__(**kwargs)
-        self.text_key = text_key
-        self.limit = limit
+        super(PrintContent, self).__init__(**kwargs)
+        if isinstance(keys, str):
+            keys = [keys]
+        self.keys = keys
+        if decode_keys is True:
+            decode_keys = keys
+        if decode_keys is None:
+            decode_keys = []
+        self.decode_keys = decode_keys
+        self.n = n
         self.header = header
         self.tokenizer = tokenizer
 
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
-        txts = batch.get(self.text_key, None)
-        if self.limit:
-            txts = txts[: self.limit]
-        print(get_separator())
-        if self.header is None:
-            print(f"=== {self.text_key} ===")
-        else:
-            print(f"=== {self.header} : {self.text_key} ===")
-        for txt in txts:
-            if self.tokenizer:
-                txt = self.tokenizer.decode(txt)
-            print(txt)
-        print(get_separator())
-
+        console_width, _ = shutil.get_terminal_size()
+        header = self.header
+        if header is None:
+            header = "Batch Content"
+        header = f"  {header}  "
+        rich.print(f"{header:=^{console_width}}")
+        for key in self.keys:
+            feature = batch.get(key, None)
+            shape = infer_shape(feature)
+            feature_info = f"  {key}:{type(feature)} ({shape})  "
+            rich.print(f"{feature_info:-^{console_width}}")
+            feature = flatten_nested(feature, level=max(0, len(shape) - 1))
+            if self.n:
+                feature = feature[: self.n]
+            for x in feature:
+                if key in self.decode_keys:
+                    if self.tokenizer is None:
+                        raise ValueError("tokenizer is required to decode")
+                    x = self.tokenizer.decode(x, skip_special_tokens=False)
+                print(x)
+                rich.print(get_separator("."))
         return batch

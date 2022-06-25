@@ -55,7 +55,7 @@ class TestPredict(TestCase):
         dataset_builder = FzCorpusBuilder(
             tokenizer=self.tokenizer,
             use_subset=True,
-            add_encoding_tokens=False,
+            add_qad_tokens=False,
         )
         dataset_builder.subset_size = [2]
         dataset = dataset_builder()
@@ -103,7 +103,7 @@ class TestPredict(TestCase):
         dataset_builder = QaBuilder(
             tokenizer=self.tokenizer,
             use_subset=True,
-            add_encoding_tokens=False,
+            add_qad_tokens=False,
         )
         dataset_builder.subset_size = [10, 10, 10]
         dataset = dataset_builder()

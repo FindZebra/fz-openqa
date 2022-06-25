@@ -117,7 +117,7 @@ def run(config):
         dset_name=config.get("dset_name", "medqa-us"),
         tokenizer=tokenizer,
         use_subset=config.get("use_subset", True),
-        add_encoding_tokens=not zero_shot,
+        add_qad_tokens=not zero_shot,
         cache_dir=cache_dir,
         num_proc=4,
     )
@@ -127,7 +127,7 @@ def run(config):
     corpus_builder = CorpusBuilder(
         dset_name=config.get("corpus_name", "medqa"),
         tokenizer=tokenizer,
-        add_encoding_tokens=not zero_shot,
+        add_qad_tokens=not zero_shot,
         use_subset=config.get("corpus_subset", False),
         cache_dir=cache_dir,
         num_proc=4,
