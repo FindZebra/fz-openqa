@@ -1,4 +1,4 @@
-_target_: fz_openqa.modeling.bert.CustomAutoModel.from_pretrained
+_target_: transformers.AutoModel.from_pretrained
 pretrained_model_name_or_path: bert-base-cased
 config:
   _target_: transformers.AutoConfig.from_pretrained

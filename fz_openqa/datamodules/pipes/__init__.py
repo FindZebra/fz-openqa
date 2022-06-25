@@ -36,7 +36,7 @@ from .option_dropout import OptionBinarized
 from .option_dropout import OptionDropout
 from .passage import GeneratePassages
 from .pprint import PrintBatch
-from .pprint import PrintText
+from .pprint import PrintContent
 from .predict import Predict
 from .relevance import ExactMatch
 from .relevance import MetaMapMatch

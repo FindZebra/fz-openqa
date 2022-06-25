@@ -1,4 +1,3 @@
-from functools import partial
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -10,14 +9,13 @@ from datasets.arrow_dataset import concatenate_datasets
 from loguru import logger
 
 from ..pipelines.collate.field import CollateField
-from ..pipes.answer_options import ConcatTextFields
-from ..pipes.answer_options import InferTokenTypeIds
-from ..pipes.control.batch_condition import HasKeys
+from ..pipes.answer_options import ConcatTokenFields
+from ..pipes.control.condition import HasPrefix
 from ..pipes.control.condition import In
+from ..pipes.control.condition import Reduce
 from ..pipes.min_length import MinLength
 from ..pipes.nesting import ApplyAsFlatten
 from ..pipes.nesting import Expand
-from ..pipes.nesting import Nested
 from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
 from ..utils.dataset import keep_only_columns
@@ -29,17 +27,17 @@ from .utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.pipes import Gate
+from fz_openqa.datamodules.pipes import Identity
 from fz_openqa.datamodules.pipes import Parallel
 from fz_openqa.datamodules.pipes import RenameKeys
 from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.utils.transformations import add_spec_token
 from fz_openqa.datamodules.utils.transformations import set_index_column
 from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
@@ -228,8 +226,8 @@ class QaBuilder(HfDatasetBuilder):
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
-            add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
+            add_qad_tokens=self.add_qad_tokens,
+            qad_tokens=self.n_answer_tokens * [ANS_TOKEN],
             shape=[-1, self.n_options],
         )
 
@@ -239,8 +237,8 @@ class QaBuilder(HfDatasetBuilder):
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
-            add_encoding_tokens=self.add_encoding_tokens,
-            spec_tokens=[DOC_TOKEN],
+            add_qad_tokens=self.add_qad_tokens,
+            qad_tokens=[DOC_TOKEN],
             shape=None,
         )
 
@@ -260,9 +258,9 @@ class QaBuilder(HfDatasetBuilder):
                 text_formatter=self.text_formatter,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
-                add_encoding_tokens=self.add_encoding_tokens,
+                add_qad_tokens=self.add_qad_tokens,
                 add_special_tokens=self.add_special_tokens,
-                spec_tokens=self.n_query_tokens * [QUERY_TOKEN],
+                qad_tokens=self.n_query_tokens * [QUERY_TOKEN],
                 shape=None,
             ),
             query_expansion_pipe,
@@ -340,18 +338,10 @@ class ConcatQaBuilder(QaBuilder):
 
         # concat question and answers
         dataset = dataset.map(
-            self.get_concat_qa_pipe(),
+            self.get_tokenize_concat_qa_pipe(),
             batched=True,
             num_proc=self.num_proc,
-            desc="Concatenating questions and answers",
-        )
-
-        # Tokenize the text fields (question and answers)
-        dataset = dataset.map(
-            self.get_qa_tokenizer_pipe(),
-            batched=True,
-            num_proc=self.num_proc,
-            desc="Tokenizing questions and answers",
+            desc="Tokenizing and concatenating questions and answers",
         )
 
         # add an index column
@@ -359,99 +349,75 @@ class ConcatQaBuilder(QaBuilder):
 
         return dataset
 
-    def get_concat_qa_pipe(self):
+    def get_tokenize_concat_qa_pipe(self):
         # register features that also need to be expanded to match the concatenated shape
+        text_keys = ["question.text", "answer.text"]
+        question_features = ["question.text", "question.input_ids", "question.attention_mask"]
         additional_question_features = ["question.document_idx", "question.metamap"]
 
         # register the tokens that prefix the question
         q_start_tokens = []
-        if self.add_encoding_tokens:
+        if self.add_qad_tokens:
             q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
 
-        if len(q_start_tokens) > 0:
-            add_spec_tokens_pipe = Apply(
-                {"question.text": partial(add_spec_token, q_start_tokens)},
-                element_wise=True,
-            )
+        # register the tokens used to separate the questions and answers, this is used
+        # for the GPT2 tokenizer which doesn't support CLS tokens
+        if self.tokenizer.cls_token is not None:
+            # no need to add them, the CLS token is already provided
+            sep_tokens = None
         else:
-            add_spec_tokens_pipe = None
+            space_token_id = self.tokenizer.encode(" ", add_special_tokens=False)[0]
+            sep_tokens = {
+                "input_ids": [space_token_id],
+                "attention_mask": [1],
+                "token_type_ids": [0],
+                "offset_mapping": [[-1, -1]],
+            }
+
+        # register the tokens used to terminate the questions when truncated
+        qmark_token_id = self.tokenizer.encode(TRUNCATED_TOKEN, add_special_tokens=False)[0]
+        end_if_truncated_tokens = {
+            "input_ids": [qmark_token_id],
+            "attention_mask": [1],
+            "token_type_ids": [0],
+            "offset_mapping": [[-1, -1]],
+        }
 
         # return the final pipe
         return Sequential(
-            self.text_formatter.copy(text_key=["question.text", "answer.text"], update=True),
-            add_spec_tokens_pipe,
+            self.text_formatter.copy(text_key=text_keys, update=True),
+            # tokenize the questions and the answers
+            Parallel(
+                self.get_question_tokenizer_pipe(),
+                self.get_answer_tokenizer_pipe(),
+                Identity(input_filter=In([*additional_question_features, *text_keys])),
+            ),
             Expand(
                 axis=1,
                 n=self.n_options,
                 update=True,
-                input_filter=In(["question.text", *additional_question_features]),
+                input_filter=In([*question_features, *additional_question_features]),
             ),
             # concat the answer text with the question
             ApplyAsFlatten(
-                ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
+                ConcatTokenFields(
+                    fields=["question", "answer"],
+                    master_key="input_ids",
+                    new_field="question",
+                    drop_start_tokens=[self.tokenizer.cls_token_id],
+                    keep_end_tokens=[self.tokenizer.sep_token_id],
+                    max_length=self.max_length,
+                    sep_tokens=sep_tokens,
+                    end_if_truncated_tokens=end_if_truncated_tokens,
+                ),
                 level=1,
-                input_filter=In(["question.text", "answer.text"]),
-                update=True,
-            ),
-            # concat the answer text with the metamap question
-            Gate(
-                HasKeys(keys=["question.metamap"]),
-                ApplyAsFlatten(
-                    ConcatTextFields(
-                        keys=["answer.text", "question.metamap"], new_key="question.metamap"
-                    ),
-                    level=1,
-                    input_filter=In(["question.metamap", "answer.text"]),
-                    update=True,
+                input_filter=Reduce(
+                    *[HasPrefix(field) for field in ["question", "answer"]], reduce_op=any
                 ),
                 update=True,
             ),
             RenameKeys({"answer.text": "question.answer_text"}),
             input_filter=In(["question.text", "answer.text", *additional_question_features]),
-        )
-
-    def get_qa_tokenizer_pipe(self):
-
-        if self.query_expansion is not None:
-            query_expansion_pipe = Nested(
-                QueryExpansionPipe(
-                    question_length=self.query_expansion, tokenizer=self.tokenizer, update=True
-                ),
-                level=1,
-            )
-        else:
-            query_expansion_pipe = None
-
-        return Sequential(
-            FormatAndTokenize(
-                prefix="question.",
-                text_formatter=None,
-                tokenizer=self.tokenizer,
-                max_length=self.max_length,
-                add_encoding_tokens=self.add_encoding_tokens,
-                add_special_tokens=self.add_special_tokens,
-                spec_tokens=self.n_answer_tokens * [ANS_TOKEN],
-                shape=[-1, self.n_options],
-            ),
-            query_expansion_pipe,
-            ApplyAsFlatten(
-                InferTokenTypeIds(
-                    field="question",
-                    tokenizer=self.tokenizer,
-                    symbol_map=[
-                        [
-                            self.tokenizer.cls_token,
-                            self.tokenizer.cls_token,
-                            QUERY_TOKEN,
-                        ],
-                        [ANS_TOKEN],
-                    ],
-                    update=True,
-                ),
-                level=1,
-                input_filter=In(["question.input_ids"]),
-                update=True,
-            ),
         )
 
     def _get_collate_pipe(self, nesting_level=1):

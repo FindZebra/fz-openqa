@@ -20,16 +20,24 @@ def init_pretrained_tokenizer(
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.sanitize_special_tokens()
-    test_special_token_encoding(tokenizer)
+    # test_special_token_encoding(tokenizer)
     return tokenizer
 
 
-def test_special_token_encoding(tokenizer):
+def test_special_token_encoding(tokenizer: PreTrainedTokenizerFast):
     text = "hello world!"
     for t in [QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN, QUERY_MASK]:
         t_id = tokenizer.get_vocab()[t]
-        tokens = tokenizer(f"{t}{text}").input_ids
-        assert tokens[0] == tokenizer.cls_token_id
+        tokens = tokenizer(f"{t}{text}", add_special_tokens=True).input_ids
+        if not tokens[0] in (tokenizer.cls_token_id, tokenizer.bos_token_id):
+            decoded = tokenizer.decode([tokens[0]])
+            raise ValueError(
+                f"{tokens[0]}={decoded} is not {tokenizer.cls_token} or {tokenizer.bos_token}"
+            )
+        if not tokens[-1] in (tokenizer.sep_token_id, tokenizer.eos_token_id):
+            decoded = tokenizer.decode([tokens[-1]])
+            raise ValueError(
+                f"{tokens[-1]}={decoded} is not {tokenizer.sep_token} or {tokenizer.eos_token}"
+            )
         assert tokens[1] == t_id
-        assert tokens[-1] == tokenizer.sep_token_id
         assert text == tokenizer.decode(tokens, skip_special_tokens=True)

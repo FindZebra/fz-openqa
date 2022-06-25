@@ -52,7 +52,7 @@ def run(config):
     ```bash
     CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 poetry run python \
     examples/load_openqa.py \
-    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10 +use_subset=False
+    sys=titan trainer.strategy=dp trainer.gpus=8 +batch_size=1000 +num_workers=10
     ```
     """
     print_config(config)
@@ -63,9 +63,10 @@ def run(config):
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
     use_colbert = config.get("colbert", False)
+    num_proc = config.get("num_proc", 4)
     setup_with_model = config.get("setup_with_model", False)
     hidden_size = 32 if use_colbert else 128
-    bert_id = "google/bert_uncased_L-2_H-128_A-2"
+    bert_id = config.get("bert_id", "google/bert_uncased_L-2_H-128_A-2")
     try:
         cache_dir = config.sys.cache_dir
     except Exception:
@@ -116,21 +117,22 @@ def run(config):
     dataset_builder = QaBuilderCls(
         dset_name=config.get("dset_name", "medqa-us"),
         tokenizer=tokenizer,
-        use_subset=config.get("use_subset", True),
-        add_encoding_tokens=not zero_shot,
+        n_query_tokens=1,
+        n_answer_tokens=0,
+        subset_size=1000 if config.get("use_subset", True) else None,
+        add_qad_tokens=not zero_shot or not setup_with_model,
         cache_dir=cache_dir,
-        num_proc=4,
+        num_proc=num_proc,
     )
-    dataset_builder.subset_size = [200, 50, 50]
 
     # define the corpus builder
     corpus_builder = CorpusBuilder(
-        dset_name=config.get("corpus_name", "medqa"),
+        dset_name=config.get("corpus_name", "medwiki"),
         tokenizer=tokenizer,
-        add_encoding_tokens=not zero_shot,
-        use_subset=config.get("corpus_subset", False),
+        add_qad_tokens=not zero_shot or not setup_with_model,
+        subset_size=100 if config.get("corpus_subset", False) else None,
         cache_dir=cache_dir,
-        num_proc=4,
+        num_proc=num_proc,
     )
 
     # define the index builder
@@ -143,8 +145,8 @@ def run(config):
                 "max_batch_size": 512,
                 "verbose": False,
                 "config": {
-                    "es_temperature": 10.0,
-                    "auxiliary_weight": config.get("aux_weight", 1.0) if concat_dset else 0,
+                    "es_temperature": 5.0,
+                    "auxiliary_weight": config.get("aux_weight", 0.5) if concat_dset else 0,
                     "filter_with_doc_ids": False,
                 },
             },
@@ -173,7 +175,7 @@ def run(config):
         relevance_classifier=ExactMatch(interpretable=True),
         sampler=PrioritySampler(total=10),
         n_retrieved_documents=100,
-        num_proc=config.get("num_proc", 4),
+        num_proc=config.get("num_proc", num_proc),
         batch_size=config.get("map_batch_size", 100),
     )
 

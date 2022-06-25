@@ -60,7 +60,7 @@ def format_row_concatenated_questions(row: Dict[str, Any], *, tokenizer, **kwarg
     repr = f"Question #{row.get('question.idx', None)}\n"
 
     repr += get_separator("-") + "\n"
-    repr += "* Question-answer:" + "\n"
+    repr += "* Question + answer:" + "\n"
     idx = row.get("answer.target", None)
     for i, an in enumerate(row["question.input_ids"]):
         an_style = "green" if idx == i else "white"

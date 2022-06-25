@@ -177,7 +177,7 @@ datamodule:
       dset_name: ${datamodule.dset_name}
       query_expansion: null
       n_query_tokens: 1
-      n_answer_tokens: 1
+      n_answer_tokens: 0
       max_length: ${datamodule.dset_max_length}
     corpus_builder:
       dset_name: ${datamodule.corpus_name}

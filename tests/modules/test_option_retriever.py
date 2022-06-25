@@ -14,7 +14,7 @@ from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, App
     ConcatTextFields, PrioritySampler
 from fz_openqa.datamodules.pipes.control.condition import In, HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
-from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.datamodules.utils.transformations import append_prefix
 from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.modeling.gradients.in_batch import InBatchGradients
 from fz_openqa.modeling.heads import DprHead
@@ -108,7 +108,7 @@ class TestOptionRetriever(TestModel):
     def get_preprocessing_pipe(self):
         # concat question and answer
         add_spec_tokens_pipe = Apply(
-            {"question.text": partial(add_spec_token, self.tokenizer.sep_token)},
+            {"question.text": partial(append_prefix, self.tokenizer.sep_token)},
             element_wise=True
         )
         concat_qa = Sequential(

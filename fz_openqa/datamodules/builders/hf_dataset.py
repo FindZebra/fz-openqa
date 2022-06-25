@@ -90,7 +90,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool = True,
+        add_qad_tokens: bool = True,
         add_special_tokens: bool = True,
         cache_dir: str = "cache/",
         max_length: Optional[int] = 512,
@@ -111,7 +111,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.text_formatter = text_formatter or TextFormatter()
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.add_encoding_tokens = add_encoding_tokens
+        self.add_qad_tokens = add_qad_tokens
         self.add_special_tokens = add_special_tokens
 
     # @cache_hf_dataset
