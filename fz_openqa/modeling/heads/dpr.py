@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from typing import Dict
 from typing import Optional
@@ -36,7 +37,7 @@ def unique_with_indices(x, dim=None):
     uids, inverse = torch.unique(x, sorted=True, return_inverse=True, dim=dim)
     perm = torch.arange(inverse.size(0), dtype=inverse.dtype, device=inverse.device)
     inverse, perm = inverse.flip([0]), perm.flip([0])
-    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm)
+    return uids, inverse.new_empty(uids.size(0)).scatter_(0, inverse, perm), inverse
 
 
 class DprHead(Head):
@@ -46,21 +47,19 @@ class DprHead(Head):
         self,
         *,
         normalize: bool = False,
-        bias: bool = True,
-        share_parameters: bool = False,
+        bias: bool = False,
+        share_parameters: bool = True,
         bayesian: bool = False,
         learn_scale: bool = False,
-        scale: float = 1.0,
-        auto_scale: bool = False,
-        is_scaled: bool = False,
+        target_scale_init: float = 1.0,
+        auto_scale: bool = True,
         scale_init: float = 1.0,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
         self.bias = bias
-        self.scale_init = scale
-        self.register_buffer("is_scaled", torch.tensor(int(is_scaled)))
-        self.auto_scale = auto_scale
+        self.target_scale_init = target_scale_init
+        self.register_buffer("is_scaled", torch.tensor(int(not auto_scale)))
 
         Layer = nn.Linear if not bayesian else BayesianLinear
 
@@ -78,18 +77,27 @@ class DprHead(Head):
         else:
             self.q_head = self.d_head = None
 
-        scale_value = torch.tensor(scale_init, dtype=torch.float)
-        offset_value = torch.tensor(0.0, dtype=torch.float)
-        if learn_scale:
-            self._scale = nn.Parameter(scale_value)
-            self._offset = nn.Parameter(offset_value)
-        else:
-            self.register_buffer("_scale", scale_value)
-            self.register_buffer("_offset", offset_value)
+        # set the temperature
+        self._kappa = nn.Parameter(torch.tensor(0.0), requires_grad=learn_scale)
+        self._kappa_zero = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+        self.scale_value = scale_init
 
     @property
-    def scale_value(self):
-        return self._scale
+    def temperature(self) -> Tensor:
+        return (self._kappa - self._kappa_zero).exp()
+
+    @temperature.setter
+    def temperature(self, value: Tensor):
+        self._kappa.data.fill_(0)
+        self._kappa_zero.data.fill_(-math.log(value))
+
+    @property
+    def scale_value(self) -> Tensor:
+        return self.temperature.pow(-1)
+
+    @scale_value.setter
+    def scale_value(self, value: Tensor):
+        self.temperature = 1 / value
 
     def entropy(self) -> Tensor | float:
         if isinstance(self.q_head, BayesianLinear):
@@ -109,28 +117,33 @@ class DprHead(Head):
 
         return 0.0
 
-    @property
-    def temperature(self) -> Tensor:
-        return self.scale_value.pow(-1)
+    def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
 
-    def set_scale(self, scores: Tensor):
-        self._scale.data = self.scale_init * scores.std().detach().pow(-1) * self._scale.data
-        self._offset.data = -scores.mean().detach() * self._scale.data
+        scores_std = self._scores_std(scores)
+
+        self.scale_value = self.target_scale_init * scores_std.pow(-1)
         self.is_scaled.data += 1
 
-        scores = self.scale(scores)
+        scores = self.scale_query(scores, qmask=qmask)
         rich.print(
             f"> standardized | out.mean={scores.mean():.3f}, "
-            f"out.std={scores.std():.3f}, "
-            f"scale={self._scale.data:.3f}, "
-            f"offset={self._offset.data:.3f}, "
+            f"out.std={self._scores_std(scores):.3f}, "
+            f"scale={self.scale_value:.3f}, "
+            f"kappa={self._kappa.data:.3f}, "
+            f"kappa_zero={self._kappa_zero.data:.3f}, "
             f"scaled={self.is_scaled}"
         )
 
         return scores
 
-    def scale(self, hq: Tensor) -> Tensor:
-        hq = hq * self.scale_value
+    def _scores_std(self, scores):
+        scores_ = scores.view(-1).detach()
+        scores_ = scores_[(~scores_.isnan()) & (~scores_.isinf())]
+        scores_std = scores_.std()
+        return scores_std
+
+    def scale_query(self, hq: Tensor, qmask=None) -> Tensor:
+        hq = hq / self.temperature
         return hq
 
     def forward(
@@ -162,10 +175,6 @@ class DprHead(Head):
 
         # compute the score
         score, diagnostics = self.score(hq=hq, hd=hd, doc_ids=doc_ids, batch=batch, **kwargs)
-
-        if self.auto_scale and self.is_scaled < 1:
-            score = self.set_scale(score)
-
         diagnostics["score"] = score + self.offset
 
         return diagnostics
@@ -193,40 +202,18 @@ class DprHead(Head):
             if self.metric_type == MetricType.inner_product:
                 scores = einsum("bh, bdh -> bd", hq, hd)
             elif self.metric_type == MetricType.euclidean:
-                scores = (
-                    -1
-                    * (
-                        hq[:, None, :]
-                        - hd[
-                            :,
-                            :,
-                            :,
-                        ]
-                    )
-                    .pow(2)
-                    .sum(-1)
-                    .pow(0.5)
-                )
+                _hq = hq[:, None, :]
+                _hd = hd[:, :, :]
+                scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
             else:
                 raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
         else:
             if self.metric_type == MetricType.inner_product:
                 scores = einsum("bh, dh -> bd", hq, hd)
             elif self.metric_type == MetricType.euclidean:
-                scores = (
-                    -1
-                    * (
-                        hq[:, None, :]
-                        - hd[
-                            None,
-                            :,
-                            :,
-                        ]
-                    )
-                    .pow(2)
-                    .sum(-1)
-                    .pow(0.5)
-                )
+                _hq = hq[:, None, :]
+                _hd = hd[None, :, :]
+                scores = -1 * (_hq - _hd).pow(2).sum(-1).pow(0.5)
             else:
                 raise ValueError(f"Unknown `metric_type`: {self.metric_type}")
 
@@ -253,7 +240,7 @@ class DprHead(Head):
             cls_repr = F.normalize(cls_repr, p=2, dim=-1)
 
         if head == "question":
-            cls_repr = self.scale(cls_repr)
+            cls_repr = self.scale_query(cls_repr)
 
         return cls_repr
 
@@ -264,7 +251,7 @@ class DprHead(Head):
         feature_dimensions = len(doc_ids.shape)
         hd = hd.view(-1, *hd.shape[feature_dimensions:])
         doc_ids = doc_ids.view(-1)
-        udoc_ids, uids = unique_with_indices(doc_ids)
+        udoc_ids, uids, _ = unique_with_indices(doc_ids)
         hd = hd[uids]
         return hd, udoc_ids
 

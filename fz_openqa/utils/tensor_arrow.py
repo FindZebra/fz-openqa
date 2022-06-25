@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import math
 import multiprocessing as mp
 import shutil
+import tempfile
+from copy import copy
 from pathlib import Path
+from typing import Any
 from typing import BinaryIO
 from typing import Dict
 from typing import Iterable
@@ -14,6 +18,7 @@ from typing import Union
 
 import numpy as np
 import pyarrow as pa
+import rich
 import torch
 from datasets.features import numpy_to_pyarrow_listarray
 from datasets.table import MemoryMappedTable
@@ -249,9 +254,10 @@ class TensorArrowTable(TensorArrowBase):
     _no_pickle_list: List[str] = ["_index", "_shapes", "_vectors"]
     _equal_shapes: bool = False
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, pad_value: Any = torch.nan, **kwargs):
         super().__init__(*args, **kwargs)
         self._load_all()
+        self.pad_value = pad_value
 
     def _load_all(self):
         self._build_index()
@@ -312,7 +318,7 @@ class TensorArrowTable(TensorArrowBase):
         return self._load_table(self.index_path).num_rows
 
     def __len__(self):
-        return self.num_rows
+        return len(self._index)
 
     @property
     def nbytes(self) -> int:
@@ -324,6 +330,65 @@ class TensorArrowTable(TensorArrowBase):
     @property
     def shape(self) -> Tuple[int, ...]:
         return (len(self), *(int(x) for x in self._shared_shape))
+
+    def size(self, dim: int = None):
+        if dim is None:
+            return self.shape
+        else:
+            return self.shape[dim]
+
+    def dim(self) -> int:
+        return len(self.shape)
+
+    def view(self, *new_shape: int) -> "TensorArrowTable":
+        """Hacky implementation used to flatten tensors for the ColbertIndex."""
+        if len(new_shape) != 2 or (new_shape[0] != -1 or new_shape[1] == -1):
+            raise NotImplementedError(
+                "Only implemented for flattening. " "Accepted shapes are of the form (-1, x)"
+            )
+        if not self._equal_shapes:
+            raise NotImplementedError("Only implemented for constant shapes")
+
+        # create a new table with the new shape
+        new_table = copy(self)
+
+        dim = new_shape[1]
+        n_elements = new_table._index[-1, -1] - new_table._index[0, 0]
+        if n_elements % dim != 0:
+            raise ValueError(
+                "The number of elements in the new shape must be a "
+                "multiple of the number of elements in the old shape. "
+                f"Found total={n_elements} and h={dim}, "
+                f"total % h = {n_elements % dim}."
+            )
+
+        # build the new index
+        new_index = torch.arange(0, n_elements + 1, dim, dtype=torch.int64)
+        new_table._index = torch.stack([new_index[:-1], new_index[1:]], dim=1)
+        if not new_table._index[0, 0] == self._index[0, 0]:
+            raise ValueError(
+                f"The first index in the new view must be the same "
+                f"as the first index in the old shape. "
+                f"Found {new_table._index[0, 0]} "
+                f"and {self._index[0, 0]}."
+            )
+        if not new_table._index[-1, -1] == self._index[-1, -1]:
+            raise ValueError(
+                f"The last index in the new view must be the same "
+                f"as the last index in the old shape. "
+                f"Found {new_table._index[-1, -1]} "
+                f"and {self._index[-1, -1]}."
+            )
+
+        # set the shapes
+        new_table._shared_shape = torch.tensor(
+            [
+                dim,
+            ],
+            dtype=torch.int64,
+        )
+        new_table._shapes = new_table._shared_shape.repeat(len(new_table), 1)
+        return new_table
 
     @torch.no_grad()
     def __getitem__(self, item: ARRAY_INDEX) -> Optional[torch.Tensor]:
@@ -410,7 +475,7 @@ class TensorArrowTable(TensorArrowBase):
         vectors = [v.view(*shape) for v in vectors]
         max_length = max([v.shape[0] for v in vectors])
         pad_value = vectors[0][:1].clone()
-        pad_value.fill_(torch.nan)
+        pad_value.fill_(self.pad_value)
         vectors = [pad_dim_zero(v, max_length, pad_value) for v in vectors]
         return vectors
 
@@ -435,3 +500,59 @@ class TensorArrowTable(TensorArrowBase):
         for k in self._no_pickle_list:
             self.__dict__[k] = None
         self._load_all()
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(shape={self.shape}, "
+            f"dtype={self._dtype}, pad_value={self.pad_value})"
+        )
+
+
+if __name__ == "__main__":
+    with tempfile.TemporaryDirectory() as tmpdir:
+        bs = 100
+        path = tmpdir
+        dtype = "float16"
+        length = 23
+        size = 9_028
+
+        # data
+        data = torch.randn(size, length, 32, dtype=torch.float16)
+        flat_data = data.view(-1, 32)
+
+        # store
+        with TensorArrowWriter(path, dtype=dtype) as writer:
+            for i in range(0, data.size(0), bs):
+                L = None
+                rows = data[i : i + bs, :L]
+                writer.write(rows)
+
+        # load
+        vectors = TensorArrowTable(path, dtype=dtype)
+
+        # view
+        flat_vectors = vectors.view(-1, vectors.size(-1))
+        if flat_vectors.shape != flat_data.shape:
+            raise Exception(
+                "view shape mismatch. "
+                f"Found {flat_vectors.shape}, "
+                f"expected {flat_data.shape}"
+            )
+
+        rich.print("[magenta] Test #1")
+        for idx in range(100):
+            i = np.random.randint(0, len(flat_data))
+            if not (flat_data[i] == flat_vectors[i]).all():
+                rich.print(f"Computed: {flat_data[i]}")
+                rich.print(f"Reference: {flat_vectors[i]}")
+                raise Exception(f"{i} mismatch")
+
+        rich.print("[magenta] Test #2")
+        bs = 234
+        for i in range(0, len(flat_data) + 7, bs):
+            v = flat_vectors[i : i + bs]
+            w = flat_data[i : i + bs]
+            if (v != w).any():
+                rich.print(f"Computed: {v}")
+                rich.print(f"Reference: {w}")
+                raise Exception(f"{i} mismatch")

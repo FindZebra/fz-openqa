@@ -1,11 +1,59 @@
 defaults:
-  - dpr
+  - es
 
-_target_: fz_openqa.datamodules.index.ColbertOrEsIndexBuilder
+# define the engines
+engines:
+  es:
+    k: 1000
+    max_batch_size: 100
+    verbose: false
+    merge_previous_results: false
+    config:
+      es_temperature: 1
+      auxiliary_weight: 0
+      filter_with_doc_ids: false
+  maxsim:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 100
+    verbose: false
+    merge_previous_results: false
+    config:
+      metric_type: ${model.metric_type}
+      max_chunksize: 1000
+  topk:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 10
+    verbose: false
+    merge_previous_results: false
+    config: {}
 
-index_factory: IVF100,PQ16x8
-faiss_train_size: 1_000_000
-p: 100
-max_chunksize: 100
-maxsim_chunksize: 10_000
-_id: colbert
+# logging
+id: colbert
+
+
+#engines:
+#  es:
+#    k: 1000
+#    verbose: false
+#    merge_previous_results: false
+#    config:
+#      es_temperature: 1
+#      auxiliary_weight: 0
+#      filter_with_doc_ids: false
+#  faiss_token:
+#    k: 3000
+#    verbose: false
+#    merge_previous_results: true
+#    config:
+#      index_factory: "shard:IVF10000,PQ32"
+#      train_size: 5_000_000
+#      p: 16
+#      metric_type: ${model: metric_type}
+#      nprobe: 32
+#  maxsim:
+#    k: ${datamodule.n_retrieved_documents}
+#    verbose: false
+#    merge_previous_results: false
+#    config:
+#      max_chunksize: 1000
+#      metric_type: ${model.metric_type}

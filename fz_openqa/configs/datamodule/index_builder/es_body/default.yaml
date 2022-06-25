@@ -3,6 +3,8 @@ mappings:
   properties:
     idx:
       type: integer
+    document_idx:
+      type: integer
     text:
       type: text
     title:

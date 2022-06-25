@@ -22,7 +22,7 @@ class CountMatchedQuestions(Analytic):
         """
         Report on a specific split of the dataset.
         """
-        n_scores = dset["document.retrieval_score"]
+        n_scores = dset["document.proposal_score"]
         n_pos = dset["document.match_score"]
         scores = [y[0].item() for x, y in zip(n_pos, n_scores) if sum(x) > 0]
         matches = [sum(y) for y in n_pos]

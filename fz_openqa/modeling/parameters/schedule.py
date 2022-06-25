@@ -7,6 +7,9 @@ class Schedule(object):
     def __init__(self, *, num_warmup_steps: int = 0, num_steps: int = None):
         self.num_warmup_steps = num_warmup_steps
         self.num_steps = num_steps
+        self.reset()
+
+    def reset(self):
         self._step = 0
 
     def step(self):
@@ -18,19 +21,23 @@ class Schedule(object):
 
 
 class LinearSchedule(Schedule):
-    def __init__(self, *, initial_value: float = 0, final_value: float = 1, **kwargs):
+    def __init__(
+        self, *, initial_value: float = 0, final_value: float = 1, temperature=1.0, **kwargs
+    ):
         super().__init__(**kwargs)
         self.initial_value = initial_value
         self.final_value = final_value
+        self.temperature = temperature
 
     def __call__(self) -> float:
         if self._step < self.num_warmup_steps:
             return self.initial_value
         else:
-            x = self._step - self.num_warmup_steps
+            x = max(self._step - self.num_warmup_steps, 0)
             M = self.num_steps - self.num_warmup_steps
             delta = self.final_value - self.initial_value
             u = min(1.0, x / M)
+            u = u ** self.temperature
             return self.initial_value + delta * self.transform(u)
 
     def transform(self, u: float) -> float:

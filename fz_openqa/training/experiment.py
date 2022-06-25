@@ -1,4 +1,5 @@
 import os
+import socket
 
 import hydra
 import numpy as np
@@ -19,22 +20,26 @@ from fz_openqa.utils.git import git_revision_short_hash
 def int_div(a, *b):
     y = a
     for x in b:
-        y = y // x
-    return y
+        y = y / x
+    return int(y)
 
 
 def int_mul(a, *b):
-    y = int(a)
+    y = a
     for x in b:
-        y *= int(x)
-    return y
+        y *= x
+    return int(y)
 
 
 def int_max(a, *b):
-    y = int(a)
+    y = a
     for x in b:
         y = max(x, y)
-    return y
+    return int(y)
+
+
+def cleanup_bert_name(name):
+    return name.split("/")[-1]
 
 
 N_GPUS = torch.cuda.device_count()
@@ -43,6 +48,7 @@ GIT_HASH_SHORT = git_revision_short_hash()
 GIT_BRANCH_NAME = git_branch_name()
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("hostname", socket.gethostname)
 OmegaConf.register_new_resolver("int", lambda x: int(x))
 OmegaConf.register_new_resolver("int_mul", int_mul)
 OmegaConf.register_new_resolver("int_div", int_div)
@@ -50,6 +56,8 @@ OmegaConf.register_new_resolver("int_max", int_max)
 OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
 OmegaConf.register_new_resolver("git_hash", lambda *_: GIT_HASH)
 OmegaConf.register_new_resolver("git_hash_short", lambda *_: GIT_HASH_SHORT)
+OmegaConf.register_new_resolver("eval", lambda x: eval(x))
+OmegaConf.register_new_resolver("cleanup_bert_name", cleanup_bert_name)
 
 
 def run_experiment_with_config(config: DictConfig):

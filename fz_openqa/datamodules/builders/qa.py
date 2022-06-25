@@ -11,6 +11,8 @@ from loguru import logger
 
 from ..pipelines.collate.field import CollateField
 from ..pipes.answer_options import ConcatTextFields
+from ..pipes.answer_options import InferTokenTypeIds
+from ..pipes.control.batch_condition import HasKeys
 from ..pipes.control.condition import In
 from ..pipes.min_length import MinLength
 from ..pipes.nesting import ApplyAsFlatten
@@ -18,8 +20,10 @@ from ..pipes.nesting import Expand
 from ..pipes.nesting import Nested
 from ..pipes.tokenizer import QueryExpansionPipe
 from ..utils.dataset import format_size_difference
+from ..utils.dataset import keep_only_columns
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
+from .preprocessing import DatasetPreprocessing
 from .utils.format_row import format_row_concatenated_questions
 from .utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.generators import medqa
@@ -44,6 +48,7 @@ QA_DATASETS = {
     "race": ("race", "all"),
     "race-hard": ("race", "hard"),
     "race-middle": ("race", "middle"),
+    "medmcqa": ("medmcqa", None),
 }
 
 
@@ -67,11 +72,8 @@ class QaBuilder(HfDatasetBuilder):
         "answer.attention_mask",
         "answer.target",
         "document.match_score",
-        "document.retrieval_score",
+        "document.proposal_score",
     ]
-
-    # number of data points per subset train/val/test
-    subset_size = [1000, 100, 100]
 
     # number of options
     n_options = 4
@@ -83,6 +85,7 @@ class QaBuilder(HfDatasetBuilder):
         "answer.attention_mask",
         "answer.target",
         "question.text",
+        "question.metamap",
         "question.input_ids",
         "question.attention_mask",
     ]
@@ -96,6 +99,7 @@ class QaBuilder(HfDatasetBuilder):
         query_expansion: Optional[int] = None,
         dset_name: str = "medqa-us",
         drop_documents: bool = True,
+        preprocessing_op: Optional[DatasetPreprocessing] = None,
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
@@ -104,6 +108,7 @@ class QaBuilder(HfDatasetBuilder):
         self.n_query_tokens = n_query_tokens
         self.n_answer_tokens = n_answer_tokens
         self.drop_documents = drop_documents
+        self.preprocessing_op = preprocessing_op
 
         # set the dataset attributes
         for dn in dset_name.split("+"):
@@ -132,15 +137,47 @@ class QaBuilder(HfDatasetBuilder):
         for dset_name in dset_names:
             script_id, name = QA_DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
+
+        # load the base datasets
         kwargs = {"cache_dir": self.cache_dir}
         dsets = [self.load_one_dataset(n, **kwargs) for n in dset_names]
 
+        # apply preprocessing operators
+        if self.preprocessing_op is not None:
+            dsets = [
+                self.preprocessing_op(
+                    d,
+                    num_proc=self.num_proc,
+                )
+                for d in dsets
+            ]
+
+        # concatenate the datasets
         if len(dsets) == 1:
             return dsets[0]
         else:
+            # check that all datasets have the same splits
+            splits = set(dsets[0].keys())
+            if not all(set(dset.keys()) == splits for dset in dsets):
+                raise ValueError(
+                    f"Datasets do not all have the same splits. "
+                    f"Found {[set(dset.keys()) for dset in dsets]}"
+                )
+
+            # only keep the columns that appear in all datasets
+            shared_columns = set.intersection(
+                *(set(ds.column_names) for dset in dsets for ds in dset.values())
+            )
+            dsets = [keep_only_columns(dset, list(shared_columns)) for dset in dsets]
+
+            # concatenate and add the `dataset.idx` column
             dsets_dict = DatasetDict()
-            for split in dsets[0].keys():
-                split_dsets = concatenate_datasets([d[split] for d in dsets])
+            for split in splits:
+                split_dsets = [d[split] for d in dsets]
+                split_dsets = [
+                    d.add_column("dataset.idx", [i] * len(d)) for i, d in enumerate(split_dsets)
+                ]
+                split_dsets = concatenate_datasets(split_dsets)
                 dsets_dict[split] = split_dsets
 
             return dsets_dict
@@ -283,7 +320,7 @@ class ConcatQaBuilder(QaBuilder):
         "question.document_idx",
         "answer.target",
         "document.match_score",
-        "document.retrieval_score",
+        "document.proposal_score",
     ]
 
     # output columns
@@ -324,7 +361,7 @@ class ConcatQaBuilder(QaBuilder):
 
     def get_concat_qa_pipe(self):
         # register features that also need to be expanded to match the concatenated shape
-        additional_question_features = ["question.document_idx"]
+        additional_question_features = ["question.document_idx", "question.metamap"]
 
         # register the tokens that prefix the question
         q_start_tokens = []
@@ -349,10 +386,24 @@ class ConcatQaBuilder(QaBuilder):
                 update=True,
                 input_filter=In(["question.text", *additional_question_features]),
             ),
+            # concat the answer text with the question
             ApplyAsFlatten(
                 ConcatTextFields(keys=["answer.text", "question.text"], new_key="question.text"),
                 level=1,
                 input_filter=In(["question.text", "answer.text"]),
+                update=True,
+            ),
+            # concat the answer text with the metamap question
+            Gate(
+                HasKeys(keys=["question.metamap"]),
+                ApplyAsFlatten(
+                    ConcatTextFields(
+                        keys=["answer.text", "question.metamap"], new_key="question.metamap"
+                    ),
+                    level=1,
+                    input_filter=In(["question.metamap", "answer.text"]),
+                    update=True,
+                ),
                 update=True,
             ),
             RenameKeys({"answer.text": "question.answer_text"}),
@@ -383,6 +434,24 @@ class ConcatQaBuilder(QaBuilder):
                 shape=[-1, self.n_options],
             ),
             query_expansion_pipe,
+            ApplyAsFlatten(
+                InferTokenTypeIds(
+                    field="question",
+                    tokenizer=self.tokenizer,
+                    symbol_map=[
+                        [
+                            self.tokenizer.cls_token,
+                            self.tokenizer.cls_token,
+                            QUERY_TOKEN,
+                        ],
+                        [ANS_TOKEN],
+                    ],
+                    update=True,
+                ),
+                level=1,
+                input_filter=In(["question.input_ids"]),
+                update=True,
+            ),
         )
 
     def _get_collate_pipe(self, nesting_level=1):
@@ -390,7 +459,7 @@ class ConcatQaBuilder(QaBuilder):
         return Parallel(
             CollateField(
                 "question",
-                exclude=["input_ids", "attention_mask"],
+                exclude=["input_ids", "attention_mask", "token_type_ids"],
                 to_tensor=["document_idx"],
                 level=0,
                 id="collate-questions",
@@ -406,7 +475,7 @@ class ConcatQaBuilder(QaBuilder):
                 "question",
                 tokenizer=self.tokenizer,
                 level=nesting_level,
-                include_only=["input_ids", "attention_mask"],
+                include_only=["input_ids", "offset_mapping", "attention_mask", "token_type_ids"],
                 id="pad-nested-question-tokens",
             ),
         )

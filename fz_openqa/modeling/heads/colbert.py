@@ -21,7 +21,7 @@ class ColbertHead(DprHead):
     def __init__(
         self,
         *,
-        use_mask: bool = False,
+        use_mask: bool = True,
         use_answer_mask=False,
         use_soft_score: bool = False,
         compute_agg_score: bool = False,
@@ -78,6 +78,7 @@ class ColbertHead(DprHead):
 
             # attention model
             attn_scores = einsum("bouh, bodvh -> boduv", hq_a, hd_a)
+            attn_scores = attn_scores.mul(1.0 / hq_a.shape[-1])
             attn_scores = attn_scores.masked_fill(attn_scores == 0, -1e3)
             log_p_dloc = attn_scores.log_softmax(dim=-1)
 
@@ -205,6 +206,37 @@ class ColbertHead(DprHead):
             last_hidden_state = last_hidden_state * mask.unsqueeze(-1)
 
         if head == "question":
-            last_hidden_state = self.scale(last_hidden_state)
+            last_hidden_state = self.scale_query(last_hidden_state, q_lengths=mask.sum(-1))
 
         return last_hidden_state
+
+    def set_scale(self, scores: Tensor, qmask: Optional[Tensor] = None):
+        scores_std = self._scores_std(scores)
+        gain = self.target_scale_init * scores_std.pow(-1)
+        self.scale_value = gain * self.scale_value.data
+        self.is_scaled.data += 1
+
+        # re-scale the scores
+        scores = scores * gain
+
+        rich.print(
+            f"> standardized | out.mean={scores.mean():.3f}, "
+            f"out.std={self._scores_std(scores):.3f}, "
+            f"scale={self.scale_value:.3f}, "
+            f"kappa={self._kappa.data:.3f}, "
+            f"kappa_zero={self._kappa_zero.data:.3f}, "
+            f"scaled={self.is_scaled}, ",
+            f"gain={gain:.3f}",
+        )
+
+        return scores
+
+    def scale_query(self, hq: Tensor, q_lengths=None) -> Tensor:
+        if q_lengths is None:
+            raise ValueError("q_lengths is required for scale_query with Colbert")
+
+        q_lengths = q_lengths.view(*q_lengths.shape, *[1] * (hq.dim() - q_lengths.dim()))
+        # q_lengths = 1
+
+        hq = hq / (q_lengths * self.temperature)
+        return hq

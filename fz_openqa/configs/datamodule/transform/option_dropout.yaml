@@ -4,10 +4,12 @@ target_key: answer.target
 keys:
   - question.input_ids
   - question.attention_mask
+  - question.token_type_ids
   - document.input_ids
   - document.attention_mask
-  - document.retrieval_score
-  - document.retrieval_rank
+  - document.proposal_score
+  - document.proposal_rank
   - document.match_score
   - document.row_idx
+  - document.proposal_log_weight
 update: true

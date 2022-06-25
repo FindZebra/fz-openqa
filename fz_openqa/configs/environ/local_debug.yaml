@@ -10,7 +10,7 @@ trainer:
 
 
 datamodule:
-  use_subset: True
+  subset_size: {'train': 100, 'validation': 100, 'test': 100}
   train_batch_size: 4
   eval_batch_size: 4
   num_proc: 2

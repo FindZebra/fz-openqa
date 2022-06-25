@@ -11,7 +11,7 @@ class TestSelectDocuments(TestCase):
     def setUp(self) -> None:
         self.data = {'document.feature': torch.tensor([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]),
                      'document.match_score': torch.tensor([0, 0, 0, 0, 0, 1, 2, 3, 4, 5]),
-                     'document.retrieval_score': torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])}
+                     'document.proposal_score': torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])}
 
     def test_select_docs_one_eg(self):
         for total, max_pos_docs in [(2, 1),

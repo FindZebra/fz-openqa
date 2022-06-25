@@ -1,8 +1,10 @@
+import math
 import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 from elasticsearch.client.indices import IndicesClient
@@ -121,11 +123,30 @@ class ElasticSearchEngine:
         Batch search in ElasticSearch Index
         """
 
+        use_aux_queries = auxiliary_queries is not None and auxiliary_weight > 0
         if auxiliary_queries is None and auxiliary_weight > 0:
             warnings.warn("auxiliary_queries is None, but auxiliary_weight > 0")
 
         request = []
         for i, query in enumerate(queries):
+
+            # remove the auxiliary queries from the query, this a quick and dirty solution
+            # to avoid counting the auxiliary query in the main query
+            if use_aux_queries:
+                aux_query_pattern = f"{auxiliary_queries[i]}."
+                if query.startswith(aux_query_pattern):
+                    query = query[len(aux_query_pattern) :]
+                elif query.endswith(aux_query_pattern):
+                    query = query[: -len(aux_query_pattern)]
+                else:
+                    pass
+
+            # measure the query and the auxiliary query
+            query_length = len(query.split(" "))
+            if auxiliary_queries is not None:
+                aux_query_length = len(auxiliary_queries[i].split(" "))
+            else:
+                aux_query_length = None
 
             # this is the main query
             query_parts = [
@@ -141,18 +162,25 @@ class ElasticSearchEngine:
             ]
 
             # this is an additional query term using the auxiliary_queries (answer option)
-            if auxiliary_queries is not None and auxiliary_weight > 0:
+            if use_aux_queries:
+                if auxiliary_weight > 0:
+                    aux_weight_i = math.log(1 + auxiliary_weight * query_length / aux_query_length)
+                else:
+                    aux_weight_i = 0
                 query_parts.append(
                     {
                         "match": {
                             "text": {
                                 "query": auxiliary_queries[i],
                                 "operator": "or",
-                                "boost": auxiliary_weight,
+                                "boost": aux_weight_i,
                             }
                         }
                     },
                 )
+
+            rich.print(query_parts)
+            exit()
 
             # final request
             r = {

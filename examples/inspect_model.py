@@ -115,7 +115,7 @@ def run(config: DictConfig) -> None:
         W_MAX = 100
         d_input_ids = batch.get("document.input_ids")
         q_input_ids = batch.get("question.input_ids")
-        retrieval_score = batch.get("document.retrieval_score")
+        proposal_score = batch.get("document.proposal_score")
         hq = output.get("_hq_")
         hd = output.get("_hd_")
         scores = torch.einsum("bmqh,bmkdh->bmkqd", hq, hd)
@@ -124,7 +124,7 @@ def run(config: DictConfig) -> None:
             j = targets[i]
             d_input_ids_i = d_input_ids[i][j]
             q_input_ids_i = q_input_ids[i][j]
-            retrieval_score_i = retrieval_score[i][j]
+            proposal_score_i = proposal_score[i][j]
             q_input_ids_i_ = [int(q.item()) for q in q_input_ids_i]
 
             if int(loader.tokenizer.pad_token_id) in q_input_ids_i_:
@@ -143,11 +143,11 @@ def run(config: DictConfig) -> None:
 
             for k in range(N_DOCS):
                 # hd_ik = hd_i[k]
-                retrieval_score_ik = retrieval_score_i[k]
+                proposal_score_ik = proposal_score_i[k]
                 scores_ik = scores_i[k, :q_padding_idx, :]
                 # scores_ik = scores_ik.softmax(dim=-1)
                 d_input_ids_ik = d_input_ids_i[k]
-                msg = f" Document {i+1}-{k+1} : score={retrieval_score_ik:.2f} "
+                msg = f" Document {i+1}-{k+1} : score={proposal_score_ik:.2f} "
                 rich.print(f"{msg:=^{TERM_SIZE}}")
                 u = pretty_decode(d_input_ids_ik, tokenizer=loader.tokenizer, style="white")
                 rich.print(u)

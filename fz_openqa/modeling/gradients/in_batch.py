@@ -10,7 +10,10 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from fz_openqa.modeling.gradients.base import Gradients
+from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
+from fz_openqa.modeling.gradients.utils import kl_divergence
+from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.pretty import pprint_batch
 
 
@@ -53,8 +56,8 @@ class InBatchGradients(Gradients):
 
         # repeat the scores for all combinations of documents:
         # `D \in D_1 \times D_2 \times ... \times D_N`
-        expanded_reader_score, expanded_retriever_score = batch_cartesian_product(
-            reader_score, retriever_score
+        expanded_retriever_score, expanded_reader_score = batch_cartesian_product(
+            retriever_score, reader_score
         )
         # partial answer log-likelihood `\log p(a | q, D[\sigma], A)` for `\sigma \in S(M)`
         logp_a__d = expanded_reader_score.log_softmax(dim=1)
@@ -97,9 +100,15 @@ class InBatchGradients(Gradients):
         retriever_score: Tensor,
         reader_score: Tensor,
         targets: Tensor,
-        retrieval_score: Optional[Tensor] = None,
+        proposal_score: Optional[Tensor] = None,
         **kwargs,
     ):
+
+        # parameters
+        reader_kl_weight = kwargs.get("reader_kl_weight", None)
+        retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
+
+        # evaluate likelihood
         q = self.evaluate_likelihood_terms(
             retriever_score,
             reader_score,
@@ -107,16 +116,50 @@ class InBatchGradients(Gradients):
             eval_topk=self.eval_topk,
             debug=self.debug,
         )
+
+        # compute the loss
         loss, diagnostics = self.compute_loss(
             q,
             targets=targets,
             reader_score=reader_score,
             retriever_score=retriever_score,
-            retrieval_score=retrieval_score,
+            proposal_score=proposal_score,
         )
+
+        # run diagnostics
+        diagnostics.update(
+            retriever_diagnostics(
+                retriever_score=retriever_score,
+                proposal_score=proposal_score,
+                reader_score=reader_score,
+                **kwargs,
+            )
+        )
+
+        # regularization
+        kl_reader = batch_reduce(kl_divergence(q.logp_a, dim=1), op=torch.mean)
+        diagnostics["reader/kl_uniform"] = kl_reader
+        kl_retriever = batch_reduce(kl_divergence(retriever_score, dim=-1), op=torch.mean)
+        diagnostics["retriever/kl_uniform"] = kl_retriever
+
+        # auxiliary loss terms
+        if reader_kl_weight is not None:
+            loss = loss + reader_kl_weight * kl_reader
+        if retriever_kl_weight is not None:
+            loss = loss + retriever_kl_weight * kl_retriever
+
+        # add the relevance targets for the retriever
+        diagnostics.update(
+            self._get_relevance_metrics(
+                retriever_scores=retriever_score, match_score=kwargs.get("match_score", None)
+            )
+        )
+
         return {
             "loss": loss,
             "reader/logp": q.logp_a_star.detach(),
+            "reader/entropy": -(q.logp_a.exp() * q.logp_a).sum(dim=1).mean().detach(),
+            "_reader_scores_": reader_score.detach(),
             "_reader_logits_": q.logp_a.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": q.log_p_d__a_no_perm.detach(),

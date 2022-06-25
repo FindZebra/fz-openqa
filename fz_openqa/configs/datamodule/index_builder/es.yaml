@@ -1,0 +1,26 @@
+_target_: fz_openqa.datamodules.index.IndexBuilder
+
+# default values
+cache_dir: ${sys.cache_dir}
+persist_cache: false
+dtype: float16
+loader_kwargs:
+  batch_size: 100
+  num_workers: 4
+  pin_memory: true
+
+
+# define the engines
+engines:
+  es:
+    k: ${datamodule.n_retrieved_documents}
+    max_batch_size: 100
+    verbose: false
+    merge_previous_results: false
+    config:
+      es_temperature: 1
+      auxiliary_weight: 0
+      filter_with_doc_ids: false
+
+# logging
+id: elasticsearch

@@ -68,7 +68,7 @@ def pad_first(x: torch.Tensor | list | Number, *, value: Any, n: int, **kwargs):
 class InverseClozeTaskBuilder(DatasetBuilder):
     _column_names = [
         "document.row_idx",
-        "document.retrieval_score",
+        "document.proposal_score",
         "document.match_score",
     ]
 
@@ -78,7 +78,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         "document.input_ids",
         "document.attention_mask",
         "document.match_score",
-        "document.retrieval_score",
+        "document.proposal_score",
     ]
 
     def __init__(
@@ -262,8 +262,8 @@ class InverseClozeTaskBuilder(DatasetBuilder):
                 "document",
                 tokenizer=self.tokenizer,
                 level=1,
-                include_only=["input_ids", "attention_mask", "match_score", "retrieval_score"],
-                to_tensor=["match_score", "retrieval_score"],
+                include_only=["input_ids", "attention_mask", "match_score", "proposal_score"],
+                to_tensor=["match_score", "proposal_score"],
             ),
         )
 
@@ -293,7 +293,7 @@ class InverseClozeTaskBuilder(DatasetBuilder):
         repr += get_separator("-") + "\n"
         n_docs = len(row["document.input_ids"])
         match_scores = row.get("document.match_score", None)
-        doc_scores = row.get("document.retrieval_score", None)
+        doc_scores = row.get("document.proposal_score", None)
         if doc_scores is None:
             doc_scores = [None] * n_docs
         if match_scores is None:

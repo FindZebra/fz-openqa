@@ -1,8 +1,11 @@
+from copy import copy
 from functools import partial
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
@@ -14,6 +17,7 @@ from fz_openqa.datamodules.pipes import Collate
 from fz_openqa.datamodules.pipes import Gate
 from fz_openqa.datamodules.pipes import Lambda
 from fz_openqa.datamodules.pipes import Parallel
+from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes import ReplaceInKeys
 from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes.control.batch_condition import HasKeys
@@ -23,6 +27,8 @@ from fz_openqa.datamodules.pipes.control.condition import HasPrefix
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.control.condition import Not
 from fz_openqa.datamodules.pipes.control.condition import Reduce
+from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 
 def to_tensor_op(inputs: List[Any]) -> Tensor:
@@ -30,6 +36,42 @@ def to_tensor_op(inputs: List[Any]) -> Tensor:
         return torch.cat([t[None] for t in inputs])
     else:
         return torch.tensor(inputs)
+
+
+class Padding(Pipe):
+    def __init__(
+        self, *, tokenizer: PreTrainedTokenizerFast, special_padding_tokens: Dict = None, **kwargs
+    ):
+        super(Padding, self).__init__(**kwargs)
+        if special_padding_tokens is None:
+            special_padding_tokens = {}
+        self.special_padding_tokens = special_padding_tokens
+        self.tokenizer = tokenizer
+
+    def _call_batch(self, batch: Batch, **kwargs) -> Batch:
+
+        special_values = {
+            k: batch[k] for k in self.special_padding_tokens.keys() if k in batch.keys()
+        }
+        pad_input = {k: v for k, v in batch.items() if k not in special_values}
+        # pad `normal` values using `tokenizer.pad`
+        output = self.tokenizer.pad(pad_input, return_tensors="pt")
+
+        # pad the special cases
+        for k, v in special_values.items():
+            lenght = output["input_ids"].shape[-1]
+            output[k] = self._pad(v, lenght, self.special_padding_tokens[k])
+
+        return output
+
+    def _pad(self, x, length, fill_value):
+        y = []
+        for z in x:
+            if len(z) < length:
+                z = z + (length - len(z)) * [fill_value]
+            y += [torch.tensor(z)]
+
+        return torch.stack(y)
 
 
 class CollateField(Gate):
@@ -103,11 +145,12 @@ class CollateField(Gate):
 
         # pipe used to pad and collate tokens
         if tokenizer is not None:
-            pad_fn = partial(tokenizer.pad, return_tensors="pt")
             tokenizer_pipe = Gate(
                 HasKeys(["input_ids"]),
-                pipe=ApplyAsFlatten(Lambda(pad_fn), level=level),
-                input_filter=In(["input_ids", "attention_mask", "offset_mapping"]),
+                pipe=ApplyAsFlatten(Padding(tokenizer=tokenizer), level=level),
+                input_filter=In(
+                    ["input_ids", "attention_mask", "offset_mapping", "token_type_ids"]
+                ),
                 id="pad-and-collate-tokens",
             )
         else:

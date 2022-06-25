@@ -29,7 +29,7 @@ def expand_and_flatten(batch: Batch, n_docs, *, keys: List[str]) -> Batch:
 
 def flatten_first_dims(batch: Batch, n_dims, *, keys: List[str]) -> Batch:
     """Collapse the first `n_dims` into a single dimension."""
-    return {k: batch[k].view(-1, *batch[k].shape[n_dims:]) for k in keys}
+    return {k: batch[k].view(-1, *batch[k].shape[n_dims:]) for k in keys if k in batch}
 
 
 def gen_preceding_mask(input_ids: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

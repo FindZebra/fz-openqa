@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
+import warnings
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
 
+import loguru
 import numpy as np
 import rich
 import torch
@@ -13,6 +16,7 @@ from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
 
+from ...modeling.gradients.renyi import cleanup_nans
 from .base import Pipe
 from .sorting import reindex
 from fz_openqa.utils.datastruct import Batch
@@ -24,7 +28,7 @@ class Sampler(Pipe):
         *,
         total: int | Dict[Split, int],
         match_score_key: str = "match_score",
-        retrieval_score_key: str = "retrieval_score",
+        proposal_score_key: str = "proposal_score",
         field="document",
         replace: bool = False,
         largest: bool | Dict[Split, bool] = False,
@@ -34,7 +38,7 @@ class Sampler(Pipe):
         super().__init__(**kwargs)
         self.total = total
         self.match_score_key = f"{field}.{match_score_key}"
-        self.retrieval_score_key = f"{field}.{retrieval_score_key}"
+        self.proposal_score_key = f"{field}.{proposal_score_key}"
         self.field = field
         self.replace = replace
         self.largest = largest
@@ -47,7 +51,7 @@ class Sampler(Pipe):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         # sample
         index = np.arange(len(logits))
@@ -56,7 +60,13 @@ class Sampler(Pipe):
         )
 
         # re-index and return
-        return {k: reindex(v, sampled_index) for k, v in batch.items()}
+        output = {k: reindex(v, sampled_index) for k, v in batch.items()}
+
+        # todo: temporary trick
+        log_w = -math.log(total) + np.zeros_like(sampled_index, dtype=np.float)
+        output[f"{self.field}.proposal_log_weight"] = torch.from_numpy(log_w)
+
+        return output
 
     def _sample(
         self,
@@ -137,7 +147,7 @@ class SamplerSupervised(Sampler):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         if self.match_score_key in batch.keys():
             scores = batch[self.match_score_key]
@@ -207,7 +217,7 @@ class SamplerBoostPositives(Sampler):
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
 
         if self.match_score_key in batch.keys():
             scores = batch[self.match_score_key]
@@ -259,30 +269,49 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
+    MAX_LOG_RANGE: float = 1e4
+
+    def __init__(self, *args, from_uniform: bool = False, mode="uniform", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.from_uniform = from_uniform
+        self.mode = mode
+        if from_uniform:
+            loguru.logger.info(
+                f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
+                f"This means the sampler will consider the base distribution to be uniform"
+                f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
+            )
+
     @torch.no_grad()
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
         largest, total, temperature = self._get_args(split)
 
-        logits = batch[self.retrieval_score_key]
+        logits = batch[self.proposal_score_key]
         logits = logits / temperature
         # logits = logits - logits.max(dim=-1, keepdim=True).values
-        # batch[self.retrieval_score_key] = logits
+        # batch[self.proposal_score_key] = logits
 
         # sample
-        z, log_w = self.sample(logits, total, largest=largest)
-        # retrieval_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
+        z, log_w = self.sample(
+            logits, total, largest=largest, from_uniform=self.from_uniform, mode=self.mode
+        )
+        # proposal_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
 
         # re-index and return
         output = {k: reindex(v, z) for k, v in batch.items()}
-        output[f"{self.field}.retrieval_log_weight"] = log_w
+        output[f"{self.field}.proposal_log_weight"] = log_w
 
         return output
 
     @staticmethod
     def sample(
-        logits: torch.Tensor, k: int = None, largest: bool = False, mode: str = "uniform"
+        logits: torch.Tensor,
+        k: int = None,
+        largest: bool = False,
+        mode: str = "uniform",
+        from_uniform: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample `log p(z)` using priority sampling with subset of size `m`
 
@@ -296,7 +325,11 @@ class PrioritySampler(Sampler):
         """
 
         assert mode in {"uniform", "exponential"}
+
+        logits = PrioritySampler.clip_logits(logits, dim=-1)
         log_pz = logits.log_softmax(dim=-1)
+
+        N = log_pz.shape[-1]
         if mode == "uniform":
             if largest:
                 u = 0.5 * torch.ones_like(log_pz)
@@ -321,6 +354,7 @@ class PrioritySampler(Sampler):
             log_tau = -float("inf") + torch.zeros_like(log_pz)
         z = z[..., :k]
         log_pz = log_pz.gather(dim=-1, index=z)
+
         if mode == "uniform":
             log_qz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
         elif mode == "exponential":
@@ -328,4 +362,33 @@ class PrioritySampler(Sampler):
             log_qz = (log_qz).exp().mul(-1).exp().mul(-1).log1p()
         else:
             raise ValueError(f"Unknown mode {mode}")
-        return z, log_pz - log_qz
+
+        # warn if NaNs are found
+        n_nans = log_qz[log_qz.isnan()].sum()
+        if n_nans > 0:
+            loguru.logger.warning(f"Found {n_nans} NaNs in log_qz")
+
+        # compute the log weights, and handle replacing the base distribution with u(z)
+        if from_uniform:
+            warnings.warn(
+                "Priority sampling: consider the base distribution to be uniform "
+                "when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
+            )
+            log_pz = torch.zeros_like(log_pz) - math.log(N)
+
+        # finally, compute the log weights
+        log_weight = log_pz - log_qz
+
+        return z, log_weight
+
+    @staticmethod
+    def clip_logits(logits, dim=-1):
+        cleanup_nans(logits, "PrioritySampler.clip_logits")
+
+        # scale the logits
+        M = logits.max(dim=dim, keepdim=True).values
+        M[M.isinf()] = 0.0
+        logits = logits - M
+
+        # clip log_pz for numerical stability
+        return M + logits.clamp(min=-PrioritySampler.MAX_LOG_RANGE)

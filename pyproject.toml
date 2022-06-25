@@ -29,6 +29,7 @@ pytorch-lamb = "^1.0.0"
 unicode = "^2.8"
 loguru = "^0.6.0"
 nltk = "^3.7"
+sentencepiece = "^0.1.96"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -36,6 +37,7 @@ parameterized = "^0.8.1"
 hypothesis = "^6.36.2"
 matplotlib = "^3.5.1"
 seaborn = "^0.11.2"
+wikipedia = "^1.4.0"
 
 [tool.poetry.scripts]
 fzqa = "fz_openqa.cli:main"

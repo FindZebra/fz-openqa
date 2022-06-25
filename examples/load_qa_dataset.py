@@ -14,6 +14,7 @@ from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.datamodules.analytics import SequenceLengths
+from fz_openqa.datamodules.builders.preprocessing.entity import EntityPreprocessing
 
 
 @hydra.main(
@@ -25,7 +26,13 @@ def run(config: DictConfig) -> None:
     datasets.set_caching_enabled(True)
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+    bert_id = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
+
+    # preprocessing
+    preprocessing_op = config.get("preprocessing", None)
+    if isinstance(preprocessing_op, str):
+        preprocessing_op = {"entity": EntityPreprocessing}[preprocessing_op]()
 
     # initialize the data module
     builder = QaBuilder(
@@ -35,6 +42,7 @@ def run(config: DictConfig) -> None:
         query_expansion=config.get("query_expansion", None),
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
+        preprocessing_op=preprocessing_op,
         analytics=[
             SequenceLengths(output_dir="analytics/", verbose=True),
         ],

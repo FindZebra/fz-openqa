@@ -33,8 +33,8 @@ def safe_cast_to_list(x: Any) -> Any:
 class RetrieverAccuracy(Analytic):
     """Measure the accuracy of the retriever. Only works for concatenated [q; a] datasets."""
 
-    requires_columns: List[str] = ["document.retrieval_score", "answer.target"]
-    output_file_name = "retrieval_accuracy.json"
+    requires_columns: List[str] = ["document.proposal_score", "answer.target"]
+    output_file_name = "proposal_accuracy.json"
     batch_size: int = 1000
     _allow_wandb: True
 
@@ -50,7 +50,7 @@ class RetrieverAccuracy(Analytic):
         """
         all_preds = None
         all_targets = None
-        dset = keep_only_columns(dset, columns=["document.retrieval_score", "answer.target"])
+        dset = keep_only_columns(dset, columns=["document.proposal_score", "answer.target"])
         for i in tqdm(
             range(0, len(dset), self.batch_size),
             desc=f"{type(self).__name__}, split={split}",
@@ -58,7 +58,7 @@ class RetrieverAccuracy(Analytic):
             leave=False,
         ):
             row = dset[i : i + self.batch_size]
-            scores = row["document.retrieval_score"]
+            scores = row["document.proposal_score"]
             scores = safe_concatenate(scores)
             msg = (
                 "Expected scores to be a 3D tensor of shape (batch_size, n_options, n_document). "

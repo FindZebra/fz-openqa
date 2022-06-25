@@ -1,33 +1,51 @@
 # @package _global_
 
 defaults:
+  - _self_
   - sys: local
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
 
-version: 22
+version: 66
 lr: 2e-3
 reader_lr: ${lr}
 retriever_lr: ${lr}
 seed: null
 wandb: true
-device: cpu
-num_epochs: 20
+wandb_name: null
+device: cuda
+num_epochs: 10
 batch_size: 64
 num_workers: 2
 pin_memory: true
 max_chunksize: 1024
-n_samples: 10
-gamma: 1.
+n_samples: 20
 sampler: priority
-temperature: 100.
+update_freq: 5
+temperature: 10.
 max_baseline_samples: 3
-metric_size: 128
-output_size: 64
+hidden_size: 128
+output_size: 32
 share_backbone: false
-estimator: reinforce_a2
+estimator: renyi
 use_baseline: false
 noise_level: 0
+supervised_ratio: 0.5
+supervised_weight: 5.
 labels: [ 1, 7, 5, 9 ]
+
+
+alpha: 1
+parameters:
+  reader_kl_weight: 0
+  retriever_kl_weight: 0
+  alpha:
+    mode: linear
+    num_steps: 1000
+    temperature: 5.0
+    initial_value: ${alpha}
+    final_value: 0
+  eval_alpha: -3
+  gamma: 0

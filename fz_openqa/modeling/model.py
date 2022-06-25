@@ -7,6 +7,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
 import torch
 from datasets import Split
 from loguru import logger
@@ -19,7 +20,6 @@ from transformers import BertPreTrainedModel
 from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.ema import EMA
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.parameters import Parameters
 from fz_openqa.utils import maybe_instantiate
@@ -67,31 +67,34 @@ class Model(LightningModule):
     def __init__(
         self,
         *,
-        tokenizer: Union[PreTrainedTokenizerFast, DictConfig],
-        bert: Union[BertPreTrainedModel, DictConfig],
-        module: Union[DictConfig, Module],
+        tokenizer: PreTrainedTokenizerFast | DictConfig,
+        bert: BertPreTrainedModel | DictConfig,
+        module: DictConfig | Module,
         monitor_metric: Optional[str],
-        num_training_steps: int = 10000,
-        num_warmup_steps: int = 1000,
-        optimizer_params: Dict[str, Any] = None,
-        ema_decay: Optional[float] = None,
+        optimizer: torch.optim.Optimizer | DictConfig,
+        lr_scheduler: torch.optim.lr_scheduler.ChainedScheduler | DictConfig,
         parameters: Optional[Parameters | Dict[str, Any]] = None,
         **kwargs,
     ):
         super().__init__()
 
-        if optimizer_params is None:
-            optimizer_params = {}
-
         # this line ensures params passed to LightningModule will be saved to ckpt
         # it also allows to access params with 'self.hparams' attribute
-        # `lr` and `weight_decay` are registered in .hparams
         self.save_hyperparameters()
-        assert self.hparams["num_warmup_steps"] == num_warmup_steps
-        assert self.hparams["optimizer_params"] == optimizer_params
-        assert self.hparams["monitor_metric"] == monitor_metric
-        assert self.hparams["num_training_steps"] == num_training_steps
-        assert self.hparams["num_warmup_steps"] == num_warmup_steps
+
+        # the following keys must be registered in the .hparams, so the objects
+        # can be instantiated in `self.configure_optimizers()`
+        for key in ["optimizer", "lr_scheduler", "monitor_metric"]:
+            if key not in self.hparams:
+                raise TypeError(
+                    f"{key} must be registered with `save_hyperparameters()`. "
+                    f"Found {self.hparams.keys()}"
+                )
+        for key in ["optimizer", "lr_scheduler"]:
+            if not isinstance(self.hparams[key], (dict, DictConfig)):
+                raise TypeError(
+                    f"Config for {key} must be provided, found {type(self.hparams[key])}"
+                )
 
         # store the state of the optimizer
         self.opt_states: Optional[Dict] = None
@@ -104,14 +107,6 @@ class Model(LightningModule):
             _recursive_=False,
         )
 
-        # exponential moving average
-        # todo: implement using SWA:
-        #  https://github.com/PyTorchLightning/pytorch-lightning/issues/8100
-        if ema_decay is not None:
-            self.ema = EMA(ema_decay, self)
-        else:
-            self.ema = None
-
         # parameters
         if parameters is None:
             self._params = None
@@ -122,6 +117,8 @@ class Model(LightningModule):
                 self._params = Parameters(**parameters)
         else:
             self._params = parameters
+
+        logger.info(f"Parameters: {self._params}")
 
     @property
     def params(self) -> Dict[str, float]:
@@ -219,9 +216,10 @@ class Model(LightningModule):
         """
 
         # optimizer and scheduler
-        optimizer_params = copy(self.hparams.optimizer_params)
+        optimizer_cfg = copy(self.hparams.optimizer)
+        lr_scheduler_cfg = copy(self.hparams.lr_scheduler)
         no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight", "BayesianLinear"]
-        weight_decay = optimizer_params.pop("weight_decay", 0.0)
+        weight_decay = optimizer_cfg.get("weight_decay", 0.0)
         optimizer_grouped_parameters = [
             {
                 "params": list(
@@ -252,32 +250,16 @@ class Model(LightningModule):
                 f"weight_decay={group['weight_decay']}"
             )
 
-        # choose the optimizer class
-        OptimizerCls = {
-            "adam": optim.Adam,
-            "adamw": optim.AdamW,
-            "adamax": optim.Adamax,
-            "sgd": optim.SGD,
-            "rmsprop": optim.RMSprop,
-            "adagrad": optim.Adagrad,
-            "adadelta": optim.Adadelta,
-            "lamb": Lamb,
-        }[self.hparams.optimizer]
-
         # define the optimizer using the above groups
-        optimizer = OptimizerCls(
-            optimizer_grouped_parameters,
-            **optimizer_params,
+        optimizer = maybe_instantiate(
+            optimizer_cfg, _args_=[optimizer_grouped_parameters], _convert_="all"
         )
 
         # defile the learning rate scheduler
-        lr_scheduler = WarmupLinearSchedule(
-            optimizer,
-            num_training_steps=self.hparams.num_training_steps,
-            num_warmup_steps=self.hparams.num_warmup_steps,
-        )
+        lr_scheduler = maybe_instantiate(lr_scheduler_cfg, _args_=[optimizer], _convert_="all")
 
-        # if a state is available, set it
+        # if an optimizer state is available, set it
+        # this is a trick to avoid resetting the state between multiple `trainer.fit()` steps
         if self.opt_states is not None:
             opt_state = self.opt_states.pop("optimizer", None)
             scheduler_state = self.opt_states.pop("lr_scheduler", None)
@@ -317,9 +299,6 @@ class Model(LightningModule):
         return output
 
     def on_before_zero_grad(self, *args, **kwargs):
-        if self.ema is not None:
-            self.ema(self)
-
         if self._params is not None:
             self._params.step()
 

@@ -1,9 +1,11 @@
+import time
 from abc import ABCMeta
 from typing import Callable
 from typing import List
 from typing import Union
 
 import wikipedia
+from loguru import logger
 
 from fz_openqa.utils.datastruct import Batch
 
@@ -11,13 +13,22 @@ from fz_openqa.utils.datastruct import Batch
 class QueryWikiAPI:
     __metaclass__ = ABCMeta
 
-    def __init__(self, text_key: str):
+    def __init__(self, text_key: str, n_results: int = 10):
         self.text_key = text_key
+        self.n_results = n_results
 
-    @staticmethod
-    def query_api(answer_str: str) -> List[str]:
+    def query_api(self, answer_str: str) -> List[str]:
         """Returns a list of all the article's titles (max 10) that contain the query."""
-        return wikipedia.search(answer_str, results=5)
+        while True:
+            try:
+                output = wikipedia.search(answer_str, results=self.n_results)
+                break
+            except Exception as exc:
+                logger.warning(exc)
+                answer_str = answer_str[:299]
+                time.sleep(1)
+
+        return output
 
     @staticmethod
     def _extract_wiki_pages(answer_options: Union[str, List], fn: Callable) -> List[str]:

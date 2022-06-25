@@ -30,24 +30,19 @@ base:
 trainer:
   gpus: ${n_gpus:}
   strategy: dp
-  min_epochs: 1
-  max_epochs: 1_000
   accumulate_grad_batches: ${base.accumulate_grad_batches}
+  max_steps: 1_000_000
 
 model:
   lr: 1e-5
-  weight_decay: 1e-4
-  bert:
-    config:
-      hidden_dropout_prob: 0.1
-      attention_probs_dropout_prob: 0.3
+  weight_decay: 1e-3
 
 
 datamodule:
   train_batch_size: 16
   valid_batch_size: 100
   max_length: 512
-  use_subset: True
+  subset_size: null
   num_workers: 8
   n_documents: 10
   max_pos_docs: 1

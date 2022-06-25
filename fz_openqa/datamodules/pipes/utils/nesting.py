@@ -94,7 +94,7 @@ def reconcat(values: List[Any], original_type: Type):
     if original_type == Tensor:
         values = torch.cat([t[None] for t in values], dim=0)
     elif original_type == np.ndarray:
-        values = np.concatenate([t[None] for t in values], dim=0)
+        values = np.concatenate([t[None] for t in values], axis=0)
     elif original_type == list:
         pass
     else:

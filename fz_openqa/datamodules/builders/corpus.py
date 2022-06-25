@@ -15,7 +15,7 @@ from datasets import load_dataset
 from loguru import logger
 
 from ..pipelines.preprocessing import FormatAndTokenize
-from ..pipelines.preprocessing.text import AppendDot
+from ..pipelines.preprocessing.text import AppendSuffix
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
 from ..utils.transformations import set_index_column
 from .adapters import DATASET_ADAPTERS
@@ -45,7 +45,8 @@ TXT_PATTERN = r"^.*\.txt$"
 
 CORPUS_GENERATORS = {
     "medqa": (meqa_en_corpus.__file__,),
-    "medwiki": (medwiki_corpus.__file__, "v3"),
+    "medwiki": (medwiki_corpus.__file__, "v6"),
+    "medwiki-v6": (medwiki_corpus.__file__, "v6"),
     "medwiki-v1": (medwiki_corpus.__file__, "v1"),
     "medwiki-v2": (medwiki_corpus.__file__, "v2"),
     "medwiki-v3": (medwiki_corpus.__file__, "v3"),
@@ -81,7 +82,6 @@ class CorpusBuilder(HfDatasetBuilder):
         "document.input_ids",
         "document.attention_mask",
     ]
-    subset_size: List[int] = [1]
     column_names = [
         "document.text",
         "document.input_ids",
@@ -303,7 +303,7 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         return Sequential(
-            AppendDot(text_fields="title", update=True),
+            AppendSuffix(text_fields="title", update=True),
             FormatAndTokenize(
                 prefix=None,
                 key="title",
@@ -347,7 +347,7 @@ class CorpusBuilder(HfDatasetBuilder):
                 "document.idx",
                 "document.uid",
                 "document.passage_idx",
-                "document.retrieval_score",
+                "document.proposal_score",
             ]
         )
 

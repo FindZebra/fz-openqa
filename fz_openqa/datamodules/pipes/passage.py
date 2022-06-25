@@ -67,8 +67,8 @@ class GeneratePassages(Pipe):
             },
             "document.attention_mask": {
                 "pad_token": 0,
-                "start_tokens": [0 for _ in start_tokens],
-                "end_tokens": [0 for _ in end_tokens],
+                "start_tokens": [1 for _ in start_tokens],
+                "end_tokens": [1 for _ in end_tokens],
                 **base_args,
             },
             "document.offset_mapping": {

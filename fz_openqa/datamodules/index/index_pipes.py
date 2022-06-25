@@ -5,9 +5,7 @@ from typing import Optional
 
 from datasets import Dataset
 
-from fz_openqa.datamodules.index.base import Index
-from fz_openqa.datamodules.index.base import IndexMode
-from fz_openqa.datamodules.index.helpers import FakeDataset
+from fz_openqa.datamodules.index.index import Index
 from fz_openqa.datamodules.pipes import ApplyAsFlatten
 from fz_openqa.datamodules.pipes import Partial
 from fz_openqa.datamodules.pipes.base import Pipe
@@ -15,23 +13,6 @@ from fz_openqa.datamodules.pipes.collate import Collate
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.array import concat_arrays
 from fz_openqa.utils.datastruct import Batch
-
-
-class SearchCorpus(ApplyAsFlatten):
-    def __init__(
-        self,
-        index: Index,
-        *,
-        k: int = 1,
-        level: int = 0,
-        **kwargs,
-    ):
-        assert "input_filter" not in kwargs
-        self.index = index
-        input_filter = In(index.input_keys(IndexMode.QUERY))
-        pipe = Partial(index, k=k)
-        # pipe = Sequential(PrintBatch("SearchCorpus"), pipe)
-        super().__init__(pipe, level=level, input_filter=input_filter, flatten_idx=True)
 
 
 class FetchDocuments(Pipe):
@@ -50,7 +31,7 @@ class FetchDocuments(Pipe):
     def __init__(
         self,
         *,
-        corpus_dataset: Dataset | FakeDataset,
+        corpus_dataset: Dataset,
         keys: Optional[List[str]] = None,
         collate_pipe: Pipe = None,
         index_key: str = "document.row_idx",
@@ -104,12 +85,18 @@ class FetchDocuments(Pipe):
 
         rows = self._fetch_rows(indexes, max_chunk_size=self.max_chunk_size)
         new_indexes = rows[self.index_key]
-        if not new_indexes == indexes:
+        if len(new_indexes) != len(indexes):
             raise ValueError(
                 f"The number of returned rows does not match with the input index. "
                 f"Retrieved {len(new_indexes)} indexes, expected {len(indexes)}."
+            )
+
+        no_neg_indices = [i for i in range(len(indexes)) if indexes[i] >= 0]
+        if new_indexes[no_neg_indices[0]] != indexes[no_neg_indices[0]]:
+            raise ValueError(
+                f"The retrieved indices do not matched the query indicies. "
                 f"First 10 retrieved indexes: {new_indexes[:10]}. "
-                f"First 10 indexes: {indexes[:10]}. "
+                f"First 10 query indexes: {indexes[:10]}. "
                 f"Try using a smaller batch size."
             )
 

@@ -1,7 +1,9 @@
 from collections import defaultdict
 from collections import namedtuple
+from functools import partial
 from typing import Dict
 
+import rich
 import torch
 from torch.utils.data import Dataset
 
@@ -68,8 +70,10 @@ class ToySampler:
         self,
         data: Dict[str, torch.Tensor],
         targets: Dict[str, torch.Tensor],
+        labels: torch.Tensor,
         knowledge: torch.Tensor,
-        s_range=100,
+        knowledge_labels: torch.Tensor,
+        s_range=None,
         batch_size: int = 32,
         n_samples: int = 10,
         n_classes: int = None,
@@ -78,6 +82,8 @@ class ToySampler:
         device: str = "cpu",
         sample_device: str = "cpu",
         sample_chunksize: int = 10,
+        supervised_weight: float = 10.0,
+        supervised_ratio: float = 0.5,
     ):
         self.device = torch.device(device)
         self.sample_device = torch.device(sample_device)
@@ -85,16 +91,22 @@ class ToySampler:
         self.n_classes = n_classes
         self.data = data
         self.targets = targets
+        self.labels = labels
         self.knowledge = knowledge
+        self.knowledge_labels = knowledge_labels
         self.chunksize = chunksize
         self.sample_chunksize = sample_chunksize
         self.scores = {k: None for k in data.keys()}
         self.batch_size = batch_size
         self.n_samples = n_samples
-        self.sampler = {"priority": PrioritySampler.sample, "weighted_mc": weighted_mc_sample}[
-            sampler
-        ]
+        self.sampler = {
+            "priority": partial(PrioritySampler.sample, mode="uniform"),
+            "priority_exp": partial(PrioritySampler.sample, mode="exponential"),
+            "weighted_mc": weighted_mc_sample,
+        }[sampler]
         self.sampled_data = {k: None for k in data.keys()}
+        self.supervised_weight = supervised_weight
+        self.supervised_ratio = supervised_ratio
 
     @torch.no_grad()
     def index(self, model: ToyOptionRetriever = None):
@@ -113,22 +125,38 @@ class ToySampler:
                     data,
                     model=model,
                     h_knowledge=h_knowledge,
+                    h_labels=self.knowledge_labels,
                     chunksize=self.chunksize,
                 )
                 self.scores[split] = score.to(self.device)
 
     def _compute_score_for_split(
-        self, data: torch.Tensor, *, model: ToyOptionRetriever, h_knowledge: torch.Tensor
+        self,
+        data: torch.Tensor,
+        *,
+        model: ToyOptionRetriever,
+        h_knowledge: torch.Tensor,
+        h_labels: torch.Tensor = None,
     ):
         h_dataset = model.process_query(data)["retriever"]
         scores = model.score(hq=h_dataset, hd=h_knowledge)
+
+        # add the supervised scores
+        supervised_scores = (self.labels[None, :, None] == h_labels[None, None, :]).float()
+        supervised_scores *= self.supervised_weight
+        if self.supervised_ratio != 0:
+            t = self.supervised_ratio
+            scores = (1 - t) * scores + t * supervised_scores
+
         # normalize scores
-        s_max = scores.max(dim=-1, keepdim=True).values
-        s_min = scores.min(dim=-1, keepdim=True).values
-        scores = (scores - s_min) / (s_max - s_min)
-        scores = self.s_range * scores
+        if self.s_range is not None:
+            s_max = scores.max(dim=-1, keepdim=True).values
+            s_min = scores.min(dim=-1, keepdim=True).values
+            scores = (scores - s_min) / (s_max - s_min)
+            scores = self.s_range * scores
         return scores
 
+    @torch.no_grad()
     def __call__(self, qids: torch.Tensor, *, split: str, k: int = 10):
         assert self.scores is not None
 
@@ -181,8 +209,8 @@ class ToySampler:
             "question": self.data[split][idx],
             "target": self.targets[split][idx],
             "evidence": self.gather_knowledge(sampled.pid[idx]),
-            "retrieval_score": sampled.score[idx],
-            "retrieval_log_weight": sampled.log_weight[idx],
+            "proposal_score": sampled.score[idx],
+            "proposal_log_weight": sampled.log_weight[idx],
         }
 
         return data

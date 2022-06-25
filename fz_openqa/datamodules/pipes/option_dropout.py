@@ -1,6 +1,7 @@
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -8,6 +9,7 @@ from datasets import Split
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.pretty import pprint_batch
 
 
 class OptionDropout(Pipe):
@@ -85,4 +87,48 @@ class OptionDropout(Pipe):
                 output[key] = [[y[i] for i in ids] for y, ids in zip(x, selected_ids)]
 
         # pprint_batch(output, "OptionDropout")
+        return output
+
+
+class OptionBinarized(OptionDropout):
+    @torch.no_grad()
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+
+        if split != Split.TRAIN:
+            return {}
+
+        # get the tensors
+        target = batch[self.target_key]
+        values = {k: v for k, v in batch.items() if k in self.keys}  # todo: refactor
+        eg = [x for x in values.values() if isinstance(x, torch.Tensor)][0]
+        n_options = eg.shape[1]
+        for k, v in values.items():
+            if isinstance(v, torch.Tensor) and not v.shape[1] == n_options:
+                raise ValueError(
+                    f"Attribute {k} doesn't have the right number of "
+                    f"options ({n_options}), found {v.shape[1]} (shape={v.shape})"
+                )
+
+        # define sampling probs
+        logits = torch.ones(eg.shape[0], n_options, dtype=torch.float32, device=eg.device)
+
+        # sample label
+        rdn_idx = F.gumbel_softmax(logits, hard=False)
+        rdn_idx = rdn_idx.argmax(dim=1)
+        answer_target = rdn_idx == target
+        selected_ids = rdn_idx[:, None]
+
+        # output
+        output = {self.target_key: answer_target}
+        for key, x in values.items():
+            if isinstance(x, torch.Tensor):
+                leaf_shape = x.shape[len(selected_ids.shape) :]
+                _index = selected_ids.view(*selected_ids.shape, *(1 for _ in leaf_shape))
+                _index = _index.expand(*selected_ids.shape, *leaf_shape)
+                output[key] = x.gather(dim=1, index=_index)
+            else:
+                output[key] = [[y[i] for i in ids] for y, ids in zip(x, selected_ids)]
+
         return output

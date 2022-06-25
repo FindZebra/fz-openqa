@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - option_retriever
+  - override /datamodule/dataset_transform: collapse
+  - override /model/module/reader_head: none
+  - override /model/module/gradients: distillation
+
+setup_with_model: true
+
+trainer:
+  max_steps: 10_000
+  val_check_interval: 0.5
+
+base:
+  target_metric: validation/loss
+  target_mode: min
+  device_batch_size: 4
+  eval_device_batch_size: 16
+
+model:
+  num_warmup_steps: 5_000
+  num_lr_warmup_steps: 1_000
+  num_training_steps: 20_000
+  optimizer_params:
+    lr: 1e-5
+  parameters: null
+  module:
+    strip_answer_from_question: true
+
+
+datamodule:
+  dataset_update: null
+  # dset_name: medqa-us+medqa-tw
+  # corpus_name: medwiki+medqa
+  n_retrieved_documents: 300
+
+logger:
+  wandb:
+    group: distillation

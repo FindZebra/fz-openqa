@@ -22,11 +22,9 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_concatena
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions_with_docs
 from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions_with_docs
-from fz_openqa.datamodules.index import DenseIndex
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
-from fz_openqa.datamodules.index.index_pipes import SearchCorpus
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
@@ -58,15 +56,15 @@ class SelectMode(Enum):
 class OpenQaBuilder(DatasetBuilder):
     _column_names = [
         "document.row_idx",
-        "document.retrieval_score",
+        "document.proposal_score",
         "document.match_score",
-        "document.retrieval_rank",
+        "document.proposal_rank",
     ]
 
     _pt_attributes = [
         "document.match_score",
-        "document.retrieval_score",
-        "document.retrieval_rank",
+        "document.proposal_score",
+        "document.proposal_rank",
     ]
 
     def __init__(
@@ -158,7 +156,8 @@ class OpenQaBuilder(DatasetBuilder):
         }
 
     def __repr__(self):
-        args = json.dumps({k: str(v) for k, v in self.to_dict().items()}, indent=2)
+        repr = self.to_dict()
+        args = json.dumps({k: str(v) for k, v in repr.items()}, indent=2)
         return f"{self.__class__.__name__}({args})"
 
     def _call(
@@ -203,10 +202,11 @@ class OpenQaBuilder(DatasetBuilder):
 
         # build the index, potentially using a model
         index = self.index_builder(
-            dataset=corpus,
+            corpus,
             model=model,
             trainer=trainer,
-            collate_pipe=self.corpus_builder._get_collate_pipe(),
+            corpus_collate_pipe=self.corpus_builder._get_collate_pipe(),
+            dataset_collate_pipe=CollateField("question", tokenizer=self.tokenizer),
         )
 
         # map the corpus to the dataset
@@ -263,48 +263,12 @@ class OpenQaBuilder(DatasetBuilder):
         NB: SystemExit: 15: is due to an error in huggingface dataset when attempting
         deleting the the dataset, see issue #114.
         """
-        question_nesting_level = self.dataset_builder.nesting_level
-
-        # cache the dataset using `index.model`, so vectors can be reused in `SearchCorpus`
-        # for nested datasets, the dataset is flatten, so the index
-        # in the flatten dataset corresponds to the flattened index
-        # in the call of SearchCorpus.
-        if isinstance(index, DenseIndex):
-            collate_fn = CollateField(
-                "question",
-                tokenizer=self.tokenizer,
-                exclude=["metamap", "text"],
-                level=0,
-            )
-
-            flat_dataset = self.flatten_dataset(
-                dataset,
-                level=question_nesting_level,
-                keys=["question.input_ids", "question.attention_mask"],
-                desc="Flattening dataset before caching",
-                batched=True,
-                num_proc=num_proc,
-                batch_size=100,
-            )
-            index.cache_query_dataset(flat_dataset, collate_fn=collate_fn)
-
-            # move the model back to CPU to save GPU memory
-            index.model.cpu()
+        # question_nesting_level = self.dataset_builder.nesting_level
 
         # Search the document and tag them with `document.match_score`
         pipe = BlockSequential(
             [
-                (
-                    "Search documents",
-                    SearchCorpus(
-                        index,
-                        k=n_retrieved_documents,
-                        # The search is applied to the flattened dataset,
-                        # the right nesting level corresponds is always
-                        # the one of the documents minus 1: {question : [doc_1, doc_2, ...]}
-                        level=self._document_base_nesting_level - 1,
-                    ),
-                ),
+                ("Search documents", index),
                 (
                     "Classify documents",
                     FetchAndClassifyDocuments(
@@ -328,7 +292,7 @@ class OpenQaBuilder(DatasetBuilder):
                     ApplyAsFlatten(
                         score_transform,
                         level=self._document_base_nesting_level - 1,
-                        input_filter=In(["document.retrieval_score", "document.match_score"]),
+                        input_filter=In(["document.proposal_score", "document.match_score"]),
                         update=True,
                     )
                     if score_transform is not None and relevance_classifier is not None
@@ -347,7 +311,6 @@ class OpenQaBuilder(DatasetBuilder):
         map_kwargs = {
             "num_proc": num_proc,
             "batch_size": batch_size,
-            "batched": True,
             # about: writer_batch_size:
             # to avoid: pyarrow.lib.ArrowInvalid: Invalid null value
             #   https://github.com/huggingface/datasets/issues/2831
@@ -358,19 +321,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         for k, block in pipe.blocks.items():
             logger.info(f"Processing: {k}")
-            mapper = MapWithFingerprint(
-                block,
-                cache_dir=self.dataset_builder.cache_dir,
-                **map_kwargs,
-                desc=f"[Mapping] {k}",
-                debug=False,
-                id=k,
-            )
-            dataset = mapper(dataset)
-
-        # free-up GPU memory
-        index.free_memory()
-
+            dataset = block(dataset, cache_fingerprint=self.dataset_builder.cache_dir, **map_kwargs)
         return dataset
 
     def flatten_dataset(
@@ -398,7 +349,7 @@ class OpenQaBuilder(DatasetBuilder):
                 CollateField(
                     "document",
                     level=self.openqa_config.document_nesting_level,
-                    to_tensor=["match_score", "retrieval_score", "retrieval_rank"],
+                    to_tensor=["match_score", "proposal_score", "proposal_rank"],
                     id="collate-nested-document-attributes",
                 ),
             ),
