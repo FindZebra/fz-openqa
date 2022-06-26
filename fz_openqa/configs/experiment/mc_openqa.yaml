@@ -1,0 +1,208 @@
+# @package _global_
+
+defaults:
+  - base
+  - override /model: option_retriever
+  - override /model/bert: biolink
+  - override /model/optimizer: adamw
+  - override /model/lr_scheduler: linear
+  - override /model/module/retriever_head: dpr
+  - override /model/module/reader_head: dpr
+  - override /model/module/gradients: renyi
+  - override /datamodule/builder: concat_openqa
+  - override /datamodule/index_builder: ${model/module/retriever_head}
+  - override /datamodule/sampler: priority
+  - override /datamodule/transform: none
+  - override /datamodule/relevance_classifier: exact_match
+  - override /datamodule/score_transform: none
+  - override /datamodule/dataset_transform: flatten_mc_questions
+  - override /datamodule/builder/analytics:
+      # - retriever_accuracy
+      - sequence_lengths
+      # - retriever_distribution
+      # - log_retrieved_documents
+  - override /logger: wandb
+  - override /callbacks:
+      - checkpoint
+      - lr_monitor
+      - log_predictions
+      - progress_bar
+
+base:
+  seed: null # TODO: remove
+  target_metric: validation/reader/Accuracy
+  target_mode: max
+  exp_info: ""
+  version: 1.0
+  batch_size: 32
+  device_batch_size: 1
+  eval_device_batch_size: 8
+  infer_batch_mul: 300
+
+trainer:
+  gradient_clip_val: 0.5
+  accumulate_grad_batches: ${base.accumulate_grad_batches}
+  check_val_every_n_epoch: 1
+  precision: 16
+  max_steps: ${int_mul:${model.period},10}
+
+model:
+  # global model configuration
+  metric_size: 768
+  metric_type: inner_product
+  period: 5_000
+
+  # optimizer configuration
+  optimizer:
+    lr: 3e-6
+    weight_decay: 1e-3
+    eps: 1e-8
+  lr_scheduler:
+    num_warmup_steps: ${int_mul:${model.period},0.1}
+    num_training_steps: 1_000_000 # constant learning rate
+
+
+  # model parameter, passed to the model's `forward()` and `step()` methods
+  parameters:
+    alpha:
+      mode: cosine
+      num_steps: ${model.period}
+      temperature: 1.0
+      initial_value: 1
+      final_value: 0
+    reader_kl_weight: 0
+    proposal_kl_weight: 0
+    retriever_kl_weight: 0
+    tau: null
+    maxim_retriever_kl_weight: null
+    maxim_reader_kl_weight: null
+    agg_retriever_kl_weight: 0
+    eval_alpha: null
+
+  # Module definition
+  module:
+    mask_punctuation: true # MaxSim focuses too much on punctuation
+    use_conditional_mask: false
+    strip_answer_from_question: false
+    split_bert_layers: 0
+    resample_k: null
+    alpha: 0
+    max_batch_size: 160
+    share_documents_across_batch: false
+    retriever_head:
+      output_size: ${model.metric_size}
+      metric_type: ${model.metric_type}
+      id: retriever
+      normalize: false
+      scale_init: 1
+      target_scale_init: 0.1
+      learn_scale: false
+      auto_scale: false
+      bias: false
+    reader_head:
+      output_size: ${model.metric_size}
+      metric_type: ${model.metric_type}
+      id: reader
+      normalize: false
+      scale_init: 1
+      target_scale_init: 0.1
+      learn_scale: false
+      auto_scale: false
+      bias: false
+    gradients:
+      cartesian_max_size: ${eval:"1<<20"}
+
+
+datamodule:
+  # how often to map the dataset
+  dataset_update:
+    freq: ${model.period}
+    reset_optimizer: true # TODO !!
+    reset_parameters: false  # TODO !!
+    test_every_update: false # might cause a bug with checkpointing
+    builder_args:
+      # relevance_classifier: null
+      score_transform: null
+
+  # dataloader
+  train_batch_size: ${base.step_batch_size}
+  eval_batch_size: ${int_mul:${base.eval_device_batch_size},${base.n_devices}}
+  num_workers: 12
+  pin_memory: true
+
+  # dataset builder
+  dset_name: medqa-us
+  dset_max_length: 312
+  corpus_name: medwiki
+  corpus_max_length: 200
+  num_proc: 8
+  output_columns:
+    - answer.target
+    - question.row_idx
+    - question.input_ids
+    - question.attention_mask
+    - question.token_type_ids
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.proposal_score
+    - document.proposal_rank
+
+  # documents: retrieval & sampling
+  n_retrieved_documents: 100
+  n_documents: 16
+
+  # ES parameters
+  es_temp: 5.0
+  es_weight: 0.5
+
+  # document sampler
+  sampler:
+    total:
+      train: ${datamodule.n_documents}
+      validation: ${datamodule.n_documents}
+      test: ${datamodule.n_documents}
+    temperature: 1
+    largest:
+      train: false
+      validation: false
+      test: false
+
+  # OpenQA builder parameters
+  builder:
+    batch_size: 100
+    writer_batch_size: 1_000
+    dataset_builder:
+      dset_name: ${datamodule.dset_name}
+      query_expansion: null
+      n_query_tokens: 1
+      n_answer_tokens: 0
+      max_length: ${datamodule.dset_max_length}
+    corpus_builder:
+      dset_name: ${datamodule.corpus_name}
+      passage_length: ${datamodule.corpus_max_length}
+      passage_stride: 100
+      append_document_title: true
+
+  # Index parameters
+  index_builder:
+    dtype: float16
+    cache_dir: ${sys.cache_dir}
+    persist_cache: false
+    loader_kwargs:
+      batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+      num_workers: ${datamodule.num_workers}
+      pin_memory: true
+    engines:
+      es:
+        config:
+          es_temperature: ${datamodule.es_temp}
+          auxiliary_weight: ${datamodule.es_weight}
+          query_text_key: question.text
+
+
+logger:
+  wandb:
+    group: openqa-${datamodule.dset_name}
+    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}

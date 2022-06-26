@@ -32,8 +32,6 @@ from .meta import Sequential
 from .nesting import ApplyAsFlatten
 from .nesting import Flatten
 from .nesting import Nest
-from .option_dropout import OptionBinarized
-from .option_dropout import OptionDropout
 from .passage import GeneratePassages
 from .pprint import PrintBatch
 from .pprint import PrintContent
@@ -60,3 +58,6 @@ from .tokenizer import TokenizerPipe
 from .torch import Forward
 from .torch import Itemize
 from .torch import ToNumpy
+from .transforms import FlattenMcQuestions
+from .transforms import OptionBinarized
+from .transforms import OptionDropout

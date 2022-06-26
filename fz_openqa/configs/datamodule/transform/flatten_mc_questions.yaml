@@ -1,8 +1,7 @@
-_target_: fz_openqa.datamodules.pipes.OptionDropout
+_target_: fz_openqa.datamodules.pipes.FlattenMcQuestions
 
+splits: null
 target_key: answer.target
-splits:
-  - train
 keys:
   - question.input_ids
   - question.attention_mask
