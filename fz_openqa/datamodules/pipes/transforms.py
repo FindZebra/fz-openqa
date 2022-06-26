@@ -20,6 +20,7 @@ class Transform(Pipe):
         self,
         target_key: str = "answer.target",
         question_id_key: str = "question.id",
+        question_loc_key: str = "question.loc",
         keys: List[str] = None,
         input_filter=None,
         splits: Optional[List[Split]] = None,
@@ -28,6 +29,7 @@ class Transform(Pipe):
         keys = keys or ["question.input_ids", "question.attention_mask"]
         self.target_key = target_key
         self.question_id_key = question_id_key
+        self.question_loc_key = question_loc_key
         self.keys = keys
         self.splits = splits
         if input_filter is not None:
@@ -77,7 +79,7 @@ class FlattenMcQuestions(TransformMcQuestions):
         binary_targets = torch.zeros(*shape, dtype=torch.bool, device=targets.device)
         binary_targets.scatter_(1, targets.unsqueeze(1), 1)
 
-        # build the `question_id` feature
+        # build the `question.id` feature
         question_id = torch.arange(shape[0], dtype=torch.long, device=targets.device)
         question_id = question_id.unsqueeze(1).expand(shape).contiguous()
 
@@ -90,6 +92,12 @@ class FlattenMcQuestions(TransformMcQuestions):
 
         # flatten the features
         output = Flatten(level=1)(output)
+
+        # build the `question.loc` feature
+        output[self.question_loc_key] = torch.arange(
+            output[self.question_id_key].shape[0], dtype=torch.long, device=targets.device
+        )
+
         return output
 
 

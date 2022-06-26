@@ -54,10 +54,10 @@ class MedQaReader(Module):
         self.answer_metrics = self._get_base_metrics(prefix=prefix)
 
     def _forward(self, batch: Batch, targets: Optional[Tensor] = None, **kwargs) -> Batch:
-        # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
+        # tokenizer = AutoTokenizer.from_pretrained(self.backbone.name_or_path, use_fast=True)
         # checks inputs, set parameters and concat the questions with the documents
         # pprint_batch(batch)
-        # self.bert.tokenizer
+        # self.backbone.tokenizer
 
         rich.print(f"[magenta] input question tokens: {batch['question.input_ids'].shape}")
         rich.print(f"[magenta] input document tokens: {batch['document.input_ids'].shape}")
@@ -74,7 +74,7 @@ class MedQaReader(Module):
             raise ValueError(f"Unknown concat strategy: {self.concat_strategy}")
 
         pprint_batch(qd_batch, "qd_batch")
-        # tokenizer = AutoTokenizer.from_pretrained(self.bert.name_or_path, use_fast=True)
+        # tokenizer = AutoTokenizer.from_pretrained(self.backbone.name_or_path, use_fast=True)
         rich.print(f"[cyan] ANS: {self.tokenizer.encode('[ANS]')}")
         rich.print(f"[cyan] QUERY: {self.tokenizer.encode('[QUERY]')}")
         rich.print(f"[cyan] DOC: {self.tokenizer.encode('[DOC]')}")
@@ -92,7 +92,7 @@ class MedQaReader(Module):
                 rich.print(f"[cyan] {decoded}")
         exit()
 
-        return self.bert(
+        return self.backbone(
             qd_batch["input_ids"], qd_batch["attention_mask"], labels=targets, return_dict=True
         )
 

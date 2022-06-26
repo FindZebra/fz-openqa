@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - override /model/bert: roberta
+  - override /model/backbone: roberta
 
 trainer:
   val_check_interval: 0.3

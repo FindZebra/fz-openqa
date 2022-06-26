@@ -16,7 +16,7 @@ def tensorize(examples: List[Batch]) -> List[Batch]:
 
 class TestCollate(TestCase):
     def setUp(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        self.tokenizer = AutoTokenizer.from_pretrained("backbone-base-cased")
 
         # generate documents
         self.documents = [

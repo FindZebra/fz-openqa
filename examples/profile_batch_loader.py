@@ -38,7 +38,7 @@ def run(config):
     # define the default cache location
     default_cache_dir = Path(fz_openqa.__file__).parent.parent / "cache"
 
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="backbone-base-cased")
 
     text_formatter = TextFormatter(lowercase=True)
 

@@ -59,7 +59,7 @@ def run(config: DictConfig) -> None:
     model.eval()
     model.freeze()
     logger.info(f"Model {type(model)} loaded")
-    logger.info(f"Model fingerprint: {get_fingerprint(model.module.bert)}")
+    logger.info(f"Model fingerprint: {get_fingerprint(model.module.backbone)}")
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")

@@ -2,11 +2,11 @@ defaults:
   - module: ???
   - optimizer: adamw
   - lr_scheduler: linear
-  - bert: bio_bert.yaml
+  - backbone: mini
 
 _target_: fz_openqa.modeling.Model
 
-bert_id: ${model.bert.pretrained_model_name_or_path}
+bert_id: ${model.backbone.pretrained_model_name_or_path}
 tokenizer: ${datamodule.tokenizer}
 cache_dir: ${sys.shared_cache_dir}
 bert_lr: 1e-5

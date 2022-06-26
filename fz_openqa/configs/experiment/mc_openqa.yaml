@@ -2,8 +2,8 @@
 
 defaults:
   - base
-  - override /model: option_retriever
-  - override /model/bert: biolink
+  - override /model: reader_retriever
+  - override /model/backbone: biolink
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
   - override /model/module/retriever_head: dpr
@@ -12,10 +12,10 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
-  - override /datamodule/transform: none
+  - override /datamodule/transform: flatten_mc_questions
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
-  - override /datamodule/dataset_transform: flatten_mc_questions
+  - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
       # - retriever_accuracy
       - sequence_lengths
@@ -70,21 +70,12 @@ model:
       temperature: 1.0
       initial_value: 1
       final_value: 0
-    reader_kl_weight: 0
-    proposal_kl_weight: 0
-    retriever_kl_weight: 0
-    tau: null
-    maxim_retriever_kl_weight: null
-    maxim_reader_kl_weight: null
-    agg_retriever_kl_weight: 0
-    eval_alpha: null
 
   # Module definition
   module:
     mask_punctuation: true # MaxSim focuses too much on punctuation
     use_conditional_mask: false
     strip_answer_from_question: false
-    split_bert_layers: 0
     resample_k: null
     alpha: 0
     max_batch_size: 160
@@ -205,4 +196,4 @@ datamodule:
 logger:
   wandb:
     group: openqa-${datamodule.dset_name}
-    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}

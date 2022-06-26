@@ -38,7 +38,7 @@ class TestIndex(TestCase, ABC):
         datasets.set_caching_enabled(False)
         setup_safe_env()
         os.environ['TOKENIZERS_PARALLELISM'] = "false"
-        # init a tokenizer and bert
+        # init a tokenizer and backbone
         self.tokenizer = AutoTokenizer.from_pretrained(self._bert_id)
 
         # Define dummy questions

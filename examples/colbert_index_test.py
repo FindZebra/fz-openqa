@@ -41,7 +41,7 @@ bert_id = "google/bert_uncased_L-2_H-128_A-2"
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
-tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+tokenizer = BertTokenizer.from_pretrained("backbone-base-cased")
 
 
 class ModelWrapper:
@@ -113,7 +113,7 @@ def run(config: DictConfig) -> None:
     rich.print(type(batch["document.input_ids"]))
     rich.print(batch["document.row_idx"][5], batch["document.text"][5])
 
-    # load the bert model model
+    # load the backbone model model
     model = AutoModel.from_pretrained(bert_id)
     model.eval()
     document_representations = model(

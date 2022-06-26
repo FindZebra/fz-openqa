@@ -3,7 +3,7 @@
 defaults:
   - base
   - override /model: option_retriever
-  - override /model/bert: biolink
+  - override /model/backbone: biolink
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
   - override /model/module/retriever_head: dpr
@@ -205,4 +205,4 @@ datamodule:
 logger:
   wandb:
     group: option-retriever
-    name: ytxn-F5.1-${cleanup_bert_name:${model.bert.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    name: ytxn-F5.1-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}

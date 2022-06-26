@@ -75,7 +75,7 @@ class PrintContent(Pipe):
     def __init__(
         self,
         keys: str | List[str],
-        n: Optional[int] = 3,
+        n: Optional[int] = None,
         decode_keys: List[str] | bool = None,
         tokenizer: Optional[PreTrainedTokenizerFast] = None,
         header: Optional[str] = None,

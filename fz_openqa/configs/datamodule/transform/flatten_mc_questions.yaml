@@ -13,4 +13,4 @@ keys:
   - document.match_score
   - document.row_idx
   - document.proposal_log_weight
-update: true
+update: false

@@ -1,0 +1,3 @@
+defaults:
+  - base
+  - override module: reader_retriever

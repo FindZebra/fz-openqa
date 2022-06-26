@@ -39,7 +39,19 @@ def cleanup_nans(score, key):
     return nan_count
 
 
+def format_parameter(x):
+    if isinstance(x, Tensor):
+        unique_x = x.unique()
+        if len(unique_x) != 1:
+            raise ValueError(f"Parameter {x} has multiple values")
+        return unique_x[0]
+    else:
+        return x
+
+
 class RenyiGradients(Gradients):
+    required_features = ["answer.target", "question.id", "question.loc"]
+
     def __init__(
         self,
         *args,
@@ -48,10 +60,6 @@ class RenyiGradients(Gradients):
     ):
         super().__init__(*args, **kwargs)
         self.cartesian_max_size = cartesian_max_size
-        # self.mu = nn.Parameter(torch.tensor(0.0), requires_grad=False)
-        # self.is_initialized = nn.Parameter(torch.tensor(0), requires_grad=False)
-        self.register_buffer("mu", torch.tensor(0.0))
-        self.register_buffer("is_initialized", torch.tensor(0))
 
     def __call__(
         self,
@@ -93,10 +101,10 @@ class RenyiGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
-        alpha = kwargs.get("alpha", 0.0)
-        reader_kl_weight = kwargs.get("reader_kl_weight", None)
-        retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
-        eval_alpha = kwargs.get("eval_alpha", None)
+        alpha = format_parameter(kwargs.get("alpha", 0.0))
+        reader_kl_weight = format_parameter(kwargs.get("reader_kl_weight", None))
+        retriever_kl_weight = format_parameter(kwargs.get("retriever_kl_weight", None))
+        eval_alpha = format_parameter(kwargs.get("eval_alpha", None))
 
         # evaluation temperature
         if not self.training and eval_alpha is not None:
@@ -108,14 +116,7 @@ class RenyiGradients(Gradients):
         f_theta_ = retriever_score
         f_phi_ = proposal_score
         log_s_ = proposal_log_weight
-        n_options = f_theta_.shape[1]
-        is_binary = n_options == 1
         targets = targets.long()
-
-        # initialize the bias
-        if self.training and self.is_initialized < 1:
-            self.is_initialized.data += 1
-            self.mu.data = torch.mean(g_theta_).data
 
         # run diagnostics
         diagnostics = retriever_diagnostics(
@@ -170,18 +171,7 @@ class RenyiGradients(Gradients):
         targets_expanded = targets_expanded.expand(targets.size(0), 1, log_zeta.size(2))
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
-        if is_binary:
-            g_theta = g_theta.expand(-1, 2, -1)
-            g_theta = g_theta - self.mu
-            targets_expanded_ = torch.zeros_like(g_theta)
-            targets_expanded_[:, 1] = 1
-            log_p_A__D_Q = -F.binary_cross_entropy_with_logits(
-                g_theta, targets_expanded_, reduction="none"
-            )
-            # rich.print(f">> mu:{self.mu},
-            # log_p_A__D_Q: {log_p_A__D_Q.shape}\n{log_p_A__D_Q.exp()}")
-        else:
-            log_p_A__D_Q = g_theta.log_softmax(dim=1)
+        log_p_A__D_Q = g_theta.log_softmax(dim=1)
 
         log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
@@ -276,6 +266,7 @@ class RenyiGradients(Gradients):
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
+            "_retriever_reading_logits_": retriever_score.sum(-1).detach(),
             # alpha diagnostics
             "reader/Accuracy-alpha": accuracy_alpha,
             "reader/entropy-alpha": H_alpha,
@@ -287,9 +278,6 @@ class RenyiGradients(Gradients):
             **diagnostics,
             **nans_info,
         }
-
-        if not is_binary:
-            output["_retriever_reading_logits_"] = retriever_score.sum(-1).detach()
 
         return output
 
