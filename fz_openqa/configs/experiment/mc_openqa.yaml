@@ -29,7 +29,7 @@ defaults:
       - progress_bar
 
 base:
-  seed: null # TODO: remove
+  seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
   exp_info: ""
@@ -73,13 +73,8 @@ model:
 
   # Module definition
   module:
-    mask_punctuation: true # MaxSim focuses too much on punctuation
-    use_conditional_mask: false
-    strip_answer_from_question: false
-    resample_k: null
-    alpha: 0
+    mask_punctuation: true
     max_batch_size: 160
-    share_documents_across_batch: false
     retriever_head:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
@@ -108,12 +103,9 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: ${model.period}
-    reset_optimizer: true # TODO !!
-    reset_parameters: false  # TODO !!
+    reset_optimizer: true
+    reset_parameters: false
     test_every_update: false # might cause a bug with checkpointing
-    builder_args:
-      # relevance_classifier: null
-      score_transform: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}

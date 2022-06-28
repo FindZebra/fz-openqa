@@ -6,24 +6,17 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
-import rich
 import torch
 from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
-from ...datamodules.pipes import PrintContent
-from ..heads.dpr import DprHead
-from ..heads.dpr import unique_with_indices
-from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.gradients import Gradients
-from fz_openqa.modeling.gradients import ReinforceGradients
+from fz_openqa.modeling.gradients import RenyiGradients
 from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.base import Module
-from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
-from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import fingerprint_bert
@@ -71,7 +64,7 @@ class ReaderRetriever(Module):
         **kwargs,
     ):
         if gradients is None:
-            gradients = ReinforceGradients()
+            gradients = RenyiGradients()
 
         super().__init__(*args, **kwargs)
 
@@ -248,27 +241,20 @@ class ReaderRetriever(Module):
             **step_output,
             **head_meta,
             **kwargs,
-            **{k: batch[k] for k in self.estimator.required_features},
         }
+        for key in self.estimator.required_features:
+            try:
+                step_output[key] = batch[key]
+            except KeyError:
+                raise KeyError(f"Missing required batch value: {key} (batch: {list(batch.keys())})")
 
         pprint_batch(step_output, "Option retriever::step::output", silent=silent)
-
         return step_output
 
     def _reduce_step_output(self, step_output: Batch) -> Batch:
         """
-        Gather losses and logits from all devices and return
+        Gather scores and compute the gradients
         """
-
-        pprint_batch(step_output, "reduce_step_output::input", silent=not VERBOSE_MODEL)
-        PrintContent(
-            keys=[
-                "question.id",
-                "question.loc",
-                "question.target",
-            ]
-        )(step_output)
-
         # process with the estimator
         output = self.estimator(**step_output)
 
@@ -284,6 +270,8 @@ class ReaderRetriever(Module):
                     v = v.float().mean()
                 output[k] = v
 
+        pprint_batch(output, "reduce_step_output::final_output", silent=not VERBOSE_MODEL)
+
         return output
 
     def _get_heads_diagnostics(self):
@@ -293,17 +281,6 @@ class ReaderRetriever(Module):
         if self.retriever_head is not None:
             diagnostics["retriever/temperature"] = self.retriever_head.temperature.detach()
         return diagnostics
-
-    @staticmethod
-    def _expand_docs_to_options(x: Tensor, doc_target_shape: Optional[torch.Size]) -> Tensor:
-        if doc_target_shape is None:
-            return x
-        elif x.shape[: len(doc_target_shape)] != doc_target_shape:
-            x = x.unsqueeze(1)
-            x = x.expand(*doc_target_shape[:2], *x.shape[2:])
-            return x
-        else:
-            return x
 
     @torch.no_grad()
     def update_metrics(self, output: Batch, split: Split) -> None:

@@ -18,7 +18,7 @@ from ..heads.dpr import unique_with_indices
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.gradients import Gradients
-from fz_openqa.modeling.gradients import ReinforceGradients
+from fz_openqa.modeling.gradients import RenyiGradients
 from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
@@ -129,7 +129,7 @@ class OptionRetriever(Module):
         **kwargs,
     ):
         if gradients is None:
-            gradients = ReinforceGradients()
+            gradients = RenyiGradients()
 
         super().__init__(*args, **kwargs)
 

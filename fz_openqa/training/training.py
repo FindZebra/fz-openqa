@@ -139,6 +139,7 @@ def train(config: DictConfig) -> Optional[float]:
             rich.print(datamodule.dataset)
             pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
             datamodule.display_samples(n_samples=1)
+            exit()
 
     # Log config to all lightning loggers
     train_utils.log_hyperparameters(

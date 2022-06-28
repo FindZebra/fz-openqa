@@ -3,8 +3,12 @@ from typing import Any
 from typing import Callable
 from typing import Dict
 
+import rich
+
 from fz_openqa.utils.pretty import get_separator
+from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.pretty import pretty_decode
+from fz_openqa.utils.shape import infer_shape
 
 
 def format_row_flat_questions(row: Dict[str, Any], *, tokenizer, **kwargs) -> str:
@@ -200,4 +204,42 @@ def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str
             )
             + "\n"
         )
+    return repr
+
+
+def format_row_qa(row: Dict[str, Any], *, tokenizer, current_level=0, **kwargs):
+    """Decode and print one row from the batch
+
+    Parameters
+    ----------
+    **kwargs
+    """
+    q_input_ids = row["question.input_ids"]
+    nesting_level = len(infer_shape(q_input_ids)) - 1
+    rich.print(f">> NESTING LEVEL: {nesting_level}")
+    q_label = row["answer.target"]
+    decode_kwargs = {
+        "skip_special_tokens": False,
+        "tokenizer": tokenizer,
+    }
+    pprint_batch(row, "format_row_qa")
+
+    repr = ""
+
+    # if current_level == nesting_level:
+
+    repr = f"Question #{row.get('question.idx', None)}\n"
+
+    repr += get_separator("-") + "\n"
+    repr += "* Question + answer:" + "\n"
+    idx = row.get("answer.target", None)
+    an_style = "green" if q_label else "white"
+    line = ""
+    if idx is not None:
+        line += f"   - ({'x' if q_label else ' '}) "
+    else:
+        line += " - "
+    line += f"{pretty_decode(q_input_ids, **decode_kwargs, only_text=False, style=an_style)}\n"
+    repr += line
+
     return repr

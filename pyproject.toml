@@ -8,7 +8,7 @@ authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 python = ">=3.9,<3.11"
 torch = ">=1.10"
 datasets = "1.18.4"
-transformers = "^4.16.2"
+transformers = "4.20.1"
 hydra-core = "^1.1.1"
 pytorch-lightning = "1.5.10"
 torchmetrics = "^0.7.2"
