@@ -11,7 +11,6 @@ from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
-from fz_openqa.utils.pretty import pprint_batch
 
 
 def cleanup_nans(score, key):
@@ -49,6 +48,16 @@ def format_parameter(x):
         return unique_x[0]
     else:
         return x
+
+
+def print_values(data, idx=None):
+    for k, v in data.items():
+        u = f" {k} - {v.shape}"
+        rich.print(f"{u:=^80}")
+        if idx is not None:
+            rich.print(f"{v[idx]}")
+        else:
+            rich.print(v)
 
 
 class RenyiGradients(Gradients):
@@ -120,6 +129,12 @@ class RenyiGradients(Gradients):
         proposal_log_weight = data["document.proposal_log_weight"]
         answer_target = data["answer.target"]
 
+        # apply masking where `proposal_score` is -inf
+        mask_ = proposal_score > -torch.inf
+        reader_score = torch.where(mask_, reader_score, -torch.inf)
+        retriever_score = torch.where(mask_, retriever_score, -torch.inf)
+        proposal_log_weight = torch.where(mask_, proposal_log_weight, -torch.inf)
+
         # evaluation temperature
         if not self.training and eval_alpha is not None:
             alpha = eval_alpha
@@ -159,17 +174,23 @@ class RenyiGradients(Gradients):
 
         # compute `\zeta = \exp f_\theta - f_\phi`
         log_zeta_ = f_theta_ - f_phi_
+        log_zeta_ = torch.where(mask_, log_zeta_, -torch.inf)
 
         # normalize the importance weights
         log_s_ = log_s_.log_softmax(dim=-1)
 
-        # compute the dfferentiable estimate of `\log p(d | q)`
+        # compute the dfferentiable estimate of `\log p(d | q)`,
+        # mask `f_theta` and `w` where `f_phi` is -inf
         w = (log_s_ + log_zeta_).softmax(dim=-1)
-        diff_log_p_D__Q_ = f_theta_ - (w.detach() * f_theta_).sum(dim=-1, keepdims=True)
+        f_theta__ = f_theta_
+        f_theta__[proposal_score == -torch.inf] = 0.0
+        f_theta__ = torch.where(mask_, f_theta_, 0.0)
+        w = torch.where(mask_, w, 0.0)
+        diff_log_p_D__Q_ = f_theta__ - (w.detach() * f_theta__).sum(dim=-1, keepdims=True)
 
         # compute the cartesian product of all variables
-        args = f_theta_, log_zeta_, g_theta_, log_s_, diff_log_p_D__Q_
-        f_theta, log_zeta, g_theta, log_s, diff_log_p_D__Q = batch_cartesian_product(
+        args = f_theta_, log_zeta_, g_theta_, log_s_, diff_log_p_D__Q_, mask_
+        f_theta, log_zeta, g_theta, log_s, diff_log_p_D__Q, mask = batch_cartesian_product(
             *args, max_size=self.cartesian_max_size
         )
 
@@ -179,15 +200,17 @@ class RenyiGradients(Gradients):
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
         log_p_A__D_Q = g_theta.log_softmax(dim=1)
-
+        log_p_A__D_Q = torch.where(mask, log_p_A__D_Q, -torch.inf)
         log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
         log_Zeta = log_zeta.sum(1)
+        Mask = mask.all(1)
 
         # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `A` and in `a`
         log_v = log_Zeta - (log_S + log_Zeta).logsumexp(dim=-1, keepdims=True)
+        log_v = torch.where(Mask, log_v, -torch.inf)
         log_w_A = log_p_A__D_Q + log_v[:, None, :]
         log_w_a = log_w_A.gather(1, index=targets_expanded).squeeze(1)
         self.ess_diagnostics(diagnostics, log_w_a)
@@ -200,7 +223,8 @@ class RenyiGradients(Gradients):
         L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the Renyi bound for alpha=1 in `A` and in `a`
-        L_A_one = (log_S[:, None, :].exp() + log_p_A__D_Q).sum(dim=-1)
+        log_p_A__D_Q_zero_masked = torch.where(mask, log_p_A__D_Q, 0)
+        L_A_one = (log_S[:, None, :].exp() + log_p_A__D_Q_zero_masked).sum(dim=-1)
         L_a_one = L_A_one.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the Renyi bound in `A` and in `a`
@@ -219,9 +243,13 @@ class RenyiGradients(Gradients):
 
         # compute the gradient
         log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
+        log_w = torch.where(Mask, log_w, -torch.inf)
+
         w = log_w.softmax(dim=-1)
         log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
-        grad_L_a_alpha = (w.detach() * log_p_a_D__q).sum(dim=-1)
+        grad_L_a_alpha = w.detach() * log_p_a_D__q
+        grad_L_a_alpha = torch.where(Mask, grad_L_a_alpha, 0.0)
+        grad_L_a_alpha = grad_L_a_alpha.sum(dim=-1)
 
         # compute the loss
         loss = -1 * grad_L_a_alpha

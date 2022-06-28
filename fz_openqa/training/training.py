@@ -137,7 +137,6 @@ def train(config: DictConfig) -> Optional[float]:
         datamodule.setup(trainer=trainer, model=setup_model)
         if config.verbose:
             rich.print(datamodule.dataset)
-            pprint_batch(next(iter(datamodule.train_dataloader())), "training batch")
             datamodule.display_samples(n_samples=1)
 
     # Log config to all lightning loggers
