@@ -4,6 +4,7 @@ from typing import Callable
 from typing import Dict
 
 import rich
+import torch
 
 from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
@@ -175,7 +176,7 @@ def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str
     """represent a row of documents"""
     repr = ""
     repr += get_separator(".") + "\n"
-    repr += f"|-* {locator} - Documents: n={len(row['document.input_ids'])}"
+    repr += f"|-* Q#{locator} - Documents: n={len(row['document.input_ids'])}"
     if "document.match_score" in row:
         repr += (
             f", n_positive={sum(row['document.match_score'] > 0)}, "
@@ -186,7 +187,7 @@ def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str
     for j in range(min(len(row["document.input_ids"]), max_documents)):
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
-        repr += f"|---* {locator} - Document #{1 + j} "
+        repr += f"|---* Q#{locator} - Document #{1 + j} "
         repr += f"(id={get(row, 'document.idx', j)}, row_idx={get(row, 'document.row_idx', j)}), "
         repr += f"score={row['document.proposal_score'][j]:.2f}, "
         if "document.match_score" in row:
@@ -207,39 +208,48 @@ def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str
     return repr
 
 
-def format_row_qa(row: Dict[str, Any], *, tokenizer, current_level=0, **kwargs):
-    """Decode and print one row from the batch
-
-    Parameters
-    ----------
-    **kwargs
-    """
-    q_input_ids = row["question.input_ids"]
-    nesting_level = len(infer_shape(q_input_ids)) - 1
-    rich.print(f">> NESTING LEVEL: {nesting_level}")
-    q_label = row["answer.target"]
+def format_row_qa(row: Dict[str, Any], *, tokenizer, **kwargs):
+    """Decode and print one row from the batch"""
     decode_kwargs = {
         "skip_special_tokens": False,
         "tokenizer": tokenizer,
     }
-    pprint_batch(row, "format_row_qa")
+    q_input_ids = row["question.input_ids"]
+    q_input_ids_shape = infer_shape(q_input_ids)
+    nesting_level = len(q_input_ids_shape) - 1
+    qid = row.get("question.idx", None)
+    if qid is None:
+        qid = row.get("question.id", None)
+    q_label = row.get("answer.target", None)
+    if q_label is not None:
+        q_label_shape = infer_shape(q_label)
+        if len(q_label_shape) < nesting_level:
+            q_label_binary = torch.zeros_like(q_label, dtype=torch.bool)
+            q_label_binary = q_label_binary.expand(q_input_ids_shape[:-1]).clone()
+            q_label_binary.scatter_(dim=-1, index=q_label, value=1)
+            q_label = q_label_binary
+            row["answer.target"] = q_label
 
     repr = ""
+    if nesting_level == 0:
+        # repr question
+        repr += get_separator("-") + "\n"
+        repr += f"* Question #{qid}:" + "\n"
+        an_style = "green" if q_label else "white"
+        line = ""
+        if q_label is not None:
+            line += f" - ({'x' if q_label else ' '}) "
+        else:
+            line += " - "
+        line += f"{pretty_decode(q_input_ids, **decode_kwargs, only_text=False, style=an_style)}\n"
+        repr += line
 
-    # if current_level == nesting_level:
-
-    repr = f"Question #{row.get('question.idx', None)}\n"
-
-    repr += get_separator("-") + "\n"
-    repr += "* Question + answer:" + "\n"
-    idx = row.get("answer.target", None)
-    an_style = "green" if q_label else "white"
-    line = ""
-    if idx is not None:
-        line += f"   - ({'x' if q_label else ' '}) "
+        # add documents repr
+        if "document.input_ids" in row:
+            repr += repr_documents(row, qid, **decode_kwargs)
     else:
-        line += " - "
-    line += f"{pretty_decode(q_input_ids, **decode_kwargs, only_text=False, style=an_style)}\n"
-    repr += line
+        for i in range(q_input_ids_shape[0]):
+            row_i = {k: v[i] for k, v in row.items() if len(infer_shape(v)) > 0}
+            repr += format_row_qa(row_i, tokenizer=tokenizer, **kwargs)
 
     return repr
