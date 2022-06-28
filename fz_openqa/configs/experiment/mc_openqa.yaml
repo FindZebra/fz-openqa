@@ -133,6 +133,7 @@ datamodule:
     - document.proposal_rank
 
   # documents: retrieval & sampling
+  n_max_retrieved_documents: 1_000
   n_retrieved_documents: 100
   n_documents: 16
 
