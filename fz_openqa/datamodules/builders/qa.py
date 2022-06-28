@@ -375,13 +375,14 @@ class ConcatQaBuilder(QaBuilder):
             }
 
         # register the tokens used to terminate the questions when truncated
-        qmark_token_id = self.tokenizer.encode(TRUNCATED_TOKEN, add_special_tokens=False)[0]
-        end_if_truncated_tokens = {
-            "input_ids": [qmark_token_id],
-            "attention_mask": [1],
-            "token_type_ids": [0],
-            "offset_mapping": [[-1, -1]],
-        }
+        # qmark_token_id = self.tokenizer.encode(TRUNCATED_TOKEN, add_special_tokens=False)[0]
+        # end_if_truncated_tokens = {
+        #     "input_ids": [qmark_token_id],
+        #     "attention_mask": [1],
+        #     "token_type_ids": [0],
+        #     "offset_mapping": [[-1, -1]],
+        # }
+        end_if_truncated_tokens = None
 
         # return the final pipe
         return Sequential(

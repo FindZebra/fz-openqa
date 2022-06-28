@@ -20,7 +20,7 @@ poetry run gpustat --debug
 
 echo "====== starting experiment ========="
 poetry run python run.py \
-  +experiment=option_retriever \
+  +experiment=mc_openqa \
   +environ=diku \
-  datamodule.num_workers=8 \
+  datamodule.num_workers=12 \
   $@

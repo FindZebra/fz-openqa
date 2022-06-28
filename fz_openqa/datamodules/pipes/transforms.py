@@ -1,50 +1,125 @@
 from typing import List
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
 
+from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
 
 
-class OptionDropout(Pipe):
+class Transform(Pipe):
     """
-    Drop out options during training.
+    A pipe to transform a batch of examples to a batch of examples with a different structure.
     """
 
     def __init__(
         self,
         target_key: str = "answer.target",
+        question_id_key: str = "question.id",
+        question_loc_key: str = "question.loc",
         keys: List[str] = None,
         input_filter=None,
+        splits: Optional[List[Split]] = None,
         **kwargs,
     ):
         keys = keys or ["question.input_ids", "question.attention_mask"]
         self.target_key = target_key
+        self.question_id_key = question_id_key
+        self.question_loc_key = question_loc_key
         self.keys = keys
-        assert input_filter is None, "OptionDropout does not support input_filter"
+        self.splits = splits
+        if input_filter is not None:
+            raise ValueError("FlattenMcQuestions does not support input_filter")
         input_filter = In(self.keys + [target_key])
-        super(OptionDropout, self).__init__(**kwargs, input_filter=input_filter)
+        super().__init__(**kwargs, input_filter=input_filter)
+
+
+class TransformMcQuestions(Transform):
+    """
+    Transform Multiple-Choice Questions weith input shape [bs, n_opts, *]
+    """
+
+    def _gather_features(self, batch: Batch) -> (torch.Size, torch.Tensor, Batch):
+        # get the tensors
+        targets = batch[self.target_key]
+        features = {k: v for k, v in batch.items() if k in self.keys}
+        eg = [x for x in features.values() if isinstance(x, torch.Tensor)][0]
+        n_options = eg.shape[1]
+        for k, v in features.items():
+            if isinstance(v, torch.Tensor) and not v.shape[1] == n_options:
+                raise ValueError(
+                    f"Attribute {k} doesn't have the right number of "
+                    f"options ({n_options}), found {v.shape[1]} (shape={v.shape})"
+                )
+
+        return eg.shape[:2], targets, features
+
+
+class FlattenMcQuestions(TransformMcQuestions):
+    """
+    Flatten Multiple-Choice Questions: [bs, n_opts, *] -> [bs * n_opts, *].
+    The answer target will be binarized in the process.
+    """
+
+    @torch.no_grad()
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+        if self.splits is not None and split not in self.splits:
+            return {}
+
+        # get the features
+        shape, targets, features = self._gather_features(batch)
+
+        # build binary targets
+        binary_targets = torch.zeros(*shape, dtype=torch.bool, device=targets.device)
+        binary_targets.scatter_(1, targets.unsqueeze(1), 1)
+
+        # build the `question.id` feature
+        question_id = torch.arange(shape[0], dtype=torch.long, device=targets.device)
+        question_id = question_id.unsqueeze(1).expand(shape).contiguous()
+
+        # prepare the output
+        output = {
+            self.target_key: binary_targets,
+            self.question_id_key: question_id,
+            **features,
+        }
+
+        # flatten the features
+        output = Flatten(level=1)(output)
+
+        # build the `question.loc` feature
+        output[self.question_loc_key] = torch.arange(
+            output[self.question_id_key].shape[0], dtype=torch.long, device=targets.device
+        )
+
+        return output
+
+
+class OptionDropout(TransformMcQuestions):
+    """
+    Drop out options during training.
+    """
 
     @torch.no_grad()
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
     ) -> Batch:
 
-        if split != Split.TRAIN:
+        if self.splits is not None and split not in self.splits:
             return {}
 
         # get the tensors
         target = batch[self.target_key]
-        values = {k: v for k, v in batch.items() if k in self.keys}  # todo: refactor
-        eg = [x for x in values.values() if isinstance(x, torch.Tensor)][0]
+        features = {k: v for k, v in batch.items() if k in self.keys}  # todo: refactor
+        eg = [x for x in features.values() if isinstance(x, torch.Tensor)][0]
         n_options = eg.shape[1]
-        for k, v in values.items():
+        for k, v in features.items():
             if isinstance(v, torch.Tensor) and not v.shape[1] == n_options:
                 raise ValueError(
                     f"Attribute {k} doesn't have the right number of "
@@ -77,7 +152,7 @@ class OptionDropout(Pipe):
 
         # output
         output = {self.target_key: answer_target}
-        for key, x in values.items():
+        for key, x in features.items():
             if isinstance(x, torch.Tensor):
                 leaf_shape = x.shape[len(selected_ids.shape) :]
                 _index = selected_ids.view(*selected_ids.shape, *(1 for _ in leaf_shape))
@@ -96,7 +171,7 @@ class OptionBinarized(OptionDropout):
         self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
     ) -> Batch:
 
-        if split != Split.TRAIN:
+        if self.splits is not None and split not in self.splits:
             return {}
 
         # get the tensors

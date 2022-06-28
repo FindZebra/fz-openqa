@@ -1,6 +1,7 @@
 import abc
 from enum import Enum
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import torch
@@ -8,6 +9,8 @@ from torch import nn
 
 
 class Gradients(nn.Module):
+    required_features: List[str] = []
+
     def __init__(self, **kwargs):
         super().__init__()
 

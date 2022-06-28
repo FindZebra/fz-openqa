@@ -82,7 +82,7 @@ class ConcatTokenFields(Pipe):
             sep_ = list(sep_tokens.values())[0]
             assert all(len(sep) == len(sep_) for sep in sep_tokens.values())
         self.sep_tokens = sep_tokens
-        if end_if_truncated_tokens is None:
+        if end_if_truncated_tokens is not None:
             sep_ = list(sep_tokens.values())[0]
             assert all(len(sep) == len(sep_) for sep in end_if_truncated_tokens.values())
         self.end_if_truncated_tokens = end_if_truncated_tokens

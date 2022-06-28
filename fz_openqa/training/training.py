@@ -11,6 +11,7 @@ from typing import Optional
 
 import datasets
 import jsondiff
+import loguru
 import pytorch_lightning as pl
 import rich
 import torch
@@ -36,7 +37,7 @@ from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
-log = train_utils.get_logger(__name__)
+log = loguru.logger
 
 
 def train(config: DictConfig) -> Optional[float]:

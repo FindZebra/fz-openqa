@@ -30,7 +30,8 @@ cache_dir: ${sys.shared_cache_dir}
 
 
 # global: openqa
-n_retrieved_documents: 1000
+n_retrieved_documents: 100
+n_max_retrieved_documents: 1000
 n_documents:
   train: 10
   validation: 100

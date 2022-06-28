@@ -2,7 +2,7 @@
 
 defaults:
   - base
-  - override /model: option_retriever
+  - override /model: reader_retriever
   - override /model/backbone: biolink
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
@@ -12,28 +12,28 @@ defaults:
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
-  - override /datamodule/transform: none
+  - override /datamodule/transform: flatten_mc_questions
   - override /datamodule/relevance_classifier: exact_match
   - override /datamodule/score_transform: none
   - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
-      - retriever_accuracy
+      # - retriever_accuracy
       - sequence_lengths
-      - retriever_distribution
-      - log_retrieved_documents
+      # - retriever_distribution
+      # - log_retrieved_documents
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - lr_monitor
       - log_predictions
       - progress_bar
-      - viz_maxsim
 
 base:
-  seed: null # TODO: remove
+  seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
-  exp_info: "--"
+  exp_info: ""
+  version: 1.0
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8
@@ -70,25 +70,11 @@ model:
       temperature: 1.0
       initial_value: 1
       final_value: 0
-    reader_kl_weight: 0
-    proposal_kl_weight: 0
-    retriever_kl_weight: 0
-    tau: null
-    maxim_retriever_kl_weight: null
-    maxim_reader_kl_weight: null
-    agg_retriever_kl_weight: 0
-    eval_alpha: null
 
   # Module definition
   module:
-    mask_punctuation: true # MaxSim focuses too much on punctuation
-    use_conditional_mask: false
-    strip_answer_from_question: false
-    split_bert_layers: 0
-    resample_k: null
-    alpha: 0
+    mask_punctuation: true
     max_batch_size: 160
-    share_documents_across_batch: false
     retriever_head:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
@@ -117,12 +103,9 @@ datamodule:
   # how often to map the dataset
   dataset_update:
     freq: ${model.period}
-    reset_optimizer: true # TODO !!
-    reset_parameters: false  # TODO !!
+    reset_optimizer: true
+    reset_parameters: false
     test_every_update: false # might cause a bug with checkpointing
-    builder_args:
-      # relevance_classifier: null
-      score_transform: null
 
   # dataloader
   train_batch_size: ${base.step_batch_size}
@@ -150,6 +133,7 @@ datamodule:
     - document.proposal_rank
 
   # documents: retrieval & sampling
+  n_max_retrieved_documents: 1_000
   n_retrieved_documents: 100
   n_documents: 16
 
@@ -204,5 +188,5 @@ datamodule:
 
 logger:
   wandb:
-    group: option-retriever
-    name: ytxn-F5.1-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    group: openqa-${datamodule.dset_name}
+    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}

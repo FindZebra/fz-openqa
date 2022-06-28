@@ -26,7 +26,7 @@ from tests.modules.base import TestModel
 class TestOptionRetriever(TestModel):
     """Testing OptionRetriever. Tests rely on dummy data."""
     # Define dummy questions
-    # _bert_id = "nboost/pt-bert-base-uncased-msmarco"
+    # _bert_id = "nboost/pt-backbone-base-uncased-msmarco"
     questions = ["What color is shrubbery?", "What size is a banana?"]
 
     # Define documents, including one for each question [#0, #4]

@@ -242,7 +242,7 @@ def run(config: DictConfig) -> None:
             rich.print(f"> {k}: {v.shape}, mean={v.mean():.2e}, std={v.std():.2e}")
 
     bert_params = {
-        k: get_fingerprint(v) for k, v in model.named_parameters() if "bert.encoder" in k
+        k: get_fingerprint(v) for k, v in model.named_parameters() if "backbone.encoder" in k
     }
     rich.print(f"> BERT fingerprint={get_fingerprint(bert_params)}")
 

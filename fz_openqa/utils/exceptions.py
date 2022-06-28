@@ -1,12 +1,14 @@
+from functools import wraps
+
 from loguru import logger
 
 
-def catch_exception_as_warning(f):
-    def wrapper(*args, **kw):
+def catch_exception_as_warning(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
         try:
-            return f(*args, **kw)
+            return fn(*args, **kwargs)
         except Exception as exc:
-            # logger.exception(exc)
-            logger.warning(f"{f.__name__} raised an exception: {exc}")
+            logger.exception(exc)
 
     return wrapper

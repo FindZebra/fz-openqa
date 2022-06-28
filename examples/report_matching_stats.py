@@ -91,7 +91,7 @@ else:
 datasets.set_caching_enabled(True)
 setup_safe_env()
 
-tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="backbone-base-cased")
 
 # load the corpus object
 corpus = corpus_module(

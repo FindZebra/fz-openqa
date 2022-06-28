@@ -1,8 +1,9 @@
+from copy import copy
 from typing import Dict
-from typing import Optional
 
+import einops
+import rich
 import torch
-import torch.nn.functional as F
 from loguru import logger
 from torch import Tensor
 
@@ -10,6 +11,7 @@ from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
+from fz_openqa.utils.pretty import pprint_batch
 
 
 def cleanup_nans(score, key):
@@ -39,32 +41,39 @@ def cleanup_nans(score, key):
     return nan_count
 
 
+def format_parameter(x):
+    if isinstance(x, Tensor):
+        unique_x = x.unique()
+        if len(unique_x) != 1:
+            raise ValueError(f"Parameter {x} has multiple values")
+        return unique_x[0]
+    else:
+        return x
+
+
 class RenyiGradients(Gradients):
+    required_features = [
+        "answer.target",
+        "question.id",
+        "question.loc",
+        "document.proposal_log_weight",
+        "document.proposal_score",
+    ]
+
     def __init__(
         self,
         *args,
         cartesian_max_size: int = None,
+        reshape_input_data: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.cartesian_max_size = cartesian_max_size
-        # self.mu = nn.Parameter(torch.tensor(0.0), requires_grad=False)
-        # self.is_initialized = nn.Parameter(torch.tensor(0), requires_grad=False)
-        self.register_buffer("mu", torch.tensor(0.0))
-        self.register_buffer("is_initialized", torch.tensor(0))
+        self.reshape_input_data = reshape_input_data
 
     def __call__(
         self,
-        *,
-        retriever_score: Tensor = None,
-        reader_score: Tensor = None,
-        targets: Tensor = None,
-        proposal_score: Optional[Tensor] = None,
-        proposal_log_weight: Optional[Tensor] = None,
-        retriever_agg_score: Optional[Tensor] = None,
-        retriever_log_p_dloc: Optional[Tensor] = None,
-        reader_log_p_dloc: Optional[Tensor] = None,
-        **kwargs,
+        **data,
     ) -> Dict[str, torch.Tensor]:
         r"""
         Compute the loss and diagnostics. This methods assumes using three probabilities
@@ -93,10 +102,23 @@ class RenyiGradients(Gradients):
             A dictionary of diagnostics including the loss.
 
         """
-        alpha = kwargs.get("alpha", 0.0)
-        reader_kl_weight = kwargs.get("reader_kl_weight", None)
-        retriever_kl_weight = kwargs.get("retriever_kl_weight", None)
-        eval_alpha = kwargs.get("eval_alpha", None)
+        # make sure not to modifying the original input data dict
+        data = copy(data)
+
+        # unpack the parameters
+        alpha = format_parameter(data.pop("alpha", 0.0))
+        reader_kl_weight = format_parameter(data.pop("reader_kl_weight", None))
+        retriever_kl_weight = format_parameter(data.pop("retriever_kl_weight", None))
+        eval_alpha = format_parameter(data.pop("eval_alpha", None))
+
+        # format and unpack the flattened data
+        if self.reshape_input_data:
+            data = self.reshape_flattened_input_data(data)
+        reader_score = data["reader_score"]
+        retriever_score = data["retriever_score"]
+        proposal_score = data["document.proposal_score"]
+        proposal_log_weight = data["document.proposal_log_weight"]
+        answer_target = data["answer.target"]
 
         # evaluation temperature
         if not self.training and eval_alpha is not None:
@@ -108,24 +130,10 @@ class RenyiGradients(Gradients):
         f_theta_ = retriever_score
         f_phi_ = proposal_score
         log_s_ = proposal_log_weight
-        n_options = f_theta_.shape[1]
-        is_binary = n_options == 1
-        targets = targets.long()
-
-        # initialize the bias
-        if self.training and self.is_initialized < 1:
-            self.is_initialized.data += 1
-            self.mu.data = torch.mean(g_theta_).data
+        targets = answer_target.long()
 
         # run diagnostics
-        diagnostics = retriever_diagnostics(
-            retriever_score=retriever_score,
-            proposal_score=proposal_score,
-            reader_score=reader_score,
-            retriever_agg_score=retriever_agg_score,
-            retriever_log_p_dloc=retriever_log_p_dloc,
-            **kwargs,
-        )
+        diagnostics = retriever_diagnostics(**data, proposal_score=proposal_score)
 
         # check inputs
         assert g_theta_ is not None
@@ -170,18 +178,7 @@ class RenyiGradients(Gradients):
         targets_expanded = targets_expanded.expand(targets.size(0), 1, log_zeta.size(2))
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
-        if is_binary:
-            g_theta = g_theta.expand(-1, 2, -1)
-            g_theta = g_theta - self.mu
-            targets_expanded_ = torch.zeros_like(g_theta)
-            targets_expanded_[:, 1] = 1
-            log_p_A__D_Q = -F.binary_cross_entropy_with_logits(
-                g_theta, targets_expanded_, reduction="none"
-            )
-            # rich.print(f">> mu:{self.mu},
-            # log_p_A__D_Q: {log_p_A__D_Q.shape}\n{log_p_A__D_Q.exp()}")
-        else:
-            log_p_A__D_Q = g_theta.log_softmax(dim=1)
+        log_p_A__D_Q = g_theta.log_softmax(dim=1)
 
         log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
@@ -209,10 +206,8 @@ class RenyiGradients(Gradients):
         # compute the Renyi bound in `A` and in `a`
         if alpha == 0:
             L_A_alpha = L_A_zero
-            # L_a_alpha = L_a_zero
         elif alpha == 1:
             L_A_alpha = L_A_one
-            # L_a_alpha = L_a_one
         else:
             # do a linear interpolation for `Beta < eps` to guarantee numerical stability
             eps = 1e-2
@@ -222,11 +217,8 @@ class RenyiGradients(Gradients):
                 u = (eps - beta) / eps
                 L_A_alpha = (1 - u) * L_A_alpha + u * L_A_zero
 
-            # L_a_alpha = L_A_alpha.gather(1, index=targets[:, None]).squeeze(1)
-
         # compute the gradient
         log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
-        # log_w = beta * (log_S + log_Zeta + log_p_a__D_Q)
         w = log_w.softmax(dim=-1)
         log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
         grad_L_a_alpha = (w.detach() * log_p_a_D__q).sum(dim=-1)
@@ -247,7 +239,7 @@ class RenyiGradients(Gradients):
 
         # add the relevance targets for the retriever
         diagnostics.update(
-            self._get_relevance_metrics(retriever_score, kwargs.get("match_score", None))
+            self._get_relevance_metrics(retriever_score, data.get("match_score", None))
         )
 
         LA_normed = L_A_alpha.log_softmax(dim=1)
@@ -276,6 +268,7 @@ class RenyiGradients(Gradients):
             "_reader_scores_": reader_score.detach(),
             "_reader_targets_": targets.detach(),
             "_retriever_scores_": retriever_score.detach(),
+            "_retriever_reading_logits_": retriever_score.sum(-1).detach(),
             # alpha diagnostics
             "reader/Accuracy-alpha": accuracy_alpha,
             "reader/entropy-alpha": H_alpha,
@@ -288,10 +281,42 @@ class RenyiGradients(Gradients):
             **nans_info,
         }
 
-        if not is_binary:
-            output["_retriever_reading_logits_"] = retriever_score.sum(-1).detach()
-
         return output
+
+    def reshape_flattened_input_data(self, data):
+        """Re-shape the input data that was flattened using
+        the `Transform` pipe `FlattenMcQuestions`."""
+        data["answer.target"] = data["answer.target"].long()
+
+        # get the ordering
+        question_loc = data["question.loc"]
+        question_id = data["question.id"]
+        # reshape data
+        n_options = len(question_id) // len(question_id.unique())
+        batch_size = len(question_id) // n_options
+        # reindex with the right ordering
+        ordering = question_loc.argsort(dim=0)
+        for (
+            key,
+            x,
+        ) in data.items():
+            if isinstance(x, torch.Tensor):
+                x = x[ordering]
+                x = einops.rearrange(
+                    x, "(bs n_opts) ... -> bs n_opts ...", bs=batch_size, n_opts=n_options
+                )
+                data[key] = x
+
+        # convert the the binary one-hot encoded target to an index
+        answer_target = data["answer.target"]
+        if (
+            not (answer_target.sum(dim=1) == 1).all()
+            or not (answer_target.max(dim=1).values == 1).all()
+        ):
+            raise ValueError("answer.target must be a one-hot vector")
+        answer_target = answer_target.argmax(dim=1)
+        data["answer.target"] = answer_target
+        return data
 
 
 def entropy(logp, dim=1):

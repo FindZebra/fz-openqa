@@ -45,7 +45,7 @@ class CrossAttentionHead(Head):
         q_mask = q_mask.unsqueeze(2).expand(bs, n_opts, n_docs, *q_mask.shape[2:])
         dq_mask = torch.cat([d_mask, q_mask], dim=-1)
 
-        # process with the bert layers
+        # process with the backbone layers
         if self.bert_layers is None:
             loguru.logger.error(
                 f"No BERT layers were found in {type(self)}. " f"Cross Attention cannot be used."

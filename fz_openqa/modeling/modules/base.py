@@ -11,34 +11,28 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
-from torchmetrics import RetrievalFallOut
-from torchmetrics import RetrievalHitRate
 from torchmetrics.classification import Accuracy
 from torchmetrics.retrieval import RetrievalMRR
-from torchmetrics.retrieval import RetrievalPrecision
-from torchmetrics.retrieval import RetrievalRecall
-from transformers import BertPreTrainedModel
+from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
-from transformers.models.bert.modeling_bert import BertEncoder
 
-from fz_openqa.modeling.modules.utils.bert import instantiate_bert_model_with_config
+from fz_openqa.modeling.modules.utils.bert import instantiate_backbone_model_with_config
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
 from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
-from fz_openqa.utils.pretty import pprint_batch
 
 
 def is_feature_name(x):
@@ -89,17 +83,16 @@ class Module(nn.Module, ABC):
     def __init__(
         self,
         *,
-        bert: DictConfig | BertPreTrainedModel,
+        backbone: DictConfig | PreTrainedModel,
         tokenizer: DictConfig | PreTrainedTokenizerFast,
-        split_bert_layers: int = 0,
         prefix: str = "",
         **kwargs,
     ):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
         self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
-        self.bert: BertPreTrainedModel = self._instantiate_bert(
-            bert=bert, tokenizer=self.tokenizer, split_bert_layers=split_bert_layers
+        self.backbone: PreTrainedModel = self._instantiate_backbone(
+            backbone=backbone, tokenizer=self.tokenizer
         )
         self._init_metrics(prefix=prefix)
 
@@ -126,12 +119,6 @@ class Module(nn.Module, ABC):
         # get input data
         inputs_ids = batch["input_ids"][:, : self.max_length]
         attention_mask = batch["attention_mask"][:, : self.max_length]
-        extended_attention_mask = batch.pop("extended_attention_mask", None)
-        if extended_attention_mask is not None:
-            extended_attention_mask = extended_attention_mask[
-                :, : self.max_length, : self.max_length
-            ]
-
         # process data by chunk
         output = None
         bs, seq_len = inputs_ids.shape
@@ -141,17 +128,10 @@ class Module(nn.Module, ABC):
             chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
 
         for i in range(0, bs, chunk_size):
-            # chuck the `extended_attention_mask` attribute
-            if extended_attention_mask is not None:
-                extended_attention_mask_ = extended_attention_mask[i : i + chunk_size]
-            else:
-                extended_attention_mask_ = None
-
             # process the chunk using BERT
             chunk = self._process_tokens(
                 inputs_ids[i : i + chunk_size],
                 attention_mask[i : i + chunk_size],
-                extended_attention_mask=extended_attention_mask_,
                 **kwargs,
             )
             if output is None:
@@ -165,76 +145,48 @@ class Module(nn.Module, ABC):
         self,
         input_ids: Tensor,
         attention_mask: Tensor,
-        extended_attention_mask: Optional[Tensor],
         **kwargs,
     ) -> Tensor:
+        backbone_output = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+        return backbone_output.last_hidden_state
 
-        if extended_attention_mask is not None:
-            raise NotImplementedError(
-                "extended_attention_mask is not supported in BERT. "
-                "This feature has been removed as it is mostly unused "
-                "for now. "
-                "Some changes are needed in the code to support it: "
-                "RoBERTa models need to be adapted."
-            )
-
-        bert_output = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            # extended_attention_mask=extended_attention_mask,
-        )
-        return bert_output.last_hidden_state
-
-    def _instantiate_bert(
+    def _instantiate_backbone(
         self,
         *,
-        bert: Union[BertPreTrainedModel, DictConfig],
+        backbone: Union[PreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
-        split_bert_layers: int = 0,
-    ) -> BertPreTrainedModel:
-        """Instantiate a bert model, and extend its embeddings to match the tokenizer"""
+    ) -> PreTrainedModel:
+        """Instantiate a backbone model, and extend its embeddings to match the tokenizer"""
 
         self._vocabulary_size = len(tokenizer.get_vocab())
         self._pad_token_id = tokenizer.pad_token_id
 
-        # instantiate the bert model using `bert.config`
-        bert = instantiate_bert_model_with_config(bert)
+        # instantiate the backbone model using `backbone.config`
+        backbone = instantiate_backbone_model_with_config(backbone)
 
-        # drop the last `drop_bert_layers` layers
-        if split_bert_layers > 0:
-            encoder: BertEncoder = bert.encoder
-            encoder.layer = nn.ModuleList(encoder.layer[:-split_bert_layers])
-
-        # extend BERT embeddings for the added special tokens
-        if bert.get_input_embeddings().weight.shape[0] != len(tokenizer):
-            bert.resize_token_embeddings(len(tokenizer))
+        # extend the embeddings for the added special tokens
+        if backbone.get_input_embeddings().weight.shape[0] != len(tokenizer):
+            backbone.resize_token_embeddings(len(tokenizer))
 
             emb_map = {
                 QUERY_MASK: tokenizer.pad_token_id,
                 QUERY_TOKEN: tokenizer.sep_token_id,
                 DOC_TOKEN: tokenizer.sep_token_id,
                 ANS_TOKEN: tokenizer.sep_token_id,
+                TRUNCATED_TOKEN: tokenizer.sep_token_id,
             }
 
-            # embs = bert.get_input_embeddings()
+            # embs = backbone.get_input_embeddings()
             self.spec_tokens = {}
             for token, target_idx in emb_map.items():
                 tok_id = tokenizer.encode(token, add_special_tokens=False)[0]
                 self.spec_tokens[token] = tok_id
+                # potentially initialize the added token embeddings
                 # embs.weight.data[tok_id] = embs.weight.data[target_idx]
-            # bert.set_input_embeddings(embs)
-            # bert.tie_weights()
+            # backbone.set_input_embeddings(embs)
+            # backbone.tie_weights()
 
-            # e = bert.get_input_embeddings().weight
-            # q_mask_id = tokenizer.encode(QUERY_MASK, add_special_tokens=False)[0]
-            # doc_id = tokenizer.encode(DOC_TOKEN, add_special_tokens=False)[0]
-            # assert (e[q_mask_id] == e[tokenizer.pad_token_id]).all()
-            # print(f"embs[q_mask_id] = {e[q_mask_id].mean()}")
-            # print(f"embs[pad_token_id] = {e[tokenizer.pad_token_id].mean()}")
-            # print(f"embs[doc_id] = {e[doc_id].mean()}")
-            # print(f"embs[sep_token_id] = {e[tokenizer.sep_token_id].mean()}")
-
-        return bert
+        return backbone
 
     def forward(self, batch: Batch, **kwargs):
         """Compute the forward pass of the model, does not require targets,
@@ -385,8 +337,7 @@ class Module(nn.Module, ABC):
             return f"{name}@{k}" if k is not None else f"{name}"
 
         if retrieval:
-            # retrieval metrics are super slow,
-            # comment out for now
+            # retrieval metrics are super slow, comment out for now
             metric_kwargs["empty_target_action"] = "skip"
             _metrics = {
                 # **{_name("Precision", k): RetrievalPrecision(k=k, **metric_kwargs) for k in topk},

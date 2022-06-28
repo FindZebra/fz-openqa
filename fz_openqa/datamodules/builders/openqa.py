@@ -22,6 +22,7 @@ from fz_openqa.datamodules.builders.utils.format_row import format_row_concatena
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
 from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions_with_docs
 from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions_with_docs
+from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
 from fz_openqa.datamodules.index import Index
 from fz_openqa.datamodules.index.builder import IndexBuilder
 from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
@@ -399,21 +400,10 @@ class OpenQaBuilder(DatasetBuilder):
         ----------
         **kwargs
         """
-
-        format_question_fn = {0: format_row_flat_questions, 1: format_row_concatenated_questions}[
-            self.openqa_config.question_nesting_level
-        ]
-        _kwargs = {"format_question_fn": format_question_fn, "tokenizer": self.tokenizer}
-        if self.openqa_config.question_nesting_level == 0:
-            return format_row_flat_questions_with_docs(row, **_kwargs, **kwargs)
-        elif self.openqa_config.question_nesting_level == 1:
-            return format_row_nested_questions_with_docs(
-                row,
-                document_nesting_level=self.openqa_config.document_nesting_level,
-                **_kwargs,
-                **kwargs,
-            )
-        else:
-            raise ValueError(
-                f"Unsupported nesting level: {self.openqa_config.question_nesting_level}"
-            )
+        _kwargs = {"tokenizer": self.tokenizer}
+        return format_row_qa(
+            row,
+            document_nesting_level=self.openqa_config.document_nesting_level,
+            **_kwargs,
+            **kwargs,
+        )

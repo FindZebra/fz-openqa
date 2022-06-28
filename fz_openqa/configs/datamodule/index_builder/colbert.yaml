@@ -4,7 +4,7 @@ defaults:
 # define the engines
 engines:
   es:
-    k: 1000
+    k: ${datamodule.n_max_retrieved_documents}
     max_batch_size: 100
     verbose: false
     merge_previous_results: false

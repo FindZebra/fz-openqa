@@ -52,7 +52,7 @@ class TestModel(TestCase, ABC):
         self.n_documents = 4
         self.n_options = 3
 
-        # init a tokenizer and bert
+        # init a tokenizer and backbone
         self.tokenizer = AutoTokenizer.from_pretrained(self._bert_id)
         self.bert: BertPreTrainedModel = AutoModel.from_pretrained(self._bert_id,
                                                                    attention_probs_dropout_prob=0,

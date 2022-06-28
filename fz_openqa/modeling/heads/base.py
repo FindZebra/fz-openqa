@@ -9,10 +9,9 @@ import torch
 from omegaconf import DictConfig
 from torch import nn
 from torch import Tensor
-from transformers.models.bert.modeling_bert import BertEncoder
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 
-from fz_openqa.modeling.modules.utils.bert import instantiate_bert_model_with_config
+from fz_openqa.modeling.modules.utils.bert import instantiate_backbone_model_with_config
 from fz_openqa.utils.metric_type import MetricType
 
 
@@ -24,7 +23,6 @@ class Head(nn.Module, ABC):
         *,
         bert: DictConfig | BertPreTrainedModel,
         output_size: int,
-        split_bert_layers: int = 0,
         metric_type: MetricType = MetricType.inner_product,
         id: str = "base",
         **kwargs,
@@ -36,19 +34,12 @@ class Head(nn.Module, ABC):
         self.id = id
         self.metric_type = MetricType(metric_type)
 
-        # instantiate bert
-        bert = instantiate_bert_model_with_config(bert)
+        # instantiate backbone
+        bert = instantiate_backbone_model_with_config(bert)
 
         # input and output dimensions
         self.input_size = bert.config.hidden_size
         self.output_size = output_size
-
-        # use the last K layers of the BERT model
-        if split_bert_layers == 0:
-            self.bert_layers = None
-        else:
-            bert_encoder: BertEncoder = bert.encoder
-            self.bert_layers = nn.ModuleList(bert_encoder.layer[-split_bert_layers:])
 
     @property
     def temperature(self) -> Tensor:
@@ -101,25 +92,7 @@ class Head(nn.Module, ABC):
         raise NotImplementedError
 
     def preprocess(self, last_hidden_state: Tensor, head: str, **kwargs) -> Tensor:
-        if self.bert_layers is not None:
-            attention_mask = kwargs.get("batch", {}).get(f"{head}.attention_mask", None)
-            last_hidden_state = self._process_with_bert_layers(attention_mask, last_hidden_state)
-
         return self._preprocess(last_hidden_state, head, **kwargs)
-
-    def _process_with_bert_layers(self, attention_mask, last_hidden_state):
-        bs = last_hidden_state.shape[:-2]
-        last_hidden_state = last_hidden_state.view(-1, *last_hidden_state.shape[-2:])
-        if attention_mask is not None:
-            attention_mask = attention_mask.view(-1, *attention_mask.shape[-1:])
-            attention_mask = attention_mask.unsqueeze(-1) * attention_mask.unsqueeze(-2)
-            attention_mask = (1.0 - attention_mask) * -10000.0
-            # final shape [bs, n_heads, seq_len, seq_len]
-            attention_mask = attention_mask.unsqueeze(1)
-        for i, layer in enumerate(self.bert_layers):
-            last_hidden_state, *_ = layer(last_hidden_state, attention_mask=attention_mask)
-        last_hidden_state = last_hidden_state.view(*bs, *last_hidden_state.shape[-2:])
-        return last_hidden_state
 
     def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs

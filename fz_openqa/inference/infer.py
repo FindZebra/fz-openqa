@@ -60,7 +60,7 @@ def load_and_infer(config: DictConfig) -> Dict[str, float]:
         device=config.device,
         cache_dir=config.cache_dir,
     )
-    bert_id: str = model.bert.config._name_or_path
+    bert_id: str = model.backbone.config._name_or_path
 
     print(f">> Instantiating tokenizer `{bert_id}`..")
     tokenizer = init_pretrained_tokenizer(

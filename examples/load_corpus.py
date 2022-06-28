@@ -33,7 +33,7 @@ def run(config: DictConfig) -> None:
     datasets.set_caching_enabled(True)
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="backbone-base-cased")
 
     # initialize text formatter
     textformatter = TextFormatter(

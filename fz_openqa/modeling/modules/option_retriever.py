@@ -18,7 +18,7 @@ from ..heads.dpr import unique_with_indices
 from .utils.total_epoch_metric import TotalEpochMetric
 from .utils.utils import flatten_first_dims
 from fz_openqa.modeling.gradients import Gradients
-from fz_openqa.modeling.gradients import ReinforceGradients
+from fz_openqa.modeling.gradients import RenyiGradients
 from fz_openqa.modeling.heads.base import Head
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
@@ -129,7 +129,7 @@ class OptionRetriever(Module):
         **kwargs,
     ):
         if gradients is None:
-            gradients = ReinforceGradients()
+            gradients = RenyiGradients()
 
         super().__init__(*args, **kwargs)
 
@@ -157,8 +157,8 @@ class OptionRetriever(Module):
         self.register_buffer("pad_token_id", torch.tensor(self.tokenizer.pad_token_id))
 
         # Log the fingerprint of the model
-        for k, hs in fingerprint_bert(self.bert).items():
-            logger.info(f"Fingerprint:bert:{k}={hs}")
+        for k, hs in fingerprint_bert(self.backbone).items():
+            logger.info(f"Fingerprint:backbone:{k}={hs}")
         logger.info(f"Fingerprint:head:reader={get_fingerprint(self.reader_head)}")
         logger.info(f"Fingerprint:head:retriever={get_fingerprint(self.retriever_head)}")
 
@@ -235,7 +235,7 @@ class OptionRetriever(Module):
         for field_name in field_names:
             if f"{field_name}.input_ids" in batch:
 
-                # process the `input_ids` using the backbone (BERT)
+                # process the `input_ids` using the backbone.yaml (BERT)
                 h = self._forward_shared_bert(batch, field_name, **kwargs)
 
                 # process `h` using the head(s)
@@ -308,17 +308,17 @@ class OptionRetriever(Module):
                     f"`use_conditional_mask=True`. "
                     f"Found keys: {list(flat_batch.keys())}"
                 )
-            device = self.bert.device
+            device = self.backbone.device
             conditional_mask = make_conditional_mask(
-                flat_batch[token_id_key], self.bert.dtype, device
+                flat_batch[token_id_key], self.backbone.dtype, device
             )
-            bert_mask = self.bert.get_extended_attention_mask(
+            bert_mask = self.backbone.get_extended_attention_mask(
                 flat_batch[f"{field}.attention_mask"], None, device
             )
             extended_attention_mask = bert_mask + conditional_mask
             flat_batch["question.extended_attention_mask"] = extended_attention_mask
 
-        # process the document with the backbone
+        # process the document with the backbone.yaml
         h = self._backbone(
             flat_batch,
             prefix=f"{field}",

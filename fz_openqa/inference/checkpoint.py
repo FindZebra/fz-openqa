@@ -113,20 +113,20 @@ class CheckpointLoader:
         return self._tokenizer
 
     def load_bert(self):
-        return instantiate(self.config.model.bert)
+        return instantiate(self.config.model.backbone)
 
     def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
         path = self.model_checkpoint_path(match=checkpoint_type)
         # if path is not None and not zero_shot:
         #     logger.info(f"Loading model from checkpoint: {path}")
-        #     # need to override the saved `tokenizer` and `bert` hyperparameters
+        #     # need to override the saved `tokenizer` and `backbone` hyperparameters
         #     # so `sys.cache_dir` can be overridden
         #     cls = _resolve_target(self.config.model._target_)
         #     model = cls.load_from_checkpoint(
         #         path,
         #         tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
-        #         bert=OmegaConf.to_object(self.config.model.bert),
+        #         backbone=OmegaConf.to_object(self.config.model.backbone),
         #         **kwargs,
         #     )
         # else:

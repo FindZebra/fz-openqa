@@ -21,7 +21,7 @@ class PipeOutput:
 class TestPipesOutputKeys(TestCase):
 
     def setUp(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        self.tokenizer = AutoTokenizer.from_pretrained("backbone-base-cased")
         text = [
             "Faiss is a library for efficient similarity search and clustering of dense vectors. It contains algorithms that search in sets of vectors of any size, up to ones that possibly do not fit in RAM.",
             "It also contains supporting code for evaluation and parameter tuning.",
