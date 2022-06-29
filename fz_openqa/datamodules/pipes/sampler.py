@@ -269,7 +269,7 @@ class SamplerBoostPositives(Sampler):
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
-    MAX_LOG_RANGE: float = 1e4
+    MAX_LOG_RANGE: float = 1e5
 
     def __init__(self, *args, from_uniform: bool = False, mode="uniform", **kwargs):
         super().__init__(*args, **kwargs)
@@ -391,4 +391,6 @@ class PrioritySampler(Sampler):
         logits = logits - M
 
         # clip log_pz for numerical stability
-        return M + logits.clamp(min=-PrioritySampler.MAX_LOG_RANGE)
+        output = M + logits.clamp(min=-PrioritySampler.MAX_LOG_RANGE)
+
+        return output

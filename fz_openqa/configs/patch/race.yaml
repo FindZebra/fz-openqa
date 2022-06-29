@@ -4,7 +4,7 @@ defaults:
   - override /model/backbone: deberta_v3
 
 trainer:
-  val_check_interval: 0.3
+  val_check_interval: 0.25
 
 base:
   device_batch_size: 1
@@ -26,8 +26,3 @@ datamodule:
         es:
           config:
             filter_with_doc_ids: true
-
-
-logger:
-  wandb:
-    group: option-retriever-race

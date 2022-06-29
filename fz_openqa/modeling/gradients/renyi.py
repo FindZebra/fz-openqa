@@ -113,6 +113,7 @@ class RenyiGradients(Gradients):
         """
         # make sure not to modifying the original input data dict
         data = copy(data)
+        INF = float("inf")
 
         # unpack the parameters
         alpha = format_parameter(data.pop("alpha", 0.0))
@@ -125,15 +126,17 @@ class RenyiGradients(Gradients):
             data = self.reshape_flattened_input_data(data)
         reader_score = data["reader_score"]
         retriever_score = data["retriever_score"]
+        answer_target = data["answer.target"]
         proposal_score = data["document.proposal_score"]
         proposal_log_weight = data["document.proposal_log_weight"]
-        answer_target = data["answer.target"]
+        proposal_score = proposal_score.to(retriever_score)
+        proposal_log_weight = proposal_log_weight.to(retriever_score)
 
         # apply masking where `proposal_score` is -inf
-        mask_ = proposal_score > -torch.inf
-        reader_score = torch.where(mask_, reader_score, -torch.inf)
-        retriever_score = torch.where(mask_, retriever_score, -torch.inf)
-        proposal_log_weight = torch.where(mask_, proposal_log_weight, -torch.inf)
+        mask_ = proposal_score.isinf() & (proposal_score < 0)
+        reader_score = reader_score.masked_fill(mask_, -INF)
+        retriever_score = retriever_score.masked_fill(mask_, -INF)
+        proposal_log_weight = proposal_log_weight.masked_fill(mask_, -INF)
 
         # evaluation temperature
         if not self.training and eval_alpha is not None:
@@ -174,7 +177,7 @@ class RenyiGradients(Gradients):
 
         # compute `\zeta = \exp f_\theta - f_\phi`
         log_zeta_ = f_theta_ - f_phi_
-        log_zeta_ = torch.where(mask_, log_zeta_, -torch.inf)
+        log_zeta_ = log_zeta_.masked_fill(mask_, -INF)
 
         # normalize the importance weights
         log_s_ = log_s_.log_softmax(dim=-1)
@@ -182,10 +185,8 @@ class RenyiGradients(Gradients):
         # compute the dfferentiable estimate of `\log p(d | q)`,
         # mask `f_theta` and `w` where `f_phi` is -inf
         w = (log_s_ + log_zeta_).softmax(dim=-1)
-        f_theta__ = f_theta_
-        f_theta__[proposal_score == -torch.inf] = 0.0
-        f_theta__ = torch.where(mask_, f_theta_, 0.0)
-        w = torch.where(mask_, w, 0.0)
+        f_theta__ = f_theta_.masked_fill(mask_, 0.0)
+        w = w.masked_fill(mask_, 0.0)
         diff_log_p_D__Q_ = f_theta__ - (w.detach() * f_theta__).sum(dim=-1, keepdims=True)
 
         # compute the cartesian product of all variables
@@ -200,17 +201,17 @@ class RenyiGradients(Gradients):
 
         # compute `\log p(A | D, Q)` and slice the `\log p(a | D, Q)`
         log_p_A__D_Q = g_theta.log_softmax(dim=1)
-        log_p_A__D_Q = torch.where(mask, log_p_A__D_Q, -torch.inf)
+        log_p_A__D_Q = log_p_A__D_Q.masked_fill(mask, -INF)
         log_p_a__D_Q = log_p_A__D_Q.gather(dim=1, index=targets_expanded).squeeze(1)
 
         # compute `s(D)`, `\zeta(D)`
         log_S = log_s.sum(1)
         log_Zeta = log_zeta.sum(1)
-        Mask = mask.all(1)
+        Mask = mask.any(1)
 
         # compute the importance weight `w(d,q) = p(a,d,|q) / q(d|q)` for all `A` and in `a`
         log_v = log_Zeta - (log_S + log_Zeta).logsumexp(dim=-1, keepdims=True)
-        log_v = torch.where(Mask, log_v, -torch.inf)
+        log_v = log_v.masked_fill(Mask, -INF)
         log_w_A = log_p_A__D_Q + log_v[:, None, :]
         log_w_a = log_w_A.gather(1, index=targets_expanded).squeeze(1)
         self.ess_diagnostics(diagnostics, log_w_a)
@@ -223,7 +224,7 @@ class RenyiGradients(Gradients):
         L_a_zero = L_A_zero.gather(1, index=targets[:, None]).squeeze(1)
 
         # compute the Renyi bound for alpha=1 in `A` and in `a`
-        log_p_A__D_Q_zero_masked = torch.where(mask, log_p_A__D_Q, 0)
+        log_p_A__D_Q_zero_masked = log_p_A__D_Q.masked_fill(mask, 0)
         L_A_one = (log_S[:, None, :].exp() + log_p_A__D_Q_zero_masked).sum(dim=-1)
         L_a_one = L_A_one.gather(1, index=targets[:, None]).squeeze(1)
 
@@ -243,12 +244,12 @@ class RenyiGradients(Gradients):
 
         # compute the gradient
         log_w = log_S + beta * (log_Zeta + log_p_a__D_Q)
-        log_w = torch.where(Mask, log_w, -torch.inf)
+        log_w = log_w.masked_fill(Mask, -INF)
 
         w = log_w.softmax(dim=-1)
         log_p_a_D__q = log_p_a__D_Q + diff_log_p_D__Q.sum(1)
+        log_p_a_D__q = log_p_a_D__q.masked_fill(Mask, 0.0)
         grad_L_a_alpha = w.detach() * log_p_a_D__q
-        grad_L_a_alpha = torch.where(Mask, grad_L_a_alpha, 0.0)
         grad_L_a_alpha = grad_L_a_alpha.sum(dim=-1)
 
         # compute the loss
