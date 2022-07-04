@@ -51,6 +51,7 @@ model:
   metric_size: 768
   metric_type: inner_product
   period: 5_000
+  weight_init_mult: 1e-1
 
   # optimizer configuration
   optimizer:
@@ -78,6 +79,7 @@ model:
     retriever_head:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
+      weight_init_mult: ${model.weight_init_mult}
       id: retriever
       normalize: false
       scale_init: 1
@@ -88,6 +90,7 @@ model:
     reader_head:
       output_size: ${model.metric_size}
       metric_type: ${model.metric_type}
+      weight_init_mult: ${model.weight_init_mult}
       id: reader
       normalize: false
       scale_init: 1
