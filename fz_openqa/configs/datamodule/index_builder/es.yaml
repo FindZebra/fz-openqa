@@ -21,7 +21,7 @@ engines:
       es_temperature: 1
       auxiliary_weight: 0
       filter_with_doc_ids: false
-      cleanup_numbers_from_aux: true
+      cleanup_numbers_from_aux: false
 
 # logging
 id: elasticsearch

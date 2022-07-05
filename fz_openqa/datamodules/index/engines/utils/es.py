@@ -42,7 +42,7 @@ def es_search_bulk(
     auxiliary_queries: List[str] = None,
     document_ids: List[int] = None,
     auxiliary_weight: float = 0,
-    cleanup_numbers_from_aux: bool = True,
+    cleanup_numbers_from_aux: bool = False,
     k: int = 10,
     request_timeout: int = 600,
 ):
