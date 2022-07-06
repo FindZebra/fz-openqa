@@ -12,11 +12,28 @@ SPECIAL_TOKENS = {
     "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
 }
 
+# lookup the base version of the tokenizer name to avoid duplicating dataset preprocessing
+TOKENIZERS_MAPPING = {
+    "bert-large-cased": "bert-base-cased",
+    "bert-large-uncased": "bert-base-uncased",
+    "sultan/BioM-ELECTRA-Large-Discriminator": "sultan/BioM-ELECTRA-Base-Discriminator",
+    "microsoft/deberta-v3-large": "microsoft/deberta-v3-base",
+    "dmis-lab/biobert-large-cased-v1.2": "dmis-lab/biobert-base-cased-v1.2",
+    "michiyasunaga/LinkBERT-large": "michiyasunaga/LinkBERT-base",
+    "michiyasunaga/BioLinkBERT-large": "michiyasunaga/BioLinkBERT-base",
+    "microsoft/BiomedNLP-PubMedBERT-"
+    "large-uncased-abstract-fulltext": "microsoft/BiomedNLP-PubMedBERT-"
+    "base-uncased-abstract-fulltext",
+}
+
 
 def init_pretrained_tokenizer(
     *, pretrained_model_name_or_path: str, **kwargs
 ) -> PreTrainedTokenizerFast:
     """Load a HuggingFace Pretrained Tokenizer and add the special tokens."""
+    pretrained_model_name_or_path = TOKENIZERS_MAPPING.get(
+        pretrained_model_name_or_path, pretrained_model_name_or_path
+    )
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.sanitize_special_tokens()
