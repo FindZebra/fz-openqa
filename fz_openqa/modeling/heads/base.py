@@ -11,7 +11,7 @@ from torch import nn
 from torch import Tensor
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 
-from fz_openqa.modeling.modules.utils.bert import instantiate_backbone_model_with_config
+from fz_openqa.modeling.modules.utils.backbone import instantiate_backbone_model_with_config
 from fz_openqa.utils.metric_type import MetricType
 
 

@@ -45,7 +45,7 @@ def retriever_diagnostics(
     retriever_probs = retriever_log_probs.exp()
 
     # arg_i(cdf=p)
-    if retriever_probs.device == "cpu":
+    if retriever_probs.device == torch.device("cpu"):
         retriever_probs = retriever_probs.to(torch.float32)
     sorted_probs = retriever_probs.sort(dim=-1, descending=True).values
     cdf = sorted_probs.cumsum(dim=-1)

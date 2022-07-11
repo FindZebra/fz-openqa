@@ -321,7 +321,7 @@ class OptionRetriever(Module):
         # process the document with the backbone.yaml
         h = self._backbone(
             flat_batch,
-            prefix=f"{field}",
+            field=f"{field}",
             max_batch_size=max_batch_size,
             **kwargs,
         )

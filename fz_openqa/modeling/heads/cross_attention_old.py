@@ -1,96 +1,64 @@
-import math
+from __future__ import annotations
+
 from typing import Dict
 from typing import Optional
 
-import einops
+import loguru
 import torch
+from torch import nn
 from torch import Tensor
 
-from fz_openqa.modeling.heads.base import Head
+from fz_openqa.modeling.heads import Head
 
 
 class CrossAttentionHead(Head):
-    def __init__(
-        self,
-        input_size: int = 768,
-        output_size: int = 256,
-        num_attention_heads: int = 4,
-        attention_dropout: float = 0.1,
-        hidden_dropout: float = 0.1,
-        **kwargs,
-    ):
-        super().__init__(input_size=input_size, output_size=output_size, **kwargs)
-        self.num_attention_heads = num_attention_heads
-        self.kv = torch.nn.Linear(input_size, 2 * output_size)
-        self.q = torch.nn.Linear(input_size, output_size)
-        self.residual = torch.nn.Linear(input_size, output_size)
-        self.attention_dropout = torch.nn.Dropout(attention_dropout)
-        self.hidden_dropout = torch.nn.Dropout(hidden_dropout)
-        self.norm = torch.nn.LayerNorm(output_size)
-        self.projection = torch.nn.Linear(output_size, 3 * output_size)
+    """Score question and document using cross-attention."""
+
+    id: str = "cross-attention"
+
+    def __init__(self, *args, bias: bool = False, **kwargs):
+        super(CrossAttentionHead, self).__init__(*args, **kwargs)
+        self.bias = bias
+        self.projection = nn.Linear(self.input_size, 1, bias=self.bias)
 
     def forward(
-        self, *, hd: Tensor, hq: Tensor, q_mask: Optional[Tensor] = None, **kwargs
+        self,
+        *,
+        hd: Tensor,
+        hq: Tensor,
+        doc_ids: Optional[Tensor] = None,
+        q_mask: Optional[Tensor] = None,
+        d_mask: Optional[Tensor] = None,
+        batch: Dict[str, Tensor] = None,
+        **kwargs,
     ) -> (Tensor, Dict):
-        # compute the features for the attention layer
-        q = self.q(hq)
-        q = einops.rearrange(
-            q, "bs opts l (heads h) -> bs opts heads l h", heads=self.num_attention_heads
-        )
-        kv = self.kv(hd)
-        kv = einops.rearrange(
-            kv,
-            "bs opts docs l (heads h) -> bs opts docs heads l h",
-            heads=self.num_attention_heads,
-        )
-        k, v = kv.chunk(2, dim=-1)
+        diagnostics = {}
 
-        # compute the cross-attention weights
-        weights = torch.einsum("bohux, bodhvx -> bodhuv", q, k)
-        weights = weights / math.sqrt(weights.shape[-1])
-        weights = weights.softmax(dim=-1)
-        weights = self.attention_dropout(weights)
+        # concatenate [D; Q] : vectors
+        bs, n_opts, n_docs, *_ = hd.shape
+        hq = hq.unsqueeze(2).expand(bs, n_opts, n_docs, *hq.shape[2:])
+        h_dq = torch.cat([hd, hq], dim=-2)
 
-        # cross-attention out
-        h_qd = torch.einsum("bodhuv, bodhvx -> bodhux", weights, v)
-        h_qd = einops.rearrange(
-            h_qd,
-            "bs opts docs heads l h -> bs opts docs l (heads h)",
-            heads=self.num_attention_heads,
-        )
+        # concatenate [D; Q] : attention_mask
+        q_mask = batch["question.attention_mask"]
+        d_mask = batch["document.attention_mask"]
+        q_mask = q_mask.unsqueeze(2).expand(bs, n_opts, n_docs, *q_mask.shape[2:])
+        dq_mask = torch.cat([d_mask, q_mask], dim=-1)
 
-        # apply dropout + layer norm + residual
-        h_qd = self.hidden_dropout(h_qd)
-        skip = self.residual(hq).unsqueeze(2)
-        h_qd = self.norm(h_qd + skip)
+        # process with the backbone layers
+        if self.bert_layers is None:
+            loguru.logger.error(
+                f"No BERT layers were found in {type(self)}. " f"Cross Attention cannot be used."
+            )
+        h_dq = self._process_with_bert_layers(dq_mask, h_dq)
 
-        # pprint_batch({"h_qd": h_qd}, "Soft reader scores : 2")
+        # compute the logits
+        h_dq_cls = h_dq[..., 0, :]
+        diagnostics["score"] = self.projection(h_dq_cls).squeeze(-1)
 
-        # final self-attention layer
-        qkv = self.projection(h_qd)
-        qkv = einops.rearrange(
-            qkv,
-            "bs opts docs l (heads h) -> bs opts docs heads l h",
-            heads=self.num_attention_heads,
-        )
-        q, k, v = qkv.chunk(3, dim=-1)
-        q = q[..., 0, :]  # select the CLS token of the query
-
-        # compute the self-attention weights
-        weights = torch.einsum("bodhx, bodhvx -> bodhv", q, k)
-        weights = weights / math.sqrt(weights.shape[-1])
-        if q_mask is not None:
-            mask_ = q_mask.bool()
-            mask_ = mask_.view(*mask_.shape[:2], 1, 1, mask_.shape[-1])
-            weights = weights.masked_fill(~mask_, -float("inf"))
-        weights = weights.softmax(dim=-1)
-        weights = self.attention_dropout(weights)
-
-        # compute the final score of shape [bs, n_opts, n_docs]
-        score = torch.einsum("bodhv, bodhvx -> bod", weights, v)
-        return score, {}
+        return diagnostics
 
     def _preprocess(
         self, last_hidden_state: Tensor, head: str, mask: Optional[Tensor] = None, **kwargs
     ) -> Tensor:
-        raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocess")
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement preprocessing")

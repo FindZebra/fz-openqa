@@ -249,11 +249,15 @@ class SearchResult:
         new_score = []
         new_index = []
         for i in range(len(self.score)):
+            # todo: propagate -inf
             # get scores for index i and substract the minimum values
             scores_a_i = to_torch(self.score[i])
+            # is_inf = torch.isinf(scores_a_i)
             min_score_a_i = scores_a_i[~scores_a_i.isinf()].min()
             scores_a_i = scores_a_i - min_score_a_i
-            scores_b_i = to_torch(other.score[i]) - min_score_a_i
+            scores_b_i = to_torch(other.score[i])
+            # is_inf = is_inf | torch.isinf(scores_b_i)
+            scores_b_i = scores_b_i - min_score_a_i
             min_score_b_i = scores_b_i[~scores_b_i.isinf()].min()
             scores_b_i = scores_b_i - min_score_b_i
             scores_i = torch.cat([scores_a_i, scores_b_i])

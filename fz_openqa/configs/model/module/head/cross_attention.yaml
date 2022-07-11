@@ -5,3 +5,6 @@ _target_: fz_openqa.modeling.heads.CrossAttentionHead
 output_size: null
 bias: false
 _id: cross-attention
+
+backbone: ${model.backbone}
+tokenizer: ${datamodule.tokenizer}

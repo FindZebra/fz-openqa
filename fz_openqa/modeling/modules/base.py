@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import collections
-import warnings
 from abc import ABC
 from abc import abstractmethod
-from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
@@ -22,7 +20,9 @@ from torchmetrics.retrieval import RetrievalMRR
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
-from fz_openqa.modeling.modules.utils.bert import instantiate_backbone_model_with_config
+from fz_openqa.modeling.modules.utils.backbone import extend_backbone_embeddings
+from fz_openqa.modeling.modules.utils.backbone import instantiate_backbone_model_with_config
+from fz_openqa.modeling.modules.utils.backbone import process_with_backbone
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.tokenizers.static import ANS_TOKEN
@@ -91,102 +91,63 @@ class Module(nn.Module, ABC):
         """Initialize a Metric for each split=train/validation/test"""
         super().__init__()
         self.tokenizer: PreTrainedTokenizerFast = maybe_instantiate(tokenizer)
-        self.backbone: PreTrainedModel = self._instantiate_backbone(
-            backbone=backbone, tokenizer=self.tokenizer
+        self._vocabulary_size = len(self.tokenizer.get_vocab())
+        self._pad_token_id = self.tokenizer.pad_token_id
+        self.spec_tokens = self.get_special_tokens(self.tokenizer)
+        self.backbone: PreTrainedModel = self.instantiate_backbone(
+            backbone=backbone,
+            tokenizer=self.tokenizer,
         )
         self._init_metrics(prefix=prefix)
 
     def _backbone(
         self,
         batch: Batch,
-        prefix: Optional[str] = None,
+        field: Optional[str] = None,
         max_batch_size: Optional[int] = None,
         **kwargs,
     ) -> Union[Tensor, Dict[str, Tensor]]:
-        batch = copy(batch)
+        return process_with_backbone(
+            batch=batch,
+            backbone=self.backbone,
+            field=field,
+            max_batch_size=max_batch_size,
+            max_length=self.max_length,
+            **kwargs,
+        )
 
-        # select the keys with prefix
-        if prefix is not None:
-            batch = self._select_field(prefix, batch)
-
-        if batch["input_ids"].shape[1] > self.max_length:
-            warnings.warn(
-                f"In model {type(self).__name__}, "
-                f"truncating input_ids with "
-                f"length={batch['input_ids'].shape[1]} > max_length={self.max_length}"
-            )
-
-        # get input data
-        inputs_ids = batch["input_ids"][:, : self.max_length]
-        attention_mask = batch["attention_mask"][:, : self.max_length]
-        # process data by chunk
-        output = None
-        bs, seq_len = inputs_ids.shape
-        if max_batch_size is None:
-            chunk_size = bs
-        else:
-            chunk_size = int(max_batch_size * (self.max_length / seq_len) ** 2)
-
-        for i in range(0, bs, chunk_size):
-            # process the chunk using BERT
-            chunk = self._process_tokens(
-                inputs_ids[i : i + chunk_size],
-                attention_mask[i : i + chunk_size],
-                **kwargs,
-            )
-            if output is None:
-                output = chunk
-            else:
-                output = torch.cat([output, chunk], dim=0)
-
-        return output
-
-    def _process_tokens(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor,
-        **kwargs,
-    ) -> Tensor:
-        backbone_output = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-        return backbone_output.last_hidden_state
-
-    def _instantiate_backbone(
-        self,
+    @staticmethod
+    def instantiate_backbone(
         *,
         backbone: Union[PreTrainedModel, DictConfig],
         tokenizer: PreTrainedTokenizerFast,
     ) -> PreTrainedModel:
         """Instantiate a backbone model, and extend its embeddings to match the tokenizer"""
 
-        self._vocabulary_size = len(tokenizer.get_vocab())
-        self._pad_token_id = tokenizer.pad_token_id
-
         # instantiate the backbone model using `backbone.config`
         backbone = instantiate_backbone_model_with_config(backbone)
 
         # extend the embeddings for the added special tokens
-        if backbone.get_input_embeddings().weight.shape[0] != len(tokenizer):
-            backbone.resize_token_embeddings(len(tokenizer))
-
-            emb_map = {
-                QUERY_MASK: tokenizer.pad_token_id,
-                QUERY_TOKEN: tokenizer.sep_token_id,
-                DOC_TOKEN: tokenizer.sep_token_id,
-                ANS_TOKEN: tokenizer.sep_token_id,
-                TRUNCATED_TOKEN: tokenizer.sep_token_id,
-            }
-
-            # embs = backbone.get_input_embeddings()
-            self.spec_tokens = {}
-            for token, target_idx in emb_map.items():
-                tok_id = tokenizer.encode(token, add_special_tokens=False)[0]
-                self.spec_tokens[token] = tok_id
-                # potentially initialize the added token embeddings
-                # embs.weight.data[tok_id] = embs.weight.data[target_idx]
-            # backbone.set_input_embeddings(embs)
-            # backbone.tie_weights()
+        backbone = extend_backbone_embeddings(backbone, tokenizer)
 
         return backbone
+
+    @staticmethod
+    def get_special_tokens(tokenizer: PreTrainedTokenizerFast) -> Dict:
+        emb_map = {
+            QUERY_MASK: tokenizer.pad_token_id,
+            QUERY_TOKEN: tokenizer.sep_token_id,
+            DOC_TOKEN: tokenizer.sep_token_id,
+            ANS_TOKEN: tokenizer.sep_token_id,
+            TRUNCATED_TOKEN: tokenizer.sep_token_id,
+        }
+
+        spec_tokens = {}
+        for token, target_idx in emb_map.items():
+            tok_id = tokenizer.encode(token, add_special_tokens=False)[0]
+            spec_tokens[token] = tok_id
+
+        return spec_tokens
 
     def forward(self, batch: Batch, **kwargs):
         """Compute the forward pass of the model, does not require targets,

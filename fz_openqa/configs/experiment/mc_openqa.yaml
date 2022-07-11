@@ -192,4 +192,4 @@ datamodule:
 logger:
   wandb:
     group: openqa-${datamodule.dset_name}
-    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${datamodule.es_temp}-${model.module.gradients._id}-${model.module.retriever_head._id}-${hostname:}-${base.seed}
+    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}

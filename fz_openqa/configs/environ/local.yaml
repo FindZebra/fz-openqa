@@ -4,10 +4,15 @@ defaults:
   - override /sys: local.yaml
   - override /model/backbone: mini.yaml
 
+base:
+  eval_device_batch_size: ${int_mul:2,${base.device_batch_size}}
 
 datamodule:
   num_proc: 2
   num_workers: 2
+
+  subset_size: 100
+  corpus_subset_size: 10
   builder:
       dataset_builder:
         max_length: 150
