@@ -36,6 +36,7 @@ class CrossAttentionHead(Head):
 
         # backbone
         tokenizer = maybe_instantiate(tokenizer)
+        self.cls_token_id = tokenizer.cls_token_id
         self.backbone = Module.instantiate_backbone(backbone=backbone, tokenizer=tokenizer)
 
         # projection
@@ -56,8 +57,13 @@ class CrossAttentionHead(Head):
         d_ids = batch["document.input_ids"]
         d_mask = batch["document.attention_mask"]
 
-        # reshape Q
+        # remove CLS token and reshape Q
         bs, n_docs, *_ = d_ids.shape
+        if self.cls_token_id is not None:
+            if (q_ids[..., 0] == self.cls_token_id).all():
+                q_ids = q_ids[..., 1:]
+                q_mask = q_mask[..., 1:]
+
         q_ids = q_ids[:, None].expand(bs, n_docs, *q_ids.shape[1:])
         q_mask = q_mask[:, None].expand(bs, n_docs, *q_mask.shape[1:])
 
