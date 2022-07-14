@@ -303,7 +303,7 @@ def populate_ivf_index(
     preproc: faiss.VectorTransform,
     vectors: TensorLike,
     gpu_resources: List,
-    max_add_per_gpu=1 << 25,
+    max_add_per_gpu: int = 1_000_000,
     use_float16: bool = True,
     use_precomputed_tables=False,
     add_batch_size=65536,
