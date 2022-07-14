@@ -240,7 +240,9 @@ def load_checkpoint(
     """Load a CheckpointLoader from a checkpoint path and print the
     difference between the `checkpoint.config` and the `config`."""
     if checkpoint_path is not None:
-        checkpoint = CheckpointLoader(checkpoint_path, override=override_config)
+        checkpoint = CheckpointLoader(
+            checkpoint_path, override=override_config, cache_dir=ref_config.sys.cache_dir
+        )
         # todo: move to original directory
         # todo: os.chdir(checkpoint.config.sys.workdir)
         # todo: config.sys.workdir = checkpoint.config.sys.workdir
