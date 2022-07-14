@@ -23,14 +23,14 @@ def get_drive_url(url):
     return base_url + split_url[5]
 
 
-def download_asset_from_gdrive(
-    url: str, cache_dir: Optional[str] = None, extract: bool = False
-) -> str:
+def download_asset(url: str, cache_dir: Optional[str] = None, extract: bool = False) -> str:
     dl_manager = datasets.utils.download_manager.DownloadManager(
-        dataset_name="fz_ner_annotator", data_dir=cache_dir
+        dataset_name="fz_openqa_assets", data_dir=cache_dir
     )
     if extract:
-        return dl_manager.download_and_extract(get_drive_url(url))
+        if "drive.google" in url:
+            url = get_drive_url(url)
+        return dl_manager.download_and_extract(url)
     else:
         return dl_manager.download(get_drive_url(url))
 
@@ -39,7 +39,7 @@ def maybe_download_weights(checkpoint: str, cache_dir: Optional[str] = None) -> 
     is_url = isinstance(checkpoint, str) and checkpoint.startswith("https://")
     if is_url:
         logger.info(f"Using weights from {checkpoint}")
-        checkpoint = download_asset_from_gdrive(checkpoint, cache_dir=cache_dir, extract=True)
+        checkpoint = download_asset(checkpoint, cache_dir=cache_dir, extract=True)
     return checkpoint
 
 
