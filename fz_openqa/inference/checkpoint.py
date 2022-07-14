@@ -135,7 +135,7 @@ class CheckpointLoader:
 
         if path is not None and not zero_shot:
             logger.info(f"Loading model from checkpoint: {path}")
-            cls: Model.__class__ = _resolve_target(self.config.model._target_)
+            cls: Model.__class__ = _resolve_target(self.config.model._target_, full_key=None)
 
             # load pytorch
             with pl_legacy_patch():
