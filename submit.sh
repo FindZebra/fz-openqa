@@ -19,7 +19,7 @@ echo "===================================="
 poetry run gpustat --debug
 
 echo "====== starting experiment ========="
-poetry run python run.py \
+HYDRA_FULL_ERROR=1 poetry run python run.py \
   +experiment=mc_openqa \
   +environ=diku \
   datamodule.num_workers=12 \
