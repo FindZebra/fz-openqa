@@ -306,7 +306,7 @@ def populate_ivf_index(
     max_add_per_gpu: int = 100_000,
     use_float16: bool = True,
     use_precomputed_tables=False,
-    add_batch_size=65536,
+    add_batch_size=65536,  # todo: try reducing this
 ):
     """Add elements to a sharded index. Return the index and if available
     a sharded gpu_index that contains the same data."""

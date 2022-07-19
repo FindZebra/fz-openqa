@@ -23,6 +23,7 @@ engines:
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
       max_add_per_gpu: 10_000 # todo: increase this
+      add_batch_size: 1_000 # todo: increase this
       metric_type: ${model.metric_type}
       nprobe: 32
   topk:

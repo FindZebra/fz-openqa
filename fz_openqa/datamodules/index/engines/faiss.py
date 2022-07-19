@@ -48,6 +48,7 @@ class FaissEngine(IndexEngine):
         "train_size": 1_000_000,
         "tempmem": -1,
         "max_add_per_gpu": 100_000,
+        "add_batch_size": 1_000,
         "metric_type": MetricType.inner_product.name,
         "random_train_subset": False,
     }
@@ -123,6 +124,7 @@ class FaissEngine(IndexEngine):
             keep_on_cpu=config["keep_on_cpu"],
             tempmem=config["tempmem"],
             max_add_per_gpu=config["max_add_per_gpu"],
+            add_batch_size=config["add_batch_size"],
         )
 
     def load(self):
