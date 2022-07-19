@@ -11,9 +11,9 @@ from es_status import ping_es
 class ElasticSearchInstance(object):
     TIMEOUT = 3600
 
-    def __init__(self, disable: bool = False, es_args: Optional[str] = None, **kwargs):
+    def __init__(self, disable: bool = False, es_java_opts: Optional[str] = None, **kwargs):
         self.disable = disable
-        self.es_args = es_args
+        self.es_java_opts = es_java_opts
         self.kwargs = copy(kwargs)
 
     def __enter__(self):
@@ -24,8 +24,8 @@ class ElasticSearchInstance(object):
 
         if not self.disable:
             cmd = "elasticsearch"
-            if self.es_args is not None:
-                cmd = f"{self.es_args} {cmd}"
+            if self.es_java_opts is not None:
+                cmd = f'ES_JAVA_OPTS="{self.es_java_opts}" {cmd}'
             logger.info(f"Spawning ElasticSearch: {cmd}")
             self.es_proc = subprocess.Popen([cmd], **self.kwargs)
             t0 = time.time()
