@@ -15,7 +15,9 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
+# elasticsearch
 spawn_es: true
+es_args: "-Xmx32g"
 
 base:
   # random seed

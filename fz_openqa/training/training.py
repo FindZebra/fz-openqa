@@ -81,7 +81,9 @@ def train(config: DictConfig) -> Optional[float]:
         seed_everything(config.base.seed, workers=True)
 
     with ElasticSearchInstance(
-        disable=not config.get("spawn_es", False), stdout=open("es.stdout.log", "w")
+        disable=not config.get("spawn_es", False),
+        stdout=open("es.stdout.log", "w"),
+        es_args=config.get("es_args", None),
     ):
 
         # only preprocess the data if there is no trainer
