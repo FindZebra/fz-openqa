@@ -33,7 +33,7 @@ class FaissVectorBase(VectorBase):
         keep_on_cpu: bool = False,
         tempmem=-1,
         use_float16: bool = True,
-        max_add_per_gpu: int = 1_000_000,
+        max_add_per_gpu: int = 100_000,
         add_batch_size: int = 65536,
         use_precomputed_tables: bool = False,
         replicas: int = 1,

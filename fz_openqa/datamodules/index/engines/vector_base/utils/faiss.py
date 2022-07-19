@@ -303,7 +303,7 @@ def populate_ivf_index(
     preproc: faiss.VectorTransform,
     vectors: TensorLike,
     gpu_resources: List,
-    max_add_per_gpu: int = 1_000_000,
+    max_add_per_gpu: int = 100_000,
     use_float16: bool = True,
     use_precomputed_tables=False,
     add_batch_size=65536,
@@ -342,6 +342,9 @@ def populate_ivf_index(
         total=nb // add_batch_size,
     ):
         i1 = i0 + xs.shape[0]
+        if np.isnan(xs).any():
+            logger.warning(f"NaN detected in vectors {i0}-{i1}")
+            xs[np.isnan(xs)] = 0
         gpu_index.add_with_ids(xs, np.arange(i0, i1))
         if 0 < max_add < gpu_index.ntotal:
             logger.info(f"Reached max. size per GPU ({max_add}), " f"flushing indices to CPU")
