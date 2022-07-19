@@ -19,7 +19,7 @@ echo "===================================="
 poetry run gpustat --debug
 
 echo "====== starting experiment ========="
-HYDRA_FULL_ERROR=1 poetry run python run.py \
+ES_JAVA_OPTS="-Xmx32g" HYDRA_FULL_ERROR=1 poetry run python run.py \
   +experiment=mc_openqa \
   +environ=diku \
   datamodule.num_workers=12 \

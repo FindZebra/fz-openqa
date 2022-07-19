@@ -83,7 +83,6 @@ def train(config: DictConfig) -> Optional[float]:
     with ElasticSearchInstance(
         disable=not config.get("spawn_es", False),
         stdout=open("es.stdout.log", "w"),
-        es_java_opts=config.get("es_java_opts", None),
     ):
 
         # only preprocess the data if there is no trainer

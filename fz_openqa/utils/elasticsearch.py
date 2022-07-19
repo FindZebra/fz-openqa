@@ -1,7 +1,7 @@
+import os
 import subprocess
 import time
 from copy import copy
-from typing import Optional
 
 from loguru import logger
 
@@ -11,9 +11,8 @@ from es_status import ping_es
 class ElasticSearchInstance(object):
     TIMEOUT = 3600
 
-    def __init__(self, disable: bool = False, es_java_opts: Optional[str] = None, **kwargs):
+    def __init__(self, disable: bool = False, **kwargs):
         self.disable = disable
-        self.es_java_opts = es_java_opts
         self.kwargs = copy(kwargs)
 
     def __enter__(self):
@@ -23,11 +22,13 @@ class ElasticSearchInstance(object):
             return
 
         if not self.disable:
+            env = copy(os.environ)
             cmd = "elasticsearch"
-            if self.es_java_opts is not None:
-                cmd = f'ES_JAVA_OPTS="{self.es_java_opts}" {cmd}'
-            logger.info(f"Spawning ElasticSearch: {cmd}")
-            self.es_proc = subprocess.Popen([cmd], **self.kwargs)
+            logger.info(
+                f"Spawning ElasticSearch: {cmd}, "
+                f"ES_JAVA_OPTS={env.get('ES_JAVA_OPTS', '<none>')}"
+            )
+            self.es_proc = subprocess.Popen([cmd], env=env, **self.kwargs)
             t0 = time.time()
             while not ping_es():
                 time.sleep(0.5)

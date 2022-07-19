@@ -17,7 +17,6 @@ defaults:
 
 # elasticsearch
 spawn_es: true
-es_java_opts: -Xmx32g
 
 base:
   # random seed
