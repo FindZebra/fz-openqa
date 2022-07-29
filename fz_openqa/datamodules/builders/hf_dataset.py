@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
@@ -98,6 +99,7 @@ class HfDatasetBuilder(DatasetBuilder):
         num_proc: int = 1,
         verbose: bool = False,
         text_formatter: Optional[TextFormatter] = None,
+        split: Optional[datasets.Split] = None,
         **kwargs,
     ):
         super().__init__(cache_dir=cache_dir, **kwargs)
@@ -106,6 +108,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.subset_size = subset_size
         self.num_proc = num_proc
         self.verbose = verbose
+        self.split = split
 
         # tokenizer and dataset
         self.text_formatter = text_formatter or TextFormatter()
@@ -138,7 +141,10 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return keep_only_columns(dataset, columns=columns)
+        dataset = keep_only_columns(dataset, columns=columns)
+        if isinstance(dataset, DatasetDict) and self.split is not None:
+            dataset = DatasetDict({self.split: dataset[self.split]})
+        return dataset
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]

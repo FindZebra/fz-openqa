@@ -1,0 +1,30 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - sys: local
+  - trainer: minimal
+    # enable color logging
+  - override hydra/hydra_logging: colorlog
+  - override hydra/job_logging: colorlog
+
+verbose: true
+setup_with_model: true
+checkpoint_type: best
+checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-dpr-dpr-1.2.zip
+split: validation
+
+overrides:
+  sys:
+    ${sys}
+  base:
+    infer_batch_mul: 400
+  datamodule:
+    builder:
+      dataset_builder:
+        split: ${split}
+    index_builder:
+      persist_cache: true
+  model:
+    module:
+      max_batch_size: null

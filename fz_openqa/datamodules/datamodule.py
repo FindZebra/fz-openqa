@@ -184,24 +184,24 @@ class DataModule(LightningDataModule):
         return f"{self.__class__.__name__}(\nbuilder={self.builder}\n)"
 
     @rank_zero_only
-    def display_samples(self, n_samples: int = 1, show_valid_batch: bool = False, **kwargs):
+    def display_samples(self, n_samples: int = 1, split: Split = Split.TRAIN, **kwargs):
         """Sample a batch and pretty print it."""
-        train_batch = next(iter(self.train_dataloader()))
+        loader = {
+            Split.TRAIN: self.train_dataloader,
+            Split.VALIDATION: self.val_dataloader,
+            Split.TEST: self.test_dataloader,
+        }[split]()
+        batch = next(iter(loader))
 
         print(get_separator("="))
-        print("=== training Batch ===")
-        pprint_batch(train_batch)
+        print(f"=== {split} Batch ===")
+        pprint_batch(batch)
         print(get_separator())
-        if show_valid_batch:
-            print("=== valid. Batch ===")
-            valid_batch = next(iter(self.val_dataloader()))
-            pprint_batch(valid_batch)
-            print(get_separator())
         print("=== example ===")
         try:
-            for i in range(min(n_samples, infer_batch_size(train_batch))):
+            for i in range(min(n_samples, infer_batch_size(batch))):
                 print(get_separator())
-                self.display_one_sample({k: v[i] for k, v in train_batch.items()}, **kwargs)
+                self.display_one_sample({k: v[i] for k, v in batch.items()}, **kwargs)
         except Exception as e:
             logger.exception(e)
         print(get_separator("="))

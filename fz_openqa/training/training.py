@@ -237,6 +237,7 @@ def load_checkpoint(
     *,
     override_config: Optional[DictConfig],
     ref_config: Optional[DictConfig],
+    silent: bool = False,
 ) -> Optional[CheckpointLoader]:
     """Load a CheckpointLoader from a checkpoint path and print the
     difference between the `checkpoint.config` and the `config`."""
@@ -247,7 +248,7 @@ def load_checkpoint(
         # todo: move to original directory
         # todo: os.chdir(checkpoint.config.sys.workdir)
         # todo: config.sys.workdir = checkpoint.config.sys.workdir
-        if ref_config is not None:
+        if ref_config is not None and not silent:
             rich.print(get_separator())
             rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
             rich.print(

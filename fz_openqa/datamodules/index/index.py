@@ -14,6 +14,7 @@ from typing import TypeVar
 
 import datasets
 import pytorch_lightning as pl
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
@@ -64,7 +65,7 @@ INFER_NESTING_KEYS = [
     "question.text",
 ]
 
-MAX_AGE = 60 * 60 * 24 * 7  # 1 week
+MAX_AGE = 60 * 60 * 24 * 3  # 3 days
 TEMPDIR_SUFFIX = "-tempdir"
 
 
@@ -139,7 +140,7 @@ class Index(Pipe):
         # set the path where to store the index
         if not persist_cache:
             cache_dir = tempfile.mkdtemp(dir=cache_dir, suffix=TEMPDIR_SUFFIX)
-        self.cache_dir = Path(cache_dir) / str(corpus._fingerprint)
+        self.cache_dir = Path(cache_dir) / f"fz-index-{corpus._fingerprint}"
 
         # input fields and input filter for query time
         self.query_field = query_field
@@ -275,7 +276,7 @@ class Index(Pipe):
                 predict=self.predict_queries,
                 trainer=self.trainer,
                 collate_fn=self.dataset_collate_pipe,
-                target_file=self.vector_file(self.predict_docs.model, field="dataset"),
+                target_file=self.vector_file(self.predict_queries.model, field="dataset"),
                 persist=True,
             )
             # put the model back to cpu to save memory
@@ -428,7 +429,8 @@ class Index(Pipe):
 
     def vector_file(self, model, field: str = "corpus"):
         model_fingerprint = get_fingerprint(model)
-        return Path(self.cache_dir) / "vectors" / f"vectors-{model_fingerprint}-{field}.tsarrow"
+        path = Path(self.cache_dir) / "vectors" / f"vectors-{model_fingerprint}-{field}.tsarrow"
+        return path
 
     def read_vectors_table(self, vector_file: Path) -> TensorArrowTable:
         logger.info(f"Reading vectors table from: {vector_file.absolute()}")

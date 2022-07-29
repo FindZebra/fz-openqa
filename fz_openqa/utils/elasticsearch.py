@@ -35,6 +35,8 @@ class ElasticSearchInstance(object):
                 if time.time() - t0 > self.TIMEOUT:
                     raise TimeoutError("Couldn't ping the ES instance.")
 
+            logger.info(f"Elasticsearch is up and running " f"(init time={time.time() - t0:.1f}s)")
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         # make sure the dbconnection gets closed
         if hasattr(self, "es_proc"):

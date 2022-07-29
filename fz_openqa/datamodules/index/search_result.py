@@ -253,12 +253,21 @@ class SearchResult:
             # get scores for index i and substract the minimum values
             scores_a_i = to_torch(self.score[i])
             # is_inf = torch.isinf(scores_a_i)
-            min_score_a_i = scores_a_i[~scores_a_i.isinf()].min()
+            scores_a_i_ = scores_a_i[~scores_a_i.isinf()]
+            if scores_a_i_.numel() == 0:
+                min_score_a_i = 0.0
+            else:
+                min_score_a_i = scores_a_i_.min()
             scores_a_i = scores_a_i - min_score_a_i
             scores_b_i = to_torch(other.score[i])
             # is_inf = is_inf | torch.isinf(scores_b_i)
             scores_b_i = scores_b_i - min_score_a_i
-            min_score_b_i = scores_b_i[~scores_b_i.isinf()].min()
+
+            scores_b_i_ = scores_b_i[~scores_b_i.isinf()]
+            if scores_b_i_.numel() == 0:
+                min_score_b_i = 0.0
+            else:
+                min_score_b_i = scores_b_i_.min()
             scores_b_i = scores_b_i - min_score_b_i
             scores_i = torch.cat([scores_a_i, scores_b_i])
 
