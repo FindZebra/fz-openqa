@@ -146,7 +146,7 @@ def get_gpu_resources(devices=None, tempmem: int = -1):
         res = faiss.StandardGpuResources()
         # res.setLogMemoryAllocations(True)
         if tempmem >= 0:
-            logger.warning(f"Setting GPU:{i} temporary memory to {tempmem/1024**3:.2f} GB")
+            logger.warning(f"Setting GPU:{i} temporary memory to {tempmem / 1024 ** 3:.2f} GB")
             res.setTempMemory(tempmem)
 
         gpu_resources.append(res)
@@ -403,8 +403,18 @@ def get_sharded_gpu_index(
     co.verbose = True
     co.shard = True  # the replicas will be made "manually"
     t0 = time.time()
-    if replicas == 1:
 
+    rich.print(
+        f"[magenta]Co: {co}, "
+        f"gpu_resources: {gpu_resources}, "
+        f"ngpu: {ngpu}, "
+        f"replicas: {replicas}, "
+        f"tempmem: {tempmem}, "
+        f"use_float16: {use_float16}, "
+        f"use_precomputed_tables: {use_precomputed_tables}, "
+    )
+
+    if replicas == 1:
         vres, vdev = make_vres_vdev(gpu_resources)
         gpu_index = faiss.index_cpu_to_gpu_multiple(vres, vdev, cpu_index, co)
     else:

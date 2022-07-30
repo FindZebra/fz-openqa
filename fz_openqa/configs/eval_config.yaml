@@ -13,6 +13,7 @@ setup_with_model: true
 checkpoint_type: best
 checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-dpr-dpr-1.2.zip
 split: validation
+n_samples: 10
 
 overrides:
   sys:
@@ -20,6 +21,7 @@ overrides:
   base:
     infer_batch_mul: 400
   datamodule:
+    dset_name: medqa-tw
     builder:
       dataset_builder:
         split: ${split}

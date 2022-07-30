@@ -187,9 +187,31 @@ datamodule:
           es_temperature: ${datamodule.es_temp}
           auxiliary_weight: ${datamodule.es_weight}
           query_text_key: question.text
+      faiss:
+        config:
+          index_factory: "shard:IVF1000,Flat"
+          train_size: 2_000_000
+          max_add_per_gpu: 200_000
+          add_batch_size: 65536
+          metric_type: ${model.metric_type}
+          nprobe: 32
 
 
 logger:
   wandb:
     group: openqa-${datamodule.dset_name}
     name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
+
+
+# TODO: remove:
+#config_overrides:
+#  datamodule:
+#    index_builder:
+#      persist_cache: true
+#      faiss:
+#        config:
+#          index_factory: "shard:IVF100000,Flat"
+#          train_size: 1_000_000
+#          max_add_per_gpu: 1_000_000 # todo: increase this
+#          add_batch_size: 65536 # todo: increase this
+#          nprobe: 32

@@ -33,11 +33,15 @@ class FaissEngine(IndexEngine):
         "train_on_cpu",
         "_index",
         "tempmem",
+        "max_add_per_gpu",
+        "add_batch_size",
     ]
     no_index_name = IndexEngine.no_index_name + [
         "keep_on_cpu",
         "train_on_cpu",
         "tempmem",
+        "max_add_per_gpu",
+        "add_batch_size",
     ]
 
     _default_config: Dict[str, Any] = {

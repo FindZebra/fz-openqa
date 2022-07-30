@@ -2,6 +2,9 @@ import os
 import sys
 from copy import copy
 
+import torch
+from datasets import Split
+
 from fz_openqa.training.training import load_checkpoint
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.fingerprint import get_fingerprint
@@ -90,6 +93,32 @@ def run(config):
     if config.verbose:
         rich.print(datamodule.dataset)
         datamodule.display_samples(n_samples=1, split=config.split)
+
+    # evaluate the model
+    logits_key = "_reader_logits_"
+    all_preds = []
+    for n in range(config.n_samples):
+        model.tracked_metrics = {logits_key: None}
+        loader = {
+            Split.VALIDATION: datamodule.val_dataloader,
+            Split.TEST: datamodule.test_dataloader,
+        }[config.split]()
+        output = trainer.test(model=model, dataloaders=loader, verbose=True)
+        rich.print(f"=== Sample {n} ===")
+        rich.print(output)
+        # store predictions
+        rich.print(model.tracked_metrics)
+        all_preds.append(model.tracked_metrics[logits_key])
+    probs = torch.stack(all_preds, dim=0)
+    probs = probs.float().softmax(dim=-1).mean(0)
+    rich.print(probs[:10])
+    preds = probs.argmax(dim=-1)
+    rich.print(f"# probs.shape: {probs.shape}")
+    targets = datamodule.dataset[config.split]["answer.target"]
+    rich.print(f"# targets.shape: {targets.shape}")
+
+    acc = (preds == targets).float().mean()
+    rich.print(f"# Accuracy (n={config.n_samples}): {acc:.2%}")
 
 
 if __name__ == "__main__":

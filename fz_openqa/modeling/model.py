@@ -6,6 +6,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from datasets import Split
 from loguru import logger
@@ -58,6 +59,8 @@ class Model(LightningModule):
     the true positives and false negatives).
     The metrics are computed for the whole epoch in `_epoch_end`.
     """
+
+    tracked_metrics: Optional[Dict[str, Optional[Tensor]]] = None
 
     def __init__(
         self,
@@ -156,6 +159,16 @@ class Model(LightningModule):
         !! This step is performed on device 0 !!
         """
         output = self.module.step_end(pre_output, split)
+
+        # track metrics
+        if self.tracked_metrics is not None:
+            for key in self.tracked_metrics.keys():
+                x = self.tracked_metrics[key]
+                y = output[key].detach().cpu()
+                if x is None:
+                    self.tracked_metrics[key] = y
+                else:
+                    self.tracked_metrics[key] = torch.cat([x, y], dim=0)
 
         if log_data:
             if self._params is not None:
