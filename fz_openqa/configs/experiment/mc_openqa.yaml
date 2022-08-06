@@ -191,7 +191,7 @@ datamodule:
         config:
           index_factory: "shard:IVF1000,Flat"
           train_size: 1_000_000
-          max_add_per_gpu: 33_554_432
+          max_add_per_gpu: 1_000_000
           add_batch_size: 65536
           metric_type: ${model.metric_type}
           nprobe: 32
