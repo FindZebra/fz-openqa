@@ -52,7 +52,7 @@ CORPUS_GENERATORS = {
     "medwiki-v3": (medwiki_corpus.__file__, "v3"),
     "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
     "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
-    "fz": (fz_corpus.__file__,),
+    "findzebra": (fz_corpus.__file__,),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__, None),
@@ -237,6 +237,7 @@ class CorpusBuilder(HfDatasetBuilder):
                         "title.offset_mapping",
                         "title.text",
                         "title.title",
+                        "title.cui",
                     ]
                 ),
                 update=True,
@@ -246,12 +247,15 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
         # process the whole dataset (tokenization + passage generation)
+        cols_to_remove = ["idx", "text", "title"]
+        if "cui" in dataset.column_names:
+            cols_to_remove.append("cui")
         dataset = dataset.map(
             preprocessing,
             batched=True,
             batch_size=10,
             num_proc=self.num_proc,
-            remove_columns=["idx", "text", "title"],
+            remove_columns=cols_to_remove,
             desc="Tokenizing documents and extracting overlapping passages",
         )
 
@@ -272,7 +276,13 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["document.idx", "document.uid", "document.title", "document.question_idx"],
+            global_keys=[
+                "document.idx",
+                "document.uid",
+                "document.title",
+                "document.question_idx",
+                "document.cui",
+            ],
             verbose=self.verbose,
         )
 

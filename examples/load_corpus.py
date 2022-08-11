@@ -33,7 +33,7 @@ def run(config: DictConfig) -> None:
     datasets.set_caching_enabled(True)
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="backbone-base-cased")
+    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
 
     # initialize text formatter
     textformatter = TextFormatter(
@@ -50,11 +50,13 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,
-        use_subset=config.get("use_subset", False),
+        subset_size=config.get("subset_size", None),
         cache_dir=config.sys.get("cache_dir"),
         num_proc=config.get("num_proc", 2),
-        analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],
         append_document_title=config.get("append_title", True),
+        analytics=[
+            # ReportCorpusStatistics(verbose=True, output_dir="./analyses")
+        ],
     )
     dm = DataModule(builder=builder)
 
