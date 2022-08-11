@@ -7,6 +7,7 @@ from typing import List
 from typing import Optional
 
 import numpy as np
+import rich
 import torch
 from datasets import Dataset
 from datasets import Split
@@ -41,17 +42,17 @@ class SequenceLengths(Analytic):
         """
         output = {}
 
-        for field in ["document", "question"]:
+        for field in ["document", "question", "answer"]:
             key = f"{field}.attention_mask"
             if key not in dset.column_names:
                 continue
 
             # drop unused columns
-            dset = keep_only_columns(dset, [key])
+            _dset = keep_only_columns(dset, [key])
 
             lengths = []
-            for i in range(0, len(dset), self.batch_size):
-                seqs = dset[i : i + self.batch_size]
+            for i in range(0, len(_dset), self.batch_size):
+                seqs = _dset[i : i + self.batch_size]
                 seqs = seqs[key]
                 for seq in self.yield_sequences(seqs):
                     lengths += [len([y for y in seq if y > 0])]

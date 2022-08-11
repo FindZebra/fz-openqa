@@ -27,7 +27,7 @@ def run(config: DictConfig) -> None:
         datasets.set_caching_enabled(False)
 
     # initialize the tokenizer
-    bert_id = config.get("bert_id", "google/bert_uncased_L-2_H-128_A-2")
+    bert_id = config.get("bert_id", "bert-base-uncased")
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # preprocessing
@@ -51,10 +51,14 @@ def run(config: DictConfig) -> None:
         n_answer_tokens=0,
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
-        max_length=config.get("max_length", 312),
+        max_length=config.get("max_length", None),
         preprocessing_op=preprocessing_op,
         analytics=[
-            SequenceLengths(output_dir="analytics/", verbose=True),
+            SequenceLengths(
+                output_dir="analytics/",
+                verbose=True,
+                concatenate=config.get("concatenate_splits", False),
+            ),
         ],
     )
     dm = DataModule(builder=builder)
