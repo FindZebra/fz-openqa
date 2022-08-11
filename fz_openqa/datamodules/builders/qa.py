@@ -24,6 +24,7 @@ from .hf_dataset import HfDatasetBuilder
 from .preprocessing import DatasetPreprocessing
 from .utils.format_row import format_row_concatenated_questions
 from .utils.format_row import format_row_flat_questions
+from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
@@ -47,6 +48,7 @@ QA_DATASETS = {
     "race-hard": ("race", "hard"),
     "race-middle": ("race", "middle"),
     "medmcqa": ("medmcqa", None),
+    "fz-queries": (fz_queries.__file__, None),
 }
 
 
@@ -203,11 +205,13 @@ class QaBuilder(HfDatasetBuilder):
 
         # Tokenize the text fields (questions, answers, and documents, if any)
         if self.tokenizer:
-            has_document_columns = any("document." in c for c in dataset["train"].column_names)
+            one_split = next(iter(dataset.keys()))
+            has_document_columns = any("document." in c for c in dataset[one_split].column_names)
+            has_answer_columns = any("document." in c for c in dataset[one_split].column_names)
             dataset = dataset.map(
                 Parallel(
                     self.get_question_tokenizer_pipe(),
-                    self.get_answer_tokenizer_pipe(),
+                    Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
                     Gate(has_document_columns, self.get_document_tokenizer_pipe()),
                 ),
                 batched=True,

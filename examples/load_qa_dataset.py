@@ -64,7 +64,7 @@ def run(config: DictConfig) -> None:
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=3)
+    dm.display_samples(n_samples=3, split=config.get("display_split", "train"))
 
     # access dataset
     rich.print(dm.dataset)
