@@ -1,0 +1,53 @@
+# @package _global_
+
+defaults:
+  - eval_config
+
+split: test
+
+overrides:
+  sys:
+    ${sys}
+  base:
+    infer_batch_mul: 400
+  datamodule:
+    dset_name: fz-queries
+    corpus_name: findzebra
+    n_max_retrieved_documents: 2048
+    n_retrieved_documents: 2048
+    n_documents: 1_000
+    es_temp: 5
+    es_weight: 0
+    num_proc: 1
+    train_batch_size: 10
+    eval_batch_size: 10
+    relevance_classifier: null
+    transform: null
+    builder:
+      dataset_builder:
+        _target_: fz_openqa.datamodules.builders.QaBuilder
+      document_nesting_level: 1
+    index_builder:
+      persist_cache: true
+    sampler:
+      largest: true
+    output_columns:
+      - answer.target
+      - question.row_idx
+      - question.text
+      - question.input_ids
+      - question.attention_mask
+      - question.token_type_ids
+      - question.cui
+      - document.title
+      - document.text
+      - document.input_ids
+      - document.attention_mask
+      - document.idx
+      - document.row_idx
+      - document.proposal_score
+      - document.proposal_rank
+      - document.cui
+  model:
+    module:
+      max_batch_size: null

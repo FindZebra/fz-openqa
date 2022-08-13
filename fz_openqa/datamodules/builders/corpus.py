@@ -177,8 +177,10 @@ class CorpusBuilder(HfDatasetBuilder):
                 def drop_cols(dset: Dataset):
                     cols = set(dset.column_names)
                     cols_to_drop = cols - shared_columns
-                    logger.warning(f"Dropping columns {cols_to_drop} from dataset")
-                    return dset.remove_columns(list(cols_to_drop))
+                    if len(cols_to_drop) > 0:
+                        logger.warning(f"Dropping columns {cols_to_drop} from dataset")
+                        dset = dset.remove_columns(list(cols_to_drop))
+                    return dset
 
                 dsets = [drop_cols(dset) for dset in dsets]
             return concatenate_datasets(dsets)
@@ -365,7 +367,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # get the raw text questions, extract and collate
         raw_collate_pipe = Collate(
-            keys=["document.text", "document.title", "document.question_idx"]
+            keys=["document.text", "document.title", "document.question_idx", "document.cui"]
         )
 
         # collate simple attributes
