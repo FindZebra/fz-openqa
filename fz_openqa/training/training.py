@@ -28,13 +28,11 @@ from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.trainer.states import TrainerStatus
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = loguru.logger
@@ -132,7 +130,10 @@ def train(config: DictConfig) -> Optional[float]:
         log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
         datamodule: DataModule = instantiate(config.datamodule)
         setup_model = instantiate_setup_model(
-            config.get("setup_with_model", None), main_model=model
+            config.get("setup_with_model", None),
+            main_model=model,
+            override_config=DictConfig({"sys": config.sys}),
+            ref_config=config,
         )
         # datamodule.prepare_data()
         datamodule.setup(trainer=trainer, model=setup_model)
@@ -228,7 +229,9 @@ def instantiate_model(
         model: Model = instantiate(config.model, _recursive_=False)
     else:
         log.info(f"Loading Module <{config.model._target_}> from checkpoint")
-        model: Model = checkpoint_manager.load_model(last=config.get("checkpoint_type", "last"))
+        model: Model = checkpoint_manager.load_model(
+            checkpoint_type=config.get("checkpoint_type", "last")
+        )
     return model
 
 
@@ -264,7 +267,13 @@ def load_checkpoint(
         return None
 
 
-def instantiate_setup_model(setup_with_model: DictConfig, *, main_model: Model) -> Optional[Model]:
+def instantiate_setup_model(
+    setup_with_model: DictConfig,
+    *,
+    main_model: Model,
+    override_config: Optional[DictConfig],
+    ref_config: Optional[DictConfig],
+) -> Optional[Model]:
     """
     Instantiate the model used to setup the dataset.
     if `setup_with_model` is a string, it will be interpreted as the path to a checkpoint.
@@ -273,7 +282,10 @@ def instantiate_setup_model(setup_with_model: DictConfig, *, main_model: Model) 
 
     if isinstance(setup_with_model, str):
         log.info(f"Setup model: Instantiating from path <{setup_with_model}>")
-        return CheckpointLoader(setup_with_model).load_model(checkpoint_type="best")
+        checkpoint = CheckpointLoader(
+            setup_with_model, override=override_config, cache_dir=ref_config.sys.cache_dir
+        )
+        return checkpoint.load_model(checkpoint_type=ref_config.get("checkpoint_type", "last"))
     elif isinstance(setup_with_model, bool) and setup_with_model:
         log.info(f"Setup model: Using main model <{type(main_model)}>")
         return main_model

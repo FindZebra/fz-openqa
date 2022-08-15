@@ -239,7 +239,6 @@ class CorpusBuilder(HfDatasetBuilder):
                         "title.offset_mapping",
                         "title.text",
                         "title.title",
-                        "title.cui",
                     ]
                 ),
                 update=True,

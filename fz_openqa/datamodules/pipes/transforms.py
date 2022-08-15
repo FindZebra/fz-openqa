@@ -1,9 +1,11 @@
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Pipe
@@ -207,3 +209,44 @@ class OptionBinarized(OptionDropout):
                 output[key] = [[y[i] for i in ids] for y, ids in zip(x, selected_ids)]
 
         return output
+
+
+class StripAnswer(Pipe):
+    """Remove tokens corresponding to the answer from the question"""
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerFast,
+        field: str = "question",
+        **kwargs,
+    ):
+        self.pad_token_id = tokenizer.pad_token_id
+        self.sep_token_id = tokenizer.sep_token_id
+        self.field = field
+        super().__init__(**kwargs)
+
+    @torch.no_grad()
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+
+        input_ids = batch[f"{self.field}.input_ids"]
+        attention_mask = batch[f"{self.field}.attention_mask"]
+
+        # identify the position of the first SEP token
+        ids = torch.linspace(0, 0.9999, input_ids.size(-1), device=input_ids.device)
+        for _ in range(max(0, input_ids.dim() - ids.dim())):
+            ids = ids.unsqueeze(0)
+        ids = ids + 1 - (input_ids == self.sep_token_id).float()
+        sep_token_pos = ids.argmin(dim=-1).unsqueeze(-1)
+
+        # mask the tokens after this position
+        ids = torch.arange(0, input_ids.size(-1), device=input_ids.device)
+        m = ids > sep_token_pos
+        input_ids = input_ids.masked_fill(m, self.pad_token_id)
+        attention_mask = attention_mask.masked_fill(m, 0)
+
+        return {
+            f"{self.field}.input_ids": input_ids,
+            f"{self.field}.attention_mask": attention_mask,
+        }
