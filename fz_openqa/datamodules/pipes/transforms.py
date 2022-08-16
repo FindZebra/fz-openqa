@@ -1,7 +1,7 @@
+import warnings
 from typing import List
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -46,8 +46,7 @@ class TransformMcQuestions(Transform):
     """
 
     def _gather_features(self, batch: Batch) -> (torch.Size, torch.Tensor, Batch):
-        # get the tensors
-        targets = batch[self.target_key]
+        # get the features
         features = {k: v for k, v in batch.items() if k in self.keys}
         eg = [x for x in features.values() if isinstance(x, torch.Tensor)][0]
         n_options = eg.shape[1]
@@ -57,6 +56,15 @@ class TransformMcQuestions(Transform):
                     f"Attribute {k} doesn't have the right number of "
                     f"options ({n_options}), found {v.shape[1]} (shape={v.shape})"
                 )
+
+        # get the target
+        if self.target_key in batch.keys():
+            targets = batch[self.target_key]
+        else:
+            warnings.warn(
+                f"No target found in batch for key {self.target_key}, setting target to -1"
+            )
+            targets = torch.ones(len(batch), dtype=torch.long) * -1
 
         return eg.shape[:2], targets, features
 
@@ -77,9 +85,10 @@ class FlattenMcQuestions(TransformMcQuestions):
         # get the features
         shape, targets, features = self._gather_features(batch)
 
-        # build binary targets
+        # build binary targets, set all to zero is the target is not provided (targets < 0)
         binary_targets = torch.zeros(*shape, dtype=torch.bool, device=targets.device)
-        binary_targets.scatter_(1, targets.unsqueeze(1), 1)
+        if (targets >= 0).all():
+            binary_targets.scatter_(1, targets.unsqueeze(1), 1)
 
         # build the `question.id` feature
         question_id = torch.arange(shape[0], dtype=torch.long, device=targets.device)

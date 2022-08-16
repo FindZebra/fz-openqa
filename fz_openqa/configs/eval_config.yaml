@@ -4,29 +4,57 @@ defaults:
   - _self_
   - sys: local
   - trainer: minimal
+  - hydra: default
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
 
+
+base:
+  exp_id: ${overrides.datamodule.dset_name}-${overrides.datamodule.corpus_name}
+
 verbose: true
 setup_with_model: true
 checkpoint_type: last
-checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-cross-dpr-1.2.zip
-split: validation
-n_samples: 10
+# checkpoint: /scratch/valv/fz-openqa/runs/2022-08-03/14-24-59
+checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-cross-dpr-1.3.zip
+split:
+  - validation
+  # - test
+n_samples: 3
 
 overrides:
   sys:
     ${sys}
   base:
     infer_batch_mul: 400
+#  trainer:
+#    precision: 32
+  model:
+    parameters:
+      alpha: 0
   datamodule:
-    dset_name: medqa-us
+    dset_name: medmcqa
+    corpus_name: medwiki
+    # n_documents: 16
+    # es_temp: 10_000
+#    subset_size: 100 # todo
+#    corpus_subset_size: 100 # todo
     builder:
       dataset_builder:
         split: ${split}
     index_builder:
       persist_cache: true
-  model:
-    module:
-      max_batch_size: null
+    output_columns:
+      - answer.target
+      - question.uid
+      - question.row_idx
+      - question.input_ids
+      - question.attention_mask
+      - question.token_type_ids
+      - document.input_ids
+      - document.attention_mask
+      - document.row_idx
+      - document.match_score
+      - document.proposal_score
+      - document.proposal_rank

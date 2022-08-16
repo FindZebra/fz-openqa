@@ -1,3 +1,4 @@
+import warnings
 from copy import copy
 from typing import Dict
 
@@ -13,7 +14,7 @@ from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
 
 
-def cleanup_nans(score, key):
+def cleanup_nans(score, key, fill_mode="mean"):
     nan_count = score.isnan().float().sum()
     if nan_count > 0:
         no_nans = score[~score.isnan()]
@@ -35,7 +36,12 @@ def cleanup_nans(score, key):
         )
 
         # replace NaNs
-        score[score.isnan()] = score_mean
+        fill_value = {
+            "mean": score_mean,
+            "min": non_nan_min,
+            "max": non_nan_max,
+        }[fill_mode]
+        score[score.isnan()] = fill_value
 
     return nan_count
 
@@ -163,12 +169,12 @@ class RenyiGradients(Gradients):
         # count and replace NaNs in the scores
         try:
             nans_info = {
-                f"nans/{key}": cleanup_nans(score, key)
-                for key, score in [
-                    ("f_theta", f_theta_),
-                    ("g_theta", g_theta_),
-                    ("f_phi", f_phi_),
-                    ("log_s", log_s_),
+                f"nans/{key}": cleanup_nans(score, key, fill_mode)
+                for key, score, fill_mode in [
+                    ("f_theta", f_theta_, "mean"),
+                    ("g_theta", g_theta_, "mean"),
+                    ("f_phi", f_phi_, "mean"),
+                    ("log_s", log_s_, "min"),
                 ]
             }
         except Exception as e:
@@ -342,7 +348,7 @@ class RenyiGradients(Gradients):
             not (answer_target.sum(dim=1) == 1).all()
             or not (answer_target.max(dim=1).values == 1).all()
         ):
-            raise ValueError("answer.target must be a one-hot vector")
+            warnings.warn("answer.target is not a one-hot vector, selecting the first option")
         answer_target = answer_target.argmax(dim=1)
         data["answer.target"] = answer_target
         return data

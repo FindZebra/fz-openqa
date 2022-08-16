@@ -133,18 +133,24 @@ class DataModule(LightningDataModule):
             collate_fn=collate_fn,
         )
 
-    def _eval_loader(self, split, *, shuffle: bool = False):
+    def _eval_loader(self, split, **kwargs):
+
         collate_fn = self._get_collate_fn(split=split)
+
+        args = {
+            "batch_size": self.eval_batch_size,
+            "num_workers": self.num_workers,
+            "pin_memory": self.pin_memory,
+            "persistent_workers": self.persistent_workers,
+            "drop_last": self.drop_last,
+            "shuffle": False,
+            "collate_fn": collate_fn,
+        }
+        args.update(kwargs)
 
         return DataLoader(
             dataset=self.get_dataset(split),
-            batch_size=self.eval_batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            persistent_workers=self.persistent_workers,
-            drop_last=self.drop_last,
-            shuffle=shuffle,
-            collate_fn=collate_fn,
+            **args,
         )
 
     def _get_collate_fn(self, split: Split):

@@ -207,7 +207,7 @@ class QaBuilder(HfDatasetBuilder):
         if self.tokenizer:
             one_split = next(iter(dataset.keys()))
             has_document_columns = any("document." in c for c in dataset[one_split].column_names)
-            has_answer_columns = any("document." in c for c in dataset[one_split].column_names)
+            has_answer_columns = any("answer." in c for c in dataset[one_split].column_names)
             dataset = dataset.map(
                 Parallel(
                     self.get_question_tokenizer_pipe(),

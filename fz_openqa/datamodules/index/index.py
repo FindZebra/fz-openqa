@@ -69,6 +69,20 @@ MAX_AGE = 60 * 60 * 24 * 3  # 3 days
 TEMPDIR_SUFFIX = "-tempdir"
 
 
+def get_dataset_fingerprints(dataset: HfDataset, reduce: bool = False) -> Dict[str, str] | str:
+    if isinstance(dataset, Dataset):
+        fingerprint_state = dataset._fingerprint
+    elif isinstance(dataset, DatasetDict):
+        fingerprint_state = {k: v._fingerprint for k, v in dataset.items()}
+    else:
+        raise ValueError("Unsupported dataset type")
+
+    if reduce and not isinstance(fingerprint_state, str):
+        fingerprint_state = get_fingerprint(fingerprint_state)
+
+    return fingerprint_state
+
+
 def cleanup_cache(cache_dir, max_age: int = MAX_AGE):
     if os.path.exists(cache_dir):
         for file in Path(cache_dir).iterdir():
@@ -207,7 +221,7 @@ class Index(Pipe):
                 predict=self.predict_docs,
                 trainer=self.trainer,
                 collate_fn=self.corpus_collate_pipe,
-                target_file=self.vector_file(self.predict_docs.model, field="corpus"),
+                target_file=self.vector_file(self.predict_docs.model, suffix="corpus"),
                 persist=True,
             )
         else:
@@ -257,13 +271,13 @@ class Index(Pipe):
 
         # cache the query vectors
         if self.requires_vector:
-            dataset_caching = keep_only_columns(dataset, ALLOWED_COLUMNS_CACHING)
+            dataset_for_caching = keep_only_columns(dataset, ALLOWED_COLUMNS_CACHING)
 
             # flatten the dataset if it is nested
             if nesting_level > 0:
                 flatten_op = Flatten(level=nesting_level)
-                dataset_caching = flatten_op(
-                    dataset_caching,
+                dataset_for_caching = flatten_op(
+                    dataset_for_caching,
                     level=nesting_level,
                     keys=["question.input_ids", "question.attention_mask"],
                     desc="Flattening dataset before caching",
@@ -271,12 +285,17 @@ class Index(Pipe):
                 )
 
             # cache the vectors
+            dset_fingerprint = get_dataset_fingerprints(dataset_for_caching, reduce=True)
+            dset_cache_file = self.vector_file(
+                self.predict_queries.model, suffix=f"dset-{dset_fingerprint}"
+            )
+
             vectors = self.cache_vectors(
-                dataset_caching,
+                dataset_for_caching,
                 predict=self.predict_queries,
                 trainer=self.trainer,
                 collate_fn=self.dataset_collate_pipe,
-                target_file=self.vector_file(self.predict_queries.model, field="dataset"),
+                target_file=dset_cache_file,
                 persist=True,
             )
             # put the model back to cpu to save memory
@@ -286,12 +305,7 @@ class Index(Pipe):
 
         # fingerprint the state as: dataset_hash + \sum _i engine_i_hash, this allows
         # giving a unique fingerprint to the intermediate results of the engines
-        if isinstance(dataset, Dataset):
-            fingerprint_state = dataset._fingerprint
-        elif isinstance(dataset, DatasetDict):
-            fingerprint_state = {k: v._fingerprint for k, v in dataset.items()}
-        else:
-            raise ValueError("Unsupported dataset type")
+        fingerprint_state = get_dataset_fingerprints(dataset)
 
         # process the dataset with the Engines
         for engine in self.engines:
@@ -427,9 +441,9 @@ class Index(Pipe):
         else:
             raise TypeError(f"Unknown dataset type {type(dataset)}")
 
-    def vector_file(self, model, field: str = "corpus"):
+    def vector_file(self, model, suffix: str = "corpus"):
         model_fingerprint = get_fingerprint(model)
-        path = Path(self.cache_dir) / "vectors" / f"vectors-{model_fingerprint}-{field}.tsarrow"
+        path = Path(self.cache_dir) / "vectors" / f"vectors-{model_fingerprint}-{suffix}.tsarrow"
         return path
 
     def read_vectors_table(self, vector_file: Path) -> TensorArrowTable:

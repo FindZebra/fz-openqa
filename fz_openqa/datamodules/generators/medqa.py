@@ -88,6 +88,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
             features=datasets.Features(
                 {
                     "question.idx": datasets.Value("int32"),
+                    "question.uid": datasets.Value("string"),
                     "question.text": datasets.Value("string"),
                     "question.metamap": datasets.Value("string"),
                     "answer.target": datasets.Value("int32"),
@@ -137,6 +138,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
                 yield i, {
                     "question.idx": i,
                     "question.text": question,
+                    "question.uid": f"{split}-{i}",
                     "question.metamap": metamap,
                     "answer.target": target,
                     "answer.text": options,
