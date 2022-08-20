@@ -8,7 +8,8 @@ defaults:
   - override /model/module/gradients: distillation
 
 # todo: update ckpt path
-setup_with_model: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-cross-dpr-1.4.zip
+setup_with_model: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-cross-dpr-1.5.zip
+checkpoint_type: best
 
 trainer:
   max_steps: 100_000

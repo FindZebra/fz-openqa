@@ -148,7 +148,7 @@ def run(config):
             else:
                 targets = torch.zeros_like(preds) - 1
             acc = (preds == targets).float().mean().item()
-            logger.info(f"{n}/{config.n_samples} - acc={acc:.3%}")
+            logger.info(f"{n+1}/{config.n_samples} - acc={acc:.3%}")
 
         # gather all predictions
         probs = torch.stack(all_preds, dim=0)
