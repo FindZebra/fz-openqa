@@ -10,6 +10,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import datasets
+
 try:
     import plotly.graph_objects as go
 except ImportError:
@@ -43,10 +45,18 @@ class Analytic:
     output_file_name: str = "analytic.json"
     _allow_wandb: bool = False
 
-    def __init__(self, *, output_dir: str, verbose: bool = True, wandb_log: bool = False):
+    def __init__(
+        self,
+        *,
+        output_dir: str,
+        verbose: bool = True,
+        wandb_log: bool = False,
+        concatenate: bool = False,
+    ):
         super().__init__()
         self.verbose = verbose
         self.wandb_log = wandb_log
+        self.concatenate = concatenate
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
         self._output_file_path = self.output_dir / self.output_file_name
@@ -96,6 +106,9 @@ class Analytic:
         None
 
         """
+        if self.concatenate and isinstance(dataset, DatasetDict):
+            dataset = datasets.concatenate_datasets(list(dataset.values()))
+
         if isinstance(dataset, Dataset):
             size = len(dataset)
         elif isinstance(dataset, DatasetDict):

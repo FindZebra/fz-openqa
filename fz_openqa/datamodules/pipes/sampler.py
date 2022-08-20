@@ -7,11 +7,11 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
-import loguru
 import numpy as np
 import rich
 import torch
 from datasets import Split
+from loguru import logger
 from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
@@ -276,7 +276,7 @@ class PrioritySampler(Sampler):
         self.from_uniform = from_uniform
         self.mode = mode
         if from_uniform:
-            loguru.logger.info(
+            logger.info(
                 f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
                 f"This means the sampler will consider the base distribution to be uniform"
                 f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
@@ -326,6 +326,7 @@ class PrioritySampler(Sampler):
 
         assert mode in {"uniform", "exponential"}
 
+        logits_ = logits.clone()
         logits = PrioritySampler.clip_logits(logits, dim=-1)
         log_pz = logits.log_softmax(dim=-1)
 
@@ -364,9 +365,14 @@ class PrioritySampler(Sampler):
             raise ValueError(f"Unknown mode {mode}")
 
         # warn if NaNs are found
-        n_nans = log_qz[log_qz.isnan()].sum()
+        n_nans = log_qz.isnan().float().sum()
         if n_nans > 0:
-            loguru.logger.warning(f"Found {n_nans} NaNs in log_qz")
+            logger.warning(f"Found {n_nans} NaNs in log_qz")
+            rich.print(f">> log_qz: {log_qz}\nlogits_:{logits_}")
+        n_nans = log_pz.isnan().float().sum()
+        if n_nans > 0:
+            logger.warning(f"Found {n_nans} NaNs in log_pz")
+            rich.print(f">> log_pz: {log_pz}\nlogits_:{logits_}")
 
         # compute the log weights, and handle replacing the base distribution with u(z)
         if from_uniform:
@@ -382,12 +388,27 @@ class PrioritySampler(Sampler):
         return z, log_weight
 
     @staticmethod
-    def clip_logits(logits, dim=-1):
+    def clip_logits(logits: Tensor, dim=-1):
         cleanup_nans(logits, "PrioritySampler.clip_logits")
+
+        mask_pos_inf = logits.isinf() & (logits > 0)
+        non_inf_values = logits[(~logits.isinf()) & (~logits.isnan())]
+        if non_inf_values.numel() == 0:
+            logger.error("All logits are inf or -inf, setting to logits to zero")
+            return logits.zero_()
+
+        # handle the positive and negative infs
+        if mask_pos_inf.float().sum() > 0:
+            # positive inf values are not allowed, but handle it for now
+            logger.error(
+                f"Found {mask_pos_inf.float().sum()} positive infs in logits, "
+                f"replacing with max value. "
+                f"TODO: investigate the origin of the +infs"
+            )
+            logits.masked_fill_(mask_pos_inf, non_inf_values.max())
 
         # scale the logits
         M = logits.max(dim=dim, keepdim=True).values
-        M[M.isinf()] = 0.0
         logits = logits - M
 
         # clip log_pz for numerical stability

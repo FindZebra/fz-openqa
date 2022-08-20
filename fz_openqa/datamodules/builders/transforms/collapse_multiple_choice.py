@@ -1,5 +1,7 @@
+import rich
 from datasets import Dataset
 
+from ...utils.dataset import get_column_names
 from .flatten_multiple_choice import FlattenMultipleChoice
 from fz_openqa.datamodules.pipes import Pipe
 from fz_openqa.utils.datastruct import Batch
@@ -30,7 +32,9 @@ class CollapseMultipleChoice(FlattenMultipleChoice):
 
     def _flatten_dataset(self, dataset: Dataset, map_kwargs):
         # drop columns
-        dataset = dataset.remove_columns(["question.idx", "question.metamap", "question.row_idx"])
+        cols_to_remove = ["dataset.idx", "question.idx", "question.metamap", "question.row_idx"]
+        cols_to_remove = [c for c in cols_to_remove if c in get_column_names(dataset)]
+        dataset = dataset.remove_columns(cols_to_remove)
         # flatten the dataset
         dataset = dataset.map(
             SelectCorrectOption(key="answer.target"),

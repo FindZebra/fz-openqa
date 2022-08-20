@@ -1,9 +1,11 @@
+import warnings
 from typing import List
 from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from datasets import Split
+from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.datamodules.pipes import Flatten
 from fz_openqa.datamodules.pipes import Pipe
@@ -44,8 +46,7 @@ class TransformMcQuestions(Transform):
     """
 
     def _gather_features(self, batch: Batch) -> (torch.Size, torch.Tensor, Batch):
-        # get the tensors
-        targets = batch[self.target_key]
+        # get the features
         features = {k: v for k, v in batch.items() if k in self.keys}
         eg = [x for x in features.values() if isinstance(x, torch.Tensor)][0]
         n_options = eg.shape[1]
@@ -55,6 +56,15 @@ class TransformMcQuestions(Transform):
                     f"Attribute {k} doesn't have the right number of "
                     f"options ({n_options}), found {v.shape[1]} (shape={v.shape})"
                 )
+
+        # get the target
+        if self.target_key in batch.keys():
+            targets = batch[self.target_key]
+        else:
+            warnings.warn(
+                f"No target found in batch for key {self.target_key}, setting target to -1"
+            )
+            targets = torch.ones(len(batch), dtype=torch.long) * -1
 
         return eg.shape[:2], targets, features
 
@@ -75,9 +85,10 @@ class FlattenMcQuestions(TransformMcQuestions):
         # get the features
         shape, targets, features = self._gather_features(batch)
 
-        # build binary targets
+        # build binary targets, set all to zero is the target is not provided (targets < 0)
         binary_targets = torch.zeros(*shape, dtype=torch.bool, device=targets.device)
-        binary_targets.scatter_(1, targets.unsqueeze(1), 1)
+        if (targets >= 0).all():
+            binary_targets.scatter_(1, targets.unsqueeze(1), 1)
 
         # build the `question.id` feature
         question_id = torch.arange(shape[0], dtype=torch.long, device=targets.device)
@@ -207,3 +218,44 @@ class OptionBinarized(OptionDropout):
                 output[key] = [[y[i] for i in ids] for y, ids in zip(x, selected_ids)]
 
         return output
+
+
+class StripAnswer(Pipe):
+    """Remove tokens corresponding to the answer from the question"""
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerFast,
+        field: str = "question",
+        **kwargs,
+    ):
+        self.pad_token_id = tokenizer.pad_token_id
+        self.sep_token_id = tokenizer.sep_token_id
+        self.field = field
+        super().__init__(**kwargs)
+
+    @torch.no_grad()
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+
+        input_ids = batch[f"{self.field}.input_ids"]
+        attention_mask = batch[f"{self.field}.attention_mask"]
+
+        # identify the position of the first SEP token
+        ids = torch.linspace(0, 0.9999, input_ids.size(-1), device=input_ids.device)
+        for _ in range(max(0, input_ids.dim() - ids.dim())):
+            ids = ids.unsqueeze(0)
+        ids = ids + 1 - (input_ids == self.sep_token_id).float()
+        sep_token_pos = ids.argmin(dim=-1).unsqueeze(-1)
+
+        # mask the tokens after this position
+        ids = torch.arange(0, input_ids.size(-1), device=input_ids.device)
+        m = ids > sep_token_pos
+        input_ids = input_ids.masked_fill(m, self.pad_token_id)
+        attention_mask = attention_mask.masked_fill(m, 0)
+
+        return {
+            f"{self.field}.input_ids": input_ids,
+            f"{self.field}.attention_mask": attention_mask,
+        }

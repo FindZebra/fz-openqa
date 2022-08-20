@@ -104,7 +104,8 @@ class DropKeys(Pipe):
     def _call_batch(self, batch: Batch, **kwargs) -> Batch:
         """The call of the pipeline process"""
         for key in self.keys:
-            batch.pop(key)
+            if key in batch:
+                batch.pop(key)
         return batch
 
     def output_keys(self, input_keys: List[str]) -> List[str]:

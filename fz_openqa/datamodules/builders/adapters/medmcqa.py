@@ -36,6 +36,7 @@ class MedMCQAAdapter(DatasetAdapter):
                 "question": "question.text",
                 "cop": "answer.target",
                 "exp": "reasoning",
+                "id": "question.uid",
             }
         )
 

@@ -38,6 +38,9 @@ base:
   device_batch_size: 1
   eval_device_batch_size: 8
   infer_batch_mul: 300
+  exp_id: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
+  ckpt_filename: "best-model-{epoch:02d}-{step}-{validation/reader/Accuracy:.3f}"
+
 
 trainer:
   gradient_clip_val: 0.5
@@ -200,7 +203,7 @@ datamodule:
 logger:
   wandb:
     group: openqa-${datamodule.dset_name}
-    name: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
+    name: ${base.exp_id}
 
 
 # TODO: remove:

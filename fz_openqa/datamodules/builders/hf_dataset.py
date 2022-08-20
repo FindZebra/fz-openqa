@@ -108,6 +108,8 @@ class HfDatasetBuilder(DatasetBuilder):
         self.subset_size = subset_size
         self.num_proc = num_proc
         self.verbose = verbose
+        if isinstance(split, (str, Split)):
+            split = [split]
         self.split = split
 
         # tokenizer and dataset
@@ -143,7 +145,7 @@ class HfDatasetBuilder(DatasetBuilder):
             dataset = self.set_format(dataset, format=format)
         dataset = keep_only_columns(dataset, columns=columns)
         if isinstance(dataset, DatasetDict) and self.split is not None:
-            dataset = DatasetDict({self.split: dataset[self.split]})
+            dataset = DatasetDict({s: dataset[s] for s in self.split})
         return dataset
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:

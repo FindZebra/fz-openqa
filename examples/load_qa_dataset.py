@@ -7,7 +7,7 @@ sys.path.append(Path(__file__).parent.parent.as_posix())
 import datasets
 import hydra
 import rich
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.qa import QaBuilder, ConcatQaBuilder
@@ -15,6 +15,10 @@ from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.datamodules.analytics import SequenceLengths
 from fz_openqa.datamodules.builders.preprocessing.entity import EntityPreprocessing
+
+
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+OmegaConf.register_new_resolver("getcwd", os.getcwd)
 
 
 @hydra.main(
@@ -27,7 +31,7 @@ def run(config: DictConfig) -> None:
         datasets.set_caching_enabled(False)
 
     # initialize the tokenizer
-    bert_id = config.get("bert_id", "google/bert_uncased_L-2_H-128_A-2")
+    bert_id = config.get("bert_id", "michiyasunaga/BioLinkBERT-base")
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # preprocessing
@@ -51,16 +55,20 @@ def run(config: DictConfig) -> None:
         n_answer_tokens=0,
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
-        max_length=config.get("max_length", 312),
+        max_length=config.get("max_length", None),
         preprocessing_op=preprocessing_op,
         analytics=[
-            SequenceLengths(output_dir="analytics/", verbose=True),
+            SequenceLengths(
+                output_dir="analytics/",
+                verbose=True,
+                concatenate=config.get("concatenate_splits", False),
+            ),
         ],
     )
     dm = DataModule(builder=builder)
     dm.prepare_data()
     dm.setup()
-    dm.display_samples(n_samples=3)
+    dm.display_samples(n_samples=3, split=config.get("display_split", "train"))
 
     # access dataset
     rich.print(dm.dataset)
