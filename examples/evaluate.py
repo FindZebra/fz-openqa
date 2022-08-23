@@ -121,7 +121,7 @@ def run(config):
     logits_key = "_reader_logits_"
     all_results = {}
     for split in config.split:
-        all_preds = []
+        all_logits = []
         dset = datamodule.dataset[split]
         logger.info(
             f"Evaluating split <{split}> with n={config.n_samples} "
@@ -137,11 +137,11 @@ def run(config):
                 Split.TEST: datamodule.test_dataloader,
             }[split](shuffle=False)
             _ = trainer.test(model=model, dataloaders=loader, verbose=False)
-            all_preds.append(model.tracked_metrics[logits_key])
+            all_logits.append(model.tracked_metrics[logits_key])
 
             # print intermediate results
-            probs = torch.stack(all_preds, dim=0)
-            probs = probs.float().softmax(dim=-1).mean(0)
+            log_probs = torch.stack(all_logits, dim=0)
+            probs = log_probs.float().softmax(dim=-1).mean(0)
             preds = probs.argmax(dim=-1)
             if "answer.target" in dset.column_names:
                 targets = dset["answer.target"]
@@ -151,8 +151,8 @@ def run(config):
             logger.info(f"{n+1}/{config.n_samples} - acc={acc:.3%}")
 
         # gather all predictions
-        probs = torch.stack(all_preds, dim=0)
-        probs = probs.float().softmax(dim=-1).mean(0)
+        log_probs = torch.stack(all_logits, dim=0)
+        probs = log_probs.float().softmax(dim=-1).mean(0)
         preds = probs.argmax(dim=-1)
         if "answer.target" in dset.column_names:
             targets = dset["answer.target"]

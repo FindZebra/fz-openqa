@@ -19,8 +19,8 @@ checkpoint_type: best
 # checkpoint: /scratch/valv/fz-openqa/runs/2022-08-03/14-24-59
 checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/medmcqa-biolink-base-cross-dpr-1.5.zip
 split:
-  - validation
   - test
+  - validation
 n_samples: 10
 
 overrides:
@@ -28,6 +28,7 @@ overrides:
     ${sys}
   base:
     infer_batch_mul: 400
+    # eval_device_batch_size: 4
 #  trainer:
 #    precision: 32
   model:

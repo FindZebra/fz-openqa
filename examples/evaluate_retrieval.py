@@ -160,7 +160,7 @@ def run(config):
                 f.write(100 * "=" + "\n")
 
     if config.verbose:
-        datamodule.display_samples(n_samples=10, split=config.split)
+        datamodule.display_samples(n_samples=10, split=config.split[0])
 
     metrics = get_metrics(ranks)
     fz_metrics = get_metrics(fz_ranks)
