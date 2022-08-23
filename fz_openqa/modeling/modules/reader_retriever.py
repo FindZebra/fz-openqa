@@ -6,6 +6,7 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+import rich
 import torch
 from datasets import Split
 from loguru import logger
@@ -70,7 +71,15 @@ class ReaderRetriever(Module):
 
         # register the heads
         self.reader_head: Optional[Head] = maybe_instantiate(reader_head)
-        self.retriever_head: Head = maybe_instantiate(retriever_head)
+        self.retriever_head: Optional[Head] = maybe_instantiate(retriever_head)
+
+        # potentially disable the shared backbone
+        self.backbone_disabled = all(
+            head is None or not head.requires_external_backbone
+            for head in [self.reader_head, self.retriever_head]
+        )
+        if self.backbone_disabled:
+            logger.info("Disabling the shared backbone")
 
         # parameters
         self.max_batch_size = max_batch_size
@@ -120,8 +129,11 @@ class ReaderRetriever(Module):
         for field_name in field_names:
             if f"{field_name}.input_ids" in batch:
 
-                # process the `input_ids` using the backbone.yaml (BERT)
-                h = self._forward_backbone(batch, field_name, **kwargs)
+                # process the `input_ids` using the backbone (BERT)
+                if self.backbone_disabled:
+                    h = None
+                else:
+                    h = self._forward_backbone(batch, field_name, **kwargs)
 
                 # process `h` using the head(s)
                 if head is not None:

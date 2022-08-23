@@ -41,6 +41,8 @@ overrides:
     # es_temp: 10_000
 #    subset_size: 100 # todo
 #    corpus_subset_size: 100 # todo
+    dataset_transform:
+      null
     builder:
       dataset_builder:
         split: ${split}

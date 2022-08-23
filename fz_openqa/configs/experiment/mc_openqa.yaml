@@ -7,7 +7,7 @@ defaults:
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
   - override /model/module/retriever_head: dpr
-  - override /model/module/reader_head: dpr
+  - override /model/module/reader_head: cross_attention
   - override /model/module/gradients: renyi
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
@@ -35,7 +35,7 @@ base:
   exp_info: ""
   version: 1.0
   batch_size: 32
-  device_batch_size: 1
+  device_batch_size: 0.5
   eval_device_batch_size: 8
   infer_batch_mul: 300
   exp_id: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
@@ -141,7 +141,7 @@ datamodule:
   # documents: retrieval & sampling
   n_max_retrieved_documents: 1_000
   n_retrieved_documents: 100
-  n_documents: 16
+  n_documents: 8
 
   # ES parameters
   es_temp: 5.0
@@ -204,17 +204,3 @@ logger:
   wandb:
     group: openqa-${datamodule.dset_name}
     name: ${base.exp_id}
-
-
-# TODO: remove:
-#config_overrides:
-#  datamodule:
-#    index_builder:
-#      persist_cache: true
-#      faiss:
-#        config:
-#          index_factory: "shard:IVF100000,Flat"
-#          train_size: 1_000_000
-#          max_add_per_gpu: 1_000_000 # todo: increase this
-#          add_batch_size: 65536 # todo: increase this
-#          nprobe: 32

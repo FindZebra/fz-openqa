@@ -42,6 +42,13 @@ class Head(nn.Module, ABC):
         self.output_size = output_size
 
     @property
+    def requires_external_backbone(self) -> bool:
+        if not hasattr(self, "backbone"):
+            return True
+        else:
+            return self.backbone is None
+
+    @property
     def temperature(self) -> Tensor:
         return self._temperature
 
