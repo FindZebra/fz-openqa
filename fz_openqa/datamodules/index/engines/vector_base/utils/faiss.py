@@ -345,6 +345,13 @@ def populate_ivf_index(
         if np.isnan(xs).any():
             logger.warning(f"NaN detected in vectors {i0}-{i1}")
             xs[np.isnan(xs)] = 0
+
+        # check range TODO: remove
+        rich.print(
+            f">> {i0}-{i1}: shape={xs.shape}, min={xs.min()}, "
+            f"max={xs.max()}, mean={xs.mean()}, nans={np.isnan(xs).sum()}"
+        )
+
         gpu_index.add_with_ids(xs, np.arange(i0, i1))
         if 0 < max_add < gpu_index.ntotal:
             logger.info(f"Reached max. size per GPU ({max_add}), " f"flushing indices to CPU")
