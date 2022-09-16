@@ -116,7 +116,8 @@ def run(config):
     datamodule: DataModule = instantiate(checkpoint_config.datamodule)
     rich.print(datamodule)
     with ElasticSearchInstance(stdout=open("es.stdout.log", "w")):
-        datamodule.setup(trainer=trainer, model=model, clean_caches=False)
+        setup_model = model if config.get("setup_with_model", True) else None
+        datamodule.setup(trainer=trainer, model=setup_model, clean_caches=False)
 
     # iterate batch and compute metrics
     ranks = []
@@ -150,12 +151,14 @@ def run(config):
                 rich.print(desc)
 
                 # write to file
-                f.write(f"Question #{j} - deep:rank={rank}, api:rank={fz_rank}\n\n")
+                cui = eg["question.cui"]
+                f.write(f"Question #{j} - deep:rank={rank}, api:rank={fz_rank} - CUI={cui}\n\n")
                 f.write(f"{eg['question.text']}\n\n")
                 f.write(100 * "-" + "\n")
                 for n, doc in enumerate(eg["document.text"][:5]):
                     title = eg["document.title"][n]
-                    f.write(f"Passage #{n + 1}, Title: {title}.\n{doc}\n")
+                    doc_cui = eg["document.cui"][n]
+                    f.write(f"Passage #{n + 1}, CUI={doc_cui} | Title: {title}.\n{doc}\n")
                     f.write(100 * "." + "\n")
                 f.write(100 * "=" + "\n")
 
