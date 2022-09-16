@@ -80,11 +80,13 @@ class RenyiGradients(Gradients):
         *args,
         cartesian_max_size: int = None,
         reshape_input_data: bool = True,
+        differentiate_in_batch_approx: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.cartesian_max_size = cartesian_max_size
         self.reshape_input_data = reshape_input_data
+        self.differentiate_in_batch_approx = differentiate_in_batch_approx
 
     def __call__(
         self,
@@ -258,8 +260,17 @@ class RenyiGradients(Gradients):
         grad_L_a_alpha = w.detach() * log_p_a_D__q
         grad_L_a_alpha = grad_L_a_alpha.sum(dim=-1)
 
+        # In-batch approx. bound
+        L_A_inbatch = (f_theta.log_softmax(dim=-1) + g_theta.log_softmax(dim=1)).logsumexp(dim=-1)
+        L_a_inbatch = L_A_inbatch.gather(1, index=targets[:, None]).squeeze(1)
+
         # compute the loss
-        loss = -1 * grad_L_a_alpha
+        if self.differentiate_in_batch_approx:
+            loss = -1 * L_a_inbatch
+            rich.print(f">> Approx: {loss}")
+        else:
+            loss = -1 * grad_L_a_alpha
+            rich.print(f">> Exact: {loss}")
 
         # compute the terms for regularization and diagnostics
         kl_reader = kl_divergence(L_A_alpha, dim=1)
@@ -288,9 +299,8 @@ class RenyiGradients(Gradients):
         agreement_alpha = (pred_zero == pred_alpha).float().mean()
         accuracy_alpha = (targets == pred_alpha).float().mean()
 
-        # In-batch approx. bound
-        L_inbatch = (f_theta.log_softmax(dim=-1) + g_theta.log_softmax(dim=1)).logsumexp(dim=-1)
-        pred_inbatch = L_inbatch.argmax(dim=1)
+        # In-batch metrics
+        pred_inbatch = L_A_inbatch.argmax(dim=1)
         agreement_inbatch = (pred_zero == pred_inbatch).float().mean()
         accuracy_inbatch = (targets == pred_inbatch).float().mean()
 
