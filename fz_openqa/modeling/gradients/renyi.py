@@ -267,10 +267,8 @@ class RenyiGradients(Gradients):
         # compute the loss
         if self.differentiate_in_batch_approx:
             loss = -1 * L_a_inbatch
-            rich.print(f">> Approx: {loss}")
         else:
             loss = -1 * grad_L_a_alpha
-            rich.print(f">> Exact: {loss}")
 
         # compute the terms for regularization and diagnostics
         kl_reader = kl_divergence(L_A_alpha, dim=1)
