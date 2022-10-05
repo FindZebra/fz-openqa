@@ -2,3 +2,5 @@ _target_: fz_openqa.datamodules.builders.preprocessing.EntityPreprocessing
 text_key: question.text
 spacy_model: en_core_sci_lg
 only_train_set: true
+update_dataset: true
+dset_name: medqa-us

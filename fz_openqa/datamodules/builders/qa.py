@@ -140,17 +140,21 @@ class QaBuilder(HfDatasetBuilder):
 
         # load the base datasets
         kwargs = {"cache_dir": self.cache_dir}
-        dsets = [self.load_one_dataset(n, **kwargs) for n in dset_names]
+        dsets = {dset_name: self.load_one_dataset(dset_name, **kwargs) for dset_name in dset_names}
 
         # apply preprocessing operators
         if self.preprocessing_op is not None:
-            dsets = [
-                self.preprocessing_op(
+            dsets = {
+                dset_name: self.preprocessing_op(
                     d,
                     num_proc=self.num_proc,
+                    dset_name=dset_name,
                 )
-                for d in dsets
-            ]
+                for dset_name, d in dsets.items()
+            }
+
+        # convert the dict of datasets to a list of datasets
+        dsets = list(dsets.values())
 
         # concatenate the datasets
         if len(dsets) == 1:
