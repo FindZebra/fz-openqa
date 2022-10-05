@@ -132,11 +132,12 @@ def run(config):
                 eg = {k: v[i] for k, v in batch.items()}
                 doc_cuis = map(str.lower, eg["document.cui"])
                 doc_ids = eg["document.idx"]
+
                 doc_cuis = reduce_docs(doc_cuis, doc_ids)
                 que_cuis = list(map(str.lower, eg["question.cui"]))
 
                 # compute the rank
-                rank = min(get_rank(c, list(doc_cuis)) for c in que_cuis)
+                rank = min(get_rank(c, doc_cuis) for c in que_cuis)
                 ranks.append(rank)
                 metrics = get_metrics(ranks)
 
@@ -144,6 +145,8 @@ def run(config):
                 fz_rank = get_fz_rank(eg["question.text"], que_cuis)
                 fz_ranks.append(fz_rank)
                 fz_metrics = get_metrics(fz_ranks)
+
+                rich.print(f">> rank: {rank}, fz:rank: {fz_rank}")
 
                 # print the intermediate results
                 desc = ", ".join(f"{k}={v:.3f}" for k, v in metrics.items())

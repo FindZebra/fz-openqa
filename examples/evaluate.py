@@ -112,7 +112,9 @@ def run(config):
     logger.info(f"Instantiating datamodule <{checkpoint_config.datamodule._target_}>")
     datamodule: DataModule = instantiate(checkpoint_config.datamodule)
     with ElasticSearchInstance(stdout=open("es.stdout.log", "w")):
-        datamodule.setup(trainer=trainer, model=model, clean_caches=False)
+        setup_model = model if config.get("setup_with_model", True) else None
+        rich.print(f">>> SETUP MODEL {setup_model}")
+        datamodule.setup(trainer=trainer, model=setup_model, clean_caches=False)
     if config.verbose:
         rich.print(datamodule.dataset)
         datamodule.display_samples(n_samples=3, split=config.split[0])
