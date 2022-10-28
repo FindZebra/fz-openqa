@@ -12,16 +12,12 @@
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
 
-
-[![unit testing](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml/badge.svg)](https://github.com/vlievin/fz-openqa/actions/workflows/unit-test.yaml)
-[![hackmd-github-sync-badge](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg/badge)](https://hackmd.io/HQFPXkocSMKuJvtWWVJNKg)
-
  </div>
 
 ## Setup
 
 <details>
-<summary>Evironment</summary>
+<summary>Environment</summary>
 
 1. Install poetry
 
@@ -53,7 +49,7 @@ tar -xzf elasticsearch-7.14.1-linux-x86_64.tar.gz
 ```
 To run ElasticSearch navigate to the `elasticsearch-7.14.1` folder in the terminal and run `./bin/elasticsearch`.
 
-5. Run something using the environment
+5. Run something using the poetry environment
 
 ```shell
 poetry run python <file.py>
@@ -62,90 +58,6 @@ poetry run which python # return the path to the virtual environment
 
 </details>
 
-<details>
-<summary>Running the code</summary>
-
-`src.cli.main` can be called directly using the command `fzqa` (which can be edited in the `.toml` file):
-
-```shell
-poetry run fzqa <args>
-```
-
-Or run the python script directly:
-
-```shell
-poetry run python run.py <args>
-```
-
-</details>
-
-
-<details>
-<summary>Using Github</summary>
-
-### Opening issues
-
-Each task, bug or idea should be registered as an issue. New issues are automatically added
-to `project/development/todo`. Use `- [ ] <text>` to describe each item in a task.
-
-### Using the project tab
-
-Use the [project page](https://github.com/vlievin/fz-openqa/projects) to keep track of progress
-
-### Branching
-
-Do not implement features in the `master` branch. Create a new branch for each issue. Use a pull request to merge the
-branch with master and close the corresponding issue. Closed issues are automatically moved
-to `project/development/done`.
-
-</details>
-
-<details>
-
-<summary>Code formatting</summary>
-
-### [Black](https://github.com/psf/black)
-
-Black is a code formatter for python. You can run it indepedently using
-
-```shell
-black <directory>
-```
-
-### [flake8](https://flake8.pycqa.org/en/latest/)
-
-Flake8 is a tool to ensure the code to be correctly formatted.
-
-### Setting up git hooks using [pre-commit](http://python-poetry.org)
-
-Git hooks allows to execute some piece of code before every commit/push/pull request/... Pre-commit hooks aim at
-checking the format of the code before a commit. They can be installed using the following commands:
-
-```shell
-pip install pre-commit
-pre-commit install
-```
-
-At every commit, both `black` and `flake8` will be run. If the code is not `flake8` compliant, the commit will be
-rejected. Furthermore, you can run `flake8` and `black` using:
-
-```shell
-pre-commit run --all-files
-```
-
-</details>
-
-<details>
-
-<summary>Unit tests</summary>
-
-Core functions should be properly tested. Unit tests can be implemented in `tests/` and executed using:
-
-```shell
-poetry run python -m unittest discover
-```
-
-</details>
 
 ## Running the code
 
@@ -227,8 +139,6 @@ HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1  poetry run python run.py ...
 ## Documentation
 
 ### HfDatasetBuilder design
-
-# todo: update this section
 
 All modules should inherit from `HfDatasetBuilder`, which in turn inherits from `pl.LightningModule`.
 Each HfDatasetBuilder features one `Module` which role is to compute the loss and the metrics.
@@ -342,26 +252,6 @@ The whole pipeline is pictured bellow:
 
 </details>
 
-## Future Improvements
-
-<details>
-<summary>Feed the answer choices to the retriever</summary>
-At the moment the current Module does not use the answer choices for retrieval. Concatenate the answer choices with the query.
-</details>
-
-<details>
-<summary>Late-interaction reader Module</summary>
-At the moment, the reader Module requires concatenating the query with the document,
-which requires processing the query and document two times (1 time for IR, one time for reading comprehension).
-A late interaction Module for the reader component would allow processing each input one time with the BERT Module.
-</details>
-
-<details>
-<summary>End-to-end training</summary>
-The current retriever only learns to identify the golden passage (which is noisily labelled).
-Sample from the retriever lives and learn from the signal given by the reader component.
-</details>
-
 ## Tips and Tricks
 
 <details>
@@ -384,7 +274,7 @@ screen -S cleaner poetry run python delete_checkpoints.py --directory /scratch/v
 </details>
 
 <details>
-<summary>ElastiSearch tips and tricks/summary>
+<summary>Elastisearch tips and tricks</summary>
 
 ```bash
 # check indexes
@@ -398,9 +288,8 @@ ES_JAVA_OPTS="-Xms16g -Xmx16g" elasticsearch
 ```
 </details>
 
- <details>
+<details>
 <summary>Export `elasticsearch`</summary>
-
 Export `elasticsearch` so it can be called from anywhere. In `.bash_profile`add the lines:
 
 ```bash
@@ -409,23 +298,6 @@ export PATH="$ES_HOME/bin:$PATH"
 ```
 </details>
 
- <details>
-<summary>Generate documentation</summary>
-
-```bash
-poetry run handsdown --exclude fz_openqa/configs -o docs
-```
-
-</details>
-## Implemented papers
-
- 1. [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906?fbclid=IwAR01S2dwYNwVjdvlhpPFJ4YrIf-FKGkBU1eCM05lg4p_G732YiM3puX4N2s)
-  * Dense retriever
-  * Relevance Module (reader)
-  * End-to-end evaluation (sample 100 passages with the retriever, score with the relevance Module, and sample the answer)
- 2. [RocketQA](https://arxiv.org/pdf/2010.08191.pdf)
-  * Batch-negative and hard negatives
-  * Cross-batch negatives: compute the retriever loss across devices
 
 ## Credits
 
