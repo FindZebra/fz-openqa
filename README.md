@@ -1,9 +1,8 @@
 <div align="center">
-
- ![FindZebra: rare disease search](fz-banner.png)
-
+ 
+> **Warning** Work in progress
+ 
 # Variational Open Domain Question Answering
-
 
 <p align="center">
 <a href="https://pytorch.org/get-started/locally/"><img alt="Python" src="https://img.shields.io/badge/-Python 3.9-blue?style=for-the-badge&logo=python&logoColor=white"></a>
