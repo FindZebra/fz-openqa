@@ -2,7 +2,7 @@
 
  ![FindZebra: rare disease search](fz-banner.png)
 
-# Medical Open Domain Question Answering
+# Variational Open Domain Question Answering
 
 
 <p align="center">
@@ -13,6 +13,10 @@
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
 
  </div>
+ 
+## Abstract
+
+> We introduce the Variational Open-Domain (VOD) framework for end-to-end training and evaluation of retrieval-augmented models (open-domain question answering and language modelling). We show that the Rényi variational bound, a lower bound to the task marginal likelihood, can be exploited to aid optimization and use importance sampling to estimate the task log-likelihood lower bound and its gradients using samples drawn from an auxiliary retriever (approximate posterior). The framework can be used to train modern retrieval-augmented systems end-to-end using tractable and consistent estimates of the Rényi variational bound and its gradients. We demonstrate the framework's versatility by training reader-retriever BERT-based models on multiple-choice medical exam questions (MedMCQA and USMLE). We registered a new state-of-the-art for both datasets (MedMCQA: 62.9\%, USMLE: 55.0\%). Last, we show that the retriever part of the learned reader-retriever model trained on the medical board exam questions can be used in search engines for a medical knowledge base. 
 
 ## Setup
 
@@ -309,3 +313,20 @@ The package relies on:
 * [Weights and Biases](https://wandb.ai) for clean logging and experiment tracking
 * [Poetry](https://python-poetry.org/) for stricter dependency management and easy packaging
 * The original template was copied form [ashleve](https://github.com/ashleve/lightning-hydra-template)
+
+
+## Citation
+
+```
+@misc{https://doi.org/10.48550/arxiv.2210.06345,
+  doi = {10.48550/ARXIV.2210.06345},
+  url = {https://arxiv.org/abs/2210.06345},
+  author = {Liévin, Valentin and Motzfeldt, Andreas Geert and Jensen, Ida Riis and Winther, Ole},
+  keywords = {Computation and Language (cs.CL), Information Retrieval (cs.IR), Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences, I.2.7; H.3.3; I.2.1},
+  title = {Variational Open-Domain Question Answering},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+
+```
