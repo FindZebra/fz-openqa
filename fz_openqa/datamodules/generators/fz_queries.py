@@ -2,6 +2,7 @@ import csv
 from pathlib import Path
 
 import datasets
+import rich
 
 TXT_PATTERN = r"^.*\.txt$"
 
@@ -17,11 +18,13 @@ class FzQueriesConfig(datasets.BuilderConfig):
         super(FzQueriesConfig, self).__init__(**kwargs)
 
 
-_DESCRIPTION = "A class to load the english MedQA corpus"
+_DESCRIPTION = "Load the FindZebra queries"
 _VERSION = "0.0.1"
-_HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
+_HOMEPAGE = "https://github.com/vlievin/fz-openqa"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1GJ6CiPSjBv3gGO7R9Dg4q20XLCV_cxEI/view?usp=sharing"
+_URL = (
+    "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/fz-retrieval-validation.csv"
+)
 
 
 class FzQueriesGenerator(datasets.GeneratorBasedBuilder):
@@ -45,19 +48,13 @@ class FzQueriesGenerator(datasets.GeneratorBasedBuilder):
             citation=_CITATION,
         )
 
-    @staticmethod
-    def _get_drive_url(url):
-        base_url = "https://drive.google.com/uc?id="
-        split_url = url.split("/")
-        return base_url + split_url[5]
-
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        downloaded_file = dl_manager.download_and_extract(_URL)
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
-                gen_kwargs={"filepath": Path(downloaded_file) / "fz-queries.csv"},
+                gen_kwargs={"filepath": Path(downloaded_file)},
             )
         ]
 

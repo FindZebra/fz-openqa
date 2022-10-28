@@ -21,7 +21,7 @@ persistent_workers: False
 drop_last: False
 
 # global: dataset preprocessing
-add_encoding_tokens: true
+add_qad_tokens: true
 add_special_tokens: true
 subset_size: null
 corpus_subset_size: null
@@ -30,7 +30,8 @@ cache_dir: ${sys.shared_cache_dir}
 
 
 # global: openqa
-n_retrieved_documents: 1000
+n_retrieved_documents: 100
+n_max_retrieved_documents: 1000
 n_documents:
   train: 10
   validation: 100

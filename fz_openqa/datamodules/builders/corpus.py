@@ -52,7 +52,7 @@ CORPUS_GENERATORS = {
     "medwiki-v3": (medwiki_corpus.__file__, "v3"),
     "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
     "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
-    "fz": (fz_corpus.__file__,),
+    "findzebra": (fz_corpus.__file__,),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__, None),
@@ -177,8 +177,10 @@ class CorpusBuilder(HfDatasetBuilder):
                 def drop_cols(dset: Dataset):
                     cols = set(dset.column_names)
                     cols_to_drop = cols - shared_columns
-                    logger.warning(f"Dropping columns {cols_to_drop} from dataset")
-                    return dset.remove_columns(list(cols_to_drop))
+                    if len(cols_to_drop) > 0:
+                        logger.warning(f"Dropping columns {cols_to_drop} from dataset")
+                        dset = dset.remove_columns(list(cols_to_drop))
+                    return dset
 
                 dsets = [drop_cols(dset) for dset in dsets]
             return concatenate_datasets(dsets)
@@ -237,6 +239,7 @@ class CorpusBuilder(HfDatasetBuilder):
                         "title.offset_mapping",
                         "title.text",
                         "title.title",
+                        "title.cui",
                     ]
                 ),
                 update=True,
@@ -246,12 +249,15 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
         # process the whole dataset (tokenization + passage generation)
+        cols_to_remove = ["idx", "text", "title"]
+        if "cui" in dataset.column_names:
+            cols_to_remove.append("cui")
         dataset = dataset.map(
             preprocessing,
             batched=True,
             batch_size=10,
             num_proc=self.num_proc,
-            remove_columns=["idx", "text", "title"],
+            remove_columns=cols_to_remove,
             desc="Tokenizing documents and extracting overlapping passages",
         )
 
@@ -272,14 +278,20 @@ class CorpusBuilder(HfDatasetBuilder):
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=["document.idx", "document.uid", "document.title", "document.question_idx"],
+            global_keys=[
+                "document.idx",
+                "document.uid",
+                "document.title",
+                "document.question_idx",
+                "document.cui",
+            ],
             verbose=self.verbose,
         )
 
     def get_text_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
-        add_encoding_tokens = self.to_sentences and self.add_encoding_tokens
+        add_qad_tokens = self.to_sentences and self.add_qad_tokens
         add_special_tokens = self.to_sentences and self.add_special_tokens
         return Sequential(
             FormatAndTokenize(
@@ -289,9 +301,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
                 add_special_tokens=add_special_tokens,
-                add_encoding_tokens=add_encoding_tokens,
+                add_qad_tokens=add_qad_tokens,
                 return_offsets_mapping=True,
-                spec_tokens=DOC_TOKEN,
+                qad_tokens=DOC_TOKEN,
                 shape=None,
                 update=True,
                 input_filter=In(["text"]),
@@ -311,9 +323,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
                 add_special_tokens=False,
-                add_encoding_tokens=False,
+                add_qad_tokens=False,
                 return_offsets_mapping=True,
-                spec_tokens=None,
+                qad_tokens=None,
                 shape=None,
                 update=True,
                 input_filter=In(["title"]),
@@ -322,22 +334,40 @@ class CorpusBuilder(HfDatasetBuilder):
         )
 
     def get_prefix_tokens(self):
-        if self.add_encoding_tokens:
+        """Get the prefix tokens for each passage"""
+        start_token = self.tokenizer.cls_token_id
+        if start_token is None:
+            if self.tokenizer.bos_token != "<|endoftext|>":
+                start_token = self.tokenizer.bos_token_id
+
+        if self.add_qad_tokens:
             doc_token_id = self.tokenizer.get_vocab()[DOC_TOKEN]
-            start_tokens = [self.tokenizer.cls_token_id, doc_token_id]
+            start_tokens = [start_token, doc_token_id]
         else:
-            start_tokens = [self.tokenizer.cls_token_id]
-        return start_tokens
+            start_tokens = [start_token]
+
+        return [s for s in start_tokens if s is not None]
 
     def get_suffix_tokens(self):
-        return [self.tokenizer.sep_token_id] if self.add_special_tokens else []
+        """Get the suffix tokens for each passage"""
+        suffix_tokens = []
+        if self.add_special_tokens:
+            end_token = self.tokenizer.sep_token_id
+            if end_token is None:
+                if self.tokenizer.eos_token != "<|endoftext|>":
+                    end_token = self.tokenizer.eos_token_id
+
+            if end_token is not None:
+                suffix_tokens = [end_token]
+
+        return suffix_tokens
 
     def _get_collate_pipe(self) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
 
         # get the raw text questions, extract and collate
         raw_collate_pipe = Collate(
-            keys=["document.text", "document.title", "document.question_idx"]
+            keys=["document.text", "document.title", "document.question_idx", "document.cui"]
         )
 
         # collate simple attributes

@@ -6,4 +6,4 @@ model_checkpoint:
   mode: ${base.target_mode} # can be "max" or "min"
   verbose: False
   dirpath: "${getcwd:}/checkpoints/"
-  filename: "best-model-{epoch:02d}"
+  filename: ${base.ckpt_filename}

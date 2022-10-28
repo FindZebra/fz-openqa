@@ -4,7 +4,7 @@ defaults:
   - base
   - override /model: retriever
   - override model/module/head: dpr # todo colbert
-  - override /model/bert: pubmed # todo: pubmed
+  - override /model/backbone: pubmed # todo: pubmed
   - override /callbacks:
       - checkpoint
       - progress_bar

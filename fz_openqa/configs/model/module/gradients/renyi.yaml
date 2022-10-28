@@ -1,3 +1,5 @@
 _target_: fz_openqa.modeling.gradients.RenyiGradients
 cartesian_max_size: null
+reshape_input_data: true
+differentiate_in_batch_approx: false
 _id: "renyi"

@@ -3,7 +3,7 @@
 defaults:
   - base
   - override /model: medqa_reader
-  - override /model/bert: pubmed
+  - override /model/backbone: pubmed
   - override /datamodule/builder: concat_openqa
   - override /datamodule/index_builder: elasticsearch
   - override /datamodule/sampler: boost_positives
@@ -65,7 +65,7 @@ datamodule:
   n_documents: 3
 
   # encoding tokens
-  add_encoding_tokens: true
+  add_qad_tokens: true
   add_special_tokens: true
 
   # tag documents as positive or negative

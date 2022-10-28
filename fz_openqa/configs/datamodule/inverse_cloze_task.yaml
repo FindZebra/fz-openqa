@@ -15,7 +15,7 @@ persistent_workers: False
 drop_last: False
 
 # global: dataset preprocessing
-add_encoding_tokens: true
+add_qad_tokens: true
 add_special_tokens: true
 use_subset: false
 num_proc: 4

@@ -15,7 +15,7 @@ class FormatAndTokenize(Sequential):
         prefix: str,
         text_formatter: TextFormatter,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool,
+        add_qad_tokens: bool,
         max_length: Optional[int],
         spec_tokens: List,
         shape: Optional[List[int]],

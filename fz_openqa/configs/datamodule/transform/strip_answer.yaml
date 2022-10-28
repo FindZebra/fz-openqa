@@ -1,0 +1,5 @@
+_target_: fz_openqa.datamodules.pipes.StripAnswer
+
+tokenizer: ${datamodule.tokenizer}
+field: question
+update: true

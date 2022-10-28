@@ -33,11 +33,15 @@ class FaissEngine(IndexEngine):
         "train_on_cpu",
         "_index",
         "tempmem",
+        "max_add_per_gpu",
+        "add_batch_size",
     ]
     no_index_name = IndexEngine.no_index_name + [
         "keep_on_cpu",
         "train_on_cpu",
         "tempmem",
+        "max_add_per_gpu",
+        "add_batch_size",
     ]
 
     _default_config: Dict[str, Any] = {
@@ -47,6 +51,8 @@ class FaissEngine(IndexEngine):
         "train_on_cpu": False,
         "train_size": 1_000_000,
         "tempmem": -1,
+        "max_add_per_gpu": 100_000,
+        "add_batch_size": 1_000,
         "metric_type": MetricType.inner_product.name,
         "random_train_subset": False,
     }
@@ -121,6 +127,8 @@ class FaissEngine(IndexEngine):
             train_on_cpu=config["train_on_cpu"],
             keep_on_cpu=config["keep_on_cpu"],
             tempmem=config["tempmem"],
+            max_add_per_gpu=config["max_add_per_gpu"],
+            add_batch_size=config["add_batch_size"],
         )
 
     def load(self):

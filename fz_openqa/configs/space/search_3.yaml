@@ -41,7 +41,7 @@ datamodule.train_sampler.n_neg:
   _target_: ray.tune.randint
   lower: 0
   upper: 4
-datamodule.add_encoding_tokens:
+datamodule.add_qad_tokens:
   _target_: ray.tune.choice
   categories:
     - False

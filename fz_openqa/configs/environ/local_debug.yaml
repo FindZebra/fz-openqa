@@ -2,7 +2,7 @@
 
 defaults:
   - override /sys: local.yaml
-  - override /model/bert: mini.yaml
+  - override /model/backbone: mini.yaml
 
 trainer:
   gpus: 0

@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+from fz_openqa.datamodules.analytics import SequenceLengths
+
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
@@ -12,7 +14,6 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 from fz_openqa import configs
-from fz_openqa.datamodules.analytics.corpus_statistics import ReportCorpusStatistics
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.pipes import TextFormatter
@@ -33,7 +34,9 @@ def run(config: DictConfig) -> None:
     datasets.set_caching_enabled(True)
 
     # initialize the tokenizer
-    tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="bert-base-cased")
+    tokenizer = init_pretrained_tokenizer(
+        pretrained_model_name_or_path="michiyasunaga/BioLinkBERT-base"
+    )
 
     # initialize text formatter
     textformatter = TextFormatter(
@@ -50,11 +53,19 @@ def run(config: DictConfig) -> None:
         tokenizer=tokenizer,
         to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,
-        use_subset=config.get("use_subset", False),
+        subset_size=config.get("subset_size", None),
         cache_dir=config.sys.get("cache_dir"),
         num_proc=config.get("num_proc", 2),
-        analytics=[ReportCorpusStatistics(verbose=True, output_dir="./analyses")],
         append_document_title=config.get("append_title", True),
+        passage_length=config.get("window_size", 200),
+        passage_stride=config.get("window_stride", 100),
+        analytics=[
+            SequenceLengths(
+                output_dir="analytics/",
+                verbose=True,
+                concatenate=config.get("concatenate_splits", False),
+            ),
+        ],
     )
     dm = DataModule(builder=builder)
 
@@ -63,6 +74,7 @@ def run(config: DictConfig) -> None:
 
     # access dataset
     rich.print(dm.dataset)
+    rich.print(f"> n documents: {len(set(dm.dataset['document.idx']))}")
 
     # sample a batch
     _ = next(iter(dm.train_dataloader()))

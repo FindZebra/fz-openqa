@@ -26,6 +26,7 @@ base:
   sharing_strategy: file_system
   git_hash: ${git_hash:}
   git_hash_short: ${git_hash_short:}
+  ckpt_filename: "best-model-{epoch:02d}-{step}"
 
 trainer:
   gpus: ${n_gpus:}

@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - override /model/bert: mini
+  - override /model/backbone: mini
   - override /model/module/retriever_head: colbert
   - override /model/module/reader_head: colbert
   - override /model/module/gradients: in_batch

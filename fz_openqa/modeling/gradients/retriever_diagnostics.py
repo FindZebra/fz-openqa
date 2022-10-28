@@ -18,14 +18,12 @@ def retriever_diagnostics(
     retriever_score: Tensor,
     proposal_score: Optional[Tensor],
     proposal_rank: Optional[Tensor] = None,
-    match_score: Optional[Tensor] = None,
     doc_ids: Optional[Tensor] = None,
     raw_doc_ids: Optional[Tensor] = None,
     reader_score: Optional[Tensor] = None,
     retriever_agg_score: Optional[Tensor] = None,
     retriever_log_p_dloc: Optional[Tensor] = None,
     share_documents_across_batch: bool = False,
-    alpha: float = None,
     **kwargs,
 ) -> Dict:
     """
@@ -47,6 +45,8 @@ def retriever_diagnostics(
     retriever_probs = retriever_log_probs.exp()
 
     # arg_i(cdf=p)
+    if retriever_probs.device == torch.device("cpu"):
+        retriever_probs = retriever_probs.to(torch.float32)
     sorted_probs = retriever_probs.sort(dim=-1, descending=True).values
     cdf = sorted_probs.cumsum(dim=-1)
     for p in [0.5, 0.9]:
@@ -83,11 +83,6 @@ def retriever_diagnostics(
             kl_div = retriever_probs * (retriever_log_probs - proposal_log_probs)
             kl_div = kl_div.sum(dim=-1)
             output["retriever/kl_div"] = kl_div.mean()
-
-            if alpha is not None:
-                reg_log_probs = (1 - alpha) * retriever_log_probs + alpha * proposal_log_probs
-                reg_entropy = -(reg_log_probs.exp() * reg_log_probs).sum(dim=-1)
-                output["retriever/entropy_alpha"] = reg_entropy.mean()
 
     # retrieval rank info
     if proposal_rank is not None:

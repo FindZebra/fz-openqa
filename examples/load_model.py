@@ -71,7 +71,7 @@ from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, ConcatTextFields
 from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
-from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.datamodules.utils.transformations import append_prefix
 
 
 class TestData:
@@ -179,7 +179,7 @@ class TestData:
     def get_preprocessing_pipe(self):
         # concat question and answer
         add_spec_tokens_pipe = Apply(
-            {"question.text": partial(add_spec_token, self.tokenizer.sep_token)}, element_wise=True
+            {"question.text": partial(append_prefix, self.tokenizer.sep_token)}, element_wise=True
         )
         concat_qa = Sequential(
             add_spec_tokens_pipe,
@@ -242,7 +242,7 @@ def run(config: DictConfig) -> None:
             rich.print(f"> {k}: {v.shape}, mean={v.mean():.2e}, std={v.std():.2e}")
 
     bert_params = {
-        k: get_fingerprint(v) for k, v in model.named_parameters() if "bert.encoder" in k
+        k: get_fingerprint(v) for k, v in model.named_parameters() if "backbone.encoder" in k
     }
     rich.print(f"> BERT fingerprint={get_fingerprint(bert_params)}")
 

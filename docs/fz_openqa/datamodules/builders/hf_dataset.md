@@ -21,7 +21,7 @@
 class HfDatasetBuilder(DatasetBuilder):
     def __init__(
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool = True,
+        add_qad_tokens: bool = True,
         cache_dir: str = 'cache/',
         max_length: Optional[int] = 512,
         use_subset: bool = False,

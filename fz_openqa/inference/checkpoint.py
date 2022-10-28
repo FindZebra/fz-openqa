@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -23,14 +24,14 @@ def get_drive_url(url):
     return base_url + split_url[5]
 
 
-def download_asset_from_gdrive(
-    url: str, cache_dir: Optional[str] = None, extract: bool = False
-) -> str:
+def download_asset(url: str, cache_dir: Optional[str] = None, extract: bool = False) -> str:
     dl_manager = datasets.utils.download_manager.DownloadManager(
-        dataset_name="fz_ner_annotator", data_dir=cache_dir
+        dataset_name="fz_openqa_assets", data_dir=cache_dir
     )
     if extract:
-        return dl_manager.download_and_extract(get_drive_url(url))
+        if "drive.google" in url:
+            url = get_drive_url(url)
+        return dl_manager.download_and_extract(url)
     else:
         return dl_manager.download(get_drive_url(url))
 
@@ -39,7 +40,7 @@ def maybe_download_weights(checkpoint: str, cache_dir: Optional[str] = None) -> 
     is_url = isinstance(checkpoint, str) and checkpoint.startswith("https://")
     if is_url:
         logger.info(f"Using weights from {checkpoint}")
-        checkpoint = download_asset_from_gdrive(checkpoint, cache_dir=cache_dir, extract=True)
+        checkpoint = download_asset(checkpoint, cache_dir=cache_dir, extract=True)
     return checkpoint
 
 
@@ -80,21 +81,12 @@ class CheckpointLoader:
     def print_config(self, **kwargs):
         print_config(self.config, resolve=False, **kwargs)
 
-    def model_checkpoint_path(self, match: Optional[str] = None) -> Optional[Path]:
+    def model_checkpoint_paths(self, match: Optional[str] = None) -> List[Path]:
         checkpoints = (self.checkpoint_dir / "checkpoints").iterdir()
         checkpoints = filter(lambda x: x.suffix == ".ckpt", checkpoints)
         if match is not None:
             checkpoints = filter(lambda x: match in x.name, checkpoints)
-        try:
-            return next(iter(checkpoints))
-        except StopIteration:
-            return None
-
-    def model_checkpoint(self, last=False) -> Union[None, Path]:
-        if last:
-            return self.model_checkpoint_path(match="last")
-        else:
-            return self.model_checkpoint_path(match="best")
+        return list(checkpoints)
 
     def load_tokenizer(self):
         return instantiate(self.config.datamodule.tokenizer)
@@ -113,29 +105,41 @@ class CheckpointLoader:
         return self._tokenizer
 
     def load_bert(self):
-        return instantiate(self.config.model.bert)
+        return instantiate(self.config.model.backbone)
 
     def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
-        path = self.model_checkpoint_path(match=checkpoint_type)
+        paths = self.model_checkpoint_paths(match=checkpoint_type)
         # if path is not None and not zero_shot:
         #     logger.info(f"Loading model from checkpoint: {path}")
-        #     # need to override the saved `tokenizer` and `bert` hyperparameters
+        #     # need to override the saved `tokenizer` and `backbone` hyperparameters
         #     # so `sys.cache_dir` can be overridden
         #     cls = _resolve_target(self.config.model._target_)
         #     model = cls.load_from_checkpoint(
         #         path,
         #         tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
-        #         bert=OmegaConf.to_object(self.config.model.bert),
+        #         backbone=OmegaConf.to_object(self.config.model.backbone),
         #         **kwargs,
         #     )
         # else:
         #     logger.warning("No checkpoint found. Initializing model without checkpoint.")
         #     model = instantiate(self.config.model, _recursive_=False)
+        if len(paths) == 0 or zero_shot:
+            if zero_shot:
+                logger.info("Zero-shot. Initializing model without checkpoint.")
+            else:
+                logger.warning("No checkpoint found. Initializing model without checkpoint.")
+            model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
 
-        if path is not None and not zero_shot:
+        else:
+            if len(paths) > 1:
+                logger.warning(
+                    f"Found multiple checkpoints: {[p.name for p in paths]}. "
+                    f"Using the last one."
+                )
+            path = paths[-1]
             logger.info(f"Loading model from checkpoint: {path}")
-            cls: Model.__class__ = _resolve_target(self.config.model._target_)
+            cls: Model.__class__ = _resolve_target(self.config.model._target_, full_key=None)
 
             # load pytorch
             with pl_legacy_patch():
@@ -150,8 +154,5 @@ class CheckpointLoader:
 
             # instantiate and load model weights
             model: Model = cls._load_model_state(checkpoint, **kwargs)
-        else:
-            logger.warning("No checkpoint found. Initializing model without checkpoint.")
-            model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
 
         return model

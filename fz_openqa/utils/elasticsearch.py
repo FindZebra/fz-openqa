@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 from copy import copy
@@ -21,13 +22,20 @@ class ElasticSearchInstance(object):
             return
 
         if not self.disable:
-            logger.info("Spawning ElasticSearch process")
-            self.es_proc = subprocess.Popen(["elasticsearch"], **self.kwargs)
+            env = copy(os.environ)
+            cmd = "elasticsearch"
+            logger.info(
+                f"Spawning ElasticSearch: {cmd}, "
+                f"ES_JAVA_OPTS={env.get('ES_JAVA_OPTS', '<none>')}"
+            )
+            self.es_proc = subprocess.Popen([cmd], env=env, **self.kwargs)
             t0 = time.time()
             while not ping_es():
                 time.sleep(0.5)
                 if time.time() - t0 > self.TIMEOUT:
                     raise TimeoutError("Couldn't ping the ES instance.")
+
+            logger.info(f"Elasticsearch is up and running " f"(init time={time.time() - t0:.1f}s)")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # make sure the dbconnection gets closed

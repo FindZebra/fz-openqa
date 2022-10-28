@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import datasets
 from datasets import DatasetDict
 from datasets import load_dataset
 from datasets import Split
@@ -90,7 +91,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool = True,
+        add_qad_tokens: bool = True,
         add_special_tokens: bool = True,
         cache_dir: str = "cache/",
         max_length: Optional[int] = 512,
@@ -98,6 +99,7 @@ class HfDatasetBuilder(DatasetBuilder):
         num_proc: int = 1,
         verbose: bool = False,
         text_formatter: Optional[TextFormatter] = None,
+        split: Optional[datasets.Split] = None,
         **kwargs,
     ):
         super().__init__(cache_dir=cache_dir, **kwargs)
@@ -106,12 +108,15 @@ class HfDatasetBuilder(DatasetBuilder):
         self.subset_size = subset_size
         self.num_proc = num_proc
         self.verbose = verbose
+        if isinstance(split, (str, Split)):
+            split = [split]
+        self.split = split
 
         # tokenizer and dataset
         self.text_formatter = text_formatter or TextFormatter()
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.add_encoding_tokens = add_encoding_tokens
+        self.add_qad_tokens = add_qad_tokens
         self.add_special_tokens = add_special_tokens
 
     # @cache_hf_dataset
@@ -138,7 +143,10 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset = self.preprocess_dataset(dataset)
         if format is not None:
             dataset = self.set_format(dataset, format=format)
-        return keep_only_columns(dataset, columns=columns)
+        dataset = keep_only_columns(dataset, columns=columns)
+        if isinstance(dataset, DatasetDict) and self.split is not None:
+            dataset = DatasetDict({s: dataset[s] for s in self.split})
+        return dataset
 
     def set_format(self, dataset: HfDataset, *, format: str = "torch") -> HfDataset:
         pt_cols = [c for c in self.pt_attributes if c in get_column_names(dataset)]

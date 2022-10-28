@@ -54,6 +54,7 @@ class DprHead(Head):
         target_scale_init: float = 1.0,
         auto_scale: bool = True,
         scale_init: float = 1.0,
+        weight_init_mult: Optional[float] = None,
         **kwargs,
     ):
         super(DprHead, self).__init__(**kwargs)
@@ -68,6 +69,9 @@ class DprHead(Head):
         self.share_parameters = share_parameters
         if self.output_size is not None:
             self.q_head = Layer(self.input_size, self.output_size, bias=self.bias)
+            if weight_init_mult is not None:
+                self.q_head.weight.data.mul_(weight_init_mult ** 0.5)
+                rich.print(f">> [magenta]scaled q_head.weight by {weight_init_mult}")
             if share_parameters:
                 self.d_head = self.q_head
             else:

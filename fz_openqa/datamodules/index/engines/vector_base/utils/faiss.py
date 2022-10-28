@@ -146,7 +146,7 @@ def get_gpu_resources(devices=None, tempmem: int = -1):
         res = faiss.StandardGpuResources()
         # res.setLogMemoryAllocations(True)
         if tempmem >= 0:
-            logger.warning(f"Setting GPU:{i} temporary memory to {tempmem/1024**3:.2f} GB")
+            logger.warning(f"Setting GPU:{i} temporary memory to {tempmem / 1024 ** 3:.2f} GB")
             res.setTempMemory(tempmem)
 
         gpu_resources.append(res)
@@ -303,10 +303,10 @@ def populate_ivf_index(
     preproc: faiss.VectorTransform,
     vectors: TensorLike,
     gpu_resources: List,
-    max_add_per_gpu=1 << 25,
+    max_add_per_gpu: int = 100_000,
     use_float16: bool = True,
     use_precomputed_tables=False,
-    add_batch_size=65536,
+    add_batch_size=65536,  # todo: try reducing this
 ):
     """Add elements to a sharded index. Return the index and if available
     a sharded gpu_index that contains the same data."""
@@ -342,6 +342,16 @@ def populate_ivf_index(
         total=nb // add_batch_size,
     ):
         i1 = i0 + xs.shape[0]
+        if np.isnan(xs).any():
+            logger.warning(f"NaN detected in vectors {i0}-{i1}")
+            xs[np.isnan(xs)] = 0
+
+        # check range TODO: remove
+        rich.print(
+            f">> {i0}-{i1}: shape={xs.shape}, min={xs.min()}, "
+            f"max={xs.max()}, mean={xs.mean()}, nans={np.isnan(xs).sum()}"
+        )
+
         gpu_index.add_with_ids(xs, np.arange(i0, i1))
         if 0 < max_add < gpu_index.ntotal:
             logger.info(f"Reached max. size per GPU ({max_add}), " f"flushing indices to CPU")
@@ -400,8 +410,18 @@ def get_sharded_gpu_index(
     co.verbose = True
     co.shard = True  # the replicas will be made "manually"
     t0 = time.time()
-    if replicas == 1:
 
+    rich.print(
+        f"[magenta]Co: {co}, "
+        f"gpu_resources: {gpu_resources}, "
+        f"ngpu: {ngpu}, "
+        f"replicas: {replicas}, "
+        f"tempmem: {tempmem}, "
+        f"use_float16: {use_float16}, "
+        f"use_precomputed_tables: {use_precomputed_tables}, "
+    )
+
+    if replicas == 1:
         vres, vdev = make_vres_vdev(gpu_resources)
         gpu_index = faiss.index_cpu_to_gpu_multiple(vres, vdev, cpu_index, co)
     else:

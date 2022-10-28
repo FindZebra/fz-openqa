@@ -75,7 +75,13 @@ def pretty_decode(
     n_qmask_tokens = tokens.count(qmask_token_id)
 
     # decode
-    txt = tokenizer.decode(tokens, **kwargs)
+    try:
+        txt = tokenizer.decode(tokens, **kwargs)
+    except Exception as exc:
+        logger.warning(exc)
+        rich.print(tokens)
+        txt = "<-- decoding failed -->"
+
     for y in tokenizer.special_tokens_map_extended.values():
         if not isinstance(y, list):
             y = [y]

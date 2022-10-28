@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 
 import datasets
 
@@ -17,11 +18,11 @@ class FzCorpusConfig(datasets.BuilderConfig):
         super(FzCorpusConfig, self).__init__(**kwargs)
 
 
-_DESCRIPTION = "A class to load the english MedQA corpus"
+_DESCRIPTION = "A class to load the FindZebra corpus"
 _VERSION = "0.0.1"
-_HOMEPAGE = "https://github.com/MotzWanted/Open-Domain-MedQA"
+_HOMEPAGE = "https://github.com/vlievin/fz-openqa"
 _CITATION = ""
-_URL = "https://drive.google.com/file/d/1OkJJxgGE9QRQF83g--JZVFUzJkEint6B/view?usp=sharing"
+_URL = "https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/datasets/fz-corpus.zip"
 
 
 class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
@@ -46,43 +47,37 @@ class FzCorpusGenerator(datasets.GeneratorBasedBuilder):
             citation=_CITATION,
         )
 
-    @staticmethod
-    def _get_drive_url(url):
-        base_url = "https://drive.google.com/uc?id="
-        split_url = url.split("/")
-        return base_url + split_url[5]
-
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        downloaded_file = dl_manager.download_and_extract(self._get_drive_url(_URL))
+        downloaded_file = dl_manager.download_and_extract(_URL)
         return [
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
-                gen_kwargs={"filepath": downloaded_file},
+                gen_kwargs={"filepath": Path(downloaded_file) / "fz-corpus"},
             )
         ]
 
     def _generate_examples(self, filepath: str):
         """Yields examples."""
+        dirpath = Path(filepath)
 
         cleanr = re.compile(r"(<.*?>)|(\[.*?\])")
 
-        with open(filepath, "r") as f:
-            for idx, line in enumerate(f.readlines()):
-                article = json.loads(line)
+        for idx, path in enumerate(dirpath.glob("**/*.json")):
+            article = json.loads(open(path, "r").read())
 
-                # cleanup the text
-                text = re.sub(cleanr, "", article["raw_content"])
+            # cleanup the text
+            text = re.sub(cleanr, "", article["raw_content"])
 
-                # get cui
-                cui = article["cui"]
-                if cui is None:
-                    cui = "<unknown-cui>"
+            # get cui
+            cui = article["cui"]
+            if cui is None:
+                cui = "<unknown-cui>"
 
-                # yield the data
-                yield idx, {
-                    "document.text": str(text),
-                    "document.title": str(article["title"]),
-                    "document.cui": str(cui),
-                    "document.idx": idx,
-                }
+            # yield the data
+            yield idx, {
+                "document.text": str(text),
+                "document.title": str(article["title"]),
+                "document.cui": str(cui),
+                "document.idx": idx,
+            }

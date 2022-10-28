@@ -4,7 +4,7 @@ defaults:
 # define the engines
 engines:
   es:
-    k: 1000
+    k: ${datamodule.n_max_retrieved_documents}
     max_batch_size: 100
     verbose: false
     merge_previous_results: true
@@ -14,7 +14,7 @@ engines:
       auxiliary_weight: 0
       filter_with_doc_ids: false
   faiss:
-    k: 1000
+    k: ${datamodule.n_max_retrieved_documents}
     max_batch_size: 512
     verbose: false
     merge_previous_results: true
@@ -22,6 +22,8 @@ engines:
     config:
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
+      max_add_per_gpu: 10_000 # todo: increase this
+      add_batch_size: 1_000 # todo: increase this
       metric_type: ${model.metric_type}
       nprobe: 32
   topk:

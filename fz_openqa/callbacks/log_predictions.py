@@ -1,6 +1,7 @@
 from typing import Any
 from typing import Optional
 
+import einops
 import pytorch_lightning as pl
 import spacy
 from loguru import logger
@@ -14,8 +15,8 @@ from transformers import PreTrainedTokenizerFast
 import wandb
 from fz_openqa.utils.exceptions import catch_exception_as_warning
 
-CORRECT_LABEL = "✅"
-INCORRECT_LABEL = "❌"
+CMARK = "✅"
+XMARK = "❌"
 
 SPACY_MODELS = {
     "en_core_sci_sm": "https://s3-us-west-2.amazonaws.com/"
@@ -44,13 +45,18 @@ def maybe_download_spacy_model(model_name: str) -> spacy.Language:
 
 
 class LogPredictions(Callback):
+    """
+    Log model predictions as plain text.
+    TODO: refactor using Jinja2 templates
+    """
+
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerFast,
         *,
         log_dir: str,
         verbose: bool = True,
-        n_samples: int = 10,
+        n_samples: int = 20,
         spacy_model: Optional[str] = None,
     ):
         super(LogPredictions, self).__init__()
@@ -86,21 +92,28 @@ class LogPredictions(Callback):
         if len(self.data) >= self.n_samples:
             return
 
-        preds = outputs["_reader_logits_"].argmax(dim=-1).cpu().detach()
-        targets = batch["answer.target"].cpu().detach()
+        probs = outputs["_reader_logits_"].cpu().detach()
+        input_ids = batch["question.input_ids"].cpu().detach()
+        is_flatten = input_ids.dim() == 2
 
         batch_keys = [
             "question.input_ids",
             "document.input_ids",
-            "answer.target",
             "document.proposal_score",
         ]
         preds_keys = [
             "_reader_logits_",
+            "_reader_targets_",
             "_retriever_scores_",
             "_reader_scores_",
         ]
         out = {k: v for k, v in batch.items() if k in batch_keys}
+        if is_flatten:
+            bs, n_opts = probs.shape
+            for k, v in out.items():
+                out[k] = einops.rearrange(
+                    v, "(bs n_opts) ... -> bs n_opts ...", n_opts=n_opts, bs=bs
+                )
         out.update({k: v for k, v in outputs.items() if k in preds_keys})
 
         # handle the document_ids in the case where documents are shared across the batch
@@ -114,17 +127,15 @@ class LogPredictions(Callback):
             doc_input_ids = doc_input_ids.expand(bs, n_opts, len(uids), seq_length)
             out["document.input_ids"] = doc_input_ids
 
-        # select the rows where the prediction was correct
-        mask = preds == targets
-        out = {k: v[mask] for k, v in out.items()}
-
+        # gather the documents
         for i in range(len(out["question.input_ids"])):
             if len(self.data) >= self.n_samples:
                 break
             self.data += [{k: v[i] for k, v in out.items()}]
 
     def decode(self, input_ids):
-        u = self.tokenizer.decode(input_ids, skip_special_tokens=True)
+        input_ids = [t for t in input_ids if t != self.tokenizer.pad_token_id]
+        u = self.tokenizer.decode(input_ids, skip_special_tokens=False)
         if self.spacy_model is not None:
             doc = self.spacy_model(u)
             html = displacy.render(doc, style="ent")
@@ -141,17 +152,21 @@ class LogPredictions(Callback):
             html += '<div tag="Question" style="font-size:12px">\n'
             html += f"<h2>Q #{k}</h2>\n"
             probs = row["_reader_logits_"].softmax(-1)
+            pred = probs.argmax(dim=-1)
             proposal_scores = row["document.proposal_score"]
-            target = row["answer.target"]
+            target = row["_reader_targets_"]
             doc_input_ids = row["document.input_ids"]
 
             # display each question
             for i, qids in enumerate(row["question.input_ids"]):
-                is_correct = i == target
                 html += "<hr>"
                 html += '<div class="option" style="background-color:#eee;">\n'
-                label = CORRECT_LABEL if is_correct else INCORRECT_LABEL
-                html += f"<h3>{label} Opt#{i} (Q#{k}) - prob={probs[i]:.2f}</h3>\n"
+                data_label = CMARK if i == target else XMARK
+                model_label = CMARK if i == pred else XMARK
+                html += (
+                    f"<h3>(model: {model_label}, data: {data_label}) "
+                    f"Opt#{i} (Q#{k}) - prob={probs[i]:.2f}</h3>\n"
+                )
                 html += self.decode(qids)
                 html += '</div">\n'
 
@@ -159,7 +174,7 @@ class LogPredictions(Callback):
                 doc_scores = row["_retriever_scores_"][i]
                 doc_probs = doc_scores.softmax(-1)
                 reader_scores = row["_reader_scores_"][i]
-                sort_score = doc_scores + reader_scores
+                sort_score = doc_scores
                 js = sort_score.argsort(-1, descending=True)
                 html += '<div class="row" style="background-color:#fff;">\n'
                 for _j, j in enumerate(js[:3]):
@@ -191,7 +206,7 @@ class LogPredictions(Callback):
             html += '</div">\n'
 
         try:
-            name = "predictions/htm"
+            name = "predictions/html"
             wandb.log({name: wandb.Html(html, inject=False)}, commit=False)
         except wandb.errors.Error as e:
             logger.warning(e)

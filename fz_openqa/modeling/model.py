@@ -5,19 +5,15 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Union
 
 import rich
 import torch
 from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
-from pytorch_lamb import Lamb
 from pytorch_lightning import LightningModule
-from torch import optim
 from torch import Tensor
-from transformers import BertPreTrainedModel
-from transformers import get_linear_schedule_with_warmup as WarmupLinearSchedule
+from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
 
 from fz_openqa.modeling.modules.base import Module
@@ -35,9 +31,9 @@ class Model(LightningModule):
 
     ## Main components
     This class contains 2 main components:
-    * self.bert: the pretrained masked language model
-    * self.backbone: wraps the bert model is a specific head
-    * self.evaluator: handles computing the loss using the backbone and evaluate the metrics
+    * self.backbone: the pretrained masked language model
+    * self.module: define the actual computation of the model
+    * self.evaluator: handles computing the loss within the module and evaluate the metrics
 
     ## Pipeline
     The main data processing flow can be described as follows:
@@ -64,11 +60,13 @@ class Model(LightningModule):
     The metrics are computed for the whole epoch in `_epoch_end`.
     """
 
+    tracked_metrics: Optional[Dict[str, Optional[Tensor]]] = None
+
     def __init__(
         self,
         *,
         tokenizer: PreTrainedTokenizerFast | DictConfig,
-        bert: BertPreTrainedModel | DictConfig,
+        backbone: PreTrainedModel | DictConfig,
         module: DictConfig | Module,
         monitor_metric: Optional[str],
         optimizer: torch.optim.Optimizer | DictConfig,
@@ -102,7 +100,7 @@ class Model(LightningModule):
         # instantiate the model
         self.module: Optional[Module] = maybe_instantiate(
             module,
-            bert=bert,
+            backbone=backbone,
             tokenizer=tokenizer,
             _recursive_=False,
         )
@@ -161,6 +159,16 @@ class Model(LightningModule):
         !! This step is performed on device 0 !!
         """
         output = self.module.step_end(pre_output, split)
+
+        # track metrics
+        if self.tracked_metrics is not None:
+            for key in self.tracked_metrics.keys():
+                x = self.tracked_metrics[key]
+                y = output[key].detach().cpu()
+                if x is None:
+                    self.tracked_metrics[key] = y
+                else:
+                    self.tracked_metrics[key] = torch.cat([x, y], dim=0)
 
         if log_data:
             if self._params is not None:

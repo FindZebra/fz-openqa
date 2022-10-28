@@ -69,6 +69,7 @@ class ElasticsearchEngine(IndexEngine):
         "es_temperature": 1.0,
         "es_logging_level": "error",
         "filter_with_doc_ids": False,
+        "cleanup_numbers_from_aux": False,
     }
 
     @property
@@ -196,6 +197,7 @@ class ElasticsearchEngine(IndexEngine):
             k=k,
             auxiliary_queries=auxiliary_text,
             auxiliary_weight=config["auxiliary_weight"],
+            cleanup_numbers_from_aux=config["cleanup_numbers_from_aux"],
             document_ids=document_ids,
         )
 

@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - override /model/bert: roberta-base #deberta-v3-base
+  - override /model/backbone: roberta-base #deberta-v3-base
   - override /datamodule/relevance_classifier: none
 
 base:

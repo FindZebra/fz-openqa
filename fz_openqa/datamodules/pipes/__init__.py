@@ -32,11 +32,9 @@ from .meta import Sequential
 from .nesting import ApplyAsFlatten
 from .nesting import Flatten
 from .nesting import Nest
-from .option_dropout import OptionBinarized
-from .option_dropout import OptionDropout
 from .passage import GeneratePassages
 from .pprint import PrintBatch
-from .pprint import PrintText
+from .pprint import PrintContent
 from .predict import Predict
 from .relevance import ExactMatch
 from .relevance import MetaMapMatch
@@ -60,3 +58,7 @@ from .tokenizer import TokenizerPipe
 from .torch import Forward
 from .torch import Itemize
 from .torch import ToNumpy
+from .transforms import FlattenMcQuestions
+from .transforms import OptionBinarized
+from .transforms import OptionDropout
+from .transforms import StripAnswer

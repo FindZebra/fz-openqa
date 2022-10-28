@@ -1,3 +1,2 @@
-bert: ${model.bert}
+bert: ${model.backbone}
 output_size: ???
-split_bert_layers: ${model.module.split_bert_layers}

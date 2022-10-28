@@ -17,7 +17,7 @@ from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.datamodules.pipes import TokenizerPipe
 from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.utils.transformations import add_spec_token
+from fz_openqa.datamodules.utils.transformations import append_prefix
 from fz_openqa.utils.datastruct import Batch
 
 
@@ -57,9 +57,9 @@ class FormatAndTokenize(Sequential):
         *,
         text_formatter: Optional[TextFormatter] = None,
         tokenizer: PreTrainedTokenizerFast,
-        add_encoding_tokens: bool = True,
+        add_qad_tokens: bool = True,
         max_length: Optional[int] = 512,
-        spec_tokens: Optional[str | List[str]] = None,
+        qad_tokens: Optional[str | List[str]] = None,
         shape: Optional[List[int]] = None,
         return_token_type_ids: bool = False,
         add_special_tokens: bool = True,
@@ -70,18 +70,17 @@ class FormatAndTokenize(Sequential):
         if shape is None:
             shape = [-1]
 
-        if isinstance(spec_tokens, str):
-            spec_tokens = [spec_tokens]
+        if isinstance(qad_tokens, str):
+            qad_tokens = [qad_tokens]
 
-        if add_encoding_tokens and spec_tokens is not None:
-            # store `spec_token` to ensure proper fingerprinting
-            spec_token = "".join(spec_tokens)
-            add_spec_tokens_pipe = Apply(
-                {key: partial(add_spec_token, spec_token)},
+        if add_qad_tokens and qad_tokens is not None:
+            qad_tokens = "".join(qad_tokens)
+            add_qad_tokens_pipe = Apply(
+                {key: partial(append_prefix, qad_tokens)},
                 element_wise=True,
             )
         else:
-            add_spec_tokens_pipe = None
+            add_qad_tokens_pipe = None
 
         # define the text formatter, used to cleanup the raw text
         if text_formatter is not None:
@@ -101,7 +100,7 @@ class FormatAndTokenize(Sequential):
             text_formatter,
             ApplyAsFlatten(
                 Sequential(
-                    add_spec_tokens_pipe,
+                    add_qad_tokens_pipe,
                     TokenizerPipe(
                         tokenizer,
                         max_length=max_length,
