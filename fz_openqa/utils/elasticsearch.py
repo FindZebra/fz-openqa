@@ -3,9 +3,12 @@ import subprocess
 import time
 from copy import copy
 
+from elasticsearch import Elasticsearch
 from loguru import logger
 
-from es_status import ping_es
+
+def ping_es(**kwargs) -> bool:
+    return Elasticsearch().ping(**kwargs)
 
 
 class ElasticSearchInstance(object):
