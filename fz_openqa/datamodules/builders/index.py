@@ -1,8 +1,7 @@
 from copy import copy
 
 from datasets import Dataset
-
-from fz_openqa.datamodules.index.index import Index
+from warp_pipes import Index
 
 
 class IndexBuilder:

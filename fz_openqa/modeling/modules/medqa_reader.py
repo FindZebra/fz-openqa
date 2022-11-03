@@ -5,12 +5,12 @@ from typing import Optional
 import rich
 from datasets import Split
 from torch import Tensor
+from warp_pipes import Batch
+from warp_pipes import pprint_batch
 
-from ...utils.pretty import pprint_batch
 from .base import Module
 from .utils.concatenate import concat_questions_and_documents
 from .utils.concatenate import stack_questions_and_documents
-from fz_openqa.utils.datastruct import Batch
 
 
 class ConcatStrategy(Enum):

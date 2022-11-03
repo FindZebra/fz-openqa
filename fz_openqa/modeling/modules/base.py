@@ -19,6 +19,7 @@ from torchmetrics.classification import Accuracy
 from torchmetrics.retrieval import RetrievalMRR
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
 
 from fz_openqa.modeling.modules.utils.backbone import extend_backbone_embeddings
 from fz_openqa.modeling.modules.utils.backbone import instantiate_backbone_model_with_config
@@ -30,7 +31,6 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 

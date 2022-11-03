@@ -1,4 +1,4 @@
-from fz_openqa.datamodules.index import Index
+from warp_pipes import Index
 from fz_openqa.datamodules.index.colbert import ColbertIndex
 from tests.indexes.test_dense_index import TestDenseIndex
 

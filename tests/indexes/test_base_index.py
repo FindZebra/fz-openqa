@@ -8,9 +8,9 @@ import torch
 from datasets import Dataset
 from transformers import AutoTokenizer
 
-from fz_openqa.datamodules.index import Index
+from warp_pipes import Index
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
-from fz_openqa.datamodules.pipes import AddPrefix, Parallel, Collate
+from warp_pipes import AddPrefix, Parallel, Collate
 from fz_openqa.utils.train_utils import setup_safe_env, silent_huggingface
 
 

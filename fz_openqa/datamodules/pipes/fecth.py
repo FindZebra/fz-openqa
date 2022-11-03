@@ -4,27 +4,23 @@ from typing import List
 from typing import Optional
 
 from datasets import Dataset
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import Batch
+from warp_pipes import Collate
+from warp_pipes import In
+from warp_pipes import Pipe
 
-from fz_openqa.datamodules.index.index import Index
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import Partial
-from fz_openqa.datamodules.pipes.base import Pipe
-from fz_openqa.datamodules.pipes.collate import Collate
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.array import concat_arrays
-from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.arrays import concat_arrays
 
 
 class FetchDocuments(Pipe):
     """
     Fetch documents from a Corpus object given a list of row_idx.
-
     Notes
     -----
     `datasets.Dataset.__getitem__` is used to fetch the documents. It return fewer
     documents than the requested number of documents if `max_chunk_size` is too large.
     Set `max_chunk_size` to a smaller value to avoid this.
-
     todo: merge this within the Index using MixIn
     """
 
@@ -107,7 +103,6 @@ class FetchDocuments(Pipe):
     def _fetch_rows(self, indexes: List[int], max_chunk_size: int = 100) -> Batch:
         """
         Fetch rows from the corpus dataset given a list of indexes.
-
         Notes
         -----
         `Dataset.select` fails when the index is too large. Chunk the indexes to avoid this issue.

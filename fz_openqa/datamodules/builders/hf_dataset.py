@@ -13,21 +13,21 @@ from datasets import load_dataset
 from datasets import Split
 from loguru import logger
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import FilterKeys
+from warp_pipes import HfDataset
+from warp_pipes import Lambda
+from warp_pipes import Pipe
+from warp_pipes import Sequential
+from warp_pipes import TokenizerPipe
+from warp_pipes.core.condition import In
+from warp_pipes.support.datasets_utils import get_column_names
+from warp_pipes.support.datasets_utils import keep_only_columns
+from warp_pipes.support.datasets_utils import take_subset
+from warp_pipes.support.pretty import pretty_decode
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Lambda
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import keep_only_columns
-from fz_openqa.datamodules.utils.dataset import take_subset
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.pretty import pretty_decode
 
 
 def cache_hf_dataset(func):
@@ -178,7 +178,7 @@ class HfDatasetBuilder(DatasetBuilder):
             TokenizerPipe(
                 self.tokenizer,
                 max_length=self.max_length,
-                fields=self.text_field,
+                field=self.text_field,
                 return_token_type_ids=False,
                 add_special_tokens=False,
                 return_offsets_mapping=False,

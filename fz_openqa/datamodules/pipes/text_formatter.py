@@ -4,8 +4,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-from .base import Pipe
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
 
 class TextFormatter(Pipe):

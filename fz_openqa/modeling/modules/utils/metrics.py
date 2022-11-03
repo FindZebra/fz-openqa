@@ -15,8 +15,7 @@ from torchmetrics import Accuracy
 from torchmetrics import Metric
 from torchmetrics import MetricCollection
 from torchmetrics.retrieval import RetrievalMetric
-
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 
 
 def is_computable(m: Metric | nn.Module):

@@ -6,10 +6,10 @@ import numpy as np
 import torch
 from parameterized import parameterized
 
-from fz_openqa.datamodules.pipes import ApplyAsFlatten, Identity, Lambda
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.nesting import Nested, Expand
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import ApplyAsFlatten, Identity, Lambda
+from warp_pipes.core.condition import HasPrefix
+from warp_pipes import Nested, Expand
+from warp_pipes import Batch
 
 
 # todo: mixed types: list | np.array | Tensor

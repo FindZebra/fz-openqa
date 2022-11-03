@@ -15,9 +15,9 @@ from datasets import DatasetDict
 from omegaconf import DictConfig
 from omegaconf import ListConfig
 from omegaconf import OmegaConf
+from warp_pipes import Pipe
 
 from fz_openqa.datamodules.analytics.base import Analytic
-from fz_openqa.datamodules.pipes import Pipe
 
 CAMEL2SNAKE = re.compile(r"(?<!^)(?=[A-Z])")
 

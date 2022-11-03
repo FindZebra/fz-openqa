@@ -6,19 +6,19 @@ from typing import List
 from typing import Optional
 
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import AddPrefix
+from warp_pipes import Apply
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import Batch
+from warp_pipes import FilterKeys
+from warp_pipes import Pipe
+from warp_pipes import ReplaceInKeys
+from warp_pipes import Sequential
+from warp_pipes import TokenizerPipe
+from warp_pipes.core.condition import In
 
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import Apply
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import ReplaceInKeys
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.utils.transformations import append_prefix
-from fz_openqa.utils.datastruct import Batch
 
 
 class CleanupSpecialTokens(Pipe):

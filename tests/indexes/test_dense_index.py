@@ -4,7 +4,7 @@ import tempfile
 
 from datasets import Dataset
 
-from fz_openqa.datamodules.index import Index, DenseIndex
+from warp_pipes import Index, DenseIndex
 from fz_openqa.modeling.zero_shot import ZeroShot
 from tests.indexes.test_base_index import TestIndex
 

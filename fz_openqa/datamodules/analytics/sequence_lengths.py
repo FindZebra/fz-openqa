@@ -12,8 +12,8 @@ import torch
 from datasets import Dataset
 from datasets import Split
 from torch import Tensor
+from warp_pipes.support.datasets_utils import keep_only_columns
 
-from ..utils.dataset import keep_only_columns
 from .base import Analytic
 
 

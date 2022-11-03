@@ -1,10 +1,10 @@
 import rich
 from datasets import Dataset
+from warp_pipes import Batch
+from warp_pipes import Pipe
+from warp_pipes.support.datasets_utils import get_column_names
 
-from ...utils.dataset import get_column_names
 from .flatten_multiple_choice import FlattenMultipleChoice
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.utils.datastruct import Batch
 
 
 class SelectCorrectOption(Pipe):

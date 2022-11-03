@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.pipes.utils.collate_fn import (
     collate_and_pad_attributes, extract_and_collate_attributes_as_list)
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 
 
 def tensorize(examples: List[Batch]) -> List[Batch]:

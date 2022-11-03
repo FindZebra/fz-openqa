@@ -10,8 +10,7 @@ import torch
 from datasets import Dataset
 from datasets import DatasetDict
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.datamodules.utils.typing import HfDataset
+from warp_pipes import HfDataset
 
 
 def append_prefix(

@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 
 from fz_openqa.datamodules.builders import FzCorpusBuilder, QaBuilder
 from fz_openqa.datamodules.pipes import Predict
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 from fz_openqa.utils.functional import get_batch_eg, cast_values_to_numpy
 
 

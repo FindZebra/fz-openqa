@@ -26,13 +26,13 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.trainer.states import TrainerStatus
+from warp_pipes import get_console_separator
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.train_utils import setup_safe_env
 
 log = loguru.logger
@@ -252,7 +252,7 @@ def load_checkpoint(
         # todo: os.chdir(checkpoint.config.sys.workdir)
         # todo: config.sys.workdir = checkpoint.config.sys.workdir
         if ref_config is not None and not silent:
-            rich.print(get_separator())
+            rich.print(get_console_separator())
             rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
             rich.print(
                 jsondiff.diff(
@@ -261,7 +261,7 @@ def load_checkpoint(
                     syntax="symmetric",
                 )
             )
-            rich.print(get_separator())
+            rich.print(get_console_separator())
         return checkpoint
     else:
         return None

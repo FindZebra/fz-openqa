@@ -3,14 +3,14 @@ from functools import partial
 from typing import Optional
 
 from datasets import DatasetDict
+from warp_pipes import Apply
+from warp_pipes import HfDataset
 
 from fz_openqa.datamodules.builders.adapters.base import DatasetAdapter
 from fz_openqa.datamodules.builders.adapters.extract_corpus import extract_corpus
 from fz_openqa.datamodules.builders.adapters.utils import set_document_row_idx
-from fz_openqa.datamodules.pipes import Apply
 from fz_openqa.datamodules.utils.transformations import set_constant_column
 from fz_openqa.datamodules.utils.transformations import set_index_column
-from fz_openqa.datamodules.utils.typing import HfDataset
 
 RACE_COL_MAPPING = {
     "example_id": "document.uid",

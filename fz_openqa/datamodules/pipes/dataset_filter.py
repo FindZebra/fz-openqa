@@ -3,10 +3,9 @@ from typing import List
 from typing import Optional
 
 import numpy as np
-
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Pipe
+from warp_pipes.core.condition import In
 
 
 class DatasetFilter(Pipe):

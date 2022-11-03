@@ -15,11 +15,11 @@ from pytorch_lightning import LightningModule
 from torch import Tensor
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
 
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.parameters import Parameters
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import is_loggable
 from fz_openqa.utils.functional import only_trainable
 

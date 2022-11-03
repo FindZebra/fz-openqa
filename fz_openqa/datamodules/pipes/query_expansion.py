@@ -1,71 +1,16 @@
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Union
 
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
+from warp_pipes import HasPrefix
+from warp_pipes import Pipe
 
-from ...tokenizers.static import QUERY_MASK
-from .base import Pipe
-from .control.condition import HasPrefix
-from .control.condition import In
-from fz_openqa.modeling.functional import TorchBatch
-from fz_openqa.utils.datastruct import Batch
+from fz_openqa.tokenizers.static import QUERY_MASK
 
 
-class TokenizerPipe(Pipe):
-    """tokenize a batch of data"""
-
-    def __init__(
-        self,
-        tokenizer: PreTrainedTokenizerFast,
-        *,
-        drop_columns: bool = True,
-        fields: Union[str, List[str]],
-        max_length: Optional[int],
-        return_token_type_ids: bool = False,
-        return_offsets_mapping: bool = False,
-        add_special_tokens: bool = True,
-        **kwargs,
-    ):
-        self.fields = [fields] if isinstance(fields, str) else fields
-        assert kwargs.get("input_filter", None) is None, "input_filter is not allowed"
-        super(TokenizerPipe, self).__init__(**kwargs, input_filter=In(self.fields))
-        self.tokenizer = tokenizer
-        self.drop_columns = drop_columns
-        self.args = {
-            "max_length": max_length,
-            "truncation": max_length is not None,
-            "return_token_type_ids": return_token_type_ids,
-            "return_offsets_mapping": return_offsets_mapping,
-            "add_special_tokens": add_special_tokens,
-        }
-
-    def output_keys(self, input_keys: List[str]) -> List[str]:
-        if self.drop_columns:
-            input_keys = []
-
-        input_keys += ["input_ids", "attention_mask"]
-        if self.args.get("return_offsets_mapping", False):
-            input_keys += ["offset_mapping"]
-        return input_keys
-
-    def _call_batch(
-        self, batch: TorchBatch, idx: Optional[List[int]] = None, **kwargs
-    ) -> TorchBatch:
-        tokenizer_input = {field: batch[field] for field in self.fields}
-
-        batch_encoding = self.tokenizer(*tokenizer_input.values(), **self.args, **kwargs)
-
-        if self.drop_columns:
-            batch = {k: v for k, v in batch_encoding.items()}
-        else:
-            batch.update({k: v for k, v in batch_encoding.items()})
-
-        return batch
-
-
-class QueryExpansionPipe(Pipe):
+class QueryExpansion(Pipe):
     def __init__(
         self,
         *,
@@ -78,7 +23,7 @@ class QueryExpansionPipe(Pipe):
             input_filter = HasPrefix(prefix)
         else:
             input_filter = None
-        super(QueryExpansionPipe, self).__init__(**kwargs, input_filter=input_filter)
+        super(QueryExpansion, self).__init__(**kwargs, input_filter=input_filter)
         self.prefix = prefix if prefix is not None else ""
         self.question_length: int = question_length
         self.sep_token_id: int = tokenizer.sep_token_id
@@ -100,7 +45,7 @@ class QueryExpansionPipe(Pipe):
 
         end_of_seq_idx = None
         if self.sep_token_id is not None:
-            end_of_seq_idx = QueryExpansionPipe._last_idx(input_ids, self.sep_token_id)
+            end_of_seq_idx = QueryExpansion._last_idx(input_ids, self.sep_token_id)
         if end_of_seq_idx is None:
             if attention_mask[-1] == 0:
                 end_of_seq_idx = attention_mask.index(0)

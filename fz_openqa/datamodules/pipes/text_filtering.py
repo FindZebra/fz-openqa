@@ -5,10 +5,10 @@ from typing import Union
 
 import spacy
 from spacy.tokens import Doc
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
-from .base import Pipe
 from fz_openqa.datamodules.pipes.utils.static import STOP_WORDS
-from fz_openqa.utils.datastruct import Batch
 
 
 class TextFilter(Pipe):

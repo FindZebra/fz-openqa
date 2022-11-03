@@ -7,6 +7,7 @@ import torch
 from datasets import Split
 from torch import Tensor
 from torch.nn import functional as F
+from warp_pipes import Batch
 
 from .base import Module
 from .utils import check_only_first_doc_positive
@@ -14,7 +15,6 @@ from .utils import expand_and_flatten
 from .utils import flatten_first_dims
 from fz_openqa.modeling.functional import flatten
 from fz_openqa.modeling.functional import padless_cat
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 
 

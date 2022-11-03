@@ -12,14 +12,14 @@ from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, \
     ConcatTextFields, PrioritySampler
-from fz_openqa.datamodules.pipes.control.condition import In, HasPrefix
+from warp_pipes.core.condition import In, HasPrefix
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten, Nested
 from fz_openqa.datamodules.utils.transformations import append_prefix
 from fz_openqa.modeling.gradients import ReinforceGradients
 from fz_openqa.modeling.gradients.in_batch import InBatchGradients
 from fz_openqa.modeling.heads import DprHead
 from fz_openqa.modeling.modules import OptionRetriever
-from fz_openqa.utils.pretty import get_separator
+from warp_pipes import get_console_separator
 from tests.modules.base import TestModel
 
 
@@ -278,9 +278,9 @@ class TestOptionRetriever(TestModel):
             rich.print(f">>> probs.target: {target_probs}")
 
             doc_score = output['_retriever_scores_'].softmax(-1).detach()
-            print(get_separator())
+            print(get_console_separator())
             rich.print(f"doc logits: \n{doc_score.numpy()}")
-            print(get_separator())
+            print(get_console_separator())
             rich.print(f"doc targets: \n{doc_targets.numpy()}")
 
         if test:

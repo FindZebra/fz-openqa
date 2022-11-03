@@ -6,8 +6,8 @@ import rich
 import torch
 
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes.core.condition import In
+from warp_pipes import Batch
 
 
 class TestSort(TestCase):

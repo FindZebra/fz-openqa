@@ -1,6 +1,6 @@
-from .base import Pipe
-from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.datastruct import Eg
+from warp_pipes import Batch
+from warp_pipes import Eg
+from warp_pipes import Pipe
 
 
 class Batchify(Pipe):

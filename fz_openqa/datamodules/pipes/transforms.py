@@ -6,11 +6,10 @@ import torch
 import torch.nn.functional as F
 from datasets import Split
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.datamodules.pipes import Flatten
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Flatten
+from warp_pipes import Pipe
+from warp_pipes.core.condition import In
 
 
 class Transform(Pipe):

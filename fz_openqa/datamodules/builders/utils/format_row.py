@@ -3,13 +3,10 @@ from typing import Any
 from typing import Callable
 from typing import Dict
 
-import rich
 import torch
-
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
-from fz_openqa.utils.pretty import pretty_decode
-from fz_openqa.utils.shape import infer_shape
+from warp_pipes import get_console_separator
+from warp_pipes.support.pretty import pretty_decode
+from warp_pipes.support.shapes import infer_shape
 
 
 def format_row_flat_questions(row: Dict[str, Any], *, tokenizer, **kwargs) -> str:
@@ -28,7 +25,7 @@ def format_row_flat_questions(row: Dict[str, Any], *, tokenizer, **kwargs) -> st
     )
 
     if "answer.input_ids" in row:
-        u += get_separator("-") + "\n"
+        u += get_console_separator("-") + "\n"
         u += "* Answer Choices:" + "\n"
         idx = row.get("answer.target", None)
         for i, an in enumerate(row["answer.input_ids"]):
@@ -64,7 +61,7 @@ def format_row_concatenated_questions(row: Dict[str, Any], *, tokenizer, **kwarg
     }
     repr = f"Question #{row.get('question.idx', None)}\n"
 
-    repr += get_separator("-") + "\n"
+    repr += get_console_separator("-") + "\n"
     repr += "* Question + answer:" + "\n"
     idx = row.get("answer.target", None)
     for i, an in enumerate(row["question.input_ids"]):
@@ -103,14 +100,14 @@ def format_row_flat_questions_with_docs(
     }
 
     repr = format_question_fn(row, tokenizer=tokenizer, **kwargs)
-    repr += get_separator("-") + "\n"
+    repr += get_console_separator("-") + "\n"
     repr += f"* Documents: n={len(row['document.input_ids'])}"
     if "document.match_score" in row:
         repr += f", n_positive={sum(row['document.match_score'] > 0)}, "
         f"n_negative={sum(row['document.match_score'] == 0)}\n"
     repr += "\n"
     for j in range(min(len(row["document.input_ids"]), max_documents)):
-        repr += get_separator(".") + "\n"
+        repr += get_console_separator(".") + "\n"
         match_on = row.get("document.match_on", None)
         match_on = match_on[j] if match_on is not None else None
         match_score = row.get("document.match_score", None)
@@ -149,7 +146,7 @@ def format_row_nested_questions_with_docs(
     # for each question-answer pair
     for i, an in enumerate(row["question.input_ids"]):
         locator = f"Option #{i + 1} (Q#{row.get('question.idx', None)})"
-        repr += get_separator("-") + "\n"
+        repr += get_console_separator("-") + "\n"
         repr += f"|-* {locator}\n"
         # print question-answer pair
         an_style = "green" if idx == i else "cyan"
@@ -175,7 +172,7 @@ def format_row_nested_questions_with_docs(
 def repr_documents(row, locator, max_documents: int = 3, **decode_kwargs) -> str:
     """represent a row of documents"""
     repr = ""
-    repr += get_separator(".") + "\n"
+    repr += get_console_separator(".") + "\n"
     repr += f"|-* Q#{locator} - Documents: n={len(row['document.input_ids'])}"
     if "document.match_score" in row:
         repr += (
@@ -233,7 +230,7 @@ def format_row_qa(row: Dict[str, Any], *, tokenizer, **kwargs):
     repr = ""
     if nesting_level == 0:
         # repr question
-        repr += get_separator("-") + "\n"
+        repr += get_console_separator("-") + "\n"
         repr += f"* Question #{qid}:" + "\n"
         an_style = "green" if q_label else "white"
         line = ""

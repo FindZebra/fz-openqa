@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import dill
 
-from fz_openqa.datamodules.pipes import Gate, Identity
+from warp_pipes import Gate, Identity
 
 
 class TestGate(TestCase):

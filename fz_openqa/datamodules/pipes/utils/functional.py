@@ -3,7 +3,7 @@ from typing import Any
 from typing import Dict
 from typing import Union
 
-from fz_openqa.datamodules.pipes import Pipe
+from warp_pipes import Pipe
 
 
 def safe_todict(x):

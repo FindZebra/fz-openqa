@@ -5,10 +5,10 @@ from unittest import TestCase
 
 from transformers import AutoTokenizer
 
-from fz_openqa.datamodules.pipes import Pipe, AddPrefix, DropKeys, FilterKeys, GetKey, Identity, \
+from warp_pipes import Pipe, AddPrefix, DropKeys, FilterKeys, GetKey, Identity, \
     Lambda, ReplaceInKeys, RenameKeys, Apply, ApplyToAll, CopyBatch, Batchify
-from fz_openqa.datamodules.pipes.control.condition import In, Not
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes.core.condition import In, Not
+from warp_pipes import Batch
 
 
 @dataclass

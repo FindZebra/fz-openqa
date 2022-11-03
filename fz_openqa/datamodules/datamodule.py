@@ -15,15 +15,15 @@ from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
+from warp_pipes import Batch
+from warp_pipes import get_console_separator
+from warp_pipes import HfDataset
+from warp_pipes import Pipe
+from warp_pipes import pprint_batch
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import infer_batch_size
-from fz_openqa.utils.pretty import get_separator
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class DataModule(LightningDataModule):
@@ -199,18 +199,18 @@ class DataModule(LightningDataModule):
         }[split]()
         batch = next(iter(loader))
 
-        print(get_separator("="))
+        print(get_console_separator("="))
         print(f"=== {split} Batch ===")
         pprint_batch(batch)
-        print(get_separator())
+        print(get_console_separator())
         print("=== example ===")
         try:
             for i in range(min(n_samples, infer_batch_size(batch))):
-                print(get_separator())
+                print(get_console_separator())
                 self.display_one_sample({k: v[i] for k, v in batch.items()}, **kwargs)
         except Exception as e:
             logger.exception(e)
-        print(get_separator("="))
+        print(get_console_separator("="))
 
     def display_one_sample(self, example: Dict[str, torch.Tensor], **kwargs):
         """Decode and print one example from the batch"""

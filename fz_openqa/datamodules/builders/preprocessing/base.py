@@ -2,8 +2,7 @@ import abc
 
 from datasets import Dataset
 from datasets import DatasetDict
-
-from fz_openqa.datamodules.utils.typing import HfDataset
+from warp_pipes import HfDataset
 
 
 class DatasetPreprocessing:

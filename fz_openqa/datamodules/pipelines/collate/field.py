@@ -9,26 +9,25 @@ import rich
 import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import ApplyToAll
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import Lambda
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import ReplaceInKeys
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.batch_condition import HasKeys
-from fz_openqa.datamodules.pipes.control.batch_condition import HasKeyWithPrefix
-from fz_openqa.datamodules.pipes.control.condition import Contains
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.control.condition import Not
-from fz_openqa.datamodules.pipes.control.condition import Reduce
-from fz_openqa.utils.datastruct import Batch
-from fz_openqa.utils.pretty import pprint_batch
+from warp_pipes import AddPrefix
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import ApplyToAll
+from warp_pipes import Batch
+from warp_pipes import Collate
+from warp_pipes import Gate
+from warp_pipes import HasKeys
+from warp_pipes import HasKeyWithPrefix
+from warp_pipes import Lambda
+from warp_pipes import Parallel
+from warp_pipes import Pipe
+from warp_pipes import pprint_batch
+from warp_pipes import ReplaceInKeys
+from warp_pipes import Sequential
+from warp_pipes.core.condition import Contains
+from warp_pipes.core.condition import HasPrefix
+from warp_pipes.core.condition import In
+from warp_pipes.core.condition import Not
+from warp_pipes.core.condition import Reduce
 
 
 def to_tensor_op(inputs: List[Any]) -> Tensor:

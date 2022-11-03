@@ -10,7 +10,7 @@ from transformers import AutoTokenizer, BertPreTrainedModel, AutoModel
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 from fz_openqa.utils.train_utils import silent_huggingface
 
 

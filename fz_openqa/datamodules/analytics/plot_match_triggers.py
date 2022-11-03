@@ -17,7 +17,7 @@ from datasets import Dataset
 from datasets import Split
 
 from .base import Analytic
-from fz_openqa.utils.pretty import get_separator
+from warp_pipes import get_console_separator
 
 
 class PlotTopMatchTriggers(Analytic):
@@ -72,13 +72,13 @@ class PlotTopMatchTriggers(Analytic):
 
         labels, counts = zip(*counter.most_common(self.topn))
         if self.verbose:
-            print(get_separator())
+            print(get_console_separator())
             rich.print(f"=== {type(self).__name__} ===")
-            print(get_separator("."))
+            print(get_console_separator("."))
             c_length = max(len(str(c)) for c in counts)
             for label, count in zip(labels, counts):
                 rich.print(f" count={str(count):{c_length}} label='{label}'")
-            print(get_separator())
+            print(get_console_separator())
 
         fig = self.plot_most_commons(labels, counts)
         self.save_fig_as_html(fig)

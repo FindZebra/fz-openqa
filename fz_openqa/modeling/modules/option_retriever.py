@@ -12,6 +12,8 @@ from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
+from warp_pipes import Batch
+from warp_pipes import pprint_batch
 
 from ..heads.dpr import DprHead
 from ..heads.dpr import unique_with_indices
@@ -24,10 +26,8 @@ from fz_openqa.modeling.modules.base import Module
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import fingerprint_bert
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.pretty import pprint_batch
 
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
 

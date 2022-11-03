@@ -2,8 +2,7 @@ import dataclasses
 
 from datasets import Dataset
 from datasets import DatasetDict
-
-from fz_openqa.datamodules.index import Index
+from warp_pipes import Index
 
 
 class OpenQaDataset(DatasetDict):

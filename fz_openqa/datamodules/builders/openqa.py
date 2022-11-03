@@ -13,40 +13,30 @@ from datasets import Dataset
 from datasets import DatasetDict
 from loguru import logger
 from omegaconf import DictConfig
+from warp_pipes import BlockSequential
+from warp_pipes import Flatten
+from warp_pipes import HfDataset
+from warp_pipes import Index
+from warp_pipes import Nested
+from warp_pipes import Parallel
+from warp_pipes import Pipe
+from warp_pipes import Sequential
+from warp_pipes.core.condition import HasPrefix
+from warp_pipes.support.datasets_utils import get_column_names
+from warp_pipes.support.datasets_utils import keep_only_columns
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
+from fz_openqa.datamodules.builders.index import IndexBuilder
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.transforms.base import OpenQaTransform
-from fz_openqa.datamodules.builders.utils.format_row import format_row_concatenated_questions
-from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions
-from fz_openqa.datamodules.builders.utils.format_row import format_row_flat_questions_with_docs
-from fz_openqa.datamodules.builders.utils.format_row import format_row_nested_questions_with_docs
 from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
-from fz_openqa.datamodules.index import Index
-from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.index.index_pipes import FetchNestedDocuments
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
-from fz_openqa.datamodules.pipelines.preprocessing import FetchAndClassifyDocuments
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
-from fz_openqa.datamodules.pipes import BlockSequential
-from fz_openqa.datamodules.pipes import Flatten
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import RelevanceClassifier
 from fz_openqa.datamodules.pipes import Sampler
-from fz_openqa.datamodules.pipes import ScoreTransform
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.pipes.nesting import ApplyAsFlatten
-from fz_openqa.datamodules.pipes.nesting import Nested
-from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import keep_only_columns
+from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments
 from fz_openqa.datamodules.utils.datastruct import OpenQaConfig
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
-from fz_openqa.datamodules.utils.map_with_fingerprint import MapWithFingerprint
-from fz_openqa.datamodules.utils.typing import HfDataset
 
 
 class SelectMode(Enum):
@@ -74,8 +64,6 @@ class OpenQaBuilder(DatasetBuilder):
         dataset_builder: QaBuilder,
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
-        relevance_classifier: Optional[RelevanceClassifier],
-        score_transform: Optional[ScoreTransform] = None,
         sampler: Optional[Sampler],
         n_retrieved_documents: int,
         document_nesting_level: Optional[int] = None,
@@ -126,8 +114,6 @@ class OpenQaBuilder(DatasetBuilder):
         self.output_columns = output_columns
         self.sampler = sampler
         self.map_args = {
-            "relevance_classifier": relevance_classifier,
-            "score_transform": score_transform,
             "n_retrieved_documents": n_retrieved_documents,
             "sort_documents": sort_documents,
             "num_proc": num_proc,
@@ -253,8 +239,6 @@ class OpenQaBuilder(DatasetBuilder):
         n_retrieved_documents: int,
         num_proc: int,
         batch_size: int,
-        relevance_classifier: Optional[RelevanceClassifier],
-        score_transform: Optional[ScoreTransform],
         sort_documents: bool,
         **map_kwargs,
     ) -> DatasetDict:
@@ -270,35 +254,6 @@ class OpenQaBuilder(DatasetBuilder):
         pipe = BlockSequential(
             [
                 ("Search documents", index),
-                (
-                    "Classify documents",
-                    FetchAndClassifyDocuments(
-                        corpus_dataset=corpus,
-                        classifier=relevance_classifier,
-                        level=self._document_base_nesting_level,
-                        axis=self._document_base_nesting_level,
-                        n=n_retrieved_documents,
-                        # When the documents are nested by one level, only the
-                        # gold answer is used to compute the match score. When
-                        # the level == 2, the match score is computed using each
-                        # answer option, therefore there is no need for extracitng
-                        # the gold answer.
-                        extract_gold=self._document_base_nesting_level < 2,
-                    )
-                    if relevance_classifier is not None
-                    else None,
-                ),
-                (
-                    "Transform scores",
-                    ApplyAsFlatten(
-                        score_transform,
-                        level=self._document_base_nesting_level - 1,
-                        input_filter=In(["document.proposal_score", "document.match_score"]),
-                        update=True,
-                    )
-                    if score_transform is not None and relevance_classifier is not None
-                    else None,
-                ),
                 (
                     "Sort documents",
                     SortDocuments(level=self._document_base_nesting_level)

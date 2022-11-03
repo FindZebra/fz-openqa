@@ -1,6 +1,6 @@
 import unittest
 
-from fz_openqa.datamodules.index import Index, ElasticSearchIndex
+from warp_pipes import Index, ElasticSearchIndex
 from fz_openqa.datamodules.index.utils.es_engine import ping_es
 from tests.indexes.test_base_index import TestIndex
 

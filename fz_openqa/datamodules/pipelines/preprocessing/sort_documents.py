@@ -1,10 +1,11 @@
-from fz_openqa.datamodules.pipes import DropKeys
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Sequential
+from warp_pipes import Batch
+from warp_pipes import DropKeys
+from warp_pipes import Nested
+from warp_pipes import Pipe
+from warp_pipes import Sequential
+from warp_pipes.core.condition import HasPrefix
+
 from fz_openqa.datamodules.pipes import Sort
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix
-from fz_openqa.datamodules.pipes.nesting import Nested
-from fz_openqa.utils.datastruct import Batch
 
 
 class GenIsPositive(Pipe):

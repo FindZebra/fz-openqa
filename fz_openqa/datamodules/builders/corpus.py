@@ -13,6 +13,17 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from loguru import logger
+from warp_pipes import AddPrefix
+from warp_pipes import Collate
+from warp_pipes import DropKeys
+from warp_pipes import Gate
+from warp_pipes import GeneratePassages
+from warp_pipes import HfDataset
+from warp_pipes import Parallel
+from warp_pipes import Pipe
+from warp_pipes import Sequential
+from warp_pipes.core.condition import In
+from warp_pipes.support.pretty import pretty_decode
 
 from ..pipelines.preprocessing import FormatAndTokenize
 from ..pipelines.preprocessing.text import AppendSuffix
@@ -27,19 +38,8 @@ from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines import collate
 from fz_openqa.datamodules.pipelines.collate import CollateTokens
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import DropKeys
-from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import GeneratePassages
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.utils.pretty import pretty_decode
 
 TXT_PATTERN = r"^.*\.txt$"
 

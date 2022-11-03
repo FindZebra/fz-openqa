@@ -5,9 +5,9 @@ from unittest import TestCase
 
 import rich
 
-from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import ExpandAndClassify
-from fz_openqa.datamodules.pipes import Collate, Sequential, PrintBatch
-from fz_openqa.datamodules.pipes.control.condition import HasPrefix, Reduce
+from fz_openqa.datamodules.pipelines.preprocessing.classify_documents import ExpandAndExtractAnswer
+from warp_pipes import Collate, Sequential, PrintBatch
+from warp_pipes.core.condition import HasPrefix, Reduce
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
 from fz_openqa.datamodules.pipes.relevance import (ExactMatch, MetaMapMatch,
                                                    ScispaCyMatch,
@@ -138,7 +138,7 @@ class TestRelevanceClassifier(TestCase):
         Flatten and process with the classifier.
         """
         return Sequential(
-            ExpandAndClassify(classifier, axis=1, n=self.n_docs, extract_gold=True)
+            ExpandAndExtractAnswer(classifier, axis=1, n=self.n_docs, extract_gold=True)
         )
 
     def test_exact_match(self):

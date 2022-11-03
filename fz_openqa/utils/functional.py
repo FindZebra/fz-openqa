@@ -11,8 +11,7 @@ import torch.nn
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch import Tensor
-
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 
 
 def is_loggable(x: Any):
