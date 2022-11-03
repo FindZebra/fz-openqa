@@ -18,8 +18,7 @@ from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
@@ -28,14 +27,16 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
     config_name="script_config.yaml",
+    version_base="1.1",
 )
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    datasets.set_caching_enabled(True)
+    datasets.enable_caching()
+    # datasets.logging.set_verbosity_error()
 
     # initialize the tokenizer
     tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="michiyasunaga/BioLinkBERT-base"
+        pretrained_model_name_or_path=config.get("bert_id", "michiyasunaga/BioLinkBERT-base")
     )
 
     # initialize text formatter
@@ -51,7 +52,6 @@ def run(config: DictConfig) -> None:
     builder = CorpusBuilder(
         dset_name=config.get("dset_name", "medqa"),
         tokenizer=tokenizer,
-        to_sentences=config.get("to_sentences", False),
         text_formatter=textformatter,
         subset_size=config.get("subset_size", None),
         cache_dir=config.sys.get("cache_dir"),
@@ -67,14 +67,15 @@ def run(config: DictConfig) -> None:
             ),
         ],
     )
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, num_proc=config.get("num_proc", 0))
 
+    # build the dataset
     dm.setup()
     dm.display_samples(n_samples=5)
 
     # access dataset
     rich.print(dm.dataset)
-    rich.print(f"> n documents: {len(set(dm.dataset['document.idx']))}")
+    logger.info(f"n. unique documents: {len(set(dm.dataset['document.idx']))}")
 
     # sample a batch
     _ = next(iter(dm.train_dataloader()))

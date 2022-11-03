@@ -104,7 +104,8 @@ class FormatAndTokenize(Sequential):
                     TokenizerPipe(
                         tokenizer,
                         max_length=max_length,
-                        fields=key,
+                        key=key,
+                        field=None,
                         return_token_type_ids=return_token_type_ids,
                         add_special_tokens=add_special_tokens,
                         return_offsets_mapping=return_offsets_mapping,
@@ -117,17 +118,28 @@ class FormatAndTokenize(Sequential):
         )
 
 
-class AppendSuffix(Pipe):
-    def __init__(self, text_fields: str | List[str], suffix: str = ". ", **kwargs):
+class AppendPrefixSuffix(Pipe):
+    def __init__(
+        self,
+        text_fields: str | List[str],
+        suffix: Optional[str] = ". ",
+        prefix: Optional[str] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if isinstance(text_fields, str):
             text_fields = [text_fields]
         self.text_fields = text_fields
+        if suffix is None:
+            suffix = ""
         self.suffix = suffix
+        if prefix is None:
+            prefix = ""
+        self.prefix = prefix
 
     def add_dot(self, x: str) -> str:
         if x is not None and len(x):
-            return f"{x}{self.suffix}"
+            return f"{self.prefix}{x}{self.suffix}"
         elif x is None:
             return ""
         else:

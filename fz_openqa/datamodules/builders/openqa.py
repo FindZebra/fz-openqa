@@ -14,6 +14,7 @@ from datasets import DatasetDict
 from loguru import logger
 from omegaconf import DictConfig
 from warp_pipes import BlockSequential
+from warp_pipes import CollateField
 from warp_pipes import Flatten
 from warp_pipes import HfDataset
 from warp_pipes import Index
@@ -31,7 +32,6 @@ from fz_openqa.datamodules.builders.index import IndexBuilder
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.transforms.base import OpenQaTransform
 from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
-from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import SortDocuments
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments

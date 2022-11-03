@@ -66,12 +66,16 @@ def run(config: DictConfig) -> None:
         ],
     )
     dm = DataModule(builder=builder, num_workers=config.get("num_workers", 0))
-    dm.prepare_data()
+
+    # build the dataset
     dm.setup()
-    dataset = dm.dataset
-    rich.print("=== dataset ===")
-    rich.print(dataset)
-    dm.display_samples(n_samples=3, split=config.get("display_split", "train"))
+    dm.display_samples(n_samples=5)
+
+    # access dataset
+    rich.print(dm.dataset)
+
+    # sample a batch
+    _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":
