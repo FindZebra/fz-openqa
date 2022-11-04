@@ -192,15 +192,15 @@ class QaBuilder(HfDatasetBuilder):
             one_split = next(iter(dataset.keys()))
             has_document_columns = any("document." in c for c in dataset[one_split].column_names)
             has_answer_columns = any("answer." in c for c in dataset[one_split].column_names)
-            dataset = dataset.map(
-                Parallel(
-                    self.get_question_tokenizer_pipe(),
-                    Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
-                    Gate(has_document_columns, self.get_document_tokenizer_pipe()),
-                ),
-                batched=True,
+            preprocessing = Parallel(
+                self.get_question_tokenizer_pipe(),
+                Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
+                Gate(has_document_columns, self.get_document_tokenizer_pipe()),
+            )
+            dataset = preprocessing(
+                dataset,
                 num_proc=self.num_proc,
-                desc="Tokenizing",
+                desc="Tokenizing questions",
             )
 
         # add an index column
@@ -326,9 +326,9 @@ class ConcatQaBuilder(QaBuilder):
         Tokenization and formatting as PyTorch tensors"""
 
         # concat question and answers
-        dataset = dataset.map(
-            self.get_tokenize_concat_qa_pipe(),
-            batched=True,
+        preprocessing = self.get_tokenize_concat_qa_pipe()
+        dataset = preprocessing(
+            dataset,
             num_proc=self.num_proc,
             desc="Tokenizing and concatenating questions and answers",
         )

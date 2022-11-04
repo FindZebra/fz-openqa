@@ -14,3 +14,6 @@ class IndexBuilder:
         params = copy(self.params)
         params.update(kwargs)
         return self.cls(corpus, **params)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(engines={self.params['engines']})"

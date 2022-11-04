@@ -97,7 +97,10 @@ class FetchDocuments(Pipe):
             )
 
         # collate and return
-        output = self.collate_pipe(rows)
+        if isinstance(rows, dict):
+            output = rows
+        else:
+            output = self.collate_pipe(rows)
         return output
 
     def _fetch_rows(self, indexes: List[int], max_chunk_size: int = 100) -> Batch:

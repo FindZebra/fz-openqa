@@ -28,7 +28,7 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     if config.get("disable_caching"):
-        datasets.set_caching_enabled(False)
+        datasets.disable_caching()
 
     # initialize the tokenizer
     bert_id = config.get("bert_id", "michiyasunaga/BioLinkBERT-base")

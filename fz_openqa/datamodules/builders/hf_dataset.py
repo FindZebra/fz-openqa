@@ -15,6 +15,7 @@ from loguru import logger
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import FilterKeys
 from warp_pipes import HfDataset
+from warp_pipes import Identity
 from warp_pipes import Lambda
 from warp_pipes import Pipe
 from warp_pipes import Sequential
@@ -113,7 +114,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.split = split
 
         # tokenizer and dataset
-        self.text_formatter = text_formatter or TextFormatter()
+        self.text_formatter = text_formatter or Identity()
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.add_qad_tokens = add_qad_tokens

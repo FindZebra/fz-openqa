@@ -40,6 +40,7 @@ from fz_openqa.datamodules.pipes.sentence import GenerateSentences
 from fz_openqa.tokenizers.static import DOC_TOKEN
 
 TXT_PATTERN = r"^.*\.txt$"
+GPT_END_OF_TEXT_TOKEN = "<|endoftext|>"
 
 CORPUS_GENERATORS = {
     "medqa": (meqa_en_corpus.__file__,),
@@ -212,6 +213,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
+            self.text_formatter.copy(text_key="text"),
             # tokenize the document texts and titles
             Parallel(
                 self.get_text_tokenizer_pipe(),
@@ -227,6 +229,7 @@ class CorpusBuilder(HfDatasetBuilder):
             ),
             # cleanup remaining special tokens in the text
             CleanupSpecialTokens("document.text", self.tokenizer, update=True),
+            DropKeys(keys=["document.offset_mapping"]),
         )
 
         # process the whole dataset (tokenization + passage generation)
@@ -236,7 +239,7 @@ class CorpusBuilder(HfDatasetBuilder):
             num_proc=self.num_proc,
             batch_size=10,
             remove_columns=cols_to_remove,
-            desc="Tokenizing documents and extracting overlapping passages",
+            desc="Formatting, tokenizing and extracting document passages",
         )
 
         # add index column
@@ -258,7 +261,7 @@ class CorpusBuilder(HfDatasetBuilder):
             pad_token_id=self.tokenizer.pad_token_id,
             global_keys=[k.replace("document.", "") for k in self.global_keys],
             verbose=self.verbose,
-            prepend_field="title",
+            prepend_field="title" if self.append_document_title else None,
         )
 
     def get_text_tokenizer_pipe(self):
@@ -308,7 +311,7 @@ class CorpusBuilder(HfDatasetBuilder):
         """Get the prefix tokens for each passage"""
         start_token = self.tokenizer.cls_token_id
         if start_token is None:
-            if self.tokenizer.bos_token != "<|endoftext|>":
+            if self.tokenizer.bos_token != GPT_END_OF_TEXT_TOKEN:
                 start_token = self.tokenizer.bos_token_id
 
         if self.add_qad_tokens:
@@ -325,7 +328,7 @@ class CorpusBuilder(HfDatasetBuilder):
         if self.add_special_tokens:
             end_token = self.tokenizer.sep_token_id
             if end_token is None:
-                if self.tokenizer.eos_token != "<|endoftext|>":
+                if self.tokenizer.eos_token != GPT_END_OF_TEXT_TOKEN:
                     end_token = self.tokenizer.eos_token_id
 
             if end_token is not None:
