@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections
+import re
 from abc import ABC
 from abc import abstractmethod
 from typing import Any
@@ -34,9 +35,11 @@ from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
+re_feature_pattern = re.compile(r"^_[^_]+_$")
+
 
 def is_feature_name(x):
-    return str(x).startswith("_") and str(x).endswith("_")
+    return re_feature_pattern.match(x)
 
 
 class Module(nn.Module, ABC):
