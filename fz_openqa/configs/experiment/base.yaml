@@ -29,8 +29,8 @@ base:
   ckpt_filename: "best-model-{epoch:02d}-{step}"
 
 trainer:
-  gpus: ${n_gpus:}
-  strategy: dp
+  devices: ${n_devices:}
+  strategy: null
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   max_steps: 1_000_000
 

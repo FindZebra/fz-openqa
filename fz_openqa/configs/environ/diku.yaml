@@ -2,3 +2,6 @@
 
 defaults:
   - override /sys: diku.yaml
+
+trainer:
+  strategy: dp

@@ -2,3 +2,6 @@
 
 defaults:
   - override /sys: titan.yaml
+
+trainer:
+  strategy: dp

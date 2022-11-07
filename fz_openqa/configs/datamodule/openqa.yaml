@@ -1,10 +1,8 @@
 defaults:
   - builder: openqa
-  - text_formatter: medqa_formatter # todo: don't lowercase
+  - text_formatter: none
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - relevance_classifier: partial_match
-  - score_transform: multiply_by_relevance
   - dataset_transform: none
   - preprocessing_op: none
   - sampler: random

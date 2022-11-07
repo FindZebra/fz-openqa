@@ -25,8 +25,7 @@ from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 
 from fz_openqa.datamodules.datamodule import DataModule
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 import fz_openqa.training.experiment  # type: ignore
 

@@ -22,7 +22,6 @@ overrides:
     num_proc: 1
     train_batch_size: 10
     eval_batch_size: 10
-    relevance_classifier: null
     transform: null
     builder:
       dataset_builder:

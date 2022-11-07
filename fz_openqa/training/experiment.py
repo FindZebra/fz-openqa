@@ -54,6 +54,7 @@ OmegaConf.register_new_resolver("int_mul", int_mul)
 OmegaConf.register_new_resolver("int_div", int_div)
 OmegaConf.register_new_resolver("int_max", int_max)
 OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
+OmegaConf.register_new_resolver("n_devices", lambda *_: max(1, N_GPUS))
 OmegaConf.register_new_resolver("git_hash", lambda *_: GIT_HASH)
 OmegaConf.register_new_resolver("git_hash_short", lambda *_: GIT_HASH_SHORT)
 OmegaConf.register_new_resolver("eval", lambda x: eval(x))
@@ -63,14 +64,6 @@ OmegaConf.register_new_resolver("cleanup_bert_name", cleanup_bert_name)
 def run_experiment_with_config(config: DictConfig):
     # replace config paths with loaded configs
     resolve_config_paths(config, path=os.path.dirname(configs.__file__))
-
-    # A couple of optional utilities:
-    # - disabling python warnings
-    # - easier access to debug mode
-    # - forcing debug friendly configuration
-    # - forcing multi-gpu friendly configuration
-    # You can safely get rid of this line if you don't want those
-    train_utils.extras(config)
 
     # set random seed if not specified
     if config.base.get("seed", None) is None:
@@ -88,6 +81,6 @@ def run_experiment_with_config(config: DictConfig):
     return training.train(config)
 
 
-@hydra.main(config_path="../configs/", config_name="config.yaml")
+@hydra.main(config_path="../configs/", config_name="config.yaml", version_base="1.1")
 def run_experiment(config: DictConfig):
     return run_experiment_with_config(config)

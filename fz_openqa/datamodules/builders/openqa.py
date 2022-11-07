@@ -8,20 +8,16 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
-from datasets import Dataset
 from datasets import DatasetDict
 from omegaconf import DictConfig
 from warp_pipes import ApplyAsFlatten
 from warp_pipes import BlockSequential
 from warp_pipes import CollateField
-from warp_pipes import Flatten
 from warp_pipes import HfDataset
 from warp_pipes import Index
 from warp_pipes import Nested
 from warp_pipes import Parallel
 from warp_pipes import Pipe
-from warp_pipes import PrintBatch
-from warp_pipes import Sequential
 from warp_pipes.core.condition import HasPrefix
 from warp_pipes.core.condition import In
 from warp_pipes.support.datasets_utils import get_column_names
@@ -186,8 +182,8 @@ class OpenQaBuilder(DatasetBuilder):
             corpus,
             model=model,
             trainer=trainer,
-            corpus_collate_pipe=self.corpus_builder._get_collate_pipe(),
-            dataset_collate_pipe=CollateField("question", tokenizer=self.tokenizer),
+            index_collate_fn=self.corpus_builder._get_collate_pipe(),
+            query_collate_fn=CollateField("question", tokenizer=self.tokenizer),
         )
 
         # map the corpus to the dataset

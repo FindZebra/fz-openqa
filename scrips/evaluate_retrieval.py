@@ -14,7 +14,6 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-import logging
 from pathlib import Path
 
 import datasets
@@ -31,7 +30,7 @@ from fz_openqa import configs
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.utils.config import print_config
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 import fz_openqa.training.experiment  # type: ignore
 
@@ -172,7 +171,7 @@ def run(config):
     fz_metrics = get_metrics(fz_ranks)
     rich.print(
         {
-            "VODQA": metrics,
+            "VOD": metrics,
             "FZ": fz_metrics,
         }
     )

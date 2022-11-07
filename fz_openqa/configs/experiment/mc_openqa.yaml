@@ -13,14 +13,9 @@ defaults:
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
   - override /datamodule/transform: flatten_mc_questions
-  - override /datamodule/relevance_classifier: exact_match
-  - override /datamodule/score_transform: none
   - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
-      # - retriever_accuracy
       - sequence_lengths
-      # - retriever_distribution
-      # - log_retrieved_documents
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
@@ -39,15 +34,13 @@ base:
   eval_device_batch_size: 8
   infer_batch_mul: 300
   exp_id: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
-  # ckpt_filename: "best-model-{epoch:02d}-{step}-{validation/reader/Accuracy:.3f}"
-
 
 trainer:
   gradient_clip_val: 0.5
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
   precision: 16
-  max_steps: 1_000_000 #${int_mul:${model.period},10}
+  max_steps: 1_000_000
 
 model:
   # global model configuration
@@ -125,18 +118,18 @@ datamodule:
   corpus_name: medwiki
   corpus_max_length: 200
   num_proc: 8
-  output_columns:
-    - answer.target
-    - question.row_idx
-    - question.input_ids
-    - question.attention_mask
-    - question.token_type_ids
-    - document.input_ids
-    - document.attention_mask
-    - document.row_idx
-    - document.match_score
-    - document.proposal_score
-    - document.proposal_rank
+#  output_columns:
+#    - answer.target
+#    - question.row_idx
+#    - question.input_ids
+#    - question.attention_mask
+#    - question.token_type_ids
+#    - document.input_ids
+#    - document.attention_mask
+#    - document.row_idx
+#    - document.match_score
+#    - document.proposal_score
+#    - document.proposal_rank
 
   # documents: retrieval & sampling
   n_max_retrieved_documents: 1_000
@@ -177,27 +170,29 @@ datamodule:
 
   # Index parameters
   index_builder:
-    dtype: float16
-    cache_dir: ${sys.cache_dir}
-    persist_cache: false
-    loader_kwargs:
-      batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
-      num_workers: ${datamodule.num_workers}
-      pin_memory: true
     engines:
-      es:
+      elasticsearch:
         config:
           es_temperature: ${datamodule.es_temp}
           auxiliary_weight: ${datamodule.es_weight}
-          query_text_key: question.text
       faiss:
         config:
           index_factory: "shard:IVF1000,Flat"
           train_size: 1_000_000
           max_add_per_gpu: 1_000_000
           add_batch_size: 65536
-          metric_type: ${model.metric_type}
+          faiss_metric: inner_product
           nprobe: 32
+    query_cache_config:
+      loader_kwargs:
+        batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+        num_workers: ${datamodule.num_workers}
+        pin_memory: true
+    index_cache_config:
+      loader_kwargs:
+        batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+        num_workers: ${datamodule.num_workers}
+        pin_memory: true
 
 
 logger:

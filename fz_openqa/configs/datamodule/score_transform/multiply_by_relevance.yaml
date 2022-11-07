@@ -1,7 +1,0 @@
-_target_: fz_openqa.datamodules.pipes.MultiplyScoreByRelevance
-_id: multiply_by_relevance
-factor: 1.0
-normalize: false
-exponentiate: false
-max_score: 1.0
-temperature: 1.0

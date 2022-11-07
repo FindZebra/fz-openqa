@@ -27,6 +27,9 @@ from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.trainer.states import TrainerStatus
 from warp_pipes import get_console_separator
+from warp_pipes import infer_batch_shape
+from warp_pipes import pprint_batch
+from warp_pipes.support.shapes import infer_shape
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
@@ -54,7 +57,7 @@ def train(config: DictConfig) -> Optional[float]:
 
     # set verbosity
     logging.getLogger("elasticsearch").setLevel(logging.ERROR)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+    # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     # avoid "too many open files" error
     sharing_strategy = config.get("base.sharing_strategy", "file_system")
     log.info(f"Using {sharing_strategy} sharing strategy")
@@ -138,17 +141,13 @@ def train(config: DictConfig) -> Optional[float]:
         # datamodule.prepare_data()
         datamodule.setup(trainer=trainer, model=setup_model)
         if config.verbose:
-            rich.print(datamodule.dataset)
             datamodule.display_samples(n_samples=1)
 
     # Log config to all lightning loggers
     train_utils.log_hyperparameters(
         config=config,
         model=model,
-        datamodule=datamodule,
         trainer=trainer,
-        callbacks=callbacks,
-        logger=logger,
     )
 
     # eval on init

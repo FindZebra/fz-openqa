@@ -1,6 +1,6 @@
 _target_: pytorch_lightning.Trainer
 
-gpus: 0
+devices: 0
 
 min_epochs: 1
 max_epochs: 2

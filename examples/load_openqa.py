@@ -1,8 +1,10 @@
 import os
 import sys
 
+from warp_pipes import infer_batch_shape
 from warp_pipes import pprint_batch
 from warp_pipes.support.caching import CacheConfig
+from warp_pipes.support.shapes import infer_shape
 
 from fz_openqa.datamodules.builders.index import IndexBuilder
 
