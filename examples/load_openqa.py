@@ -1,6 +1,7 @@
 import os
 import sys
 
+from warp_pipes import pprint_batch
 from warp_pipes.support.caching import CacheConfig
 
 from fz_openqa.datamodules.builders.index import IndexBuilder
@@ -149,7 +150,7 @@ def run(config):
                 "config": {
                     "k": 100,
                     "main_key": "text",
-                    "auxiliary_key": "title",
+                    "auxiliary_field": "answer",
                     "es_temperature": 5.0,
                     "auxiliary_weight": config.get("aux_weight", 0.5) if concat_dset else 0,
                     **base_engine_config,
@@ -172,7 +173,7 @@ def run(config):
         query_cache_config=CacheConfig(
             cache_dir=cache_dir,
             model_output_key="_hq_",
-            collate_fn=dataset_builder.get_collate_pipe(),
+            collate_fn=dataset_builder.get_collate_pipe(nesting_level=0),
             loader_kwargs={"num_workers": 0, "batch_size": 10},
         ),
     )
@@ -189,14 +190,14 @@ def run(config):
     )
 
     # define the data module
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, num_workers=0)
 
     # preprocess the data
     dm.setup(
         model=model if setup_with_model else None,
         trainer=trainer,
     )
-    dm.display_samples(n_samples=10)
+    dm.display_samples(n_samples=1)
 
     # access dataset
     rich.print(dm.dataset)

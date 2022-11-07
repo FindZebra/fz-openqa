@@ -336,13 +336,15 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return suffix_tokens
 
-    def _get_collate_pipe(self) -> Pipe:
+    def _get_collate_pipe(self, **kwargs) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
+        base_kwargs = {"to_tensor": ["row_idx", "idx", "passage_idx", "passage_mask"]}
+        base_kwargs.update(kwargs)
         return CollateField(
             "document",
             tokenizer=self.tokenizer,
-            to_tensor=["row_idx", "idx", "passage_idx", "passage_mask"],
             id="collate-documents",
+            **base_kwargs,
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:

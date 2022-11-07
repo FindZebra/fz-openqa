@@ -196,9 +196,12 @@ class HfDatasetBuilder(DatasetBuilder):
         return dataset
 
     def get_collate_pipe(
-        self, transform: Optional[Callable | Pipe] = None, columns: Optional[List[str]] = None
+        self,
+        transform: Optional[Callable | Pipe] = None,
+        columns: Optional[List[str]] = None,
+        **kwargs,
     ) -> Pipe:
-        pipe = self._get_collate_pipe()
+        pipe = self._get_collate_pipe(**kwargs)
         if columns is not None:
             pipe = Sequential(pipe, FilterKeys(In(columns)))
 
@@ -207,7 +210,7 @@ class HfDatasetBuilder(DatasetBuilder):
 
         return pipe
 
-    def _get_collate_pipe(self) -> Pipe:
+    def _get_collate_pipe(self, **kwargs) -> Pipe:
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 
