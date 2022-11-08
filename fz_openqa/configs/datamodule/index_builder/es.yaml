@@ -16,7 +16,7 @@ engines:
       auxiliary_field: answer
       main_key: text
       index_key: row_idx
-      group_key: doc_idxs
+      group_key: doc_idx
       score_key: proposal_score
       max_batch_size: 100
       verbose: false

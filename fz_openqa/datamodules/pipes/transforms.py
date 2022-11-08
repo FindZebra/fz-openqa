@@ -61,7 +61,8 @@ class TransformMcQuestions(Transform):
             targets = batch[self.target_key]
         else:
             warnings.warn(
-                f"No target found in batch for key {self.target_key}, setting target to -1"
+                f"No target found in batch for key {self.target_key}, "
+                f"setting target to -1. Found keys: {batch.keys()}"
             )
             targets = torch.ones(len(batch), dtype=torch.long) * -1
 

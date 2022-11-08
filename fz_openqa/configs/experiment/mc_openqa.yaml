@@ -118,18 +118,18 @@ datamodule:
   corpus_name: medwiki
   corpus_max_length: 200
   num_proc: 8
-#  output_columns:
-#    - answer.target
-#    - question.row_idx
-#    - question.input_ids
-#    - question.attention_mask
-#    - question.token_type_ids
-#    - document.input_ids
-#    - document.attention_mask
-#    - document.row_idx
-#    - document.match_score
-#    - document.proposal_score
-#    - document.proposal_rank
+  output_columns:
+    - answer.target
+    - question.row_idx
+    - question.input_ids
+    - question.attention_mask
+    - question.token_type_ids
+    - document.input_ids
+    - document.attention_mask
+    - document.row_idx
+    - document.match_score
+    - document.proposal_score
+    - document.proposal_rank
 
   # documents: retrieval & sampling
   n_max_retrieved_documents: 1_000
@@ -139,6 +139,7 @@ datamodule:
   # ES parameters
   es_temp: 5.0
   es_weight: 0.5
+  faiss_factory: "IVF1000,Flat"
 
   # document sampler
   sampler:
@@ -177,7 +178,8 @@ datamodule:
           auxiliary_weight: ${datamodule.es_weight}
       faiss:
         config:
-          index_factory: "shard:IVF1000,Flat"
+          index_factory: ${datamodule.faiss_factory}
+          shard: true
           train_size: 1_000_000
           max_add_per_gpu: 1_000_000
           add_batch_size: 65536

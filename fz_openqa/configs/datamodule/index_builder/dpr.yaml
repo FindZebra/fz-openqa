@@ -1,5 +1,6 @@
 defaults:
   - es
+  - /datamodule/index_builder/es_body/default@engines.elasticsearch.config.es_body
 
 # define the engines
 engines:
@@ -11,13 +12,14 @@ engines:
         k: ${datamodule.n_retrieved_documents}
         es_temperature: 1
         auxiliary_weight: 0
+        timeout: 360
         # base config
         query_field: question
         index_field: document
         auxiliary_field: answer
         main_key: text
         index_key: row_idx
-        group_key: doc_idxs
+        group_key: doc_idx
         score_key: proposal_score
         max_batch_size: 100
         verbose: false
@@ -39,9 +41,9 @@ engines:
       auxiliary_field: answer
       main_key: text
       index_key: row_idx
-      group_key: doc_idxs
+      group_key: doc_idx
       score_key: proposal_score
-      max_batch_size: 512
+      max_batch_size: 100
       verbose: false
       merge_previous_results: true
   topk:
@@ -54,12 +56,11 @@ engines:
       auxiliary_field: answer
       main_key: text
       index_key: row_idx
-      group_key: doc_idxs
+      group_key: doc_idx
       score_key: proposal_score
-      max_batch_size: 100
+      max_batch_size: 10
       verbose: false
       merge_previous_results: false
-      config: { }
 
 # logging
 id: dpr
