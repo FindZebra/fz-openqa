@@ -25,7 +25,7 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
     config_name="script_config.yaml",
-    version_base="1.1",
+    version_base="1.2",
 )
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"

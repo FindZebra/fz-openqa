@@ -1,38 +1,32 @@
 import math
 import os
-import sys
-
-import numpy as np
-import requests
-from tqdm import tqdm
-
-from fz_openqa.training.training import load_checkpoint
-from fz_openqa.utils.elasticsearch import ElasticSearchInstance
-from fz_openqa.utils.fingerprint import get_fingerprint
-
-current_dir = os.path.dirname(os.path.realpath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
-
 from pathlib import Path
 
 import datasets
+import dotenv
 import hydra
+import numpy as np
+import requests
 import rich
 import transformers
 from hydra.utils import instantiate
+from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
-
-from fz_openqa import configs
-from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.utils.config import print_config
-
-from loguru import logger
+from pytorch_lightning import seed_everything
+from tqdm import tqdm
+from warp_pipes import get_console_separator
 
 import fz_openqa.training.experiment  # type: ignore
+from fz_openqa import configs
+from fz_openqa.datamodules.datamodule import DataModule
+from fz_openqa.training.training import load_checkpoint
+from fz_openqa.utils.config import print_config
+from fz_openqa.utils.elasticsearch import ElasticSearchInstance
+from fz_openqa.utils.fingerprint import get_fingerprint
+
+dotenv.load_dotenv(Path(fz_openqa.__file__).parent / ".env")
 
 
 def get_rank(x, y):
@@ -57,7 +51,7 @@ def get_fz_rank(query, que_cuis):
         "q": query,
         "response_format": "json",
         "rows": 100,
-        "api_key": "2bde80df-c408-4a15-acec-dfd0201812ce",
+        "api_key": os.environ['FZ_API_KEY'],
     }
     response = requests.get(base_url, params=params)
     content = response.json()
@@ -89,13 +83,16 @@ def run(config):
     datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    os.environ["HF_DATASETS_CACHE"] = config.sys.cache_dir
+    os.environ["HF_DATASETS_CACHE"] = str(config.sys.cache_dir)
+    os.environ["HF_TRANSFORMERS_CACHE"] = str(config.sys.cache_dir)
     seed_everything(1, workers=True)
 
     # load the model
     overrides = DictConfig(OmegaConf.to_container(config.overrides, resolve=True))
     logger.info("overriding config with:")
+    print(get_console_separator("-"))
     print_config(overrides)
+    print(get_console_separator("-"))
     checkpoint_manager = load_checkpoint(
         config.checkpoint,
         override_config=overrides,
@@ -105,7 +102,9 @@ def run(config):
     model = checkpoint_manager.load_model(config.checkpoint_type)
     checkpoint_config = checkpoint_manager.config
     logger.info("Checkpoint config:")
+    print(get_console_separator("-"))
     print_config(checkpoint_config)
+    print(get_console_separator("-"))
     logger.info(f"Model fingerprint: {get_fingerprint(model)}")
 
     # load the trainer and dataset
@@ -113,8 +112,8 @@ def run(config):
     # instantiate the datamodule
     logger.info(f"Instantiating datamodule <{checkpoint_config.datamodule._target_}>")
     datamodule: DataModule = instantiate(checkpoint_config.datamodule)
-    rich.print(datamodule)
     with ElasticSearchInstance(stdout=open("es.stdout.log", "w")):
+        # setup_model: if `None`, skip faiss indexing (only use elasticsearch)
         setup_model = model if config.get("setup_with_model", True) else None
         datamodule.setup(trainer=trainer, model=setup_model, clean_caches=False)
 

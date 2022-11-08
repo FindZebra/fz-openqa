@@ -28,7 +28,7 @@ base:
 
 # version info (useful for filtering runs on wandb)
 exp_version: 16
-code_version: "0.1.6"
+code_version: "0.2.0"
 
 # base pretrained model
 pretrained_model: ${model.backbone.pretrained_model_name_or_path}

@@ -3,7 +3,6 @@ import json
 import os
 import sys
 import warnings
-from copy import copy
 
 import torch
 from datasets import Split
@@ -21,7 +20,6 @@ sys.path.append(parent_dir)
 
 from loguru import logger
 from pathlib import Path
-from typing import Optional
 
 import datasets
 import hydra
@@ -33,17 +31,8 @@ from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
 
-import fz_openqa
-from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
-from fz_openqa.datamodules.builders import CorpusBuilder
-from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.pipes import ExactMatch, PrioritySampler
-from fz_openqa.inference.checkpoint import CheckpointLoader
-from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
 
 import fz_openqa.training.experiment  # type: ignore
@@ -76,6 +65,8 @@ def run(config):
     # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    os.environ["HF_DATASETS_CACHE"] = str(config.sys.cache_dir)
+    os.environ["HF_TRANSFORMERS_CACHE"] = str(config.sys.cache_dir)
     hydra_config = HydraConfig().get()
     seed_everything(1, workers=True)
 
@@ -150,7 +141,7 @@ def run(config):
             else:
                 targets = torch.zeros_like(preds) - 1
             acc = (preds == targets).float().mean().item()
-            logger.info(f"{n+1}/{config.n_samples} - acc={acc:.3%}")
+            logger.info(f"{n + 1}/{config.n_samples} - acc={acc:.3%}")
 
         # gather all predictions
         log_probs = torch.stack(all_logits, dim=0)

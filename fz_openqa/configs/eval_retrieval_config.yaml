@@ -19,7 +19,7 @@ overrides:
     n_documents: 1_000
     es_temp: 5
     es_weight: 0
-    num_proc: 1
+    num_proc: 4
     train_batch_size: 10
     eval_batch_size: 10
     transform: null

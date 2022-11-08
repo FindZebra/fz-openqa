@@ -81,6 +81,6 @@ def run_experiment_with_config(config: DictConfig):
     return training.train(config)
 
 
-@hydra.main(config_path="../configs/", config_name="config.yaml", version_base="1.1")
+@hydra.main(config_path="../configs/", config_name="config.yaml", version_base="1.2")
 def run_experiment(config: DictConfig):
     return run_experiment_with_config(config)
