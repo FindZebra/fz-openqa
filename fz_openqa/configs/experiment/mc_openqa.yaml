@@ -13,7 +13,6 @@ defaults:
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
   - override /datamodule/transform: flatten_mc_questions
-  - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
       - sequence_lengths
   - override /logger: wandb
@@ -27,8 +26,6 @@ base:
   seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
-  exp_info: ""
-  version: 2.0
   batch_size: 32
   device_batch_size: 0.5
   eval_device_batch_size: 8

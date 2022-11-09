@@ -1,3 +1,0 @@
-_target_: fz_openqa.datamodules.builders.transforms.CollapseMultipleChoice
-filter_unmatched: false
-max_positives: 100

@@ -1,9 +1,12 @@
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import dill  # type: ignore
+import rich
 from datasets import concatenate_datasets
+from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from loguru import logger
@@ -15,7 +18,9 @@ from warp_pipes import HasPrefix
 from warp_pipes import HfDataset
 from warp_pipes import Identity
 from warp_pipes import In
+from warp_pipes import infer_batch_shape
 from warp_pipes import Parallel
+from warp_pipes import pprint_batch
 from warp_pipes import Reduce
 from warp_pipes import RenameKeys
 from warp_pipes import Sequential
@@ -187,6 +192,9 @@ class QaBuilder(HfDatasetBuilder):
             logger.info(f"Dropping document columns {cols}")
             dataset = dataset.remove_columns(cols)
 
+        # answer nesting level
+        answer_shape = infer_columns_batch_size(dataset, ["answer.text"])
+
         # Tokenize the text fields (questions, answers, and documents, if any)
         if self.tokenizer:
             one_split = next(iter(dataset.keys()))
@@ -194,13 +202,13 @@ class QaBuilder(HfDatasetBuilder):
             has_answer_columns = any("answer." in c for c in dataset[one_split].column_names)
             preprocessing = Parallel(
                 self.get_question_tokenizer_pipe(),
-                Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
+                Gate(has_answer_columns, self.get_answer_tokenizer_pipe(answer_shape)),
                 Gate(has_document_columns, self.get_document_tokenizer_pipe()),
             )
             dataset = preprocessing(
                 dataset,
                 num_proc=self.num_proc,
-                desc="Tokenizing questions",
+                desc="Tokenizing questions and answers",
             )
 
         # add an index column
@@ -208,7 +216,7 @@ class QaBuilder(HfDatasetBuilder):
 
         return dataset
 
-    def get_answer_tokenizer_pipe(self):
+    def get_answer_tokenizer_pipe(self, answer_shape: List[int]):
         return FormatAndTokenize(
             prefix="answer.",
             text_formatter=self.text_formatter,
@@ -216,7 +224,7 @@ class QaBuilder(HfDatasetBuilder):
             max_length=self.max_length,
             add_qad_tokens=self.add_qad_tokens,
             qad_tokens=self.n_answer_tokens * [ANS_TOKEN],
-            shape=[-1, self.n_options],
+            shape=answer_shape,
         )
 
     def get_document_tokenizer_pipe(self):
@@ -284,7 +292,7 @@ class QaBuilder(HfDatasetBuilder):
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
-                nesting_level=1,
+                nesting_level=-1,
                 include_only=["input_ids", "attention_mask"],
                 id="pad-answer-tokens",
             ),
@@ -426,3 +434,12 @@ class ConcatQaBuilder(QaBuilder):
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
         return format_row_concatenated_questions(row, tokenizer=self.tokenizer, **kwargs)
+
+
+def infer_columns_batch_size(dataset: HfDataset, keys: List[str], n: int = 10) -> List[int]:
+    assert isinstance(dataset, (Dataset, DatasetDict))
+    dset = dataset if isinstance(dataset, Dataset) else next(iter(dataset.values()))
+    sample = {k: v for k, v in dset[:n].items() if k in keys}
+    batch_size = infer_batch_shape(sample)
+    batch_size[0] = -1
+    return batch_size

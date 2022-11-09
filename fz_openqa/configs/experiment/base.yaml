@@ -15,7 +15,8 @@ base:
   seed: null
   target_metric: ???
   target_mode: ???
-  exp_info: "--"
+  exp_info: ""
+  version: 2.0
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8

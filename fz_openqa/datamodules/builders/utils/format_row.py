@@ -227,6 +227,10 @@ def format_row_qa(row: Dict[str, Any], *, tokenizer, **kwargs):
             q_label = q_label_binary
             row["answer.target"] = q_label
 
+        a_input_ids = None
+    else:
+        a_input_ids = row.get("answer.input_ids", None)
+
     repr = ""
     if nesting_level == 0:
         # repr question
@@ -240,6 +244,11 @@ def format_row_qa(row: Dict[str, Any], *, tokenizer, **kwargs):
             line += " - "
         line += f"{pretty_decode(q_input_ids, **decode_kwargs, only_text=False, style=an_style)}\n"
         repr += line
+        if a_input_ids is not None:
+            repr += "* Answer:" + "\n"
+            ans_str = pretty_decode(a_input_ids, **decode_kwargs, only_text=False, style="green")
+            line = f" - {ans_str}\n"
+            repr += line
 
         # add documents repr
         if "document.input_ids" in row:

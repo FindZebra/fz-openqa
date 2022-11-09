@@ -27,7 +27,6 @@ from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.index import IndexBuilder
 from fz_openqa.datamodules.builders.qa import QaBuilder
-from fz_openqa.datamodules.builders.transforms.base import OpenQaTransform
 from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments
@@ -56,14 +55,14 @@ class OpenQaBuilder(DatasetBuilder):
         corpus_builder: CorpusBuilder,
         index_builder: IndexBuilder,
         sampler: Optional[Sampler],
-        document_nesting_level: Optional[int] = None,
-        dataset_transform: Optional[OpenQaTransform] = None,
         num_proc: int = 4,
         batch_size: int = 100,
         writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
         transform: Optional[Pipe | DictConfig] = None,
         # depreciated
+        document_nesting_level: Optional[int] = None,
+        dataset_transform: Optional = None,
         sort_documents: bool = False,
         n_retrieved_documents: Optional[int] = None,
         **kwargs,
@@ -83,14 +82,6 @@ class OpenQaBuilder(DatasetBuilder):
             question_nesting_level=self.dataset_builder.nesting_level,
             document_nesting_level=self._document_base_nesting_level,
         )
-
-        # set transform and update the OpenQaConfig
-        if dataset_transform is not None:
-            assert isinstance(dataset_transform, OpenQaTransform)
-            self.openqa_config = dataset_transform(self.openqa_config)
-            self.dataset_transform = dataset_transform
-        else:
-            self.dataset_transform = None
 
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
@@ -192,14 +183,6 @@ class OpenQaBuilder(DatasetBuilder):
             if k in map_args:
                 map_args[k] = kwargs.pop(k)
         dataset = self.search_corpus(dataset=dataset, index=index, **map_args, **kwargs)
-
-        # transform the dataset
-        if self.dataset_transform is not None:
-            dataset = self.dataset_transform(
-                dataset,
-                openqa_config=self.openqa_config,
-                **{k: v for k, v in map_args.items() if k in ["num_proc", "batch_size"]},
-            )
 
         # format the dataset
         if format is not None:

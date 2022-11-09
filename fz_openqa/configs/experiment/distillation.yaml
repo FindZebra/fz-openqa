@@ -2,7 +2,7 @@
 
 defaults:
   - mc_openqa
-  - override /datamodule/dataset_transform: collapse_multiple_choice
+  - override /datamodule/preprocessing_op: multi_choice_to_generative
   - override /datamodule/transform: strip_answer
   - override /model/module/reader_head: none
   - override /model/module/gradients: distillation

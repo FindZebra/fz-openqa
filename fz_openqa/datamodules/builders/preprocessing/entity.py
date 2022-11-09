@@ -15,22 +15,16 @@ class EntityPreprocessing(DatasetPreprocessing):
         text_key: str = "question.text",
         spacy_model: str = "en_core_sci_lg",
         only_train_set: bool = True,
-        dset_name: Optional[str] = None,
         update_dataset: bool = False,
         **kwargs,
     ):
         super().__init__(only_train_set=only_train_set, **kwargs)
         logger.info(f"Initializing {type(self).__name__} " f"with spacy_model: {spacy_model}")
         self.spacy_model = spacy_model
-        self.dset_name = dset_name
         self.update_dataset = update_dataset
         self.op = SciSpaCyFilter(text_key=text_key, model_name=spacy_model)
 
-    def preprocess(self, dataset: Dataset, dset_name: Optional[str] = None, **kwargs) -> Dataset:
-        if self.dset_name is not None:
-            if self.dset_name != dset_name:
-                return dataset
-
+    def preprocess(self, dataset: Dataset, **kwargs) -> Dataset:
         # extract entities
         new_dataset = dataset.map(
             self.op,

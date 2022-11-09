@@ -3,7 +3,6 @@ defaults:
   - text_formatter: none
   - tokenizer: pretrained
   - index_builder: elasticsearch
-  - dataset_transform: none
   - preprocessing_op: none
   - sampler: random
   - transform: none

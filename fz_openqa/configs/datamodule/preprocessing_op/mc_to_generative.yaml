@@ -1,0 +1,3 @@
+_target_: fz_openqa.datamodules.builders.preprocessing.MultipleChoiceToGenerative
+key: target
+field: answer

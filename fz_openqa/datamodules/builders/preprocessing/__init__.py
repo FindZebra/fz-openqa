@@ -1,2 +1,3 @@
 from .base import DatasetPreprocessing
 from .entity import EntityPreprocessing
+from .multiple_choice_to_generative import MultipleChoiceToGenerative

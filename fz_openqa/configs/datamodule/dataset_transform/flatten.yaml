@@ -1,3 +1,0 @@
-_target_: fz_openqa.datamodules.builders.transforms.FlattenMultipleChoice
-filter_unmatched: true
-max_positives: 100
