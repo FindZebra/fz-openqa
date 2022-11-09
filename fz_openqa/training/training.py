@@ -95,7 +95,6 @@ def train(config: DictConfig) -> Optional[float]:
             datamodule.display_samples(n_samples=10)
             rich.print(datamodule.dataset)
             return
-        exit()
 
         # Init Lightning Module
         model = instantiate_model(
