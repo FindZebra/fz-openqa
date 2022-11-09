@@ -87,12 +87,15 @@ def train(config: DictConfig) -> Optional[float]:
     ):
 
         # only preprocess the data if there is no trainer
-        if config.get("trainer", None) is None:
+        if "null" in config.trainer._target_:
             log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
             datamodule: DataModule = instantiate(config.datamodule)
             # datamodule.prepare_data()
             datamodule.setup()
+            datamodule.display_samples(n_samples=10)
+            rich.print(datamodule.dataset)
             return
+        exit()
 
         # Init Lightning Module
         model = instantiate_model(

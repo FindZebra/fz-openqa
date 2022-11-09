@@ -18,9 +18,12 @@ from fz_openqa.utils.git import git_revision_short_hash
 
 
 def int_div(a, *b):
-    y = a
-    for x in b:
-        y = y / x
+    try:
+        y = a
+        for x in b:
+            y = y / x
+    except Exception as exc:
+        raise ValueError(f"Inputs: a={a}, b={b}") from exc
     return int(y)
 
 
@@ -42,6 +45,10 @@ def cleanup_bert_name(name):
     return name.split("/")[-1]
 
 
+def get_n_devices(*args, **kwargs):
+    return max(1, N_GPUS)
+
+
 N_GPUS = torch.cuda.device_count()
 GIT_HASH = git_revision_hash()
 GIT_HASH_SHORT = git_revision_short_hash()
@@ -54,7 +61,7 @@ OmegaConf.register_new_resolver("int_mul", int_mul)
 OmegaConf.register_new_resolver("int_div", int_div)
 OmegaConf.register_new_resolver("int_max", int_max)
 OmegaConf.register_new_resolver("n_gpus", lambda *_: N_GPUS)
-OmegaConf.register_new_resolver("n_devices", lambda *_: max(1, N_GPUS))
+OmegaConf.register_new_resolver("n_devices", get_n_devices)
 OmegaConf.register_new_resolver("git_hash", lambda *_: GIT_HASH)
 OmegaConf.register_new_resolver("git_hash_short", lambda *_: GIT_HASH_SHORT)
 OmegaConf.register_new_resolver("eval", lambda x: eval(x))

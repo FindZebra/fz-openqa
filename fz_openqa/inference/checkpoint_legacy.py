@@ -64,6 +64,7 @@ def patch_index_builder(config: Dict) -> Dict:
     return {
         "_target_": "fz_openqa.datamodules.builders.IndexBuilder",
         "engines": engines,
+        "cache_dir": cache_dir,
         "index_cache_config": {**cache_config, "model_output_key": "_hd_"},
         "query_cache_config": {**cache_config, "model_output_key": "_hq_"},
         "id": id,

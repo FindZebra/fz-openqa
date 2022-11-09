@@ -21,8 +21,8 @@ base:
   eval_device_batch_size: 8
   infer_batch_mul: 100
   n_devices: ${n_devices:}
-  step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
-  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
+  step_batch_size: ${int_max:1,${int_mul:${base.device_batch_size},${base.n_devices}}}
+  accumulate_grad_batches: ${int_max:1,${int_div:${base.batch_size},${base.step_batch_size}}}
   sharing_strategy: file_system
   git_hash: ${git_hash:}
   git_hash_short: ${git_hash_short:}

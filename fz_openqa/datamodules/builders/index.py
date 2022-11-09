@@ -43,7 +43,7 @@ class IndexBuilder:
         else:
             raise ValueError(f"query_cache_config must be provided. Found {params.keys()}")
 
-        return self.cls(corpus, **params)
+        return self.cls(corpus=corpus, **params)
 
     def _inject_config_attr(self, cache_config, key, value):
         if isinstance(cache_config, (dict, DictConfig)):

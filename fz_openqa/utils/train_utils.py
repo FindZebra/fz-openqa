@@ -48,7 +48,7 @@ def log_hyperparameters(
     Additionaly saves:
         - number of trainable model parameters
     """
-    if trainer.logger is None:
+    if trainer is None or trainer.logger is None:
         return
 
     hparams = {

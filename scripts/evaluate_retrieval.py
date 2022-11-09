@@ -26,8 +26,7 @@ from fz_openqa.utils.config import print_config
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.fingerprint import get_fingerprint
 
-dotenv.load_dotenv(Path(fz_openqa.__file__).parent / ".env")
-
+dotenv.load_dotenv(Path(fz_openqa.__file__).parent.parent / ".env")
 
 def get_rank(x, y):
     if x not in y:
@@ -46,12 +45,15 @@ def reduce_docs(docs, doc_ids):
 
 
 def get_fz_rank(query, que_cuis):
+    if not 'FZ_API_KEY' in os.environ:
+        raise ValueError('FZ_API_KEY not set')
+    API_KEY = os.environ['FZ_API_KEY']
     base_url = "https://www.findzebra.com/api/v1/query"
     params = {
         "q": query,
         "response_format": "json",
         "rows": 100,
-        "api_key": os.environ['FZ_API_KEY'],
+        "api_key": API_KEY,
     }
     response = requests.get(base_url, params=params)
     content = response.json()
@@ -124,7 +126,8 @@ def run(config):
     rich.print(f"Writing output to {output_file.absolute()}")
     j = 0
     with open(output_file, "w") as f:
-        for batch in tqdm(datamodule.test_dataloader(), desc="Evaluating"):
+        pbar = tqdm(datamodule.test_dataloader(), desc="Evaluating")
+        for batch in pbar:
             for i in range(len(batch["document.cui"])):
                 j += 1
                 eg = {k: v[i] for k, v in batch.items()}
@@ -144,12 +147,12 @@ def run(config):
                 fz_ranks.append(fz_rank)
                 fz_metrics = get_metrics(fz_ranks)
 
-                rich.print(f">> rank: {rank}, fz:rank: {fz_rank}")
-
                 # print the intermediate results
-                desc = ", ".join(f"{k}={v:.3f}" for k, v in metrics.items())
+                desc = 'Evaluating: '
+                desc += ", ".join(f"{k}={v:.3f}" for k, v in metrics.items() if k in ['MRR', 'Hit@20'])
                 desc += f", FZ:MRR={fz_metrics.get('MRR', -1):.3f}"
-                rich.print(desc)
+                desc += f" (rank: {rank}, fz:rank: {fz_rank})"
+                pbar.set_description(desc)
 
                 # write to file
                 cui = eg["question.cui"]
