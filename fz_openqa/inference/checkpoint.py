@@ -3,6 +3,8 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+import rich
+import torch
 import yaml
 from datasets import DownloadManager
 from hydra._internal.instantiate._instantiate2 import _resolve_target
@@ -119,6 +121,7 @@ class CheckpointLoader:
 
     def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
+        model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
 
         # find checkpoint files
         paths = self.model_checkpoint_paths(match=checkpoint_type)
@@ -127,8 +130,6 @@ class CheckpointLoader:
                 logger.info("Zero-shot. Initializing model without checkpoint.")
             else:
                 logger.warning("No checkpoint found. Initializing model without checkpoint.")
-
-            model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
             return model
 
         # select one checkpoint path
@@ -140,7 +141,7 @@ class CheckpointLoader:
         path = paths[-1]
 
         # load checkpoint state_dict
-        logger.info(f"Loading model from checkpoint: {path}")
-        cls: Model.__class__ = _resolve_target(self.config.model._target_, full_key=None)
-        model = cls.load_from_checkpoint(checkpoint_path=str(path), map_location="cpu")
+        logger.info(f"Loading `state_dict` from checkpoint: {path}")
+        ckpt = torch.load(path, map_location=model.device)
+        model.load_state_dict(ckpt["state_dict"], strict=False)
         return model

@@ -43,7 +43,7 @@ engines:
       index_key: row_idx
       group_key: doc_idx
       score_key: proposal_score
-      max_batch_size: null
+      max_batch_size: 100
       verbose: false
       merge_previous_results: true
   topk:

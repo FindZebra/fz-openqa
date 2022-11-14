@@ -1,0 +1,14 @@
+defaults:
+  - eval_retrieval_config
+
+
+# checkpoint
+checkpoint: https://f001.backblazeb2.com/file/FindZebraData/fz-openqa/checkpoints/distill-med-all-entity-biolink-base-cross-simdpr-v1.1.zip
+checkpoint_type: last
+
+export_model_id: findzebra/vod-retriever-medical-v1.0
+
+# overrides
+overrides:
+  sys:
+    ${sys}

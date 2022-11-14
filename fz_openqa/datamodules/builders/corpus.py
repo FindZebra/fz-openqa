@@ -95,7 +95,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def __init__(
         self,
-        dset_name: str = "file",
+        dset_name: Optional[str] = None,
         passage_length: int = 200,
         passage_stride: int = 100,
         input_dir: Optional[str] = None,
@@ -105,11 +105,12 @@ class CorpusBuilder(HfDatasetBuilder):
     ):
         super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
 
-        for dn in dset_name.split("+"):
-            if dn not in CORPUS_GENERATORS:
-                raise ValueError(
-                    f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
-                )
+        if dset_name is not None:
+            for dn in dset_name.split("+"):
+                if dn not in CORPUS_GENERATORS:
+                    raise ValueError(
+                        f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
+                    )
 
         if self.max_length is not None:
             raise ValueError(
@@ -138,7 +139,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return load_dataset(*args, **kwargs)
 
-    def load_base_dataset(self) -> DatasetDict:
+    def load_base_dataset(self) -> HfDataset:
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
 
         # split dataset names using `+`

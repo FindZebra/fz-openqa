@@ -122,7 +122,10 @@ class HfDatasetBuilder(DatasetBuilder):
 
     # @cache_hf_dataset
     def _call(
-        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+        self,
+        format: Optional[str] = "torch",
+        columns: Optional[List[str]] = None,
+        **kwargs,
     ) -> HfDataset:
         """
         Loads the dataset and preprocesses it
@@ -154,7 +157,7 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset.set_format(type=format, columns=pt_cols, output_all_columns=True)
         return dataset
 
-    def load_and_filter_dataset(self) -> HfDataset:
+    def load_and_filter_dataset(self, base_dataset: Optional[HfDataset] = None) -> HfDataset:
         dataset: HfDataset = self.load_base_dataset()
         dataset = self.filter_dataset(dataset)
         if self.subset_size is not None:
