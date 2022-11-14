@@ -402,7 +402,7 @@ python-versions = ">=3.7"
 
 [[package]]
 name = "fsspec"
-version = "2022.10.0"
+version = "2022.11.0"
 description = "File-system specification"
 category = "main"
 optional = false
@@ -2018,7 +2018,7 @@ transformers = "^4.23.1"
 type = "git"
 url = "https://github.com/vlievin/warp-pipes.git"
 reference = "dev/fz-openqa"
-resolved_reference = "3111571f20a2387055972f1c310cceeb1327a9ff"
+resolved_reference = "7d921577c54ad33fc19d3caccae87dc7b4387889"
 
 [[package]]
 name = "wasabi"
