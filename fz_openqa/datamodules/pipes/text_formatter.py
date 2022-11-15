@@ -127,3 +127,12 @@ class HtmlCleaner(TextFormatter):
         text = self.text_maker.handle(text)
         text = self.remove_pattern.sub("", text)
         return text
+
+
+class ReSubPatternFormatter(TextFormatter):
+    def __init__(self, clean_pattern: str = r"(<.*?>)|(\[.*?\])", **kwargs):
+        super(ReSubPatternFormatter, self).__init__(**kwargs)
+        self.cleanr = re.compile(clean_pattern)
+
+    def clean(self, text: str) -> str:
+        return re.sub(self.cleanr, "", text)

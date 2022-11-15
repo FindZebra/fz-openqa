@@ -1,6 +1,7 @@
 import math
 import os
 from pathlib import Path
+from typing import Optional
 
 import dotenv
 import hydra
@@ -40,6 +41,11 @@ def reduce_docs(docs, doc_ids):
             new_docs.append(d)
             selected_doc_ids.add(idx)
     return new_docs
+
+def cleanup_cui(cui: Optional[str]) -> str:
+    if cui is None:
+        return "--"
+    return cui.lower()
 
 
 def get_fz_rank(query, que_cuis):
@@ -122,7 +128,7 @@ def run(config):
             for i in range(len(batch["document.cui"])):
                 j += 1
                 eg = {k: v[i] for k, v in batch.items()}
-                doc_cuis = map(str.lower, eg["document.cui"])
+                doc_cuis = map(cleanup_cui, eg["document.cui"])
                 doc_ids = eg["document.idx"]
 
                 doc_cuis = reduce_docs(doc_cuis, doc_ids)

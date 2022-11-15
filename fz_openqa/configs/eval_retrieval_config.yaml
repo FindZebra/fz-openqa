@@ -13,13 +13,13 @@ overrides:
     infer_batch_mul: 400
   datamodule:
     dset_name: fz-queries
-    corpus_name: findzebra
+    corpus_name: findzebra-latest
     n_max_retrieved_documents: 2048
     n_retrieved_documents: 2048
     n_documents: 1_000
     es_temp: 5
     es_weight: 0
-    num_proc: 4
+    num_proc: 16
     train_batch_size: 10
     eval_batch_size: 10
     transform: null
