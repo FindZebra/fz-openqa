@@ -60,7 +60,7 @@ def run(config: DictConfig) -> None:
 
     # build the dataset
     dm.setup()
-    dm.display_samples(n_samples=5)
+    dm.display_samples(n_samples=20)
 
     # access dataset
     rich.print(dm.dataset)

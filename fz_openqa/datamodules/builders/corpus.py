@@ -60,7 +60,7 @@ CORPUS_GENERATORS = {
     "race": ("race", "all"),
 }
 
-DEFAULT_COLUMNS = ["text", "title"]
+DEFAULT_COLUMNS = ["text"]
 
 
 class CorpusBuilder(HfDatasetBuilder):
@@ -295,7 +295,7 @@ class CorpusBuilder(HfDatasetBuilder):
             AppendPrefixSuffix(
                 text_fields="title", suffix=". ", prefix=None, update=True, lowercase=True
             ),
-            RenameKeys({"title": "text"}),
+            RenameKeys({"title": "text"}, update=True),
             FormatAndTokenize(
                 prefix=None,
                 key="text",
