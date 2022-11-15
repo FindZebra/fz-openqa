@@ -124,6 +124,7 @@ class AppendPrefixSuffix(Pipe):
         text_fields: str | List[str],
         suffix: Optional[str] = ". ",
         prefix: Optional[str] = None,
+        lowercase: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -136,8 +137,11 @@ class AppendPrefixSuffix(Pipe):
         if prefix is None:
             prefix = ""
         self.prefix = prefix
+        self.lowercase = lowercase
 
     def add_dot(self, x: str) -> str:
+        if isinstance(x, str) and self.lowercase:
+            x = x.lower()
         if x is not None and len(x):
             return f"{self.prefix}{x}{self.suffix}"
         elif x is None:

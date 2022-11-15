@@ -53,6 +53,7 @@ CORPUS_GENERATORS = {
     "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
     "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
     "findzebra": (fz_corpus.__file__,),
+    "findzebra-latest": ("findzebra/corpus.latest",),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__, None),
@@ -180,10 +181,6 @@ class CorpusBuilder(HfDatasetBuilder):
                 dsets = [drop_cols(dset) for dset in dsets]
             dataset = concatenate_datasets(dsets)
 
-        # infer the global keys
-        columns = get_column_names(dataset)
-        self.global_keys = [k for k in columns if k not in DEFAULT_COLUMNS]
-
         return dataset
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
@@ -193,10 +190,10 @@ class CorpusBuilder(HfDatasetBuilder):
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
-        for attr in dataset.column_names:
-            if "document." in attr:
-                new_attr = attr.replace("document.", "")
-                dataset = dataset.rename_column(attr, new_attr)
+        # remove `document.` prefix
+        dataset = dataset.rename_columns(
+            {k: k.replace("document.", "") for k in dataset.column_names}
+        )
 
         # add the document index column if not already provided
         if "uid" in dataset.column_names:
@@ -212,6 +209,10 @@ class CorpusBuilder(HfDatasetBuilder):
             if all(len(t) == 0 for t in dataset[:100]["title"]):
                 self.append_document_title = False
                 logger.info("No title found in dataset, `append_document_title` is set to False")
+
+        # infer the global keys
+        columns = get_column_names(dataset)
+        self.global_keys = [k for k in columns if k not in DEFAULT_COLUMNS]
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
@@ -291,7 +292,9 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         return Sequential(
-            AppendPrefixSuffix(text_fields="title", suffix=". ", prefix=None, update=True),
+            AppendPrefixSuffix(
+                text_fields="title", suffix=". ", prefix=None, update=True, lowercase=True
+            ),
             RenameKeys({"title": "text"}),
             FormatAndTokenize(
                 prefix=None,

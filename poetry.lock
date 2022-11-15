@@ -522,6 +522,14 @@ six = ">=1.5.2"
 protobuf = ["grpcio-tools (>=1.50.0)"]
 
 [[package]]
+name = "html2text"
+version = "2020.1.16"
+description = "Turn HTML into equivalent Markdown-structured text."
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[[package]]
 name = "huggingface-hub"
 version = "0.10.1"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
@@ -2108,7 +2116,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "flake8 
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "e620f9752280427f33ba5ee85224062a10466b3b441139d4f154309fc1c0f0d1"
+content-hash = "bff142c3f34f3ef8ae582dfe7185c8adb43adab8704a1112b934264277485f2d"
 
 [metadata.files]
 absl-py = []
@@ -2152,6 +2160,7 @@ gitpython = []
 google-auth = []
 google-auth-oauthlib = []
 grpcio = []
+html2text = []
 huggingface-hub = []
 hydra-colorlog = []
 hydra-core = []

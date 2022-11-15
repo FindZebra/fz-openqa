@@ -20,6 +20,7 @@ sentencepiece = "^0.1.96"
 warp-pipes = {git="https://github.com/vlievin/warp-pipes.git", branch="dev/fz-openqa"}
 spacy = "^3.4.2"
 python-dotenv = "^0.21.0"
+html2text = "^2020.1.16"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
