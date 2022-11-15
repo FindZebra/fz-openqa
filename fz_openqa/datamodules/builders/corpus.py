@@ -19,6 +19,7 @@ from warp_pipes import GeneratePassages
 from warp_pipes import HfDataset
 from warp_pipes import Parallel
 from warp_pipes import Pipe
+from warp_pipes import RenameKeys
 from warp_pipes import Sequential
 from warp_pipes.core.condition import HasPrefix
 from warp_pipes.core.condition import In
@@ -291,9 +292,10 @@ class CorpusBuilder(HfDatasetBuilder):
         are added only in `to_sentence` mode."""
         return Sequential(
             AppendPrefixSuffix(text_fields="title", suffix=". ", prefix=None, update=True),
+            RenameKeys({"title": "text"}),
             FormatAndTokenize(
                 prefix=None,
-                key="title",
+                key="text",
                 text_formatter=None,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
@@ -303,9 +305,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 qad_tokens=None,
                 shape=None,
                 update=True,
-                input_filter=In(["title"]),
             ),
             AddPrefix("title."),
+            input_filter=In(["title"]),
         )
 
     def get_prefix_tokens(self):

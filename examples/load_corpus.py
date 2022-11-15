@@ -39,14 +39,15 @@ def run(config: DictConfig) -> None:
 
     # initialize the data module
     builder = CorpusBuilder(
-        dset_name=config.get("dset_name", "medqa"),
+        dset_name=config.get("dset_name", "findzebra"),
         tokenizer=tokenizer,
-        subset_size=config.get("subsest_size", None),
+        subset_size=config.get("subset_size", None),
         cache_dir=config.sys.get("cache_dir"),
         num_proc=config.get("num_proc", 2),
+        add_qad_tokens=config.get("add_qad_tokens", False),
         append_document_title=config.get("append_title", True),
-        passage_length=config.get("window_size", 200),
-        passage_stride=config.get("window_stride", 100),
+        passage_length=config.get("passage_length", 200),
+        passage_stride=config.get("passage_stride", 100),
         analytics=[
             SequenceLengths(
                 output_dir="analytics/",

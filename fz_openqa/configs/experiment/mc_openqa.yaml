@@ -169,6 +169,7 @@ datamodule:
       passage_length: ${datamodule.corpus_max_length}
       passage_stride: 100
       append_document_title: true
+      add_qad_tokens: false
 
   # Index parameters
   index_builder:
