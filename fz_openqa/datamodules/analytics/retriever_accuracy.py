@@ -13,11 +13,11 @@ from datasets import Split
 from sklearn.metrics import classification_report
 from torch import Tensor
 from tqdm import tqdm
+from warp_pipes import get_console_separator
+from warp_pipes.support.datasets_utils import keep_only_columns
 
-from ..utils.dataset import keep_only_columns
 from .base import Analytic
 from .retriever_distribution import safe_concatenate
-from fz_openqa.utils.pretty import get_separator
 
 
 def safe_cast_to_list(x: Any) -> Any:
@@ -108,13 +108,13 @@ class RetrieverAccuracy(Analytic):
         self.save_as_json(dict_results)
 
         if self.verbose:
-            print(get_separator())
+            print(get_console_separator())
             rich.print(f"=== {type(self).__name__}  ===")
             for split, r in results.items():
-                print(get_separator("."))
+                print(get_console_separator("."))
                 rich.print(f"{split}:")
                 rich.print(r["str"])
-            print(get_separator())
+            print(get_console_separator())
 
         if self.wandb_log:
             try:

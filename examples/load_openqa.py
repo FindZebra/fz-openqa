@@ -1,6 +1,13 @@
 import os
 import sys
 
+from warp_pipes import infer_batch_shape
+from warp_pipes import pprint_batch
+from warp_pipes.support.caching import CacheConfig
+from warp_pipes.support.shapes import infer_shape
+
+from fz_openqa.datamodules.builders.index import IndexBuilder
+
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -26,8 +33,7 @@ from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
 from fz_openqa.datamodules.builders import CorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.index.builder import IndexBuilder
-from fz_openqa.datamodules.pipes import ExactMatch, PrioritySampler
+from fz_openqa.datamodules.pipes import PrioritySampler
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.utils.config import print_config
@@ -44,6 +50,7 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
     config_name="script_config.yaml",
+    version_base="1.2",
 )
 def run(config):
     """Load the OpenQA dataset mapped using a pre-trained model.
@@ -56,50 +63,52 @@ def run(config):
     ```
     """
     print_config(config)
-    # set the context
-    datasets.set_caching_enabled(True)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    if config.get("disable_caching"):
+        datasets.disable_caching()
     # datasets.logging.set_verbosity(datasets.logging.CRITICAL)
     transformers.logging.set_verbosity(transformers.logging.CRITICAL)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     seed_everything(1, workers=True)
-    use_colbert = config.get("colbert", False)
+    # arguments
     num_proc = config.get("num_proc", 4)
     setup_with_model = config.get("setup_with_model", False)
-    hidden_size = 32 if use_colbert else 128
+    zero_shot = config.get("zero_shot", True)
+    hidden_size = 128
     bert_id = config.get("bert_id", "google/bert_uncased_L-2_H-128_A-2")
     try:
         cache_dir = config.sys.cache_dir
     except Exception:
         cache_dir = default_cache_dir
 
-    # faiss engines
-    if use_colbert:
-        faiss_engines = [
-            {
-                "name": "maxsim",
+    base_engine_config = {
+        "query_field": "question",
+        "index_field": "document",
+        "index_key": "row_idx",
+        "group_key": "idx",
+        "score_key": "proposal_score",
+        "verbose": config.get("verbose", False),
+    }
+    faiss_engines = [
+        {
+            "name": "dense",
+            "config": {
                 "k": 100,
-                "merge_previous_results": False,
-                "max_batch_size": 100,
-                "config": {
-                    "max_chunksize": 1000,
-                },
+                "index_factory": "IVF1,Flat",
+                "shard": False,
+                **base_engine_config,
             },
-        ]
-    else:
-        faiss_engines = [
-            {
-                "name": "faiss",
-                "k": 100,
-                "merge_previous_results": False,
-                "max_batch_size": 100,
-                "config": {
-                    "index_factory": "IVF1000,Flat",
-                },
-            },
-        ]
+        },
+    ]
 
     # load model
-    model, zero_shot = load_model(config, use_colbert, hidden_size=hidden_size, bert_id=bert_id)
+    model, zero_shot = load_model(
+        config,
+        False,
+        hidden_size=hidden_size,
+        bert_id=bert_id,
+        zero_shot=zero_shot,
+    )
 
     # Init Lightning trainer
     logger.info(f"Instantiating trainer <{config.trainer.get('_target_', None)}>")
@@ -112,14 +121,14 @@ def run(config):
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # define the medqa builder
-    concat_dset = config.get("concat_qa", True)
+    concat_dset = config.get("concat_qa", False)
     QaBuilderCls = ConcatQaBuilder if concat_dset else QaBuilder
     dataset_builder = QaBuilderCls(
         dset_name=config.get("dset_name", "medqa-us"),
         tokenizer=tokenizer,
         n_query_tokens=1,
         n_answer_tokens=0,
-        subset_size=1000 if config.get("use_subset", True) else None,
+        subset_size=config.get("subset_size", 100),
         add_qad_tokens=not zero_shot or not setup_with_model,
         cache_dir=cache_dir,
         num_proc=num_proc,
@@ -127,10 +136,10 @@ def run(config):
 
     # define the corpus builder
     corpus_builder = CorpusBuilder(
-        dset_name=config.get("corpus_name", "medwiki"),
+        dset_name=config.get("corpus_name", "findzebra"),
         tokenizer=tokenizer,
         add_qad_tokens=not zero_shot or not setup_with_model,
-        subset_size=100 if config.get("corpus_subset", False) else None,
+        subset_size=config.get("corpus_subset_size", 100),
         cache_dir=cache_dir,
         num_proc=num_proc,
     )
@@ -139,32 +148,36 @@ def run(config):
     index_builder = IndexBuilder(
         engines=[
             {
-                "name": "es",
-                "k": 100,
-                "merge_previous_results": True,
-                "max_batch_size": 512,
-                "verbose": False,
+                "name": "elasticsearch",
                 "config": {
+                    "k": 100,
+                    "main_key": "text",
+                    "auxiliary_field": "answer",
                     "es_temperature": 5.0,
                     "auxiliary_weight": config.get("aux_weight", 0.5) if concat_dset else 0,
-                    "filter_with_doc_ids": False,
+                    **base_engine_config,
                 },
             },
             *faiss_engines,
             {
                 "name": "topk",
-                "k": 100,
-                "max_batch_size": 100,
+                "config": {"k": 10, "merge_previous_results": False, **base_engine_config},
             },
         ],
-        corpus_collate_pipe=corpus_builder.get_collate_pipe(),
-        loader_kwargs={
-            "batch_size": config.get("batch_size", 10),
-            "num_workers": config.get("num_workers", 4),
-            "pin_memory": config.get("pin_memory", True),
-        },
+        model=model,
         cache_dir=cache_dir,
-        persist_cache=False,
+        index_cache_config=CacheConfig(
+            cache_dir=cache_dir,
+            model_output_key="_hd_",
+            collate_fn=corpus_builder.get_collate_pipe(),
+            loader_kwargs={"num_workers": 0, "batch_size": 10},
+        ),
+        query_cache_config=CacheConfig(
+            cache_dir=cache_dir,
+            model_output_key="_hq_",
+            collate_fn=dataset_builder.get_collate_pipe(nesting_level=0),
+            loader_kwargs={"num_workers": 0, "batch_size": 10},
+        ),
     )
 
     # define the OpenQA builder
@@ -172,7 +185,6 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=index_builder,
-        relevance_classifier=ExactMatch(interpretable=True),
         sampler=PrioritySampler(total=10),
         n_retrieved_documents=100,
         num_proc=config.get("num_proc", num_proc),
@@ -180,24 +192,23 @@ def run(config):
     )
 
     # define the data module
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, num_workers=0)
 
     # preprocess the data
     dm.setup(
         model=model if setup_with_model else None,
         trainer=trainer,
     )
-    dm.display_samples(n_samples=10)
+    dm.display_samples(n_samples=1)
 
     # access dataset
     rich.print(dm.dataset)
 
     # sample a batch
-    # _ = next(iter(dm.train_dataloader()))
+    _ = next(iter(dm.train_dataloader()))
 
 
-def load_model(config, use_colbert, hidden_size=64, bert_id=None):
-    zero_shot = config.get("zero_shot", True)
+def load_model(config, use_colbert=False, hidden_size=64, bert_id=None, zero_shot=True):
     if zero_shot:
         model = ZeroShot(
             head="contextual" if use_colbert else "flat", hidden_size=hidden_size, bert_id=bert_id

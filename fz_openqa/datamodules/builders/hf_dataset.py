@@ -13,21 +13,22 @@ from datasets import load_dataset
 from datasets import Split
 from loguru import logger
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import FilterKeys
+from warp_pipes import HfDataset
+from warp_pipes import Identity
+from warp_pipes import Lambda
+from warp_pipes import Pipe
+from warp_pipes import Sequential
+from warp_pipes import TokenizerPipe
+from warp_pipes.core.condition import In
+from warp_pipes.support.datasets_utils import get_column_names
+from warp_pipes.support.datasets_utils import keep_only_columns
+from warp_pipes.support.datasets_utils import take_subset
+from warp_pipes.support.pretty import pretty_decode
 
 from fz_openqa.datamodules.builders.base import DatasetBuilder
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Lambda
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.datamodules.utils.dataset import get_column_names
-from fz_openqa.datamodules.utils.dataset import keep_only_columns
-from fz_openqa.datamodules.utils.dataset import take_subset
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.pretty import pretty_decode
 
 
 def cache_hf_dataset(func):
@@ -113,7 +114,7 @@ class HfDatasetBuilder(DatasetBuilder):
         self.split = split
 
         # tokenizer and dataset
-        self.text_formatter = text_formatter or TextFormatter()
+        self.text_formatter = text_formatter or Identity()
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.add_qad_tokens = add_qad_tokens
@@ -121,7 +122,10 @@ class HfDatasetBuilder(DatasetBuilder):
 
     # @cache_hf_dataset
     def _call(
-        self, format: Optional[str] = "torch", columns: Optional[List[str]] = None, **kwargs
+        self,
+        format: Optional[str] = "torch",
+        columns: Optional[List[str]] = None,
+        **kwargs,
     ) -> HfDataset:
         """
         Loads the dataset and preprocesses it
@@ -153,7 +157,7 @@ class HfDatasetBuilder(DatasetBuilder):
         dataset.set_format(type=format, columns=pt_cols, output_all_columns=True)
         return dataset
 
-    def load_and_filter_dataset(self) -> HfDataset:
+    def load_and_filter_dataset(self, base_dataset: Optional[HfDataset] = None) -> HfDataset:
         dataset: HfDataset = self.load_base_dataset()
         dataset = self.filter_dataset(dataset)
         if self.subset_size is not None:
@@ -178,7 +182,7 @@ class HfDatasetBuilder(DatasetBuilder):
             TokenizerPipe(
                 self.tokenizer,
                 max_length=self.max_length,
-                fields=self.text_field,
+                field=self.text_field,
                 return_token_type_ids=False,
                 add_special_tokens=False,
                 return_offsets_mapping=False,
@@ -195,9 +199,12 @@ class HfDatasetBuilder(DatasetBuilder):
         return dataset
 
     def get_collate_pipe(
-        self, transform: Optional[Callable | Pipe] = None, columns: Optional[List[str]] = None
+        self,
+        transform: Optional[Callable | Pipe] = None,
+        columns: Optional[List[str]] = None,
+        **kwargs,
     ) -> Pipe:
-        pipe = self._get_collate_pipe()
+        pipe = self._get_collate_pipe(**kwargs)
         if columns is not None:
             pipe = Sequential(pipe, FilterKeys(In(columns)))
 
@@ -206,7 +213,7 @@ class HfDatasetBuilder(DatasetBuilder):
 
         return pipe
 
-    def _get_collate_pipe(self) -> Pipe:
+    def _get_collate_pipe(self, **kwargs) -> Pipe:
         """Returns a pipe that allow collating multiple rows into one Batch"""
         return Sequential(Lambda(self.tokenizer.pad), Lambda(dict))
 

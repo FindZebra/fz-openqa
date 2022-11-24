@@ -20,17 +20,17 @@ base:
   device_batch_size: 1
   eval_device_batch_size: 8
   infer_batch_mul: 100
-  n_devices: ${int_max:1,${trainer.gpus}}
-  step_batch_size: ${int_mul:${base.device_batch_size},${base.n_devices}}
-  accumulate_grad_batches: ${int_div:${base.batch_size},${base.step_batch_size}}
+  n_devices: ${n_devices:}
+  step_batch_size: ${int_max:1,${int_mul:${base.device_batch_size},${base.n_devices}}}
+  accumulate_grad_batches: ${int_max:1,${int_div:${base.batch_size},${base.step_batch_size}}}
   sharing_strategy: file_system
   git_hash: ${git_hash:}
   git_hash_short: ${git_hash_short:}
   ckpt_filename: "best-model-{epoch:02d}-{step}"
 
 trainer:
-  gpus: ${n_gpus:}
-  strategy: dp
+  devices: ${n_devices:}
+  strategy: null
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   max_steps: 1_000_000
 

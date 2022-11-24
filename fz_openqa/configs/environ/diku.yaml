@@ -2,3 +2,7 @@
 
 defaults:
   - override /sys: diku.yaml
+
+trainer:
+  accelerator: gpu
+  strategy: dp

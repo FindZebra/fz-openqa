@@ -3,16 +3,15 @@ from typing import Optional
 
 import torch
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import ApplyToAll
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import Lambda
-from fz_openqa.datamodules.pipes import ReplaceInKeys
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.batch_condition import AllValuesOfType
+from warp_pipes import AddPrefix
+from warp_pipes import AllValuesOfType
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import ApplyToAll
+from warp_pipes import Collate
+from warp_pipes import Gate
+from warp_pipes import Lambda
+from warp_pipes import ReplaceInKeys
+from warp_pipes import Sequential
 
 
 class CollateAsTensor(Sequential):

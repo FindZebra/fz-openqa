@@ -1,11 +1,13 @@
+import math
 import re
 from typing import Callable
 from typing import List
 from typing import Optional
 from typing import Union
 
-from .base import Pipe
-from fz_openqa.utils.datastruct import Batch
+import html2text
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
 
 class TextFormatter(Pipe):
@@ -15,8 +17,8 @@ class TextFormatter(Pipe):
         self,
         text_key: Optional[Union[str, List[str]]] = None,
         *,
-        remove_breaks: bool = True,
-        remove_ref: bool = True,
+        remove_breaks: bool = False,
+        remove_ref: bool = False,
         lowercase: bool = False,
         aggressive_cleaning: bool = False,
         remove_symbols: bool = False,
@@ -104,3 +106,33 @@ class MedQaTextFormatter(TextFormatter):
     def clean(self, text: str) -> str:
         text = re.sub(r"([^a-zA-Z0-9\.])", " ", text).strip()
         return text
+
+
+class HtmlCleaner(TextFormatter):
+    def __init__(self, text_key: Optional[Union[str, List[str]]] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.text_key = text_key
+
+        self.text_maker = html2text.HTML2Text(bodywidth=math.inf)
+        self.text_maker.ignore_links = True
+        self.text_maker.ignore_images = False
+        self.text_maker.ignore_emphasis = True
+        self.text_maker.ignore_tables = False
+        self.text_maker.images_to_alt = True
+        self.text_maker.default_image_alt = "figure"
+
+        self.remove_pattern = re.compile("|".join([r"#+ ", r"\[edit\]"]))
+
+    def clean(self, text: str) -> str:
+        text = self.text_maker.handle(text)
+        text = self.remove_pattern.sub("", text)
+        return text
+
+
+class ReSubPatternFormatter(TextFormatter):
+    def __init__(self, clean_pattern: str = r"(<.*?>)|(\[.*?\])", **kwargs):
+        super(ReSubPatternFormatter, self).__init__(**kwargs)
+        self.cleanr = re.compile(clean_pattern)
+
+    def clean(self, text: str) -> str:
+        return re.sub(self.cleanr, "", text)

@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import List
 
 import torch
-
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 
 
 def check_only_first_doc_positive(

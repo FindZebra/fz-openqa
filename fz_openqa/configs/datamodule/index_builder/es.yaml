@@ -1,27 +1,45 @@
-_target_: fz_openqa.datamodules.index.IndexBuilder
+_target_: fz_openqa.datamodules.builders.IndexBuilder
 
 # default values
 cache_dir: ${sys.cache_dir}
-persist_cache: false
-dtype: float16
-loader_kwargs:
-  batch_size: 100
-  num_workers: 4
-  pin_memory: true
-
 
 # define the engines
 engines:
-  es:
-    k: ${datamodule.n_retrieved_documents}
-    max_batch_size: 100
-    verbose: false
-    merge_previous_results: false
+  elasticsearch:
+    name: elasticsearch
     config:
+      k: ${datamodule.n_retrieved_documents}
       es_temperature: 1
       auxiliary_weight: 0
-      filter_with_doc_ids: false
-      cleanup_numbers_from_aux: false
+      query_field: question
+      index_field: document
+      auxiliary_key: answer
+      main_key: text
+      index_key: row_idx
+      group_key: doc_idx
+      score_key: proposal_score
+      max_batch_size: 100
+      verbose: false
+      merge_previous_results: true
+
+index_cache_config:
+  cache_dir: ${sys.cache_dir}
+  model_output_key: _hd_
+  dtype: float16
+  loader_kwargs:
+    batch_size: 100
+    num_workers: 4
+    pin_memory: true
+
+query_cache_config:
+  cache_dir: ${sys.cache_dir}
+  model_output_key: _hq_
+  dtype: float16
+  loader_kwargs:
+    batch_size: 100
+    num_workers: 4
+    pin_memory: true
+
 
 # logging
 id: elasticsearch

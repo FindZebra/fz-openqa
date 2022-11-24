@@ -1,4 +1,0 @@
-_target_: fz_openqa.datamodules.pipes.ScispaCyMatch
-_id: scispacy_match
-interpretable: true
-model_name: en_core_sci_lg

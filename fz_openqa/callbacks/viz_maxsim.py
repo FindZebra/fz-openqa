@@ -14,13 +14,13 @@ from pytorch_lightning import Callback
 from pytorch_lightning.utilities import move_data_to_device
 from pytorch_lightning.utilities import rank_zero_only
 from transformers import PreTrainedTokenizerFast
+from warp_pipes.support.pretty import pretty_decode
 
 import wandb
 from fz_openqa.modeling.heads import ColbertHead
 from fz_openqa.modeling.model import Model
 from fz_openqa.modeling.modules import OptionRetriever
 from fz_openqa.utils.exceptions import catch_exception_as_warning
-from fz_openqa.utils.pretty import pretty_decode
 
 
 class VizMaxsimCallback(Callback):

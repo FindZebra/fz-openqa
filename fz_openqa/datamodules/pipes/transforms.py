@@ -6,11 +6,10 @@ import torch
 import torch.nn.functional as F
 from datasets import Split
 from transformers import PreTrainedTokenizerFast
-
-from fz_openqa.datamodules.pipes import Flatten
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Flatten
+from warp_pipes import Pipe
+from warp_pipes.core.condition import In
 
 
 class Transform(Pipe):
@@ -62,7 +61,8 @@ class TransformMcQuestions(Transform):
             targets = batch[self.target_key]
         else:
             warnings.warn(
-                f"No target found in batch for key {self.target_key}, setting target to -1"
+                f"No target found in batch for key {self.target_key}, "
+                f"setting target to -1. Found keys: {batch.keys()}"
             )
             targets = torch.ones(len(batch), dtype=torch.long) * -1
 

@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from pathlib import Path
@@ -16,10 +15,8 @@ from omegaconf import OmegaConf
 from fz_openqa import configs
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.datamodule import DataModule
-from fz_openqa.datamodules.pipes import TextFormatter
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
@@ -28,37 +25,29 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 @hydra.main(
     config_path=str(Path(configs.__file__).parent),
     config_name="script_config.yaml",
+    version_base="1.2",
 )
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    datasets.set_caching_enabled(True)
+    if config.get("disable_caching"):
+        datasets.disable_caching()
 
     # initialize the tokenizer
     tokenizer = init_pretrained_tokenizer(
-        pretrained_model_name_or_path="michiyasunaga/BioLinkBERT-base"
-    )
-
-    # initialize text formatter
-    textformatter = TextFormatter(
-        lowercase=True,
-        remove_symbols=True,
-        remove_ref=True,
-        remove_hex=True,
-        remove_breaks=True,
+        pretrained_model_name_or_path=config.get("bert_id", "michiyasunaga/BioLinkBERT-base")
     )
 
     # initialize the data module
     builder = CorpusBuilder(
-        dset_name=config.get("dset_name", "medqa"),
+        dset_name=config.get("dset_name", "findzebra"),
         tokenizer=tokenizer,
-        to_sentences=config.get("to_sentences", False),
-        text_formatter=textformatter,
         subset_size=config.get("subset_size", None),
         cache_dir=config.sys.get("cache_dir"),
         num_proc=config.get("num_proc", 2),
+        add_qad_tokens=config.get("add_qad_tokens", False),
         append_document_title=config.get("append_title", True),
-        passage_length=config.get("window_size", 200),
-        passage_stride=config.get("window_stride", 100),
+        passage_length=config.get("passage_length", 200),
+        passage_stride=config.get("passage_stride", 100),
         analytics=[
             SequenceLengths(
                 output_dir="analytics/",
@@ -67,14 +56,15 @@ def run(config: DictConfig) -> None:
             ),
         ],
     )
-    dm = DataModule(builder=builder)
+    dm = DataModule(builder=builder, num_proc=config.get("num_proc", 0))
 
+    # build the dataset
     dm.setup()
-    dm.display_samples(n_samples=5)
+    dm.display_samples(n_samples=20)
 
     # access dataset
     rich.print(dm.dataset)
-    rich.print(f"> n documents: {len(set(dm.dataset['document.idx']))}")
+    logger.info(f"n. unique documents: {len(set(dm.dataset['document.idx']))}")
 
     # sample a batch
     _ = next(iter(dm.train_dataloader()))

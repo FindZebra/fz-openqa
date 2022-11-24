@@ -6,11 +6,11 @@ import numpy as np
 import torch
 from pytorch_lightning.utilities import move_data_to_device
 from torch import Tensor
+from warp_pipes import ApplyToAll
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
-from . import ApplyToAll
-from ...utils.functional import cast_values_to_numpy
-from .base import Pipe
-from fz_openqa.utils.datastruct import Batch
+from fz_openqa.utils.functional import cast_values_to_numpy
 
 
 class ToNumpy(Pipe):

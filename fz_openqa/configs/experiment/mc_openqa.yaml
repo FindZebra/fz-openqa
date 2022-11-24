@@ -13,41 +13,35 @@ defaults:
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
   - override /datamodule/transform: flatten_mc_questions
-  - override /datamodule/relevance_classifier: exact_match
-  - override /datamodule/score_transform: none
   - override /datamodule/dataset_transform: none
   - override /datamodule/builder/analytics:
-      # - retriever_accuracy
       - sequence_lengths
-      # - retriever_distribution
-      # - log_retrieved_documents
   - override /logger: wandb
   - override /callbacks:
       - checkpoint
       - lr_monitor
       - log_predictions
       - progress_bar
+      - pympler
 
 base:
   seed: null
   target_metric: validation/reader/Accuracy
   target_mode: max
   exp_info: ""
-  version: 1.0
+  version: 2.0
   batch_size: 32
   device_batch_size: 0.5
   eval_device_batch_size: 8
   infer_batch_mul: 300
   exp_id: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
-  # ckpt_filename: "best-model-{epoch:02d}-{step}-{validation/reader/Accuracy:.3f}"
-
 
 trainer:
   gradient_clip_val: 0.5
   accumulate_grad_batches: ${base.accumulate_grad_batches}
   check_val_every_n_epoch: 1
   precision: 16
-  max_steps: 1_000_000 #${int_mul:${model.period},10}
+  max_steps: 1_000_000
 
 model:
   # global model configuration
@@ -124,7 +118,7 @@ datamodule:
   dset_max_length: 312
   corpus_name: medwiki
   corpus_max_length: 200
-  num_proc: 8
+  num_proc: 16
   output_columns:
     - answer.target
     - question.row_idx
@@ -146,6 +140,7 @@ datamodule:
   # ES parameters
   es_temp: 5.0
   es_weight: 0.5
+  faiss_factory: "IVF1000,Flat"
 
   # document sampler
   sampler:
@@ -174,30 +169,34 @@ datamodule:
       passage_length: ${datamodule.corpus_max_length}
       passage_stride: 100
       append_document_title: true
+      add_qad_tokens: false
 
   # Index parameters
   index_builder:
-    dtype: float16
-    cache_dir: ${sys.cache_dir}
-    persist_cache: false
-    loader_kwargs:
-      batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
-      num_workers: ${datamodule.num_workers}
-      pin_memory: true
     engines:
-      es:
+      elasticsearch:
         config:
           es_temperature: ${datamodule.es_temp}
           auxiliary_weight: ${datamodule.es_weight}
-          query_text_key: question.text
       faiss:
         config:
-          index_factory: "shard:IVF1000,Flat"
+          index_factory: ${datamodule.faiss_factory}
+          shard: true
           train_size: 1_000_000
           max_add_per_gpu: 1_000_000
           add_batch_size: 65536
-          metric_type: ${model.metric_type}
+          faiss_metric: inner_product
           nprobe: 32
+    query_cache_config:
+      loader_kwargs:
+        batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+        num_workers: ${datamodule.num_workers}
+        pin_memory: true
+    index_cache_config:
+      loader_kwargs:
+        batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}
+        num_workers: ${datamodule.num_workers}
+        pin_memory: true
 
 
 logger:

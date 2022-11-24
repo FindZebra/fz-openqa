@@ -4,10 +4,10 @@ from pathlib import Path
 
 import rich
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
+from warp_pipes import pprint_batch
 
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.fingerprint import get_fingerprint
-from fz_openqa.utils.pretty import pprint_batch
 
 sys.path.append(str(Path(__file__).parent.parent))
 rich.print(f"> root: {str(Path(__file__).parent.parent)}")
@@ -69,7 +69,7 @@ import torch
 from fz_openqa.datamodules.pipelines.collate.field import CollateField
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, ConcatTextFields
-from fz_openqa.datamodules.pipes.control.condition import In
+from warp_pipes.core.condition import In
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
 from fz_openqa.datamodules.utils.transformations import append_prefix
 

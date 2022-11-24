@@ -3,13 +3,13 @@ from typing import Optional
 
 from datasets import DatasetDict
 from loguru import logger
+from warp_pipes import Flatten
+from warp_pipes import HfDataset
 
-from ...pipes import Flatten
-from ...pipes import SupervisedDatasetFilter
-from ...utils.datastruct import OpenQaConfig
-from ...utils.transformations import set_index_column
-from ...utils.typing import HfDataset
 from .base import OpenQaTransform
+from fz_openqa.datamodules.pipes import SupervisedDatasetFilter
+from fz_openqa.datamodules.utils.datastruct import OpenQaConfig
+from fz_openqa.datamodules.utils.transformations import set_index_column
 
 
 class FlattenMultipleChoice(OpenQaTransform):

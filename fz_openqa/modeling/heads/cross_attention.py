@@ -12,11 +12,11 @@ from torch import nn
 from torch import Tensor
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import pprint_batch
 
 from fz_openqa.modeling.heads import Head
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.pretty import pprint_batch
 
 
 class CrossAttentionHead(Head):

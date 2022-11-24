@@ -2,3 +2,7 @@
 
 defaults:
   - override /sys: titan.yaml
+
+trainer:
+  accelerator: gpu
+  strategy: dp

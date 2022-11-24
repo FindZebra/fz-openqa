@@ -1,48 +1,12 @@
-import functools
-import io
-from typing import Any
+from typing import Dict
 
+import numpy as np
 import torch
-import xxhash
-from datasets.fingerprint import Hasher
-from torch import nn
-
-from fz_openqa.utils.tensor_arrow import TensorArrowTable
-from wandb.util import np
+from transformers import BertModel
+from warp_pipes import get_fingerprint
 
 
-@functools.singledispatch
-def get_fingerprint(obj: Any) -> str:
-    """Compute an object fingerprint"""
-    hash = Hasher()
-    if isinstance(obj, torch.Tensor):
-        obj = serialize_tensor(obj)
-    hash.update(obj)
-    return hash.hexdigest()
-
-
-def serialize_tensor(x: torch.Tensor):
-    x = x.cpu()
-    buff = io.BytesIO()
-    torch.save(x, buff)
-    buff.seek(0)
-    return buff.read()
-
-
-@get_fingerprint.register(nn.Module)
-def get_module_weights_fingerprint(obj: nn.Module) -> str:
-    hasher = xxhash.xxh64()
-    state = obj.state_dict()
-    for (k, v) in sorted(state.items(), key=lambda x: x[0]):
-        # it did not work without hashing the tensor
-        hasher.update(k)
-        u = serialize_tensor(v)
-        hasher.update(u)
-
-    return hasher.hexdigest()
-
-
-def fingerprint_bert(bert):
+def fingerprint_bert(bert: BertModel) -> Dict[str, str]:
     """Fingerprint BERT weights and the image of a random input."""
     bert_params = {k: get_fingerprint(v) for k, v in bert.named_parameters() if "encoder." in k}
     bert_fingerprint = get_fingerprint(bert_params)
@@ -62,8 +26,3 @@ def fingerprint_bert(bert):
         "input_tensor": input_fingerprint,
         "ber_output_tensor": output_fingerprint,
     }
-
-
-@get_fingerprint.register(TensorArrowTable)
-def get_tensor_arrow_table_fingerprint(obj: TensorArrowTable) -> str:
-    return get_fingerprint({"path": str(obj.path), "dtype": obj._dtype})

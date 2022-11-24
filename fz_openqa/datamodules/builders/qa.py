@@ -3,22 +3,25 @@ from typing import Dict
 from typing import Optional
 
 import dill  # type: ignore
+from datasets import concatenate_datasets
 from datasets import DatasetDict
 from datasets import load_dataset
-from datasets.arrow_dataset import concatenate_datasets
 from loguru import logger
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import CollateField
+from warp_pipes import Expand
+from warp_pipes import Gate
+from warp_pipes import HasPrefix
+from warp_pipes import HfDataset
+from warp_pipes import Identity
+from warp_pipes import In
+from warp_pipes import Parallel
+from warp_pipes import PrintBatch
+from warp_pipes import Reduce
+from warp_pipes import RenameKeys
+from warp_pipes import Sequential
+from warp_pipes.support.datasets_utils import keep_only_columns
 
-from ..pipelines.collate.field import CollateField
-from ..pipes.answer_options import ConcatTokenFields
-from ..pipes.control.condition import HasPrefix
-from ..pipes.control.condition import In
-from ..pipes.control.condition import Reduce
-from ..pipes.min_length import MinLength
-from ..pipes.nesting import ApplyAsFlatten
-from ..pipes.nesting import Expand
-from ..pipes.tokenizer import QueryExpansionPipe
-from ..utils.dataset import format_size_difference
-from ..utils.dataset import keep_only_columns
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from .preprocessing import DatasetPreprocessing
@@ -28,17 +31,12 @@ from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
-from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import Identity
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import RenameKeys
-from fz_openqa.datamodules.pipes import Sequential
+from fz_openqa.datamodules.pipes.concat_fields import ConcatTokenFields
+from fz_openqa.datamodules.pipes.query_expansion import QueryExpansion
 from fz_openqa.datamodules.utils.transformations import set_index_column
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import ANS_TOKEN
 from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_TOKEN
-from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),
@@ -55,8 +53,6 @@ QA_DATASETS = {
 class QaBuilder(HfDatasetBuilder):
     # HuggingFace dataset id or local path to script
     # these values are set dynamically in the __init__
-    dset_script_path_or_id = None
-    dset_name = None
 
     # nesting level of the question field
     nesting_level = 0
@@ -71,7 +67,6 @@ class QaBuilder(HfDatasetBuilder):
         "answer.input_ids",
         "answer.attention_mask",
         "answer.target",
-        "document.match_score",
         "document.proposal_score",
     ]
 
@@ -93,7 +88,6 @@ class QaBuilder(HfDatasetBuilder):
     def __init__(
         self,
         *args,
-        min_answer_length: Optional[int] = None,
         n_query_tokens: int = 1,
         n_answer_tokens: int = 1,
         query_expansion: Optional[int] = None,
@@ -103,7 +97,6 @@ class QaBuilder(HfDatasetBuilder):
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
-        self.min_answer_length = min_answer_length
         self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
         self.n_answer_tokens = n_answer_tokens
@@ -186,24 +179,12 @@ class QaBuilder(HfDatasetBuilder):
 
             return dsets_dict
 
-    def filter_dataset(self, dataset: HfDataset) -> HfDataset:
-        """Apply filter operation to the dataset and return"""
-
-        # filter out answers that are too short
-        if self.min_answer_length is not None:
-            logger.info(f"Filtering out answers shorter than {self.min_answer_length} characters")
-            lengths = {k: len(d) for k, d in dataset.items()}
-            dataset = dataset.filter(MinLength("answer.text", self.min_answer_length))
-            logger.info(format_size_difference(lengths, dataset))
-
-        return dataset
-
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
 
         if self.drop_documents:
-            cols = {c for c in dataset.column_names if "document." in c}
+            cols = list({c for c in dataset.column_names if "document." in c})
             logger.info(f"Dropping document columns {cols}")
             dataset = dataset.remove_columns(cols)
 
@@ -212,15 +193,15 @@ class QaBuilder(HfDatasetBuilder):
             one_split = next(iter(dataset.keys()))
             has_document_columns = any("document." in c for c in dataset[one_split].column_names)
             has_answer_columns = any("answer." in c for c in dataset[one_split].column_names)
-            dataset = dataset.map(
-                Parallel(
-                    self.get_question_tokenizer_pipe(),
-                    Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
-                    Gate(has_document_columns, self.get_document_tokenizer_pipe()),
-                ),
-                batched=True,
+            preprocessing = Parallel(
+                self.get_question_tokenizer_pipe(),
+                Gate(has_answer_columns, self.get_answer_tokenizer_pipe()),
+                Gate(has_document_columns, self.get_document_tokenizer_pipe()),
+            )
+            dataset = preprocessing(
+                dataset,
                 num_proc=self.num_proc,
-                desc="Tokenizing",
+                desc="Tokenizing questions",
             )
 
         # add an index column
@@ -254,7 +235,7 @@ class QaBuilder(HfDatasetBuilder):
         """create a Pipe to tokenize the questions."""
 
         if self.query_expansion is not None:
-            query_expansion_pipe = QueryExpansionPipe(
+            query_expansion_pipe = QueryExpansion(
                 question_length=self.query_expansion, tokenizer=self.tokenizer, update=True
             )
         else:
@@ -275,19 +256,21 @@ class QaBuilder(HfDatasetBuilder):
         )
 
     def _get_collate_pipe(self, nesting_level=None):
-        # get the raw text questions, extract and collate
+        """get the raw text questions, extract and collate"""
         return Parallel(
-            CollateField("question", tokenizer=self.tokenizer, level=0, id="collate-questions"),
+            CollateField(
+                "question", tokenizer=self.tokenizer, nesting_level=0, id="collate-questions"
+            ),
             CollateField(
                 "document",
                 tokenizer=self.tokenizer,
-                level=0,
+                nesting_level=0,
                 id="collate-documents",
-                include_only=["document.text", "document.input_ids", "document.attention_mask"],
+                include_only=["text", "input_ids", "attention_mask"],
             ),
             CollateField(
                 "answer",
-                level=0,
+                nesting_level=0,
                 exclude=["input_ids", "attention_mask"],
                 to_tensor=["target"],
                 id="collate-answer-attributes",
@@ -295,14 +278,14 @@ class QaBuilder(HfDatasetBuilder):
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
-                level=1,
+                nesting_level=1,
                 include_only=["input_ids", "attention_mask"],
                 id="pad-answer-tokens",
             ),
             CollateField(
                 "answer",
                 tokenizer=self.tokenizer,
-                level=1,
+                nesting_level=1,
                 include_only=["input_ids", "attention_mask"],
                 id="pad-answer-tokens",
             ),
@@ -325,7 +308,6 @@ class ConcatQaBuilder(QaBuilder):
         "question.attention_mask",
         "question.document_idx",
         "answer.target",
-        "document.match_score",
         "document.proposal_score",
     ]
 
@@ -345,9 +327,9 @@ class ConcatQaBuilder(QaBuilder):
         Tokenization and formatting as PyTorch tensors"""
 
         # concat question and answers
-        dataset = dataset.map(
-            self.get_tokenize_concat_qa_pipe(),
-            batched=True,
+        preprocessing = self.get_tokenize_concat_qa_pipe()
+        dataset = preprocessing(
+            dataset,
             num_proc=self.num_proc,
             desc="Tokenizing and concatenating questions and answers",
         )
@@ -361,7 +343,7 @@ class ConcatQaBuilder(QaBuilder):
         # register features that also need to be expanded to match the concatenated shape
         text_keys = ["question.text", "answer.text"]
         question_features = ["question.text", "question.input_ids", "question.attention_mask"]
-        additional_question_features = ["question.document_idx", "question.metamap"]
+        additional_question_features = ["question.document_idx"]
 
         # register the tokens that prefix the question
         q_start_tokens = []
@@ -381,16 +363,6 @@ class ConcatQaBuilder(QaBuilder):
                 "token_type_ids": [0],
                 "offset_mapping": [[-1, -1]],
             }
-
-        # register the tokens used to terminate the questions when truncated
-        # qmark_token_id = self.tokenizer.encode(TRUNCATED_TOKEN, add_special_tokens=False)[0]
-        # end_if_truncated_tokens = {
-        #     "input_ids": [qmark_token_id],
-        #     "attention_mask": [1],
-        #     "token_type_ids": [0],
-        #     "offset_mapping": [[-1, -1]],
-        # }
-        end_if_truncated_tokens = None
 
         # return the final pipe
         return Sequential(
@@ -417,7 +389,6 @@ class ConcatQaBuilder(QaBuilder):
                     keep_end_tokens=[self.tokenizer.sep_token_id],
                     max_length=self.max_length,
                     sep_tokens=sep_tokens,
-                    end_if_truncated_tokens=end_if_truncated_tokens,
                 ),
                 level=1,
                 input_filter=Reduce(
@@ -425,23 +396,22 @@ class ConcatQaBuilder(QaBuilder):
                 ),
                 update=True,
             ),
-            RenameKeys({"answer.text": "question.answer_text"}),
+            RenameKeys({"answer.text": "question.answer"}, update=True),
             input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 
     def _get_collate_pipe(self, nesting_level=1):
-        # get the raw text questions, extract and collate
         return Parallel(
             CollateField(
                 "question",
                 exclude=["input_ids", "attention_mask", "token_type_ids"],
                 to_tensor=["document_idx"],
-                level=0,
+                nesting_level=0,
                 id="collate-questions",
             ),
             CollateField(
                 "answer",
-                level=0,
+                nesting_level=0,
                 exclude=["input_ids", "attention_mask"],
                 to_tensor=["target"],
                 id="collate-answer-attributes",
@@ -449,7 +419,7 @@ class ConcatQaBuilder(QaBuilder):
             CollateField(
                 "question",
                 tokenizer=self.tokenizer,
-                level=nesting_level,
+                nesting_level=nesting_level,
                 include_only=["input_ids", "offset_mapping", "attention_mask", "token_type_ids"],
                 id="pad-nested-question-tokens",
             ),

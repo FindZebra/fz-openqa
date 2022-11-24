@@ -1,38 +1,66 @@
 defaults:
   - es
+  - /datamodule/index_builder/es_body/default@engines.elasticsearch.config.es_body
 
 # define the engines
 engines:
-  es:
-    k: ${datamodule.n_max_retrieved_documents}
-    max_batch_size: 100
-    verbose: false
-    merge_previous_results: true
-    merge_max_size: null
+  elasticsearch:
+    name: elasticsearch
     config:
-      es_temperature: 10.
-      auxiliary_weight: 0
-      filter_with_doc_ids: false
+      name: elasticsearch
+      config:
+        k: ${datamodule.n_retrieved_documents}
+        es_temperature: 1
+        auxiliary_weight: 0
+        timeout: 360
+        # base config
+        query_field: question
+        index_field: document
+        auxiliary_key: answer
+        main_key: text
+        index_key: row_idx
+        group_key: doc_idx
+        score_key: proposal_score
+        max_batch_size: 100
+        verbose: false
+        merge_previous_results: true
   faiss:
-    k: ${datamodule.n_max_retrieved_documents}
-    max_batch_size: 512
-    verbose: false
-    merge_previous_results: true
-    merge_max_size: ${datamodule.n_retrieved_documents}
+    name: dense
     config:
+      k: ${datamodule.n_max_retrieved_documents}
+      k_max: ${datamodule.n_retrieved_documents}
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
-      max_add_per_gpu: 10_000 # todo: increase this
-      add_batch_size: 1_000 # todo: increase this
-      metric_type: ${model.metric_type}
+      max_add_per_gpu: 10_000
+      add_batch_size: 1_000
+      faiss_metric: inner_product
       nprobe: 32
+      # base config
+      query_field: question
+      index_field: document
+      auxiliary_field: answer
+      main_key: text
+      index_key: row_idx
+      group_key: doc_idx
+      score_key: proposal_score
+      max_batch_size: 100
+      verbose: false
+      merge_previous_results: true
   topk:
-    k: ${datamodule.n_retrieved_documents}
-    max_batch_size: 10
-    verbose: false
-    merge_previous_results: false
-    merge_max_size: null
-    config: { }
+    name: topk
+    config:
+      k: ${datamodule.n_retrieved_documents}
+      # base config
+      query_field: question
+      index_field: document
+      auxiliary_field: answer
+      main_key: text
+      index_key: row_idx
+      group_key: doc_idx
+      score_key: proposal_score
+      max_batch_size: 10
+      verbose: false
+      merge_previous_results: false
 
 # logging
 id: dpr

@@ -6,8 +6,7 @@ import torch
 from torch import nn
 from torch import tensor
 from transformers import AutoModel
-
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
 
 
 class ZeroShot(pl.LightningModule):

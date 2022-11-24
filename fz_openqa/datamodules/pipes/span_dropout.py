@@ -4,10 +4,9 @@ from typing import Optional
 import numpy as np
 import torch
 from datasets import Split
-
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes.control.condition import In
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Pipe
+from warp_pipes.core.condition import In
 
 
 class SpanDropout(Pipe):

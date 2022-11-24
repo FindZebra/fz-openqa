@@ -10,8 +10,8 @@ import pytorch_lightning as pl
 import torch
 from loguru import logger
 from pytorch_lightning import Callback
+from warp_pipes import Batch
 
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.datastruct import PathLike
 from fz_openqa.utils.tensor_arrow import TensorArrowTable
 from fz_openqa.utils.tensor_arrow import TensorArrowWriter

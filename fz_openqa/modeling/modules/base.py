@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections
+import re
 from abc import ABC
 from abc import abstractmethod
 from typing import Any
@@ -19,6 +20,7 @@ from torchmetrics.classification import Accuracy
 from torchmetrics.retrieval import RetrievalMRR
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
 
 from fz_openqa.modeling.modules.utils.backbone import extend_backbone_embeddings
 from fz_openqa.modeling.modules.utils.backbone import instantiate_backbone_model_with_config
@@ -30,13 +32,14 @@ from fz_openqa.tokenizers.static import DOC_TOKEN
 from fz_openqa.tokenizers.static import QUERY_MASK
 from fz_openqa.tokenizers.static import QUERY_TOKEN
 from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
-from fz_openqa.utils.datastruct import Batch
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
+re_feature_pattern = re.compile(r"^_[^_]+_$")
+
 
 def is_feature_name(x):
-    return str(x).startswith("_") and str(x).endswith("_")
+    return re_feature_pattern.match(x)
 
 
 class Module(nn.Module, ABC):
@@ -213,6 +216,12 @@ class Module(nn.Module, ABC):
         # filter internal values (e.g. __targets__
         if filter_features:
             output = self._filter_features_from_output(output)
+
+        # detach grads
+        for k, v in output.items():
+            if k != "loss":
+                output[k] = v.detach()
+
         return output
 
     @abstractmethod

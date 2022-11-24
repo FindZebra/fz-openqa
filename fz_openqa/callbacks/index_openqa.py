@@ -4,9 +4,9 @@ import pytorch_lightning as pl
 import rich
 from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.trainer.connectors.data_connector import DataConnector
+from warp_pipes import get_console_separator
 
 from fz_openqa.datamodules import DataModule
-from fz_openqa.utils.pretty import get_separator
 
 
 class IndexOpenQaCallback(Callback):
@@ -61,7 +61,7 @@ class IndexOpenQaCallback(Callback):
         data_connector: DataConnector = trainer._data_connector
         datamodule = trainer.datamodule
 
-        print(f"\n{get_separator()}\n")
+        print(f"\n{get_console_separator()}\n")
         rich.print(
             f">>>> [cyan]{type(self).__name__}[/cyan]: epoch={trainer.current_epoch}\n"
             f"trainer._is_data_prepared: {trainer._is_data_prepared}\n"
@@ -69,7 +69,7 @@ class IndexOpenQaCallback(Callback):
         )
         rich.print(data_connector)
         rich.print(f"> train_data_fetcher: {data_connector.train_data_fetcher}")
-        print(f"\n{get_separator()}\n")
+        print(f"\n{get_console_separator()}\n")
 
         # cleanup the data connector
         # data_connector._train_dataloader_source = None
@@ -84,7 +84,7 @@ class IndexOpenQaCallback(Callback):
         # make sure to re-attach the datamodule to the `pl.Trainer`
         # data_connector.attach_datamodule(pl_module, datamodule=self.datamodule)
 
-        print(f"\n{get_separator()}\n")
+        print(f"\n{get_console_separator()}\n")
         rich.print(
             f">>>> [magenta]{type(self).__name__}[/magenta]: epoch={trainer.current_epoch}\n"
             f"trainer._is_data_prepared: {trainer._is_data_prepared}\n"
@@ -92,4 +92,4 @@ class IndexOpenQaCallback(Callback):
         )
         rich.print(data_connector)
         rich.print(f"> train_data_fetcher: {data_connector.train_data_fetcher}")
-        print(f"\n{get_separator()}\n")
+        print(f"\n{get_console_separator()}\n")

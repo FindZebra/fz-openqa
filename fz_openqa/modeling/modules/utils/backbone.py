@@ -11,9 +11,9 @@ from torch import Tensor
 from transformers import BertPreTrainedModel
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import Batch
 
 from fz_openqa.utils import maybe_instantiate
-from fz_openqa.utils.datastruct import Batch
 
 
 def instantiate_backbone_model_with_config(

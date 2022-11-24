@@ -1,4 +1,5 @@
 _target_: pytorch_lightning.Trainer
 
-gpus: 0
-strategy: dp
+devices: 1
+accelerator: cpu
+strategy: null

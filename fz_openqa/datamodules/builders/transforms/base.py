@@ -5,10 +5,10 @@ from typing import Optional
 
 from datasets import Dataset
 from datasets import DatasetDict
+from warp_pipes import HfDataset
 
 from fz_openqa.datamodules.utils.datastruct import OpenQaConfig
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
-from fz_openqa.datamodules.utils.typing import HfDataset
 
 
 class DatasetTransform:

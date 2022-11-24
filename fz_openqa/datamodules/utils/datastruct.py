@@ -1,9 +1,7 @@
-import dataclasses
-
 from datasets import Dataset
 from datasets import DatasetDict
-
-from fz_openqa.datamodules.index import Index
+from pydantic import BaseModel
+from warp_pipes import Index
 
 
 class OpenQaDataset(DatasetDict):
@@ -23,7 +21,6 @@ class OpenQaDataset(DatasetDict):
         return u
 
 
-@dataclasses.dataclass
-class OpenQaConfig:
+class OpenQaConfig(BaseModel):
     question_nesting_level: int
     document_nesting_level: int

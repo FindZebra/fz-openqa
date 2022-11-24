@@ -2,7 +2,6 @@
 
 defaults:
   - override /model/backbone: roberta-base #deberta-v3-base
-  - override /datamodule/relevance_classifier: none
 
 base:
   device_batch_size: 2
@@ -26,8 +25,6 @@ datamodule:
     freq: 10_000
     reset_optimizer: true
     test_every_update: false
-    builder_args:
-      relevance_classifier: null
 
   builder:
     # update the builder parameters to use the quality builder

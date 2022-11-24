@@ -4,13 +4,13 @@ from typing import Optional
 from datasets import DatasetDict
 from datasets import Split
 from loguru import logger
+from warp_pipes import HfDataset
 
 from fz_openqa.datamodules.builders.adapters.base import DatasetAdapter
 from fz_openqa.datamodules.builders.adapters.extract_corpus import extract_corpus
 from fz_openqa.datamodules.builders.adapters.utils import set_document_row_idx
 from fz_openqa.datamodules.utils.transformations import set_constant_column
 from fz_openqa.datamodules.utils.transformations import set_index_column
-from fz_openqa.datamodules.utils.typing import HfDataset
 
 QUALITY_COL_MAPPING = {}
 

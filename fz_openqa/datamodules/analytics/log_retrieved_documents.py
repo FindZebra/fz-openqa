@@ -11,14 +11,14 @@ import rich
 from datasets import Split
 from rich.console import Console
 from torch import Tensor
+from warp_pipes import get_console_separator
+from warp_pipes import HfDataset
+from warp_pipes.support.functional import camel_to_snake
 
 import wandb
-from ..index.utils.misc import camel_to_snake
 from ..utils.datastruct import OpenQaDataset
-from ..utils.typing import HfDataset
 from .base import Analytic
 from .base import logger
-from fz_openqa.utils.pretty import get_separator
 
 
 def safe_cast_to_list(x: Any) -> Any:
@@ -53,7 +53,7 @@ class LogRetrievedDocuments(Analytic):
             batch = collate_fn([dset[int(i)] for i in row_ids], split=Split.TRAIN)
             total_repr = ""
             for i in range(self.n_samples):
-                total_repr += get_separator("=")
+                total_repr += get_console_separator("=")
                 row = {k: v[i] for k, v in batch.items()}
                 repr = builder.format_row(
                     row,
@@ -86,13 +86,13 @@ class LogRetrievedDocuments(Analytic):
         self.save_as_json(dict_results)
 
         if self.verbose:
-            print(get_separator())
+            print(get_console_separator())
             rich.print(f"=== {type(self).__name__}  ===")
             for split, r in results.items():
-                print(get_separator("."))
+                print(get_console_separator("."))
                 rich.print(f"{split}:")
                 rich.print(r["str"])
-            print(get_separator())
+            print(get_console_separator())
 
         if self.wandb_log:
             try:

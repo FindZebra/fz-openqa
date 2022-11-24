@@ -8,13 +8,13 @@ from typing import Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from warp_pipes import pprint_batch
 
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.retriever_diagnostics import retriever_diagnostics
 from fz_openqa.modeling.gradients.utils import batch_cartesian_product
 from fz_openqa.modeling.gradients.utils import kl_divergence
 from fz_openqa.utils.functional import batch_reduce
-from fz_openqa.utils.pretty import pprint_batch
 
 
 @dataclass

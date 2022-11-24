@@ -22,11 +22,11 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 
-from fz_openqa.datamodules.index.utils.misc import camel_to_snake
-from fz_openqa.datamodules.utils.dataset import get_column_names
+from warp_pipes.support.functional import camel_to_snake
+from warp_pipes.support.datasets_utils import get_column_names
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
-from fz_openqa.datamodules.utils.typing import HfDataset
-from fz_openqa.utils.pretty import get_separator
+from warp_pipes import HfDataset
+from warp_pipes import get_console_separator
 
 logger = logging.getLogger(__name__.replace(".base", ""))
 
@@ -173,11 +173,11 @@ class Analytic:
 
     def pprint_json_results(self, results: List | Dict):
         """Print results as JSON"""
-        print(get_separator())
+        print(get_console_separator())
         rich.print(f"=== {type(self).__name__} ===")
-        print(get_separator("."))
+        print(get_console_separator("."))
         rich.print(json.dumps(results, indent=2))
-        print(get_separator())
+        print(get_console_separator())
 
     def log_to_wandb(self, results: List | Dict):
         """Log results to wandb"""

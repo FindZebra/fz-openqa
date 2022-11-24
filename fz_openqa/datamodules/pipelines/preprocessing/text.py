@@ -6,19 +6,19 @@ from typing import List
 from typing import Optional
 
 from transformers import PreTrainedTokenizerFast
+from warp_pipes import AddPrefix
+from warp_pipes import Apply
+from warp_pipes import ApplyAsFlatten
+from warp_pipes import Batch
+from warp_pipes import FilterKeys
+from warp_pipes import Pipe
+from warp_pipes import ReplaceInKeys
+from warp_pipes import Sequential
+from warp_pipes import TokenizerPipe
+from warp_pipes.core.condition import In
 
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import Apply
-from fz_openqa.datamodules.pipes import ApplyAsFlatten
-from fz_openqa.datamodules.pipes import FilterKeys
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import ReplaceInKeys
-from fz_openqa.datamodules.pipes import Sequential
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.pipes import TokenizerPipe
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.utils.transformations import append_prefix
-from fz_openqa.utils.datastruct import Batch
 
 
 class CleanupSpecialTokens(Pipe):
@@ -104,7 +104,8 @@ class FormatAndTokenize(Sequential):
                     TokenizerPipe(
                         tokenizer,
                         max_length=max_length,
-                        fields=key,
+                        key=key,
+                        field=None,
                         return_token_type_ids=return_token_type_ids,
                         add_special_tokens=add_special_tokens,
                         return_offsets_mapping=return_offsets_mapping,
@@ -117,17 +118,32 @@ class FormatAndTokenize(Sequential):
         )
 
 
-class AppendSuffix(Pipe):
-    def __init__(self, text_fields: str | List[str], suffix: str = ". ", **kwargs):
+class AppendPrefixSuffix(Pipe):
+    def __init__(
+        self,
+        text_fields: str | List[str],
+        suffix: Optional[str] = ". ",
+        prefix: Optional[str] = None,
+        lowercase: bool = False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if isinstance(text_fields, str):
             text_fields = [text_fields]
         self.text_fields = text_fields
+        if suffix is None:
+            suffix = ""
         self.suffix = suffix
+        if prefix is None:
+            prefix = ""
+        self.prefix = prefix
+        self.lowercase = lowercase
 
     def add_dot(self, x: str) -> str:
+        if isinstance(x, str) and self.lowercase:
+            x = x.lower()
         if x is not None and len(x):
-            return f"{x}{self.suffix}"
+            return f"{self.prefix}{x}{self.suffix}"
         elif x is None:
             return ""
         else:

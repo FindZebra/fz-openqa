@@ -15,11 +15,11 @@ from loguru import logger
 from omegaconf import DictConfig
 from scipy.special import softmax
 from torch import Tensor
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
 from ...modeling.gradients.renyi import cleanup_nans
-from .base import Pipe
 from .sorting import reindex
-from fz_openqa.utils.datastruct import Batch
 
 
 class Sampler(Pipe):

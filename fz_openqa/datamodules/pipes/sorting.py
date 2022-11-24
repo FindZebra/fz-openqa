@@ -5,9 +5,8 @@ from typing import Union
 
 import numpy as np
 from torch import Tensor
-
-from .base import Pipe
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
 
 def reindex(x: Any, index: Union[np.ndarray, Tensor, List[int]]) -> Any:

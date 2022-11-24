@@ -1,21 +1,33 @@
 import os
 import re
-from collections import Counter
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import dill  # type: ignore
-import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import load_dataset
 from loguru import logger
+from warp_pipes import AddPrefix
+from warp_pipes import CollateField
+from warp_pipes import DropKeys
+from warp_pipes import Gate
+from warp_pipes import GeneratePassages
+from warp_pipes import HfDataset
+from warp_pipes import Parallel
+from warp_pipes import Pipe
+from warp_pipes import RenameKeys
+from warp_pipes import Sequential
+from warp_pipes.core.condition import HasPrefix
+from warp_pipes.core.condition import In
+from warp_pipes.support.datasets_utils import get_column_names
+from warp_pipes.support.pretty import pretty_decode
 
 from ..pipelines.preprocessing import FormatAndTokenize
-from ..pipelines.preprocessing.text import AppendSuffix
+from ..pipelines.preprocessing.text import AppendPrefixSuffix
 from ..pipelines.preprocessing.text import CleanupSpecialTokens
 from ..utils.transformations import set_index_column
 from .adapters import DATASET_ADAPTERS
@@ -25,23 +37,11 @@ from fz_openqa.datamodules.generators import fz_corpus
 from fz_openqa.datamodules.generators import medwiki_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.generators import quality
-from fz_openqa.datamodules.pipelines import collate
-from fz_openqa.datamodules.pipelines.collate import CollateTokens
-from fz_openqa.datamodules.pipes import AddPrefix
-from fz_openqa.datamodules.pipes import Collate
-from fz_openqa.datamodules.pipes import DropKeys
-from fz_openqa.datamodules.pipes import Gate
-from fz_openqa.datamodules.pipes import GeneratePassages
-from fz_openqa.datamodules.pipes import Parallel
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.datamodules.pipes import Sequential
-from fz_openqa.datamodules.pipes.control.condition import In
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.datamodules.utils.typing import HfDataset
 from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.utils.pretty import pretty_decode
 
 TXT_PATTERN = r"^.*\.txt$"
+GPT_END_OF_TEXT_TOKEN = "<|endoftext|>"
 
 CORPUS_GENERATORS = {
     "medqa": (meqa_en_corpus.__file__,),
@@ -53,11 +53,14 @@ CORPUS_GENERATORS = {
     "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
     "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
     "findzebra": (fz_corpus.__file__,),
+    "findzebra-latest": ("findzebra/corpus.latest",),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__, None),
     "race": ("race", "all"),
 }
+
+DEFAULT_COLUMNS = ["text"]
 
 
 class CorpusBuilder(HfDatasetBuilder):
@@ -94,10 +97,9 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def __init__(
         self,
-        dset_name: str = "file",
+        dset_name: Optional[str] = None,
         passage_length: int = 200,
         passage_stride: int = 100,
-        to_sentences: bool = False,
         input_dir: Optional[str] = None,
         append_document_title: bool = False,
         max_length: Optional[int] = None,
@@ -105,11 +107,12 @@ class CorpusBuilder(HfDatasetBuilder):
     ):
         super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
 
-        for dn in dset_name.split("+"):
-            if dn not in CORPUS_GENERATORS:
-                raise ValueError(
-                    f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
-                )
+        if dset_name is not None:
+            for dn in dset_name.split("+"):
+                if dn not in CORPUS_GENERATORS:
+                    raise ValueError(
+                        f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
+                    )
 
         if self.max_length is not None:
             raise ValueError(
@@ -122,15 +125,8 @@ class CorpusBuilder(HfDatasetBuilder):
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
-        self.to_sentences = to_sentences
-        if self.to_sentences:
-            logger.warning(
-                f"Argument `to_sentence` is True, `passage_length`={self.passage_length} "
-                f"and `passage_stride`={self.passage_stride} will be ignored."
-            )
-            self.passage_length = self.passage_stride = None
-
         self.append_document_title = append_document_title
+        self.global_keys = None  # to be set automatically by the builder
 
     @staticmethod
     def _load_dataset(*args, input_dir=None, **kwargs):
@@ -145,7 +141,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return load_dataset(*args, **kwargs)
 
-    def load_base_dataset(self) -> DatasetDict:
+    def load_base_dataset(self) -> HfDataset:
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
 
         # split dataset names using `+`
@@ -158,7 +154,7 @@ class CorpusBuilder(HfDatasetBuilder):
             # load dataset
             dset = self._load_dataset(*dset_args, **kwargs)
 
-            # adapt dataset
+            # adapt the dataset to the fz-openqa format
             if dn in DATASET_ADAPTERS:
                 adapter = DATASET_ADAPTERS[dn]()
                 _, dset = adapter(dset, num_proc=self.num_proc)
@@ -169,7 +165,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         # concatenate datasets
         if len(dset_names) == 1:
-            return dsets[0]
+            dataset = dsets[0]
         else:
             shared_columns = set.intersection(*[set(dset.column_names) for dset in dsets])
             if any(shared_columns != set(dset.column_names) for dset in dsets):
@@ -183,7 +179,9 @@ class CorpusBuilder(HfDatasetBuilder):
                     return dset
 
                 dsets = [drop_cols(dset) for dset in dsets]
-            return concatenate_datasets(dsets)
+            dataset = concatenate_datasets(dsets)
+
+        return dataset
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply filter operation to the dataset and return"""
@@ -192,17 +190,16 @@ class CorpusBuilder(HfDatasetBuilder):
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
-        for attr in dataset.column_names:
-            if "document." in attr:
-                new_attr = attr.replace("document.", "")
-                dataset = dataset.rename_column(attr, new_attr)
+        # remove `document.` prefix
+        dataset = dataset.rename_columns(
+            {k: k.replace("document.", "") for k in dataset.column_names}
+        )
 
         # add the document index column if not already provided
         if "uid" in dataset.column_names:
             ids = dataset["uid"]
             if len(ids) != len(set(ids)):
-                rich.print(Counter(ids))
-                raise ValueError("Duplicated `document.uid` found in dataset")
+                raise ValueError("Duplicate `document.uid` found in dataset")
 
         if "idx" not in dataset.column_names:
             dataset = set_index_column(dataset, key="idx")
@@ -211,54 +208,41 @@ class CorpusBuilder(HfDatasetBuilder):
         if "title" in dataset.column_names and self.append_document_title is True:
             if all(len(t) == 0 for t in dataset[:100]["title"]):
                 self.append_document_title = False
-                logger.warning("No title found in dataset, `append_document_title` is set to False")
+                logger.info("No title found in dataset, `append_document_title` is set to False")
+
+        # infer the global keys
+        columns = get_column_names(dataset)
+        self.global_keys = [k for k in columns if k not in DEFAULT_COLUMNS]
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
-            # yield sentences from each document
-            Gate(self.to_sentences, self.get_generate_sentences_pipe(), update=True),
-            # tokenize, only add special tokens if sentence mode is on
+            self.text_formatter.copy(text_key="text"),
+            # tokenize the document texts and titles
             Parallel(
                 self.get_text_tokenizer_pipe(),
                 Gate(self.append_document_title, self.get_title_tokenizer_pipe()),
             ),
-            # if not sentence mode, generate equal length-passages and add the special
-            # tokens to each passage,
-            Gate(
-                not self.to_sentences,
-                self.get_generate_passages_pipe(),
-                update=True,
-            ),
+            # generate equal length-passages and add the special tokens to each passage
+            self.get_generate_passages_pipe(),
+            # drop the columns with `title.` prefix
             Gate(
                 self.append_document_title,
-                DropKeys(
-                    keys=[
-                        "title.attention_mask",
-                        "title.idx",
-                        "title.input_ids",
-                        "title.offset_mapping",
-                        "title.text",
-                        "title.title",
-                        "title.cui",
-                    ]
-                ),
+                DropKeys(condition=HasPrefix("title.")),
                 update=True,
             ),
             # cleanup remaining special tokens in the text
             CleanupSpecialTokens("document.text", self.tokenizer, update=True),
+            DropKeys(keys=["document.offset_mapping"]),
         )
 
         # process the whole dataset (tokenization + passage generation)
-        cols_to_remove = ["idx", "text", "title"]
-        if "cui" in dataset.column_names:
-            cols_to_remove.append("cui")
-        dataset = dataset.map(
-            preprocessing,
-            batched=True,
-            batch_size=10,
+        cols_to_remove = get_column_names(dataset)
+        dataset = preprocessing(
+            dataset,
             num_proc=self.num_proc,
+            batch_size=10,
             remove_columns=cols_to_remove,
-            desc="Tokenizing documents and extracting overlapping passages",
+            desc="Formatting, tokenizing and extracting document passages",
         )
 
         # add index column
@@ -267,32 +251,25 @@ class CorpusBuilder(HfDatasetBuilder):
         return dataset
 
     def get_generate_sentences_pipe(self):
-        return GenerateSentences(global_keys=["idx", "uid", "cui", "title", "question_idx"])
+        return GenerateSentences(global_keys=self.global_keys)
 
     def get_generate_passages_pipe(self):
         """Build the pipe to extract overlapping passages from the tokenized documents."""
         return GeneratePassages(
+            field="document",
             size=self.passage_length,
             stride=self.passage_stride,
-            append_document_titles=self.append_document_title,
             start_tokens=self.get_prefix_tokens(),
             end_tokens=self.get_suffix_tokens(),
             pad_token_id=self.tokenizer.pad_token_id,
-            global_keys=[
-                "document.idx",
-                "document.uid",
-                "document.title",
-                "document.question_idx",
-                "document.cui",
-            ],
+            global_keys=[k.replace("document.", "") for k in self.global_keys],
             verbose=self.verbose,
+            prepend_field="title" if self.append_document_title else None,
         )
 
     def get_text_tokenizer_pipe(self):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
-        add_qad_tokens = self.to_sentences and self.add_qad_tokens
-        add_special_tokens = self.to_sentences and self.add_special_tokens
         return Sequential(
             FormatAndTokenize(
                 prefix=None,
@@ -300,8 +277,8 @@ class CorpusBuilder(HfDatasetBuilder):
                 text_formatter=None,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
-                add_special_tokens=add_special_tokens,
-                add_qad_tokens=add_qad_tokens,
+                add_special_tokens=False,
+                add_qad_tokens=False,
                 return_offsets_mapping=True,
                 qad_tokens=DOC_TOKEN,
                 shape=None,
@@ -315,10 +292,13 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         return Sequential(
-            AppendSuffix(text_fields="title", update=True),
+            AppendPrefixSuffix(
+                text_fields="title", suffix=". ", prefix=None, update=True, lowercase=True
+            ),
+            RenameKeys({"title": "text"}, update=True),
             FormatAndTokenize(
                 prefix=None,
-                key="title",
+                key="text",
                 text_formatter=None,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
@@ -328,16 +308,16 @@ class CorpusBuilder(HfDatasetBuilder):
                 qad_tokens=None,
                 shape=None,
                 update=True,
-                input_filter=In(["title"]),
             ),
             AddPrefix("title."),
+            input_filter=In(["title"]),
         )
 
     def get_prefix_tokens(self):
         """Get the prefix tokens for each passage"""
         start_token = self.tokenizer.cls_token_id
         if start_token is None:
-            if self.tokenizer.bos_token != "<|endoftext|>":
+            if self.tokenizer.bos_token != GPT_END_OF_TEXT_TOKEN:
                 start_token = self.tokenizer.bos_token_id
 
         if self.add_qad_tokens:
@@ -354,7 +334,7 @@ class CorpusBuilder(HfDatasetBuilder):
         if self.add_special_tokens:
             end_token = self.tokenizer.sep_token_id
             if end_token is None:
-                if self.tokenizer.eos_token != "<|endoftext|>":
+                if self.tokenizer.eos_token != GPT_END_OF_TEXT_TOKEN:
                     end_token = self.tokenizer.eos_token_id
 
             if end_token is not None:
@@ -362,51 +342,21 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return suffix_tokens
 
-    def _get_collate_pipe(self) -> Pipe:
+    def _get_collate_pipe(self, **kwargs) -> Pipe:
         """Build a Pipe to transform examples into a Batch."""
-
-        # get the raw text questions, extract and collate
-        raw_collate_pipe = Collate(
-            keys=["document.text", "document.title", "document.question_idx", "document.cui"]
+        base_kwargs = {"to_tensor": ["row_idx", "idx", "passage_idx", "passage_mask"]}
+        base_kwargs.update(kwargs)
+        return CollateField(
+            "document",
+            tokenizer=self.tokenizer,
+            id="collate-documents",
+            **base_kwargs,
         )
-
-        # collate simple attributes
-        simple_attr_pipe = collate.CollateAsTensor(
-            keys=[
-                "document.row_idx",
-                "document.idx",
-                "document.uid",
-                "document.passage_idx",
-                "document.proposal_score",
-            ]
-        )
-
-        # collate the questions attributes (question.input_ids, question.idx, ...)
-        document_pipe = CollateTokens("document.", tokenizer=self.tokenizer)
-
-        return Parallel(raw_collate_pipe, simple_attr_pipe, document_pipe)
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        """Decode and print one example from the batch
-
-        Parameters
-        ----------
-        **kwargs
-        """
         decode_kwargs = {"skip_special_tokens": False}
         return pretty_decode(
             row["document.input_ids"],
             tokenizer=self.tokenizer,
             **decode_kwargs,
         )
-
-    @staticmethod
-    def append_dot(dataset: DatasetDict) -> DatasetDict:
-        """Append a dot to each title before tokenizing"""
-
-        def add_dot(row):
-            row["title"] = row["title"] + "."
-            return row
-
-        dataset.map(add_dot)
-        return dataset

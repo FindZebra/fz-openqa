@@ -11,12 +11,12 @@ from typing import Optional
 
 import datasets
 import jsondiff
-import loguru
 import pytorch_lightning as pl
 import rich
 import torch
 from datasets import Split
 from hydra.utils import instantiate
+from loguru import logger as log
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import Callback
@@ -26,16 +26,14 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.trainer.states import TrainerStatus
+from warp_pipes import get_console_separator
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
-from fz_openqa.utils.pretty import get_separator
 from fz_openqa.utils.train_utils import setup_safe_env
-
-log = loguru.logger
 
 
 def train(config: DictConfig) -> Optional[float]:
@@ -55,6 +53,11 @@ def train(config: DictConfig) -> Optional[float]:
     # set verbosity
     logging.getLogger("elasticsearch").setLevel(logging.ERROR)
     datasets.logging.set_verbosity(datasets.logging.CRITICAL)
+
+    # set default cache dirs
+    os.environ["HF_DATASETS_CACHE"] = str(config.sys.cache_dir)
+    os.environ["HF_TRANSFORMERS_CACHE"] = str(config.sys.cache_dir)
+
     # avoid "too many open files" error
     sharing_strategy = config.get("base.sharing_strategy", "file_system")
     log.info(f"Using {sharing_strategy} sharing strategy")
@@ -84,11 +87,13 @@ def train(config: DictConfig) -> Optional[float]:
     ):
 
         # only preprocess the data if there is no trainer
-        if config.get("trainer", None) is None:
+        if "null" in config.trainer._target_:
             log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
             datamodule: DataModule = instantiate(config.datamodule)
             # datamodule.prepare_data()
             datamodule.setup()
+            datamodule.display_samples(n_samples=10)
+            rich.print(datamodule.dataset)
             return
 
         # Init Lightning Module
@@ -145,10 +150,7 @@ def train(config: DictConfig) -> Optional[float]:
     train_utils.log_hyperparameters(
         config=config,
         model=model,
-        datamodule=datamodule,
         trainer=trainer,
-        callbacks=callbacks,
-        logger=logger,
     )
 
     # eval on init
@@ -252,7 +254,7 @@ def load_checkpoint(
         # todo: os.chdir(checkpoint.config.sys.workdir)
         # todo: config.sys.workdir = checkpoint.config.sys.workdir
         if ref_config is not None and not silent:
-            rich.print(get_separator())
+            rich.print(get_console_separator())
             rich.print(f"Loading checkpoint from {checkpoint_path}. Config diff:")
             rich.print(
                 jsondiff.diff(
@@ -261,7 +263,7 @@ def load_checkpoint(
                     syntax="symmetric",
                 )
             )
-            rich.print(get_separator())
+            rich.print(get_console_separator())
         return checkpoint
     else:
         return None
@@ -333,7 +335,8 @@ def train_with_dataset_updates(
     max_steps = trainer.max_steps
     trainer.fit_loop.max_steps = min(update_freq, max_steps)
     dataset_iter = 0
-    trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
+    if trainer.logger is not None:
+        trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
     while trainer.global_step < max_steps - 1:
 
         # update the dataset

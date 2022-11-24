@@ -1,15 +1,19 @@
 import os
 import re
+from copy import copy
+from numbers import Number
 from typing import List
 from typing import Optional
 from typing import Sequence
 
 import omegaconf
-import rich.syntax
-import rich.tree
+import rich
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
+from omegaconf import open_dict
 from pytorch_lightning.utilities import rank_zero_only
+from rich.syntax import Syntax
+from rich.tree import Tree
 
 YAML_PATTERN = r"^.*\.yaml$"
 
@@ -46,15 +50,26 @@ def print_config(
         fields (Sequence[str], optional): Determines which main fields from config will
         be printed and in what order.
         resolve (bool, optional): Whether to resolve reference fields of DictConfig.
+        :param exclude:
     """
 
     style = "dim"
-    tree = rich.tree.Tree(":gear: CONFIG", style=style, guide_style=style)
+    tree = Tree(":gear: CONFIG", style=style, guide_style=style)
     if exclude is None:
         exclude = []
 
-    fields = fields or config.keys()
-    fields = filter(lambda x: x not in exclude, fields)
+    fields = fields or list(config.keys())
+    fields = list(filter(lambda x: x not in exclude, fields))
+
+    with open_dict(config):
+        base_config = {}
+        for field in copy(fields):
+            if isinstance(config.get(field), (bool, str, Number)):
+                base_config[field] = config.get(field)
+                fields.remove(field)
+        config["__root__"] = base_config
+    fields = ["__root__"] + fields
+
     for field in fields:
         branch = tree.add(field, style=style, guide_style=style)
 
@@ -66,6 +81,6 @@ def print_config(
             except Exception:
                 pass
 
-        branch.add(rich.syntax.Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
+        branch.add(Syntax(branch_content, "yaml", indent_guides=True, word_wrap=True))
 
     rich.print(tree)

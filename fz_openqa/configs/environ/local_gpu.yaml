@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - override /sys: local.yaml
+  - override /model/backbone: mini.yaml
+
+trainer:
+  accelerator: gpu
+  strategy: dp
+
+
+datamodule:
+  num_proc: 4
+  num_workers: 4
+
+  builder:
+      dataset_builder:
+        max_length: 200
+      corpus_builder:
+        passage_length: 200
+        passage_stride: 100

@@ -3,17 +3,19 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import datasets
+import rich
 import torch
+import yaml
+from datasets import DownloadManager
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from pytorch_lightning.utilities.cloud_io import load as pl_load
-from pytorch_lightning.utilities.migration import pl_legacy_patch
+from packaging.version import parse as parse_version
 from transformers import PreTrainedTokenizerFast
 
+from fz_openqa.inference.checkpoint_legacy import patch_legacy_config
 from fz_openqa.modeling import Model
 from fz_openqa.utils.config import print_config
 
@@ -25,9 +27,7 @@ def get_drive_url(url):
 
 
 def download_asset(url: str, cache_dir: Optional[str] = None, extract: bool = False) -> str:
-    dl_manager = datasets.utils.download_manager.DownloadManager(
-        dataset_name="fz_openqa_assets", data_dir=cache_dir
-    )
+    dl_manager = DownloadManager(dataset_name="fz_openqa_assets", data_dir=cache_dir)
     if extract:
         if "drive.google" in url:
             url = get_drive_url(url)
@@ -62,17 +62,29 @@ class CheckpointLoader:
         if all(p.is_dir() for p in files) and len([p for p in files]) == 1:
             self.checkpoint_dir = files[0]
         logger.info(f"Loading checkpoint from {self.checkpoint_dir}")
+        self.config = self._load_config(self.checkpoint_dir / "config.yaml")
 
-        # load the checkpoint config
-        self.config = OmegaConf.load(self.checkpoint_dir / "config.yaml")
         if override is not None:
             logger.info(f"Overriding config with keys {list(override.keys())}")
             if "override_ops" in override.keys():
                 self._apply_override_ops(override.override_ops)
             self.config = OmegaConf.merge(self.config, override)
 
-    def _apply_override_ops(self, override_config: DictConfig):
+    def _load_config(self, path: Union[str, Path]):
+        with open(path, "r") as f:
+            config = yaml.safe_load(f)
+        code_version = parse_version(config["code_version"])
+        if code_version < parse_version("0.2.0"):
+            logger.warning(
+                f"Code version {code_version} is older than 0.2.0. Patching legacy config."
+            )
+            config = patch_legacy_config(config)
 
+        # load the checkpoint config
+        config = OmegaConf.create(config)
+        return config
+
+    def _apply_override_ops(self, override_config: DictConfig):
         delete_keys = override_config.get("delete", None)
         if delete_keys is not None:
             for key in delete_keys:
@@ -109,50 +121,27 @@ class CheckpointLoader:
 
     def load_model(self, checkpoint_type="last", zero_shot: bool = False, **kwargs) -> Model:
         logger.info(f"Instantiating model <{self.config.model._target_}>")
+        model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
+
+        # find checkpoint files
         paths = self.model_checkpoint_paths(match=checkpoint_type)
-        # if path is not None and not zero_shot:
-        #     logger.info(f"Loading model from checkpoint: {path}")
-        #     # need to override the saved `tokenizer` and `backbone` hyperparameters
-        #     # so `sys.cache_dir` can be overridden
-        #     cls = _resolve_target(self.config.model._target_)
-        #     model = cls.load_from_checkpoint(
-        #         path,
-        #         tokenizer=OmegaConf.to_object(self.config.datamodule.tokenizer),
-        #         backbone=OmegaConf.to_object(self.config.model.backbone),
-        #         **kwargs,
-        #     )
-        # else:
-        #     logger.warning("No checkpoint found. Initializing model without checkpoint.")
-        #     model = instantiate(self.config.model, _recursive_=False)
         if len(paths) == 0 or zero_shot:
             if zero_shot:
                 logger.info("Zero-shot. Initializing model without checkpoint.")
             else:
                 logger.warning("No checkpoint found. Initializing model without checkpoint.")
-            model: Model = instantiate(self.config.model, _recursive_=False, **kwargs)
+            return model
 
-        else:
-            if len(paths) > 1:
-                logger.warning(
-                    f"Found multiple checkpoints: {[p.name for p in paths]}. "
-                    f"Using the last one."
-                )
-            path = paths[-1]
-            logger.info(f"Loading model from checkpoint: {path}")
-            cls: Model.__class__ = _resolve_target(self.config.model._target_, full_key=None)
+        # select one checkpoint path
+        if len(paths) > 1:
+            logger.warning(
+                f"Found multiple checkpoints: {[p.name for p in paths]}. "
+                f"Using the last one in the list."
+            )
+        path = paths[-1]
 
-            # load pytorch
-            with pl_legacy_patch():
-                checkpoint = pl_load(path, map_location=torch.device("cpu"))
-
-            # drop callbacks
-            checkpoint.pop("callbacks", None)
-
-            # override hyper parameters
-            if "hyper_parameters" in checkpoint:
-                checkpoint["hyper_parameters"] = self.config.model
-
-            # instantiate and load model weights
-            model: Model = cls._load_model_state(checkpoint, **kwargs)
-
+        # load checkpoint state_dict
+        logger.info(f"Loading `state_dict` from checkpoint: {path}")
+        ckpt = torch.load(path, map_location=model.device)
+        model.load_state_dict(ckpt["state_dict"], strict=False)
         return model

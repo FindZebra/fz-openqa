@@ -1,12 +1,12 @@
 # defining a mapping will help: (1) optimize the performance, (2) save disk space
 mappings:
   properties:
-    idx:
-      type: integer
-    document_idx:
-      type: integer
     text:
       type: text
+    document.doc_idx:
+      type: integer
+    document.__ROW_IDX__:
+      type: integer
     title:
       # Prevents the inverted index and doc values from being created
       enabled: false

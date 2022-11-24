@@ -1,4 +1,0 @@
-_target_: fz_openqa.datamodules.pipes.PartialMatch
-_id: partial_match
-interpretable: true
-max_grams: 5

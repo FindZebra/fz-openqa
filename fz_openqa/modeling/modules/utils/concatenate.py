@@ -2,9 +2,9 @@ import warnings
 
 import einops
 import torch
+from warp_pipes import Batch
 
 from fz_openqa.modeling.functional import padless_cat
-from fz_openqa.utils.datastruct import Batch
 
 
 def concat_questions_and_documents(batch: Batch, *, pad_token_id: int, max_length: int) -> Batch:

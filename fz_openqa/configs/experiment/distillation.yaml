@@ -39,7 +39,6 @@ datamodule:
   n_documents: 16
   n_retrieved_documents: 300
   # n_max_retrieved_documents: 1_000
-  relevance_classifier: null
   index_builder:
     persist_cache: true
 

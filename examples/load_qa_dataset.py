@@ -28,7 +28,7 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 def run(config: DictConfig) -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     if config.get("disable_caching"):
-        datasets.set_caching_enabled(False)
+        datasets.disable_caching()
 
     # initialize the tokenizer
     bert_id = config.get("bert_id", "michiyasunaga/BioLinkBERT-base")
@@ -65,13 +65,17 @@ def run(config: DictConfig) -> None:
             ),
         ],
     )
-    dm = DataModule(builder=builder)
-    dm.prepare_data()
+    dm = DataModule(builder=builder, num_workers=config.get("num_workers", 0))
+
+    # build the dataset
     dm.setup()
-    dm.display_samples(n_samples=3, split=config.get("display_split", "train"))
+    dm.display_samples(n_samples=5)
 
     # access dataset
     rich.print(dm.dataset)
+
+    # sample a batch
+    _ = next(iter(dm.train_dataloader()))
 
 
 if __name__ == "__main__":

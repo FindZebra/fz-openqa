@@ -3,9 +3,8 @@ from typing import Optional
 
 import torch
 from torch import Tensor
-
-from fz_openqa.datamodules.pipes import Pipe
-from fz_openqa.utils.datastruct import Batch
+from warp_pipes import Batch
+from warp_pipes import Pipe
 
 
 def pad(x: Tensor, length: int, fill_value=0):

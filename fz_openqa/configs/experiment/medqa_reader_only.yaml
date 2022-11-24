@@ -68,10 +68,6 @@ datamodule:
   add_qad_tokens: true
   add_special_tokens: true
 
-  # tag documents as positive or negative
-  relevance_classifier:
-    interpretable: false
-
   # OpenQA builder parameters
   builder:
     batch_size: 100
