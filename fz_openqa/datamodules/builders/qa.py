@@ -242,12 +242,15 @@ class QaBuilder(HfDatasetBuilder):
 
             # make a pipe to concatenate the questions and answers
             concat_qa = Sequential(
+                # expand the `question` field from [-1] to [-1, n_opts].
                 Expand(
                     axis=1,
                     n=self.n_options,
                     update=True,
                     input_filter=In([*question_features, *additional_question_features]),
                 ),
+                # concatenate the questions tokens with the answer tokens
+                # warning: this will not affect `question.text`.
                 ApplyAsFlatten(
                     ConcatTokenFields(
                         fields=["question", "answer"],
@@ -259,12 +262,10 @@ class QaBuilder(HfDatasetBuilder):
                         sep_tokens=sep_tokens,
                         input_filter=In(
                             [
-                                "question.text",
                                 "question.input_ids",
                                 "question.attention_mask",
                                 "question.token_type_ids",
                                 "question.offset_mapping",
-                                "answer.text",
                                 "answer.input_ids",
                                 "answer.attention_mask",
                                 "answer.token_type_ids",
