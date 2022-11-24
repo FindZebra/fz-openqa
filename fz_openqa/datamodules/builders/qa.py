@@ -16,7 +16,9 @@ from warp_pipes import HfDataset
 from warp_pipes import Identity
 from warp_pipes import In
 from warp_pipes import Parallel
+from warp_pipes import PrintBatch
 from warp_pipes import Reduce
+from warp_pipes import RenameKeys
 from warp_pipes import Sequential
 from warp_pipes.support.datasets_utils import keep_only_columns
 
@@ -394,6 +396,7 @@ class ConcatQaBuilder(QaBuilder):
                 ),
                 update=True,
             ),
+            RenameKeys({"answer.text": "question.answer"}, update=True),
             input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 

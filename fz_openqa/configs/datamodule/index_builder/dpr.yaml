@@ -16,7 +16,7 @@ engines:
         # base config
         query_field: question
         index_field: document
-        auxiliary_field: answer
+        auxiliary_key: answer
         main_key: text
         index_key: row_idx
         group_key: doc_idx
