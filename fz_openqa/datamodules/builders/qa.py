@@ -21,6 +21,7 @@ from warp_pipes import In
 from warp_pipes import infer_batch_shape
 from warp_pipes import Parallel
 from warp_pipes import pprint_batch
+from warp_pipes import PrintBatch
 from warp_pipes import Reduce
 from warp_pipes import RenameKeys
 from warp_pipes import Sequential
@@ -403,7 +404,7 @@ class ConcatQaBuilder(QaBuilder):
                 ),
                 update=True,
             ),
-            RenameKeys({"answer.text": "question.answer_text"}),
+            RenameKeys({"answer.text": "question.answer"}, update=True),
             input_filter=In(["question.text", "answer.text", *additional_question_features]),
         )
 

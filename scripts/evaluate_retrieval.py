@@ -1,20 +1,18 @@
 import math
 import os
 from pathlib import Path
+from typing import Optional
 
-import datasets
 import dotenv
 import hydra
 import numpy as np
 import requests
 import rich
-import transformers
 from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import Trainer
-from pytorch_lightning import seed_everything
 from tqdm import tqdm
 from warp_pipes import get_console_separator
 
@@ -25,6 +23,7 @@ from fz_openqa.training.training import load_checkpoint
 from fz_openqa.utils.config import print_config
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.fingerprint import get_fingerprint
+from scripts.utils import configure_env
 
 dotenv.load_dotenv(Path(fz_openqa.__file__).parent.parent / ".env")
 
@@ -42,6 +41,11 @@ def reduce_docs(docs, doc_ids):
             new_docs.append(d)
             selected_doc_ids.add(idx)
     return new_docs
+
+def cleanup_cui(cui: Optional[str]) -> str:
+    if cui is None:
+        return "--"
+    return cui.lower()
 
 
 def get_fz_rank(query, que_cuis):
@@ -80,14 +84,7 @@ def run(config):
     ```
     """
     print_config(config)
-    # set the context
-    datasets.set_caching_enabled(True)
-    datasets.logging.set_verbosity(datasets.logging.CRITICAL)
-    transformers.logging.set_verbosity(transformers.logging.CRITICAL)
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    os.environ["HF_DATASETS_CACHE"] = str(config.sys.cache_dir)
-    os.environ["HF_TRANSFORMERS_CACHE"] = str(config.sys.cache_dir)
-    seed_everything(1, workers=True)
+    configure_env(config)
 
     # load the model
     overrides = DictConfig(OmegaConf.to_container(config.overrides, resolve=True))
@@ -131,7 +128,7 @@ def run(config):
             for i in range(len(batch["document.cui"])):
                 j += 1
                 eg = {k: v[i] for k, v in batch.items()}
-                doc_cuis = map(str.lower, eg["document.cui"])
+                doc_cuis = map(cleanup_cui, eg["document.cui"])
                 doc_ids = eg["document.idx"]
 
                 doc_cuis = reduce_docs(doc_cuis, doc_ids)

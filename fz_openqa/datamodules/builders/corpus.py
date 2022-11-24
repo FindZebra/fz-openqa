@@ -19,6 +19,7 @@ from warp_pipes import GeneratePassages
 from warp_pipes import HfDataset
 from warp_pipes import Parallel
 from warp_pipes import Pipe
+from warp_pipes import RenameKeys
 from warp_pipes import Sequential
 from warp_pipes.core.condition import HasPrefix
 from warp_pipes.core.condition import In
@@ -52,13 +53,14 @@ CORPUS_GENERATORS = {
     "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
     "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
     "findzebra": (fz_corpus.__file__,),
+    "findzebra-latest": ("findzebra/corpus.latest",),
     "file": (file_corpus.__file__,),
     "wikipedia": ("wikipedia", "20200501.en"),
     "quality": (quality.__file__, None),
     "race": ("race", "all"),
 }
 
-DEFAULT_COLUMNS = ["text", "title"]
+DEFAULT_COLUMNS = ["text"]
 
 
 class CorpusBuilder(HfDatasetBuilder):
@@ -95,7 +97,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def __init__(
         self,
-        dset_name: str = "file",
+        dset_name: Optional[str] = None,
         passage_length: int = 200,
         passage_stride: int = 100,
         input_dir: Optional[str] = None,
@@ -105,11 +107,12 @@ class CorpusBuilder(HfDatasetBuilder):
     ):
         super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
 
-        for dn in dset_name.split("+"):
-            if dn not in CORPUS_GENERATORS:
-                raise ValueError(
-                    f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
-                )
+        if dset_name is not None:
+            for dn in dset_name.split("+"):
+                if dn not in CORPUS_GENERATORS:
+                    raise ValueError(
+                        f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
+                    )
 
         if self.max_length is not None:
             raise ValueError(
@@ -138,7 +141,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
         return load_dataset(*args, **kwargs)
 
-    def load_base_dataset(self) -> DatasetDict:
+    def load_base_dataset(self) -> HfDataset:
         kwargs = {"cache_dir": self.cache_dir, "input_dir": self.input_dir}
 
         # split dataset names using `+`
@@ -178,10 +181,6 @@ class CorpusBuilder(HfDatasetBuilder):
                 dsets = [drop_cols(dset) for dset in dsets]
             dataset = concatenate_datasets(dsets)
 
-        # infer the global keys
-        columns = get_column_names(dataset)
-        self.global_keys = [k for k in columns if k not in DEFAULT_COLUMNS]
-
         return dataset
 
     def filter_dataset(self, dataset: HfDataset) -> HfDataset:
@@ -191,10 +190,10 @@ class CorpusBuilder(HfDatasetBuilder):
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset. Tokenization and formatting as PyTorch tensors"""
 
-        for attr in dataset.column_names:
-            if "document." in attr:
-                new_attr = attr.replace("document.", "")
-                dataset = dataset.rename_column(attr, new_attr)
+        # remove `document.` prefix
+        dataset = dataset.rename_columns(
+            {k: k.replace("document.", "") for k in dataset.column_names}
+        )
 
         # add the document index column if not already provided
         if "uid" in dataset.column_names:
@@ -210,6 +209,10 @@ class CorpusBuilder(HfDatasetBuilder):
             if all(len(t) == 0 for t in dataset[:100]["title"]):
                 self.append_document_title = False
                 logger.info("No title found in dataset, `append_document_title` is set to False")
+
+        # infer the global keys
+        columns = get_column_names(dataset)
+        self.global_keys = [k for k in columns if k not in DEFAULT_COLUMNS]
 
         # define the pipe used for preprocessing
         preprocessing = Sequential(
@@ -289,10 +292,13 @@ class CorpusBuilder(HfDatasetBuilder):
         """Build a pipe to tokenize raw documents, special and encoding tokens
         are added only in `to_sentence` mode."""
         return Sequential(
-            AppendPrefixSuffix(text_fields="title", suffix=". ", prefix=None, update=True),
+            AppendPrefixSuffix(
+                text_fields="title", suffix=". ", prefix=None, update=True, lowercase=True
+            ),
+            RenameKeys({"title": "text"}, update=True),
             FormatAndTokenize(
                 prefix=None,
-                key="title",
+                key="text",
                 text_formatter=None,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
@@ -302,9 +308,9 @@ class CorpusBuilder(HfDatasetBuilder):
                 qad_tokens=None,
                 shape=None,
                 update=True,
-                input_filter=In(["title"]),
             ),
             AddPrefix("title."),
+            input_filter=In(["title"]),
         )
 
     def get_prefix_tokens(self):

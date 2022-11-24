@@ -1,0 +1,2 @@
+pympler:
+  _target_: fz_openqa.callbacks.PymplerCallback

@@ -216,6 +216,12 @@ class Module(nn.Module, ABC):
         # filter internal values (e.g. __targets__
         if filter_features:
             output = self._filter_features_from_output(output)
+
+        # detach grads
+        for k, v in output.items():
+            if k != "loss":
+                output[k] = v.detach()
+
         return output
 
     @abstractmethod

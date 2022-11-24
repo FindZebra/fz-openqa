@@ -21,6 +21,7 @@ defaults:
       - lr_monitor
       - log_predictions
       - progress_bar
+      - pympler
 
 base:
   seed: null
@@ -114,7 +115,7 @@ datamodule:
   dset_max_length: 312
   corpus_name: medwiki
   corpus_max_length: 200
-  num_proc: 8
+  num_proc: 16
   output_columns:
     - answer.target
     - question.row_idx
@@ -165,6 +166,7 @@ datamodule:
       passage_length: ${datamodule.corpus_max_length}
       passage_stride: 100
       append_document_title: true
+      add_qad_tokens: false
 
   # Index parameters
   index_builder:

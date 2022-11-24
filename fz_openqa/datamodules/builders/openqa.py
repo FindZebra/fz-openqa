@@ -222,7 +222,7 @@ class OpenQaBuilder(DatasetBuilder):
                         "question.text",
                         "question.input_ids",
                         "question.attention_mask",
-                        "answer.text",
+                        "question.answer",
                     ]
                 ),
                 update=True,
