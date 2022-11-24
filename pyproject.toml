@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fz-openqa"
-version = "0.0.1"
+version = "0.2.1"
 description = "Medical Open Domain Question Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
@@ -15,7 +15,7 @@ hydra-colorlog = "^1.1.0"
 unicode = "^2.8"
 nltk = "^3.7"
 sentencepiece = "^0.1.96"
-warp-pipes = {git="https://github.com/vlievin/warp-pipes.git", branch="dev/fz-openqa"}
+warp-pipes = { git = "https://github.com/vlievin/warp-pipes.git", tag = "v0.1.1" }
 spacy = "^3.4.2"
 python-dotenv = "^0.21.0"
 html2text = "^2020.1.16"
