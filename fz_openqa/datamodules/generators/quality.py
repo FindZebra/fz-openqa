@@ -23,10 +23,7 @@ _HOMEPAGE = "https://github.com/nyu-mll/quality"
 _LICENSE = ""
 # The HuggingFace dataset library don't host the datasets but only point to the original files
 # This can be an arbitrary nested dict/list of URLs (see below in `_split_generators` method)
-_URL = "https://github.com/nyu-mll/quality/raw/main/data/QuALITY.v0.9.zip"
-
-
-# _URL = "/Users/valv/Downloads/QuALITY.v0.9.zip"
+_URL = "https://github.com/nyu-mll/quality/blob/main/data/v1.0.1/QuALITY.v1.0.1.zip"
 
 
 class QualityConfig(datasets.BuilderConfig):

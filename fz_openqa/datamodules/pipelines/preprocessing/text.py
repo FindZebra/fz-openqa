@@ -15,10 +15,11 @@ from warp_pipes import Pipe
 from warp_pipes import ReplaceInKeys
 from warp_pipes import Sequential
 from warp_pipes import TokenizerPipe
+from warp_pipes.core.condition import HasPrefix
 from warp_pipes.core.condition import In
 
 from fz_openqa.datamodules.pipes import TextFormatter
-from fz_openqa.datamodules.utils.transformations import append_prefix
+from fz_openqa.datamodules.utils.transformations import append_prefix_tokens
 
 
 class CleanupSpecialTokens(Pipe):
@@ -53,7 +54,7 @@ class FormatAndTokenize(Sequential):
 
     def __init__(
         self,
-        prefix: Optional[str],
+        field: Optional[str],
         *,
         text_formatter: Optional[TextFormatter] = None,
         tokenizer: PreTrainedTokenizerFast,
@@ -76,7 +77,7 @@ class FormatAndTokenize(Sequential):
         if add_qad_tokens and qad_tokens is not None:
             qad_tokens = "".join(qad_tokens)
             add_qad_tokens_pipe = Apply(
-                {key: partial(append_prefix, qad_tokens)},
+                {key: partial(append_prefix_tokens, qad_tokens)},
                 element_wise=True,
             )
         else:
@@ -87,15 +88,18 @@ class FormatAndTokenize(Sequential):
             text_formatter = text_formatter.copy(text_key=key)
 
         # define pipes to filter by prefix
-        if prefix is not None:
+        if field is not None:
+            prefix = f"{field}."
             format_out = AddPrefix(prefix)
             format_in = Sequential(FilterKeys(In([f"{prefix}{key}"])), ReplaceInKeys(prefix, ""))
+            input_filer = HasPrefix(prefix)
 
         else:
             format_out = None
             format_in = None
+            input_filer = None
 
-        super().__init__(
+        blocks = [
             format_in,
             text_formatter,
             ApplyAsFlatten(
@@ -114,6 +118,11 @@ class FormatAndTokenize(Sequential):
                 level=len(shape) - 1,
             ),
             format_out,
+        ]
+
+        super().__init__(
+            *blocks,
+            input_filer=input_filer,
             **kwargs,
         )
 

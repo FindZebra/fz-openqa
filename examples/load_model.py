@@ -71,7 +71,7 @@ from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes import TextFormatter, Parallel, Sequential, Apply, ConcatTextFields
 from warp_pipes.core.condition import In
 from fz_openqa.datamodules.pipes.nesting import Expand, ApplyAsFlatten
-from fz_openqa.datamodules.utils.transformations import append_prefix
+from fz_openqa.datamodules.utils.transformations import append_prefix_tokens
 
 
 class TestData:
@@ -179,7 +179,8 @@ class TestData:
     def get_preprocessing_pipe(self):
         # concat question and answer
         add_spec_tokens_pipe = Apply(
-            {"question.text": partial(append_prefix, self.tokenizer.sep_token)}, element_wise=True
+            {"question.text": partial(append_prefix_tokens, self.tokenizer.sep_token)},
+            element_wise=True,
         )
         concat_qa = Sequential(
             add_spec_tokens_pipe,

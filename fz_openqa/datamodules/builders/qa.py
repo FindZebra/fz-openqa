@@ -4,7 +4,6 @@ from typing import List
 from typing import Optional
 
 import dill  # type: ignore
-import rich
 from datasets import concatenate_datasets
 from datasets import Dataset
 from datasets import DatasetDict
@@ -14,17 +13,14 @@ from warp_pipes import ApplyAsFlatten
 from warp_pipes import CollateField
 from warp_pipes import Expand
 from warp_pipes import Gate
-from warp_pipes import HasPrefix
 from warp_pipes import HfDataset
-from warp_pipes import Identity
 from warp_pipes import In
 from warp_pipes import infer_batch_shape
 from warp_pipes import Parallel
-from warp_pipes import pprint_batch
-from warp_pipes import PrintBatch
-from warp_pipes import Reduce
+from warp_pipes import Pipe
 from warp_pipes import RenameKeys
 from warp_pipes import Sequential
+from warp_pipes.support.datasets_utils import get_column_names
 from warp_pipes.support.datasets_utils import keep_only_columns
 
 from .adapters import DATASET_ADAPTERS
@@ -54,14 +50,10 @@ QA_DATASETS = {
     "fz-queries": (fz_queries.__file__, None),
 }
 
+REQUIRED_INPUT_COLUMNS = ["question.text"]
+
 
 class QaBuilder(HfDatasetBuilder):
-    # HuggingFace dataset id or local path to script
-    # these values are set dynamically in the __init__
-
-    # nesting level of the question field
-    nesting_level = 0
-
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
     pt_attributes = [
@@ -99,6 +91,7 @@ class QaBuilder(HfDatasetBuilder):
         dset_name: str = "medqa-us",
         drop_documents: bool = True,
         preprocessing_op: Optional[DatasetPreprocessing] = None,
+        concat_qa: bool = False,
         **kwargs,
     ):
         super(QaBuilder, self).__init__(*args, **kwargs)
@@ -107,6 +100,7 @@ class QaBuilder(HfDatasetBuilder):
         self.n_answer_tokens = n_answer_tokens
         self.drop_documents = drop_documents
         self.preprocessing_op = preprocessing_op
+        self.concat_qa = concat_qa
 
         # set the dataset attributes
         for dn in dset_name.split("+"):
@@ -142,14 +136,12 @@ class QaBuilder(HfDatasetBuilder):
 
         # apply preprocessing operators
         if self.preprocessing_op is not None:
-            dsets = {
-                dset_name: self.preprocessing_op(
-                    d,
+            for dset_name in list(dsets.keys()):
+                dsets[dset_name] = self.preprocessing_op(
+                    dsets[dset_name],
                     num_proc=self.num_proc,
                     dset_name=dset_name,
                 )
-                for dset_name, d in dsets.items()
-            }
 
         # convert the dict of datasets to a list of datasets
         dsets = list(dsets.values())
@@ -184,42 +176,131 @@ class QaBuilder(HfDatasetBuilder):
 
             return dsets_dict
 
+    def _check_input_dataset(self, dataset):
+        if not isinstance(dataset, (Dataset, DatasetDict)):
+            raise ValueError(f"Expected a `Dataset` or `DatasetDict` but got `{type(dataset)}`.")
+        # check required columns
+        columns = get_column_names(dataset)
+        if set(REQUIRED_INPUT_COLUMNS) > set(columns):
+            raise ValueError(
+                f"The input dataset must contain the following columns: {REQUIRED_INPUT_COLUMNS}. "
+                f"Found {columns}"
+            )
+
     def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
         """Apply processing steps to the dataset.
         Tokenization and formatting as PyTorch tensors"""
+        self._check_input_dataset(dataset)
 
         if self.drop_documents:
             cols = list({c for c in dataset.column_names if "document." in c})
             logger.info(f"Dropping document columns {cols}")
             dataset = dataset.remove_columns(cols)
 
-        # answer nesting level
-        answer_shape = infer_columns_batch_size(dataset, ["answer.text"])
-
-        # Tokenize the text fields (questions, answers, and documents, if any)
-        if self.tokenizer:
-            one_split = next(iter(dataset.keys()))
-            has_document_columns = any("document." in c for c in dataset[one_split].column_names)
-            has_answer_columns = any("answer." in c for c in dataset[one_split].column_names)
-            preprocessing = Parallel(
-                self.get_question_tokenizer_pipe(),
-                Gate(has_answer_columns, self.get_answer_tokenizer_pipe(answer_shape)),
-                Gate(has_document_columns, self.get_document_tokenizer_pipe()),
-            )
-            dataset = preprocessing(
-                dataset,
-                num_proc=self.num_proc,
-                desc="Tokenizing questions and answers",
-            )
+        preprocessing = self.get_tokenize_concat_qa_pipe(dataset)
+        dataset = preprocessing(dataset, num_proc=self.num_proc, desc="Preprocessing QA dataset")
 
         # add an index column
         dataset = set_index_column(dataset, key="question.row_idx")
-
         return dataset
+
+    def get_tokenize_concat_qa_pipe(self, dataset: HfDataset) -> Pipe:
+        # register features that also need to be expanded to match the concatenated shape
+        input_columns = get_column_names(dataset)
+        text_keys = ["question.text", "answer.text"]
+        question_features = ["question.text", "question.input_ids", "question.attention_mask"]
+        additional_question_features = ["question.document_idx"]
+        has_document_columns = any("document." in c for c in input_columns)
+        has_answer_columns = any("answer." in c for c in input_columns)
+
+        # infer the shape of the `answer.text` field and `question.text` field
+        if has_answer_columns:
+            answer_shape = infer_dataset_batch_size(dataset, ["answer.text"])
+        else:
+            answer_shape = None
+
+        # register the tokens that prefix the question
+        q_start_tokens = []
+        if self.add_qad_tokens:
+            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
+
+        # make a pipe to concatenate the questions and answers
+        if self.concat_qa and has_answer_columns:
+            # register the tokens used to separate the questions and answers, this is used
+            # for the GPT2 tokenizer which doesn't support CLS tokens
+            if self.tokenizer.cls_token is not None:
+                # no need to add them, the CLS token is already provided
+                sep_tokens = None
+            else:
+                space_token_id = self.tokenizer.encode(" ", add_special_tokens=False)[0]
+                sep_tokens = {
+                    "input_ids": [space_token_id],
+                    "attention_mask": [1],
+                    "token_type_ids": [0],
+                    "offset_mapping": [[-1, -1]],
+                }
+
+            # make a pipe to concatenate the questions and answers
+            concat_qa = Sequential(
+                Expand(
+                    axis=1,
+                    n=self.n_options,
+                    update=True,
+                    input_filter=In([*question_features, *additional_question_features]),
+                ),
+                ApplyAsFlatten(
+                    ConcatTokenFields(
+                        fields=["question", "answer"],
+                        master_key="input_ids",
+                        new_field="question",
+                        drop_start_tokens=[self.tokenizer.cls_token_id],
+                        keep_end_tokens=[self.tokenizer.sep_token_id],
+                        max_length=self.max_length,
+                        sep_tokens=sep_tokens,
+                        input_filter=In(
+                            [
+                                "question.text",
+                                "question.input_ids",
+                                "question.attention_mask",
+                                "question.token_type_ids",
+                                "question.offset_mapping",
+                                "answer.text",
+                                "answer.input_ids",
+                                "answer.attention_mask",
+                                "answer.token_type_ids",
+                                "answer.offset_mapping",
+                            ]
+                        ),
+                    ),
+                    level=1,
+                    update=True,
+                ),
+            )
+        else:
+            if self.concat_qa:
+                logger.warning(
+                    f"The questions won't be concatenated with the answers because "
+                    f"the dataset doesn't contain any answer columns. "
+                    f"columns={input_columns}"
+                )
+            concat_qa = None
+
+        # compose the final pipe
+        return Sequential(
+            self.text_formatter.copy(text_key=text_keys, update=True),
+            Parallel(
+                self.get_question_tokenizer_pipe(),
+                Gate(has_answer_columns, self.get_answer_tokenizer_pipe(answer_shape)),
+                Gate(has_document_columns, self.get_document_tokenizer_pipe()),
+                update=True,
+            ),
+            concat_qa,
+            RenameKeys({"answer.text": "question.answer"}, update=True),
+        )
 
     def get_answer_tokenizer_pipe(self, answer_shape: List[int]):
         return FormatAndTokenize(
-            prefix="answer.",
+            field="answer",
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
@@ -230,7 +311,7 @@ class QaBuilder(HfDatasetBuilder):
 
     def get_document_tokenizer_pipe(self):
         return FormatAndTokenize(
-            prefix="document.",
+            field="document",
             text_formatter=self.text_formatter,
             tokenizer=self.tokenizer,
             max_length=self.max_length,
@@ -240,8 +321,6 @@ class QaBuilder(HfDatasetBuilder):
         )
 
     def get_question_tokenizer_pipe(self):
-        """create a Pipe to tokenize the questions."""
-
         if self.query_expansion is not None:
             query_expansion_pipe = QueryExpansion(
                 question_length=self.query_expansion, tokenizer=self.tokenizer, update=True
@@ -251,7 +330,7 @@ class QaBuilder(HfDatasetBuilder):
 
         return Sequential(
             FormatAndTokenize(
-                prefix="question.",
+                field="question",
                 text_formatter=self.text_formatter,
                 tokenizer=self.tokenizer,
                 max_length=self.max_length,
@@ -263,184 +342,53 @@ class QaBuilder(HfDatasetBuilder):
             query_expansion_pipe,
         )
 
-    def _get_collate_pipe(self, nesting_level=None):
-        """get the raw text questions, extract and collate"""
+    def _get_collate_pipe(self):
         return Parallel(
             CollateField(
-                "question", tokenizer=self.tokenizer, nesting_level=0, id="collate-questions"
+                "question",
+                tokenizer=self.tokenizer,
+                nesting_level=["text", "input_ids"],
+                id="pad-nested-question-tokens",
+            ),
+            CollateField(
+                "answer",
+                tokenizer=self.tokenizer,
+                nesting_level=["text", "input_ids"],
+                id="collate-answer-attributes",
+            ),
+            CollateField(
+                "answer",
+                include_only=["target"],
+                to_tensor=["target"],
+                id="collate-answer-attributes",
             ),
             CollateField(
                 "document",
                 tokenizer=self.tokenizer,
-                nesting_level=0,
-                id="collate-documents",
-                include_only=["text", "input_ids", "attention_mask"],
-            ),
-            CollateField(
-                "answer",
-                nesting_level=0,
-                exclude=["input_ids", "attention_mask"],
-                to_tensor=["target"],
-                id="collate-answer-attributes",
-            ),
-            CollateField(
-                "answer",
-                tokenizer=self.tokenizer,
-                nesting_level=1,
-                include_only=["input_ids", "attention_mask"],
-                id="pad-answer-tokens",
-            ),
-            CollateField(
-                "answer",
-                tokenizer=self.tokenizer,
-                nesting_level=-1,
-                include_only=["input_ids", "attention_mask"],
-                id="pad-answer-tokens",
-            ),
-        )
-
-    def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        return format_row_flat_questions(row, tokenizer=self.tokenizer, **kwargs)
-
-
-class ConcatQaBuilder(QaBuilder):
-    """A MedQa dataset with concatenated questions and answers"""
-
-    # nesting level of the question field
-    nesting_level = 1
-
-    # name of the attributes that will be converted to
-    # tensors in the preprocessing function
-    pt_attributes = [
-        "question.input_ids",
-        "question.attention_mask",
-        "question.document_idx",
-        "answer.target",
-        "document.proposal_score",
-    ]
-
-    # output columns
-    column_names = [
-        "question.text",
-        "question.input_ids",
-        "question.attention_mask",
-        "answer.text",
-        "answer.target",
-        "document.input_ids",
-        "document.attention_mask",
-    ]
-
-    def preprocess_dataset(self, dataset: HfDataset) -> HfDataset:
-        """Apply processing steps to the dataset.
-        Tokenization and formatting as PyTorch tensors"""
-
-        # concat question and answers
-        preprocessing = self.get_tokenize_concat_qa_pipe()
-        dataset = preprocessing(
-            dataset,
-            num_proc=self.num_proc,
-            desc="Tokenizing and concatenating questions and answers",
-        )
-
-        # add an index column
-        dataset = set_index_column(dataset, key="question.row_idx")
-
-        return dataset
-
-    def get_tokenize_concat_qa_pipe(self):
-        # register features that also need to be expanded to match the concatenated shape
-        text_keys = ["question.text", "answer.text"]
-        question_features = ["question.text", "question.input_ids", "question.attention_mask"]
-        additional_question_features = ["question.document_idx"]
-
-        # register the tokens that prefix the question
-        q_start_tokens = []
-        if self.add_qad_tokens:
-            q_start_tokens.extend(self.n_query_tokens * [QUERY_TOKEN])
-
-        # register the tokens used to separate the questions and answers, this is used
-        # for the GPT2 tokenizer which doesn't support CLS tokens
-        if self.tokenizer.cls_token is not None:
-            # no need to add them, the CLS token is already provided
-            sep_tokens = None
-        else:
-            space_token_id = self.tokenizer.encode(" ", add_special_tokens=False)[0]
-            sep_tokens = {
-                "input_ids": [space_token_id],
-                "attention_mask": [1],
-                "token_type_ids": [0],
-                "offset_mapping": [[-1, -1]],
-            }
-
-        # return the final pipe
-        return Sequential(
-            self.text_formatter.copy(text_key=text_keys, update=True),
-            # tokenize the questions and the answers
-            Parallel(
-                self.get_question_tokenizer_pipe(),
-                self.get_answer_tokenizer_pipe(),
-                Identity(input_filter=In([*additional_question_features, *text_keys])),
-            ),
-            Expand(
-                axis=1,
-                n=self.n_options,
-                update=True,
-                input_filter=In([*question_features, *additional_question_features]),
-            ),
-            # concat the answer text with the question
-            ApplyAsFlatten(
-                ConcatTokenFields(
-                    fields=["question", "answer"],
-                    master_key="input_ids",
-                    new_field="question",
-                    drop_start_tokens=[self.tokenizer.cls_token_id],
-                    keep_end_tokens=[self.tokenizer.sep_token_id],
-                    max_length=self.max_length,
-                    sep_tokens=sep_tokens,
-                ),
-                level=1,
-                input_filter=Reduce(
-                    *[HasPrefix(field) for field in ["question", "answer"]], reduce_op=any
-                ),
-                update=True,
-            ),
-            RenameKeys({"answer.text": "question.answer"}, update=True),
-            input_filter=In(["question.text", "answer.text", *additional_question_features]),
-        )
-
-    def _get_collate_pipe(self, nesting_level=1):
-        return Parallel(
-            CollateField(
-                "question",
-                exclude=["input_ids", "attention_mask", "token_type_ids"],
+                nesting_level=["text", "input_ids"],
                 to_tensor=["document_idx"],
-                nesting_level=0,
                 id="collate-questions",
             ),
-            CollateField(
-                "answer",
-                nesting_level=0,
-                exclude=["input_ids", "attention_mask"],
-                to_tensor=["target"],
-                id="collate-answer-attributes",
-            ),
-            CollateField(
-                "question",
-                tokenizer=self.tokenizer,
-                nesting_level=nesting_level,
-                include_only=["input_ids", "offset_mapping", "attention_mask", "token_type_ids"],
-                id="pad-nested-question-tokens",
-            ),
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        return format_row_concatenated_questions(row, tokenizer=self.tokenizer, **kwargs)
+        if self.concat_qa:
+            return format_row_concatenated_questions(row, tokenizer=self.tokenizer, **kwargs)
+        else:
+            return format_row_flat_questions(row, tokenizer=self.tokenizer, **kwargs)
 
 
-def infer_columns_batch_size(dataset: HfDataset, keys: List[str], n: int = 10) -> List[int]:
+def infer_dataset_batch_size(
+    dataset: HfDataset, keys: Optional[List[str]] = None, n: int = 10
+) -> List[int]:
     assert isinstance(dataset, (Dataset, DatasetDict))
     dset = dataset if isinstance(dataset, Dataset) else next(iter(dataset.values()))
-    sample = {k: v for k, v in dset[:n].items() if k in keys}
+    sample = {k: v for k, v in dset[:n].items() if keys is not None and k in keys}
     batch_size = infer_batch_shape(sample)
     batch_size[0] = -1
     return batch_size
+
+
+def infer_dataset_nesting_level(*args, **kwargs) -> int:
+    level = infer_dataset_batch_size(*args, **kwargs)
+    return len(level)

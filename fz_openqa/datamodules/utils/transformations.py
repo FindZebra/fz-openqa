@@ -13,7 +13,7 @@ from transformers import PreTrainedTokenizerFast
 from warp_pipes import HfDataset
 
 
-def append_prefix(
+def append_prefix_tokens(
     prefix: Union[str, List[str]],
     text: str,
 ):

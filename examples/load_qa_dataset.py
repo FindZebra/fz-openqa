@@ -10,7 +10,7 @@ import rich
 from omegaconf import DictConfig, OmegaConf
 
 from fz_openqa import configs
-from fz_openqa.datamodules.builders.qa import QaBuilder, ConcatQaBuilder
+from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.datamodules.analytics import SequenceLengths
@@ -45,13 +45,12 @@ def run(config: DictConfig) -> None:
         subset_size = None
 
     # initialize the data module
-    concat_dset = config.get("concat_qa", False)
-    QaBuilderCls = ConcatQaBuilder if concat_dset else QaBuilder
-    builder = QaBuilderCls(
+    builder = QaBuilder(
         tokenizer=tokenizer,
         subset_size=subset_size,
         cache_dir=config.sys.cache_dir,
         query_expansion=config.get("query_expansion", None),
+        concat_qa=config.get("concat_qa", False),
         n_answer_tokens=0,
         num_proc=config.get("num_proc", 2),
         dset_name=config.get("dset_name", "medqa-us"),
@@ -69,7 +68,7 @@ def run(config: DictConfig) -> None:
 
     # build the dataset
     dm.setup()
-    dm.display_samples(n_samples=5)
+    dm.display_samples(n_samples=1)
 
     # access dataset
     rich.print(dm.dataset)

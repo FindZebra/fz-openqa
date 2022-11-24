@@ -26,11 +26,11 @@ from warp_pipes.support.datasets_utils import keep_only_columns
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.index import IndexBuilder
+from fz_openqa.datamodules.builders.qa import infer_dataset_nesting_level
 from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments
-from fz_openqa.datamodules.utils.datastruct import OpenQaConfig
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 
 
@@ -72,16 +72,6 @@ class OpenQaBuilder(DatasetBuilder):
         # sub-builders
         self.dataset_builder = dataset_builder
         self.corpus_builder = corpus_builder
-
-        # final dataset configuration & nesting levels
-        if document_nesting_level is None:
-            document_nesting_level = self.dataset_builder.nesting_level + 1
-        self._document_base_nesting_level = document_nesting_level
-
-        self.openqa_config: Optional[OpenQaConfig] = OpenQaConfig(
-            question_nesting_level=self.dataset_builder.nesting_level,
-            document_nesting_level=self._document_base_nesting_level,
-        )
 
         # get the tokenizer
         self.tokenizer = dataset_builder.tokenizer
@@ -212,10 +202,11 @@ class OpenQaBuilder(DatasetBuilder):
         Map the dataset with documents from the corpus.
         Wrap the index in a `ApplyAsFlatten` to handle nested questions
         """
-        if self.openqa_config.question_nesting_level > 0:
+        question_nesting_level = infer_dataset_nesting_level(dataset, ["question.text"])
+        if question_nesting_level:
             index = ApplyAsFlatten(
                 index,
-                level=self.openqa_config.question_nesting_level,
+                level=question_nesting_level,
                 flatten_as_dataset=True,
                 input_filter=In(
                     [
@@ -228,6 +219,11 @@ class OpenQaBuilder(DatasetBuilder):
                 update=True,
             )
 
+        import rich
+        from warp_pipes import pprint_batch
+
+        rich.print(f">> INDEXING: {dataset}")
+        pprint_batch(dataset["train"][:10], "INDEX_BAHTCH")
         dataset = index(dataset, cache_fingerprint=self.dataset_builder.cache_dir, **map_kwargs)
 
         return dataset
