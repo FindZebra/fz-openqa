@@ -28,7 +28,7 @@ from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.index import IndexBuilder
 from fz_openqa.datamodules.builders.qa import infer_dataset_nesting_level
 from fz_openqa.datamodules.builders.qa import QaBuilder
-from fz_openqa.datamodules.builders.utils.format_row import format_row_qa
+from fz_openqa.datamodules.builders.utils.format_row import format_qa_eg
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
@@ -283,9 +283,8 @@ class OpenQaBuilder(DatasetBuilder):
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
         """Pretty format a dataset row"""
         _kwargs = {"tokenizer": self.tokenizer}
-        return format_row_qa(
+        return format_qa_eg(
             row,
-            document_nesting_level=self.openqa_config.document_nesting_level,
             **_kwargs,
             **kwargs,
         )

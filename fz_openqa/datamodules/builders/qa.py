@@ -26,8 +26,7 @@ from warp_pipes.support.datasets_utils import keep_only_columns
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from .preprocessing import DatasetPreprocessing
-from .utils.format_row import format_row_concatenated_questions
-from .utils.format_row import format_row_flat_questions
+from .utils.format_row import format_qa_eg
 from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.generators import medqa
 from fz_openqa.datamodules.generators import quality
@@ -373,10 +372,7 @@ class QaBuilder(HfDatasetBuilder):
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        if self.concat_qa:
-            return format_row_concatenated_questions(row, tokenizer=self.tokenizer, **kwargs)
-        else:
-            return format_row_flat_questions(row, tokenizer=self.tokenizer, **kwargs)
+        return format_qa_eg(row, tokenizer=self.tokenizer, **kwargs)
 
 
 def infer_dataset_batch_size(
