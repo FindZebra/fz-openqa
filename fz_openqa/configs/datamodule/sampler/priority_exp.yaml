@@ -1,4 +1,0 @@
-defaults:
-  - priority
-
-mode: exponential

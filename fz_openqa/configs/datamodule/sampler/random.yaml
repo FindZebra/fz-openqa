@@ -1,10 +1,10 @@
 _target_: fz_openqa.datamodules.pipes.Sampler
 
-total: ${datamodule.n_documents}
-
-match_score_key: match_score
-proposal_score_key: proposal_score
 field: document
-replace: false
-largest: false
-temperature: 1.0
+proposal_score_key: proposal_score
+idx_key: row_idx
+log_weight_key: proposal_log_weight
+
+config:
+  total: ${datamodule.n_documents}
+  temperature: 1.0
