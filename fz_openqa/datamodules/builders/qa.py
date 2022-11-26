@@ -236,15 +236,21 @@ class QaBuilder(HfDatasetBuilder):
                     "offset_mapping": [[-1, -1]],
                 }
 
-            # make a pipe to concatenate the questions and answers
-            concat_qa = Sequential(
-                # expand the `question` field from [-1] to [-1, n_opts].
-                Expand(
+            # in the multiple-choice setting,
+            # expand the `question` field from [-1] to [-1, n_opts].
+            if len(answer_shape) > 1:
+                expand_questions = Expand(
                     axis=1,
                     n=answer_shape[1],
                     update=True,
                     input_filter=In([*question_features, *additional_question_features]),
-                ),
+                )
+            else:
+                expand_questions = None
+
+            # make a pipe to concatenate the questions and answers
+            concat_qa = Sequential(
+                expand_questions,
                 # concatenate the questions tokens with the answer tokens
                 # warning: this will not affect `question.text`.
                 ApplyAsFlatten(
@@ -269,7 +275,7 @@ class QaBuilder(HfDatasetBuilder):
                             ]
                         ),
                     ),
-                    level=1,
+                    level=len(answer_shape) - 1,
                     update=True,
                 ),
             )

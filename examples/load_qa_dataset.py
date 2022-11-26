@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+from fz_openqa.datamodules.builders.preprocessing import MultipleChoiceToGenerative
+
 sys.path.append(Path(__file__).parent.parent.as_posix())
 
 import datasets
@@ -15,7 +17,6 @@ from fz_openqa.datamodules.datamodule import DataModule
 from fz_openqa.tokenizers.pretrained import init_pretrained_tokenizer
 from fz_openqa.datamodules.analytics import SequenceLengths
 from fz_openqa.datamodules.builders.preprocessing.entity import EntityPreprocessing
-
 
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
@@ -37,7 +38,10 @@ def run(config: DictConfig) -> None:
     # preprocessing
     preprocessing_op = config.get("preprocessing", None)
     if isinstance(preprocessing_op, str):
-        preprocessing_op = {"entity": EntityPreprocessing}[preprocessing_op]()
+        preprocessing_op = {
+            "entity": EntityPreprocessing,
+            "mc_to_generative": MultipleChoiceToGenerative,
+        }[preprocessing_op]()
 
     if config.get("use_subset", False):
         subset_size = 100
