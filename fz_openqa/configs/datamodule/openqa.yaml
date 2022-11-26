@@ -4,7 +4,7 @@ defaults:
   - tokenizer: pretrained
   - index_builder: elasticsearch
   - preprocessing_op: none
-  - sampler: random
+  - sampler: priority
   - transform: none
 
 _target_: fz_openqa.datamodules.DataModule

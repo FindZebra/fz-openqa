@@ -4,6 +4,7 @@ field: document
 proposal_score_key: proposal_score
 idx_key: row_idx
 log_weight_key: proposal_log_weight
+update: True
 
 config:
   total: ${datamodule.n_documents}

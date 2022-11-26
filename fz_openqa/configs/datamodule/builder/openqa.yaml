@@ -7,11 +7,7 @@ _target_: fz_openqa.datamodules.builders.OpenQaBuilder
 index_builder: ${datamodule.index_builder}
 transform: ${datamodule.transform}
 sampler: ${datamodule.sampler}
-n_retrieved_documents: ${datamodule.n_retrieved_documents}
 output_columns: ${datamodule.output_columns}
 
 num_proc: ${datamodule.num_proc}
 batch_size: 100
-
-# nesting level
-document_nesting_level: 1

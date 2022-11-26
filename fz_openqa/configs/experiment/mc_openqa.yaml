@@ -9,10 +9,11 @@ defaults:
   - override /model/module/retriever_head: dpr
   - override /model/module/reader_head: cross_attention
   - override /model/module/gradients: renyi
-  - override /datamodule/builder: concat_openqa
+  - override /datamodule/builder: openqa
   - override /datamodule/index_builder: ${model/module/retriever_head}
   - override /datamodule/sampler: priority
-  - override /datamodule/transform: flatten_mc_questions
+  - override /datamodule/transform:
+      - flatten_mc_questions
   - override /datamodule/builder/analytics:
       - sequence_lengths
   - override /logger: wandb
@@ -115,6 +116,7 @@ datamodule:
   dset_max_length: 312
   corpus_name: medwiki
   corpus_max_length: 200
+  add_qad_tokens: false
   num_proc: 16
   output_columns:
     - answer.target
@@ -141,15 +143,12 @@ datamodule:
 
   # document sampler
   sampler:
+    config:
     total:
       train: ${datamodule.n_documents}
       validation: ${datamodule.n_documents}
       test: ${datamodule.n_documents}
     temperature: 1
-    largest:
-      train: false
-      validation: false
-      test: false
 
   # OpenQA builder parameters
   builder:
@@ -157,16 +156,18 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: ${datamodule.dset_name}
+      concat_qa: true
       query_expansion: null
       n_query_tokens: 1
       n_answer_tokens: 1
       max_length: ${datamodule.dset_max_length}
+      add_qad_tokens: ${datamodule.add_qad_tokens}
     corpus_builder:
       dset_name: ${datamodule.corpus_name}
       passage_length: ${datamodule.corpus_max_length}
       passage_stride: 100
       append_document_title: true
-      add_qad_tokens: false
+      add_qad_tokens: ${datamodule.add_qad_tokens}
 
   # Index parameters
   index_builder:

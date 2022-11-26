@@ -1,5 +1,5 @@
 defaults:
-  - sampler
+  - mc
 
 _target_: fz_openqa.datamodules.pipes.PrioritySampler
 config:

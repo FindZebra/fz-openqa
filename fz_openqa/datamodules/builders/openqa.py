@@ -235,7 +235,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Transform", self.transform),
             ],
             id="collate-pipeline",
-            pprint=False,
+            pprint=True,
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
