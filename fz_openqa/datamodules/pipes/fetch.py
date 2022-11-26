@@ -46,8 +46,10 @@ class FetchDocuments(Pipe):
         fetched_batch = self.dataset[ids]
 
         # reshape the documents
-        nest_pipe = Nest(shape=list(ref_shape))
-        fetched_batch = nest_pipe(fetched_batch)
+        if len(ref_shape) > 1:
+            nest_pipe = Nest(shape=list(ref_shape))
+            fetched_batch = nest_pipe(fetched_batch)
+
         return fetched_batch
 
 

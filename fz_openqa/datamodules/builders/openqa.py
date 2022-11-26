@@ -27,7 +27,7 @@ from fz_openqa.datamodules.builders.qa import QaBuilder
 from fz_openqa.datamodules.builders.utils.datasets_utils import infer_dataset_nesting_level
 from fz_openqa.datamodules.builders.utils.format_row import format_qa_eg
 from fz_openqa.datamodules.pipes import Sampler
-from fz_openqa.datamodules.pipes.fecth import NestedFetchDocuments
+from fz_openqa.datamodules.pipes.fetch import NestedFetchDocuments
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 
 

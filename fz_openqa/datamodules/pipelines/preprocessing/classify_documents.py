@@ -9,7 +9,7 @@ from warp_pipes.core.condition import Not
 from warp_pipes.core.condition import Reduce
 
 from fz_openqa.datamodules.pipes import ExtractGoldAnswer
-from fz_openqa.datamodules.pipes.fecth import FetchDocuments
+from fz_openqa.datamodules.pipes.fetch import FetchDocuments
 
 
 class FetchDocumentsAndExtractAnswer(Sequential):

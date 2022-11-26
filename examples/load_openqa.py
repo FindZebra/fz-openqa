@@ -1,10 +1,14 @@
 import os
 import sys
 
-from warp_pipes import pprint_batch
 from warp_pipes.support.caching import CacheConfig
+from warp_pipes.support.pretty import get_console_separator
+from warp_pipes.support.pretty import pretty_decode
 
 from fz_openqa.datamodules.builders.index import IndexBuilder
+from fz_openqa.datamodules.builders.preprocessing import EntityPreprocessing
+from fz_openqa.datamodules.builders.preprocessing import MultipleChoiceToGenerative
+from fz_openqa.datamodules.pipes.transforms import LanguageModelingTransform
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -118,6 +122,14 @@ def run(config):
     # tokenizer and text formatter
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
+    # preprocessing
+    preprocessing_op = config.get("preprocessing", None)
+    if isinstance(preprocessing_op, str):
+        preprocessing_op = {
+            "entity": EntityPreprocessing,
+            "mc_to_generative": MultipleChoiceToGenerative,
+        }[preprocessing_op]()
+
     # define the medqa builder
     concat_qa = config.get("concat_qa", False)
     dataset_builder = QaBuilder(
@@ -130,6 +142,7 @@ def run(config):
         cache_dir=cache_dir,
         num_proc=num_proc,
         concat_qa=concat_qa,
+        preprocessing_op=preprocessing_op,
     )
 
     # define the corpus builder
@@ -179,14 +192,25 @@ def run(config):
         ),
     )
 
+    # define the transform
+    transform = config.get("transform", None)
+    lm_tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="gpt2")
+    if isinstance(transform, str):
+        Cls, args = {
+            "lm": (LanguageModelingTransform, {"tokenizer": lm_tokenizer}),
+            "lm_multi": (LanguageModelingTransform, {"tokenizer": lm_tokenizer, "multi_doc": True}),
+        }[transform]
+        transform = Cls(**args)
+
     # define the OpenQA builder
     builder = OpenQaBuilder(
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=index_builder,
-        sampler=PrioritySampler(config={"total": 10}, update=True),
+        sampler=PrioritySampler(config={"total": 3}, update=True),
         num_proc=config.get("num_proc", num_proc),
         batch_size=config.get("map_batch_size", 100),
+        transform=transform,
     )
 
     # define the data module
@@ -203,7 +227,16 @@ def run(config):
     rich.print(dm.dataset)
 
     # sample a batch
-    _ = next(iter(dm.train_dataloader()))
+    batch = next(iter(dm.train_dataloader()))
+
+    if "lm.input_ids" in batch:
+        lm_tokens = batch["lm.input_ids"]
+        lm_shape = lm_tokens.shape
+        lm_tokens = lm_tokens.view(-1, lm_tokens.shape[-1])
+        print(get_console_separator("="))
+        decoded = pretty_decode(lm_tokens[0], tokenizer=lm_tokenizer, style="white")
+        decoded = decoded.replace("[PAD]", "")
+        rich.print(f"LM input (shape={lm_shape}):\n{decoded}")
 
 
 def load_model(config, use_colbert=False, hidden_size=64, bert_id=None, zero_shot=True):

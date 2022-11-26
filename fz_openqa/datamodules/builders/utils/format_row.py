@@ -1,38 +1,50 @@
-from typing import Literal
+from enum import Enum
 from typing import Optional
 
 import torch
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Eg
 from warp_pipes.support.pretty import pretty_decode
+from warp_pipes.support.shapes import infer_shape
 
-ReprScenario = Literal["none", "generative-qa", "multiple-choice-qa", "multiple-choice-concat-qa"]
+
+class Scenario(Enum):
+    none = "none"
+    generative_qa = "generative-qa"
+    multiple_choice_qa = "multiple-choice-qa"
+    multiple_choice_concat_qa = "multiple-choice-concat-qa"
 
 
-def infer_scenario(eg: Eg) -> ReprScenario:
-    q_input_ids = eg.get("question.input_ids", None)
-    a_input_ids = eg.get("answer.input_ids", None)
+def infer_field_dim(eg: Eg, field: str) -> Optional[int]:
+    if f"{field}.input_ids" in eg:
+        return len(infer_shape(eg[f"{field}.input_ids"]))
+    elif f"{field}.text" in eg:
+        return 1 + len(infer_shape(eg[f"{field}.text"]))
+    else:
+        return None
+
+
+def infer_scenario(eg: Eg) -> Scenario:
+    q_dim = infer_field_dim(eg, "question")
+    a_dim = infer_field_dim(eg, "answer")
 
     # handle the case where no question is provided
-    if q_input_ids is None:
+    if q_dim is None:
         raise ValueError(
-            f"No question provided (with key 'question.input_ids'). Found keys: {eg.keys()}"
+            f"No question provided (tacking keys 'question.input_ids' and 'question.text'). "
+            f"Found keys: {eg.keys()}"
         )
 
     # handle the case where no answer is provided
-    if a_input_ids is None:
-        return "generative-qa"
-
-    # infer shapes
-    q_dim = q_input_ids.ndim
-    a_dim = a_input_ids.ndim
+    if a_dim is None:
+        return Scenario.generative_qa
 
     if q_dim == 1 and a_dim == 1:
-        return "generative-qa"
+        return Scenario.generative_qa
     elif q_dim == 2 and a_dim == 2:
-        return "multiple-choice-concat-qa"
+        return Scenario.multiple_choice_concat_qa
     elif q_dim == 1 and a_dim == 2:
-        return "multiple-choice-qa"
+        return Scenario.multiple_choice_qa
     else:
         raise ValueError(f"Unknown scenario: q_dim={q_dim}, a_dim={a_dim}")
 
@@ -40,15 +52,17 @@ def infer_scenario(eg: Eg) -> ReprScenario:
 def format_qa_eg(eg: Eg, tokenizer: PreTrainedTokenizerFast, **kwargs) -> str:
     scenario = infer_scenario(eg)
     if scenario == "none":
-        return f"<couldn't represent example {type(eg)}>"
-    elif scenario == "generative-qa":
-        return format_generative_qa_eg(eg, tokenizer, **kwargs)
-    elif scenario == "multiple-choice-qa":
-        return format_multiple_choice_qa_eg(eg, tokenizer, **kwargs)
-    elif scenario == "multiple-choice-concat-qa":
-        return format_multiple_choice_concat_qa_eg(eg, tokenizer, **kwargs)
+        canvas = f"<couldn't represent example {type(eg)}>"
+    elif scenario == Scenario.generative_qa:
+        canvas = format_generative_qa_eg(eg, tokenizer, **kwargs)
+    elif scenario == Scenario.multiple_choice_qa:
+        canvas = format_multiple_choice_qa_eg(eg, tokenizer, **kwargs)
+    elif scenario == Scenario.multiple_choice_concat_qa:
+        canvas = format_multiple_choice_concat_qa_eg(eg, tokenizer, **kwargs)
     else:
         raise ValueError(f"Unknown scenario: {scenario}")
+
+    return canvas
 
 
 def format_generative_qa_eg(eg, tokenizer, **kwargs):

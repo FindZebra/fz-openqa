@@ -1,4 +1,6 @@
+import string
 import warnings
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -7,9 +9,16 @@ import torch.nn.functional as F
 from datasets import Split
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Batch
+from warp_pipes import Eg
 from warp_pipes import Flatten
+from warp_pipes import Nest
 from warp_pipes import Pipe
 from warp_pipes.core.condition import In
+from warp_pipes.support.functional import iter_batch_egs
+from warp_pipes.support.shapes import infer_shape
+
+from fz_openqa.datamodules.builders.utils.format_row import infer_scenario
+from fz_openqa.datamodules.builders.utils.format_row import Scenario
 
 
 class Transform(Pipe):
@@ -238,7 +247,6 @@ class StripAnswer(Pipe):
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
     ) -> Batch:
-
         input_ids = batch[f"{self.field}.input_ids"]
         attention_mask = batch[f"{self.field}.attention_mask"]
 
@@ -259,3 +267,193 @@ class StripAnswer(Pipe):
             f"{self.field}.input_ids": input_ids,
             f"{self.field}.attention_mask": attention_mask,
         }
+
+
+class LanguageModellingTemplate:
+    def __init__(
+        self,
+        scenario: Scenario,
+        question_field: str = "question",
+        answer_field: str = "answer",
+        document_field: str = "document",
+    ):
+        self.scenario = scenario
+        self.q_key = f"{question_field}.text"
+        self.a_key = f"{answer_field}.text"
+        self.d_key = f"{document_field}.text"
+        self.a_target_key = f"{answer_field}.target"
+        self.required_keys = [self.q_key, self.a_key]
+        if scenario == Scenario.multiple_choice_qa:
+            self.required_keys.append(self.a_target_key)
+
+    def __call__(self, eg: Eg) -> str:
+        input_keys = set(eg.keys())
+        if not input_keys.issuperset(self.required_keys):
+            raise ValueError(f"Requires keys {self.required_keys}. Found {eg.keys()}")
+
+        canvas = ""
+        if self.d_key in eg:
+            doc = eg[self.d_key]
+            if not isinstance(doc, str):
+                raise ValueError(f"Document should be a string, found {type(doc)}")
+            canvas += f"Context: {doc}\n\n"
+
+        if self.scenario == Scenario.generative_qa:
+            canvas += f"Q: {eg[self.q_key]}\nA: {eg[self.a_key]}"
+        elif self.scenario == Scenario.multiple_choice_qa:
+            canvas += f"Q: {eg[self.q_key]}\n\n"
+            letters = string.ascii_letters.upper()
+            ans_repr = []
+            for letter, opt in zip(letters, eg[self.a_key]):
+                ans_repr.append(f"({letter}) {opt}")
+            canvas += " ".join(ans_repr)
+
+            target = eg[self.a_target_key]
+            canvas += f"\n\nA: The answer is ({letters[target]}) {eg[self.a_key][target]}"
+        elif self.scenario == Scenario.multiple_choice_concat_qa:
+            raise ValueError(
+                "Template cannot be used for this scenario. "
+                "You must run the template with scenario "
+                "`Scenario.generative_qa` for each question-answer pair."
+            )
+        else:
+            raise ValueError(f"Unknown scenario {self.scenario}")
+
+        return canvas
+
+
+class LanguageModelingTransform(Pipe):
+    """Language modeling task"""
+
+    def __init__(
+        self,
+        *,
+        tokenizer: PreTrainedTokenizerFast,
+        question_field: str = "question",
+        answer_field: str = "answer",
+        document_field: str = "document",
+        output_field: str = "lm",
+        multi_doc: bool = False,
+        tokenizer_kwargs: Optional[Dict] = None,
+        update: bool = True,
+        **kwargs,
+    ):
+        self.tokenizer = tokenizer
+        self.question_field = question_field
+        self.answer_field = answer_field
+        self.document_field = document_field
+        self.output_field = output_field
+        self.multi_doc = multi_doc
+        self.input_keys = [
+            f"{self.question_field}.text",
+            f"{self.answer_field}.text",
+            f"{self.answer_field}.target",
+            f"{self.document_field}.text",
+        ]
+
+        # tokenizer kwargs
+        tokenizer_kwargs_ = {
+            "return_tensors": "pt",
+            "padding": True,
+        }
+        if tokenizer_kwargs is not None:
+            tokenizer_kwargs_ = {**tokenizer_kwargs_, **tokenizer_kwargs}
+        self.tokenizer_kwargs = tokenizer_kwargs_
+
+        super().__init__(input_filter=In(self.input_keys), update=update, **kwargs)
+
+    @torch.no_grad()
+    def _call_batch(
+        self, batch: Batch, idx: Optional[List[int]] = None, split: Optional[Split] = None, **kwargs
+    ) -> Batch:
+        eg = {k: v[0] for k, v in batch.items()}
+        scenario: Scenario = infer_scenario(eg)
+        if scenario == Scenario.multiple_choice_concat_qa:
+            batch.pop(f"{self.answer_field}.target", None)
+
+        # expand the batch to include all the documents
+        batch = self._expand_question_or_flatten_docs(batch)
+
+        # flatten the batch
+        question_shape = infer_shape(batch[f"{self.question_field}.text"])
+        flatten_pipe = Flatten(level=len(question_shape) - 1)
+        batch = flatten_pipe(batch)
+
+        eg = {k: v[0] for k, v in batch.items()}
+        scenario: Scenario = infer_scenario(eg)
+        template = LanguageModellingTemplate(
+            scenario=scenario, question_field=self.question_field, answer_field=self.answer_field
+        )
+
+        # convert the question, answer and document texts into a single string
+        # using the `template`.
+        texts = [template(eg) for eg in iter_batch_egs(batch)]
+
+        # tokenize
+        output = self.tokenizer(texts, **self.tokenizer_kwargs)
+        output = {f"{self.output_field}.{k}": v for k, v in output.items()}
+        output[f"{self.output_field}.text"] = texts
+
+        # reshape the output
+        output = Nest(shape=question_shape)(output)
+        return output
+
+    @staticmethod
+    def join_documents(documents: List[str]) -> str:
+        return " (...) ".join(documents)
+
+    def _expand_question_or_flatten_docs(self, batch: Batch) -> Batch:
+        """
+        This method makes sure that the questions and documents have the same shape.
+        This handles the case where multiple documents are joined into a single one,
+        and this other case where the question is repeated for each document.
+        """
+        question_shape = infer_shape(batch[f"{self.question_field}.text"])
+        document_shape = infer_shape(batch[f"{self.document_field}.text"])
+
+        # handle the answer target key
+        if f"{self.answer_field}.target" in batch:
+            answer_target_shape = infer_shape(batch[f"{self.answer_field}.target"])
+            if len(answer_target_shape) < len(question_shape):
+                answer_target = batch.pop(f"{self.answer_field}.target", None)
+            else:
+                answer_target = None
+        else:
+            answer_target = None
+
+        if len(question_shape) == len(document_shape):
+            # the question and document are already of the same shape
+            return batch
+        elif len(question_shape) != len(document_shape) - 1:
+            raise ValueError(
+                f"Question shape {question_shape} is not "
+                f"compatible with document shape {document_shape}"
+            )
+
+        else:
+            # flatten the batch
+            flatten_pipe = Flatten(level=len(question_shape) - 1)
+            batch = flatten_pipe(batch)
+            if self.multi_doc:
+                # join the documents
+                target_shape = question_shape
+                batch[f"{self.document_field}.text"] = [
+                    self.join_documents(doc) for doc in batch[f"{self.document_field}.text"]
+                ]
+            else:
+                # expand the question
+                target_shape = document_shape
+                for key in [
+                    f"{self.question_field}.text",
+                    f"{self.answer_field}.text",
+                    f"{self.answer_field}.target",
+                ]:
+                    if key in batch:
+                        batch[key] = [[x] * document_shape[-1] for x in batch[key]]
+
+            # reshape the first dimension
+            if len(target_shape) > 2:
+                batch = Nest(shape=target_shape[:-1])(batch)
+            if answer_target is not None:
+                batch[f"{self.answer_field}.target"] = answer_target
+            return batch
