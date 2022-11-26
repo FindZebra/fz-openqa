@@ -1,368 +1,168 @@
 from __future__ import annotations
 
 import math
-import warnings
 from typing import Dict
 from typing import List
+from typing import Literal
 from typing import Optional
 from typing import Tuple
+from typing import Union
 
-import numpy as np
+import datasets
 import rich
 import torch
 from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
-from scipy.special import softmax
+from pydantic import BaseModel
+from pydantic import PositiveFloat
+from pydantic import PositiveInt
 from torch import Tensor
 from warp_pipes import Batch
 from warp_pipes import Pipe
+from warp_pipes.support.tensor_handler import TensorFormat
+from warp_pipes.support.tensor_handler import TensorHandler
 
-from ...modeling.gradients.renyi import cleanup_nans
-from .sorting import reindex
+
+class SamplerConfig(BaseModel):
+    total: Union[PositiveInt, Dict[str, PositiveInt]] = 10
+    temperature: Union[PositiveFloat, Dict[str, PositiveFloat]] = 1.0
+
+
+class PrioritySamplerConfig(SamplerConfig):
+    mode: Literal["exponential", "uniform"] = "uniform"
 
 
 class Sampler(Pipe):
+    ConfigCls = SamplerConfig
+
     def __init__(
         self,
         *,
-        total: int | Dict[Split, int],
-        match_score_key: str = "match_score",
+        config: Optional[SamplerConfig] = None,
         proposal_score_key: str = "proposal_score",
+        idx_key: str = "row_idx",
+        log_weight_key: str = "proposal_log_weight",
         field="document",
-        replace: bool = False,
-        largest: bool | Dict[Split, bool] = False,
-        temperature: float = 1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.total = total
-        self.match_score_key = f"{field}.{match_score_key}"
         self.proposal_score_key = f"{field}.{proposal_score_key}"
+        self.idx_key = f"{field}.{idx_key}"
+        self.log_weight_key = f"{field}.{log_weight_key}"
         self.field = field
-        self.replace = replace
-        self.largest = largest
-        self.temperature = temperature
+        if isinstance(config, (DictConfig, dict)):
+            config = self.ConfigCls(**config)
+        elif config is None:
+            config = self.ConfigCls()
+        self.config = config
 
-        super(Sampler, self).__init__(**kwargs)
+    def _infer_split_config(self, split: datasets.Split) -> SamplerConfig:
+        output_config = {}
+        for key, value in self.config.dict().items():
+            if isinstance(value, dict):
+                output_config[key] = value[split]
+            else:
+                output_config[key] = value
+        return self.ConfigCls(**output_config)
 
     def _call_batch(
         self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
     ) -> Batch:
-        largest, total, temperature = self._get_args(split)
+        config = self._infer_split_config(split)
+        handler = TensorHandler(TensorFormat.TORCH)
 
-        logits = batch[self.proposal_score_key]
+        logits = handler(batch[self.proposal_score_key])
+        indices = handler(batch[self.idx_key])
 
         # sample
-        index = np.arange(len(logits))
-        sampled_index = self._sample(
-            index, logits=logits, total=total, largest=largest, temperature=temperature
-        )
+        with torch.no_grad():
+            ids, log_w = self.sample(logits=logits, config=config)
 
         # re-index and return
-        output = {k: reindex(v, sampled_index) for k, v in batch.items()}
+        logits = logits.gather(-1, index=ids)
+        indices = indices.gather(-1, index=ids)
 
-        # todo: temporary trick
-        log_w = -math.log(total) + np.zeros_like(sampled_index, dtype=np.float)
-        output[f"{self.field}.proposal_log_weight"] = torch.from_numpy(log_w)
-
-        return output
-
-    def _sample(
-        self,
-        index: np.ndarray | List,
-        *,
-        logits: np.ndarray,
-        total: int,
-        largest: bool,
-        temperature: float,
-    ) -> np.ndarray:
-
-        assert temperature > 0, "temperature must be positive"
-
-        if largest:
-            sorted_idx = np.argsort(-logits)
-            sorted_idx = sorted_idx[:total]
-            sampled_index = [index[i] for i in sorted_idx]
-        else:
-            probs = self.compute_probs(logits, temperature=temperature)
-            sampled_index = np.random.choice(index, size=total, p=probs, replace=self.replace)
-        return sampled_index
+        return {
+            self.proposal_score_key: logits,
+            self.idx_key: indices,
+            self.log_weight_key: log_w,
+        }
 
     @staticmethod
-    def compute_probs(
-        logits: Tensor | np.ndarray,
-        temperature: float = 1.0,
-        min_prob_value: Optional[float] = 1e-40,
-    ) -> np.ndarray:
-        if isinstance(logits, Tensor):
-            logits = logits.detach().cpu().numpy()
+    def sample(
+        logits: torch.Tensor,
+        config: SamplerConfig,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
 
-        logits = logits - np.max(logits, axis=-1, keepdims=True)
-        logits = np.nan_to_num(logits, nan=-1e6, posinf=1e3, neginf=-1e6)
-        probs = softmax(logits / temperature, axis=-1)
+        if config.temperature < 0:
+            raise ValueError("temperature must be non-positive")
 
-        if min_prob_value is not None:
-            probs = np.maximum(probs, min_prob_value)
-            probs = probs / np.sum(probs, axis=-1, keepdims=True)
-
-        return probs
-
-    def _get_args(self, split):
-        total = self.total
-        if isinstance(total, (dict, DictConfig)):
-            total = total[str(split)]
-        largest = self.largest
-        if isinstance(largest, (dict, DictConfig)):
-            largest = largest[str(split)]
-        temperature = self.temperature
-        if isinstance(temperature, (dict, DictConfig)):
-            temperature = temperature[str(split)]
-
-        return largest, total, temperature
-
-
-class FirstN(Sampler):
-    def __init__(self, *, total: int, **kwargs):
-        super().__init__(total=total, **kwargs)
-
-    def _call_batch(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
-    ) -> Batch:
-        largest, total, temperature = self._get_args(split)
-        index = np.arange(total)
-        # re-index and return
-        return {k: reindex(v, index) for k, v in batch.items()}
-
-
-class SamplerSupervised(Sampler):
-    """Sample"""
-
-    def __init__(self, *args, n_positives: int, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.n_positives = n_positives
-
-    def _call_batch(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
-    ) -> Batch:
-        largest, total, temperature = self._get_args(split)
-
-        logits = batch[self.proposal_score_key]
-
-        if self.match_score_key in batch.keys():
-            scores = batch[self.match_score_key]
-            # select positives samples
-            pos_indexes = [i for i, x in enumerate(scores) if x > 0]
-            neg_indexes = [i for i, x in enumerate(scores) if x <= 0]
+        if config.temperature == 0:
+            indices = torch.argsort(logits, descending=True)
+            indices = indices[..., : config.total]
         else:
-            pos_indexes = []
-            neg_indexes = []
+            indices = logits.multinomial(num_samples=config.total, dim=-1, replacement=True)
 
-        # sample positives
-        if self.n_positives > 0 and len(pos_indexes) > 0:
-            pos_logits = logits[pos_indexes]
-            n = min(self.n_positives, total, len(pos_indexes))
-            sampled_pos_indexes = self._sample(
-                pos_indexes, logits=pos_logits, total=n, largest=largest, temperature=temperature
-            )
-        else:
-            sampled_pos_indexes = []
-
-        # sample the negative indexes
-        n = max(0, total - len(sampled_pos_indexes))
-        if len(neg_indexes) > 0 and n > 0:
-            neg_logits = logits[neg_indexes]
-            n = min(len(neg_indexes), n)
-            sampled_neg_indexes = self._sample(
-                neg_indexes, logits=neg_logits, total=n, largest=largest, temperature=temperature
-            )
-        else:
-            sampled_neg_indexes = []
-
-        # concatenate positive and negative samples
-        sampled_indexes = np.concatenate([sampled_pos_indexes, sampled_neg_indexes], axis=0)
-        sampled_indexes = sampled_indexes.astype(np.long)
-
-        # sample remaining indexes if needed
-        sampled_other_indexes = []
-        if len(sampled_indexes) < total:
-            n = max(0, total - len(sampled_indexes))
-            other_indexes = [i for i in range(len(logits)) if i not in sampled_indexes]
-            assert len(other_indexes) >= n
-            other_logits = logits[other_indexes]
-            sampled_other_indexes = self._sample(
-                other_indexes,
-                logits=other_logits,
-                total=n,
-                largest=largest,
-                temperature=temperature,
-            )
-
-        # re-index and return
-        sampled_indexes = np.concatenate([sampled_indexes, sampled_other_indexes], axis=0)
-        sampled_indexes = sampled_indexes.astype(np.long)
-        return {k: reindex(v, sampled_indexes) for k, v in batch.items()}
-
-
-class SamplerBoostPositives(Sampler):
-    """Sample first `n_boosted` positive samples from the batch and
-    complete with any other sample"""
-
-    def __init__(self, *args, n_boosted: int = 1, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.n_boosted = n_boosted
-
-    def _call_batch(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
-    ) -> Batch:
-        largest, total, temperature = self._get_args(split)
-
-        logits = batch[self.proposal_score_key]
-
-        if self.match_score_key in batch.keys():
-            scores = batch[self.match_score_key]
-            # select positives samples
-            pos_indexes = [i for i, x in enumerate(scores) if x > 0]
-        else:
-            pos_indexes = []
-
-        # sample positives
-        if self.n_boosted > 0 and len(pos_indexes) > 0:
-            pos_logits = logits[pos_indexes]
-            n = min(self.n_boosted, total, len(pos_indexes))
-            sampled_pos_indexes = self._sample(
-                pos_indexes, logits=pos_logits, total=n, largest=largest, temperature=temperature
-            )
-        else:
-            sampled_pos_indexes = []
-
-        # sample the remaining indexes
-        n = max(0, total - len(sampled_pos_indexes))
-        other_indexes = [i for i in range(len(logits)) if i not in sampled_pos_indexes]
-        if len(other_indexes) > 0 and n > 0:
-            other_logits = logits[other_indexes]
-            try:
-                sampled_other_indexes = self._sample(
-                    other_indexes,
-                    logits=other_logits,
-                    total=n,
-                    largest=largest,
-                    temperature=temperature,
-                )
-            except Exception as e:
-                rich.print(
-                    f"indexes: {len(logits)}, n: {n}, "
-                    f"other_indexes: {other_indexes}, "
-                    f"sampled_pos_indexes: {sampled_pos_indexes}, "
-                    f"other_logits: {other_logits}"
-                )
-                raise e
-        else:
-            sampled_other_indexes = []
-
-        # re-index and return
-        sampled_indexes = np.concatenate([sampled_pos_indexes, sampled_other_indexes], axis=0)
-        sampled_indexes = sampled_indexes.astype(np.long)
-        return {k: reindex(v, sampled_indexes) for k, v in batch.items()}
+        # uniform importance weights
+        log_w = torch.zeros_like(logits[..., : config.total])
+        log_w -= math.log(config.total)
+        return indices, log_w
 
 
 class PrioritySampler(Sampler):
     """Sample using `priority sampling`: https://arxiv.org/abs/cs/0509026"""
 
+    ConfigCls = PrioritySamplerConfig
     MAX_LOG_RANGE: float = 1e5
 
-    def __init__(self, *args, from_uniform: bool = False, mode="uniform", **kwargs):
+    def __init__(self, *args, mode: Literal["uniform", "exponential"] = "uniform", **kwargs):
         super().__init__(*args, **kwargs)
-        self.from_uniform = from_uniform
         self.mode = mode
-        if from_uniform:
-            logger.info(
-                f"PrioritySampler: from_uniform is set to {self.from_uniform}. "
-                f"This means the sampler will consider the base distribution to be uniform"
-                f"when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
-            )
-
-    @torch.no_grad()
-    def _call_batch(
-        self, batch: Batch, idx: Optional[List[int]] = None, split: Split = None, **kwargs
-    ) -> Batch:
-        largest, total, temperature = self._get_args(split)
-
-        logits = batch[self.proposal_score_key]
-        logits = logits / temperature
-        # logits = logits - logits.max(dim=-1, keepdim=True).values
-        # batch[self.proposal_score_key] = logits
-
-        # sample
-        z, log_w = self.sample(
-            logits, total, largest=largest, from_uniform=self.from_uniform, mode=self.mode
-        )
-        # proposal_log_Z = logits.logsumexp(axis=-1, keepdim=True).expand_as(log_pz)
-
-        # re-index and return
-        output = {k: reindex(v, z) for k, v in batch.items()}
-        output[f"{self.field}.proposal_log_weight"] = log_w
-
-        return output
 
     @staticmethod
     def sample(
         logits: torch.Tensor,
-        k: int = None,
-        largest: bool = False,
-        mode: str = "uniform",
-        from_uniform: bool = False,
+        config: PrioritySamplerConfig,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Sample `log p(z)` using priority sampling with subset of size `m`
-
-        Args:
-            logits (torch.Tensor): un-normalized logits of the distribution
-            k (int): size of the subset to sample
-            mode (str): sampling mode, one of `uniform`, `exponential`
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: sampled index and log probs
-        """
-
-        assert mode in {"uniform", "exponential"}
+        assert isinstance(config, PrioritySamplerConfig)
 
         logits_ = logits.clone()
         logits = PrioritySampler.clip_logits(logits, dim=-1)
         log_pz = logits.log_softmax(dim=-1)
 
-        N = log_pz.shape[-1]
-        if mode == "uniform":
-            if largest:
+        if config.mode == "uniform":
+            if config.temperature == 0:
                 u = 0.5 * torch.ones_like(log_pz)
             else:
                 u = torch.rand_like(log_pz).clamp(min=1e-12)
-        elif mode == "exponential":
-            if largest:
+        elif config.mode == "exponential":
+            if config.temperature == 0:
                 u = torch.ones_like(log_pz)
             else:
                 u = torch.empty_like(log_pz)
                 u.exponential_()
         else:
-            raise ValueError(f"Unknown mode {mode}")
+            raise ValueError(f"Unknown mode {config.mode}")
 
         log_u = u.log()
         keys = log_pz - log_u
-        z = keys.argsort(dim=-1, descending=True)[..., : k + 1]
-        if k < logits.shape[-1]:
+        z = keys.argsort(dim=-1, descending=True)[..., : config.total + 1]
+        if config.total < logits.shape[-1]:
             z_tau = z[..., -1:]
             log_tau = keys.gather(dim=-1, index=z_tau)[..., :1]
         else:
             log_tau = -float("inf") + torch.zeros_like(log_pz)
-        z = z[..., :k]
+        z = z[..., : config.total]
         log_pz = log_pz.gather(dim=-1, index=z)
 
-        if mode == "uniform":
+        if config.mode == "uniform":
             log_qz = torch.where(log_pz - log_tau < 0, log_pz - log_tau, torch.zeros_like(log_pz))
-        elif mode == "exponential":
+        elif config.mode == "exponential":
             log_qz = log_pz - log_tau
             log_qz = (log_qz).exp().mul(-1).exp().mul(-1).log1p()
         else:
-            raise ValueError(f"Unknown mode {mode}")
+            raise ValueError(f"Unknown mode {config.mode}")
 
         # warn if NaNs are found
         n_nans = log_qz.isnan().float().sum()
@@ -374,14 +174,6 @@ class PrioritySampler(Sampler):
             logger.warning(f"Found {n_nans} NaNs in log_pz")
             rich.print(f">> log_pz: {log_pz}\nlogits_:{logits_}")
 
-        # compute the log weights, and handle replacing the base distribution with u(z)
-        if from_uniform:
-            warnings.warn(
-                "Priority sampling: consider the base distribution to be uniform "
-                "when computing the importance weights: s(z) = p(z) / tau(z) * u(z) / p(z)."
-            )
-            log_pz = torch.zeros_like(log_pz) - math.log(N)
-
         # finally, compute the log weights
         log_weight = log_pz - log_qz
 
@@ -389,8 +181,6 @@ class PrioritySampler(Sampler):
 
     @staticmethod
     def clip_logits(logits: Tensor, dim=-1):
-        cleanup_nans(logits, "PrioritySampler.clip_logits")
-
         mask_pos_inf = logits.isinf() & (logits > 0)
         non_inf_values = logits[(~logits.isinf()) & (~logits.isnan())]
         if non_inf_values.numel() == 0:

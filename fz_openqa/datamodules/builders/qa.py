@@ -15,7 +15,6 @@ from warp_pipes import Expand
 from warp_pipes import Gate
 from warp_pipes import HfDataset
 from warp_pipes import In
-from warp_pipes import infer_batch_shape
 from warp_pipes import Parallel
 from warp_pipes import Pipe
 from warp_pipes import RenameKeys
@@ -26,6 +25,7 @@ from warp_pipes.support.datasets_utils import keep_only_columns
 from .adapters import DATASET_ADAPTERS
 from .hf_dataset import HfDatasetBuilder
 from .preprocessing import DatasetPreprocessing
+from .utils.datasets_utils import infer_dataset_batch_size
 from .utils.format_row import format_qa_eg
 from fz_openqa.datamodules.generators import fz_queries
 from fz_openqa.datamodules.generators import medqa
@@ -65,9 +65,6 @@ class QaBuilder(HfDatasetBuilder):
         "answer.target",
         "document.proposal_score",
     ]
-
-    # number of options
-    n_options = 4
 
     # output columns
     column_names = [
@@ -244,7 +241,7 @@ class QaBuilder(HfDatasetBuilder):
                 # expand the `question` field from [-1] to [-1, n_opts].
                 Expand(
                     axis=1,
-                    n=self.n_options,
+                    n=answer_shape[1],
                     update=True,
                     input_filter=In([*question_features, *additional_question_features]),
                 ),
@@ -342,7 +339,7 @@ class QaBuilder(HfDatasetBuilder):
             query_expansion_pipe,
         )
 
-    def _get_collate_pipe(self):
+    def _get_collate_pipe(self, **kwargs):
         return Parallel(
             CollateField(
                 "question",
@@ -365,27 +362,11 @@ class QaBuilder(HfDatasetBuilder):
             CollateField(
                 "document",
                 tokenizer=self.tokenizer,
-                nesting_level=["text", "input_ids"],
-                to_tensor=["document_idx"],
+                nesting_level=["row_idx", "text", "input_ids"],
+                to_tensor=["row_idx", "proposal_score", "document_idx"],
                 id="collate-questions",
             ),
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
         return format_qa_eg(row, tokenizer=self.tokenizer, **kwargs)
-
-
-def infer_dataset_batch_size(
-    dataset: HfDataset, keys: Optional[List[str]] = None, n: int = 10
-) -> List[int]:
-    assert isinstance(dataset, (Dataset, DatasetDict))
-    dset = dataset if isinstance(dataset, Dataset) else next(iter(dataset.values()))
-    sample = {k: v for k, v in dset[:n].items() if keys is not None and k in keys}
-    batch_size = infer_batch_shape(sample)
-    batch_size[0] = -1
-    return batch_size
-
-
-def infer_dataset_nesting_level(*args, **kwargs) -> int:
-    level = infer_dataset_batch_size(*args, **kwargs)
-    return len(level)

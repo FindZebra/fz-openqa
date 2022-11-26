@@ -15,10 +15,7 @@ from warp_pipes import BlockSequential
 from warp_pipes import CollateField
 from warp_pipes import HfDataset
 from warp_pipes import Index
-from warp_pipes import Nested
-from warp_pipes import Parallel
 from warp_pipes import Pipe
-from warp_pipes.core.condition import HasPrefix
 from warp_pipes.core.condition import In
 from warp_pipes.support.datasets_utils import get_column_names
 from warp_pipes.support.datasets_utils import keep_only_columns
@@ -26,11 +23,11 @@ from warp_pipes.support.datasets_utils import keep_only_columns
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.datamodules.builders.corpus import CorpusBuilder
 from fz_openqa.datamodules.builders.index import IndexBuilder
-from fz_openqa.datamodules.builders.qa import infer_dataset_nesting_level
 from fz_openqa.datamodules.builders.qa import QaBuilder
+from fz_openqa.datamodules.builders.utils.datasets_utils import infer_dataset_nesting_level
 from fz_openqa.datamodules.builders.utils.format_row import format_qa_eg
 from fz_openqa.datamodules.pipes import Sampler
-from fz_openqa.datamodules.pipes.fecth import FetchNestedDocuments
+from fz_openqa.datamodules.pipes.fecth import NestedFetchDocuments
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
 
 
@@ -60,11 +57,6 @@ class OpenQaBuilder(DatasetBuilder):
         writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
         transform: Optional[Pipe | DictConfig] = None,
-        # depreciated
-        document_nesting_level: Optional[int] = None,
-        dataset_transform: Optional = None,
-        sort_documents: bool = False,
-        n_retrieved_documents: Optional[int] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -77,7 +69,7 @@ class OpenQaBuilder(DatasetBuilder):
         self.tokenizer = dataset_builder.tokenizer
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
-        # transform for the collate_fn
+        # transform use as last step of the collate_fn
         self.transform = transform
 
         # objects
@@ -165,6 +157,15 @@ class OpenQaBuilder(DatasetBuilder):
             trainer=trainer,
             index_collate_fn=self.corpus_builder._get_collate_pipe(),
             query_collate_fn=CollateField("question", tokenizer=self.tokenizer),
+            input_filter=In(
+                [
+                    "question.text",
+                    "question.input_ids",
+                    "question.attention_mask",
+                    "question.answer",
+                    "question.document_idx",
+                ]
+            ),
         )
 
         # map the corpus to the dataset
@@ -203,27 +204,14 @@ class OpenQaBuilder(DatasetBuilder):
         Wrap the index in a `ApplyAsFlatten` to handle nested questions
         """
         question_nesting_level = infer_dataset_nesting_level(dataset, ["question.text"])
-        if question_nesting_level:
+        if question_nesting_level > 0:
             index = ApplyAsFlatten(
                 index,
                 level=question_nesting_level,
                 flatten_as_dataset=True,
-                input_filter=In(
-                    [
-                        "question.text",
-                        "question.input_ids",
-                        "question.attention_mask",
-                        "question.answer",
-                    ]
-                ),
                 update=True,
             )
 
-        import rich
-        from warp_pipes import pprint_batch
-
-        rich.print(f">> INDEXING: {dataset}")
-        pprint_batch(dataset["train"][:10], "INDEX_BAHTCH")
         dataset = index(dataset, cache_fingerprint=self.dataset_builder.cache_dir, **map_kwargs)
 
         return dataset
@@ -231,36 +219,18 @@ class OpenQaBuilder(DatasetBuilder):
     def get_collate_pipe(self) -> BlockSequential:
         """Build a Pipe to transform examples into a Batch."""
 
-        # A. Collate all attributes stored in `self.dataset`
-        # document attributes are collated at level 0
-        collate_qad = Parallel(
-            CollateField(
-                "document",
-                level=self.openqa_config.document_nesting_level,
-                to_tensor=["proposal_score", "row_idx"],
-                id="collate-nested-document-attributes",
-            ),
-            self.dataset_builder._get_collate_pipe(
-                nesting_level=self.openqa_config.question_nesting_level
-            ),
-        )
-
-        # B. select documents (resample the field `document.row_idx`)
-        select_documents = self.get_select_documents_pipe(
-            self.sampler, level=self.openqa_config.document_nesting_level
-        )
-
-        # C. fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
-        fetch_documents = FetchNestedDocuments(
-            corpus_dataset=self.corpus_builder(columns=self.output_columns),
+        # fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
+        fetch_documents = NestedFetchDocuments(
+            dataset=self.corpus_builder(columns=self.output_columns),
             collate_pipe=self.corpus_builder._get_collate_pipe(),
-            level=self.openqa_config.document_nesting_level,
+            index_key="document.row_idx",
+            pprint=False,
         )
 
         return BlockSequential(
             [
-                ("Collate Q&A + document indexes", collate_qad),
-                ("Select documents", select_documents),
+                ("Collate Q&A + document indexes", self.dataset_builder._get_collate_pipe()),
+                ("Sample documents", self.sampler),
                 ("Fetch document data", fetch_documents),
                 ("Transform", self.transform),
             ],
@@ -268,23 +238,5 @@ class OpenQaBuilder(DatasetBuilder):
             pprint=False,
         )
 
-    @staticmethod
-    def get_select_documents_pipe(
-        sampler: Optional[Sampler],
-        *,
-        level: int = 1,
-    ) -> Optional[Pipe]:
-        if sampler is None:
-            return None
-
-        input_filter = HasPrefix(f"{sampler.field}")
-        return Nested(pipe=sampler, level=level, input_filter=input_filter, update=True)
-
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:
-        """Pretty format a dataset row"""
-        _kwargs = {"tokenizer": self.tokenizer}
-        return format_qa_eg(
-            row,
-            **_kwargs,
-            **kwargs,
-        )
+        return format_qa_eg(row, tokenizer=self.tokenizer, **kwargs)

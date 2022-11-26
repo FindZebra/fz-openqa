@@ -1,10 +1,8 @@
 import os
 import sys
 
-from warp_pipes import infer_batch_shape
 from warp_pipes import pprint_batch
 from warp_pipes.support.caching import CacheConfig
-from warp_pipes.support.shapes import infer_shape
 
 from fz_openqa.datamodules.builders.index import IndexBuilder
 
@@ -29,7 +27,7 @@ from pytorch_lightning import Trainer
 import fz_openqa
 from fz_openqa.modeling.zero_shot import ZeroShot
 from fz_openqa import configs
-from fz_openqa.datamodules.builders import QaBuilder, ConcatQaBuilder
+from fz_openqa.datamodules.builders import QaBuilder
 from fz_openqa.datamodules.builders import CorpusBuilder
 from fz_openqa.datamodules.builders import OpenQaBuilder
 from fz_openqa.datamodules.datamodule import DataModule
@@ -121,25 +119,26 @@ def run(config):
     tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path=bert_id)
 
     # define the medqa builder
-    concat_dset = config.get("concat_qa", False)
-    QaBuilderCls = ConcatQaBuilder if concat_dset else QaBuilder
-    dataset_builder = QaBuilderCls(
+    concat_qa = config.get("concat_qa", False)
+    dataset_builder = QaBuilder(
         dset_name=config.get("dset_name", "medqa-us"),
         tokenizer=tokenizer,
         n_query_tokens=1,
         n_answer_tokens=0,
         subset_size=config.get("subset_size", 100),
-        add_qad_tokens=not zero_shot or not setup_with_model,
+        add_qad_tokens=not zero_shot,
         cache_dir=cache_dir,
         num_proc=num_proc,
+        concat_qa=concat_qa,
     )
 
     # define the corpus builder
     corpus_builder = CorpusBuilder(
         dset_name=config.get("corpus_name", "findzebra"),
         tokenizer=tokenizer,
-        add_qad_tokens=not zero_shot or not setup_with_model,
+        add_qad_tokens=not zero_shot,
         subset_size=config.get("corpus_subset_size", 100),
+        append_document_title=True,
         cache_dir=cache_dir,
         num_proc=num_proc,
     )
@@ -154,14 +153,14 @@ def run(config):
                     "main_key": "text",
                     "auxiliary_field": "answer",
                     "es_temperature": 5.0,
-                    "auxiliary_weight": config.get("aux_weight", 0.5) if concat_dset else 0,
+                    "auxiliary_weight": config.get("aux_weight", 0.5) if concat_qa else 0,
                     **base_engine_config,
                 },
             },
             *faiss_engines,
             {
                 "name": "topk",
-                "config": {"k": 10, "merge_previous_results": False, **base_engine_config},
+                "config": {"k": 30, "merge_previous_results": False, **base_engine_config},
             },
         ],
         model=model,
@@ -185,8 +184,7 @@ def run(config):
         dataset_builder=dataset_builder,
         corpus_builder=corpus_builder,
         index_builder=index_builder,
-        sampler=PrioritySampler(total=10),
-        n_retrieved_documents=100,
+        sampler=PrioritySampler(config={"total": 10}, update=True),
         num_proc=config.get("num_proc", num_proc),
         batch_size=config.get("map_batch_size", 100),
     )

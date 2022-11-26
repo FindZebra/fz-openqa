@@ -44,7 +44,7 @@ class FetchDocumentsAndExtractAnswer(Sequential):
         super().__init__(
             ApplyAsFlatten(
                 FetchDocuments(
-                    corpus_dataset=corpus_dataset,
+                    dataset=corpus_dataset,
                     keys=["document.text"],
                 ),
                 input_filter=In(["document.row_idx"]),

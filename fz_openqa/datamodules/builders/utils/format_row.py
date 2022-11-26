@@ -1,8 +1,9 @@
 from typing import Literal
+from typing import Optional
 
+import torch
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Eg
-from warp_pipes.support.pretty import get_console_separator
 from warp_pipes.support.pretty import pretty_decode
 
 ReprScenario = Literal["none", "generative-qa", "multiple-choice-qa", "multiple-choice-concat-qa"]
@@ -15,7 +16,7 @@ def infer_scenario(eg: Eg) -> ReprScenario:
     # handle the case where no question is provided
     if q_input_ids is None:
         raise ValueError(
-            f"No question provided (with key 'question.input_ids'). " f"Found keys: {eg.keys()}"
+            f"No question provided (with key 'question.input_ids'). Found keys: {eg.keys()}"
         )
 
     # handle the case where no answer is provided
@@ -51,7 +52,9 @@ def format_qa_eg(eg: Eg, tokenizer: PreTrainedTokenizerFast, **kwargs) -> str:
 
 
 def format_generative_qa_eg(eg, tokenizer, **kwargs):
-    question_str = pretty_decode(eg["question.input_ids"], style="white", tokenizer=tokenizer)
+    question_str = pretty_decode(
+        eg["question.input_ids"], style="deep_sky_blue3", tokenizer=tokenizer
+    )
     canvas = f"Question: {question_str}"
 
     # answers
@@ -60,10 +63,14 @@ def format_generative_qa_eg(eg, tokenizer, **kwargs):
         answer_str = pretty_decode(a_tokens, style="green", tokenizer=tokenizer)
         canvas += f"\nAnswer: {answer_str}"
 
-    # documents
-    d_tokens = eg.get("documents.input_ids", None)
-    if d_tokens is not None:
-        canvas += f"\nDocuments:{format_documents_eg(d_tokens, tokenizer)}"
+        # documents
+        d_tokens = eg.get("document.input_ids", None)
+        d_scores = eg.get("document.proposal_score", None)
+        if d_tokens is not None:
+            doc_info = f"(n={len(d_tokens)})"
+            canvas += (
+                f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
+            )
 
     return canvas
 
@@ -78,7 +85,7 @@ def format_multiple_choice_qa_eg(eg, tokenizer, **kwargs):
         n_opts = a_tokens.shape[0]
         canvas += "\nAnswer options:"
         for i in range(n_opts):
-            style = "green" if i == target else "white"
+            style = "green" if i == target else "deep_sky_blue3"
             marker = "✓" if i == target else " "
             answer_str = pretty_decode(
                 a_tokens[i], style=style, tokenizer=tokenizer, only_text=True
@@ -86,38 +93,54 @@ def format_multiple_choice_qa_eg(eg, tokenizer, **kwargs):
             canvas += f"\n({marker}) {answer_str}"
 
     # documents
-    d_tokens = eg.get("documents.input_ids", None)
+    d_tokens = eg.get("document.input_ids", None)
+    d_scores = eg.get("document.proposal_score", None)
     if d_tokens is not None:
-        canvas += f"\nDocuments:{format_documents_eg(d_tokens, tokenizer)}"
+        doc_info = f"(n={len(d_tokens)})"
+        canvas += f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
 
     return canvas
 
 
 def format_multiple_choice_concat_qa_eg(eg, tokenizer, **kwargs):
     q_tokens = eg["question.input_ids"]
-    d_tokens = eg.get("documents.input_ids", None)
+    d_tokens = eg.get("document.input_ids", None)
+    d_scores = eg.get("document.proposal_score", None)
     target = eg.get("answer.target", -1)
     sep = "\n"
     canvas = "Question-answer pairs:"
     for i in range(q_tokens.shape[0]):
-        style = "green" if i == target else "white"
+        style = "green" if i == target else "deep_sky_blue3"
         marker = "✓" if i == target else " "
         answer_str = pretty_decode(q_tokens[i], style=style, tokenizer=tokenizer, only_text=False)
         canvas += f"{sep}({marker}) {answer_str}"
 
         # documents
         if d_tokens is not None:
-            doc_sep = "\n---| "
-            canvas += rf"{format_documents_eg(d_tokens[i], tokenizer, sep=doc_sep)}"
+            d_scores_i = d_scores[i] if d_scores is not None else None
+            canvas += rf"{format_documents(d_tokens[i], tokenizer, scores=d_scores_i)}"
 
     return canvas
 
 
-def format_documents_eg(
-    doc_tokens, tokenizer, style="deep_sky_blue3", top_k: int = 3, sep="\n", **kwargs
+def format_documents(
+    doc_tokens: torch.Tensor,
+    tokenizer: PreTrainedTokenizerFast,
+    style="white",
+    scores: Optional[torch.Tensor] = None,
+    top_k: int = 3,
+    sep="\n  Doc",
+    **kwargs,
 ):
-    canvas = "Documents:"
+    def fmt_score(scores, i):
+        if scores is None:
+            return ""
+        else:
+            return f", {scores[i]:.2f}"
+
+    canvas = ""
     for i in range(doc_tokens.shape[0])[:top_k]:
         doc_str = pretty_decode(doc_tokens[i], style=style, tokenizer=tokenizer, only_text=True)
-        canvas += f"{sep}{doc_str}"
+        loc = f"(#{i + 1}{fmt_score(scores, i)})"
+        canvas += f"{sep}{loc} {doc_str}"
     return canvas

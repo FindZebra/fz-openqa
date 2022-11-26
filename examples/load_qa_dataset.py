@@ -58,7 +58,7 @@ def run(config: DictConfig) -> None:
         preprocessing_op=preprocessing_op,
         analytics=[
             SequenceLengths(
-                output_dir="analytics/",
+                output_dir="tmp-analytics/",
                 verbose=True,
                 concatenate=config.get("concatenate_splits", False),
             ),

@@ -9,8 +9,6 @@ from .dataset_filter import SupervisedDatasetFilter
 from .misc import ExtractGoldAnswer
 from .sampler import PrioritySampler
 from .sampler import Sampler
-from .sampler import SamplerBoostPositives
-from .sampler import SamplerSupervised
 from .sorting import Sort
 from .span_dropout import SpanDropout
 from .text_filtering import SciSpaCyFilter

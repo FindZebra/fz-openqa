@@ -272,7 +272,7 @@ class CorpusBuilder(HfDatasetBuilder):
         are added only in `to_sentence` mode."""
         return Sequential(
             FormatAndTokenize(
-                prefix=None,
+                field=None,
                 key="text",
                 text_formatter=None,
                 tokenizer=self.tokenizer,
@@ -297,7 +297,7 @@ class CorpusBuilder(HfDatasetBuilder):
             ),
             RenameKeys({"title": "text"}, update=True),
             FormatAndTokenize(
-                prefix=None,
+                field=None,
                 key="text",
                 text_formatter=None,
                 tokenizer=self.tokenizer,
@@ -358,5 +358,6 @@ class CorpusBuilder(HfDatasetBuilder):
         return pretty_decode(
             row["document.input_ids"],
             tokenizer=self.tokenizer,
+            style="white",
             **decode_kwargs,
         )
