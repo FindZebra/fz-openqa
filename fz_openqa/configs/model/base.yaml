@@ -2,11 +2,13 @@ defaults:
   - module: ???
   - optimizer: adamw
   - lr_scheduler: linear
-  - backbone: mini
+  - reader: transformer
+  - retriever: transformer
 
 _target_: fz_openqa.modeling.Model
 
-bert_id: ${model.backbone.pretrained_model_name_or_path}
+reader_id: bert-base-uncased
+retriever_id: bert-base-uncased
 tokenizer: ${datamodule.tokenizer}
 cache_dir: ${sys.shared_cache_dir}
 bert_lr: 1e-5

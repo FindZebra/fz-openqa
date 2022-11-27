@@ -8,14 +8,17 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
+import rich
 from datasets import DatasetDict
 from omegaconf import DictConfig
+from omegaconf import ListConfig
 from warp_pipes import ApplyAsFlatten
 from warp_pipes import BlockSequential
 from warp_pipes import CollateField
 from warp_pipes import HfDataset
 from warp_pipes import Index
 from warp_pipes import Pipe
+from warp_pipes import Sequential
 from warp_pipes.core.condition import In
 from warp_pipes.support.datasets_utils import get_column_names
 from warp_pipes.support.datasets_utils import keep_only_columns
@@ -29,6 +32,7 @@ from fz_openqa.datamodules.builders.utils.format_row import format_qa_eg
 from fz_openqa.datamodules.pipes import Sampler
 from fz_openqa.datamodules.pipes.fetch import NestedFetchDocuments
 from fz_openqa.datamodules.utils.datastruct import OpenQaDataset
+from fz_openqa.utils import maybe_instantiate
 
 
 class OpenQaBuilder(DatasetBuilder):
@@ -56,7 +60,7 @@ class OpenQaBuilder(DatasetBuilder):
         batch_size: int = 100,
         writer_batch_size: int = 1000,
         output_columns: Optional[List[str]] = None,
-        transform: Optional[Pipe | DictConfig] = None,
+        transform: Optional[Pipe | DictConfig | ListConfig] = None,
         **kwargs,
     ):
         super(OpenQaBuilder, self).__init__(cache_dir=None, **kwargs)
@@ -70,6 +74,11 @@ class OpenQaBuilder(DatasetBuilder):
         assert self.tokenizer.vocab == corpus_builder.tokenizer.vocab
 
         # transform use as last step of the collate_fn
+        transform = maybe_instantiate(transform)
+        if isinstance(transform, (list, ListConfig)):
+            transform = Sequential(*transform)
+        elif isinstance(transform, (dict, DictConfig)):
+            transform = BlockSequential(transform.items(), pprint=False)
         self.transform = transform
 
         # objects
@@ -235,7 +244,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Transform", self.transform),
             ],
             id="collate-pipeline",
-            pprint=True,
+            pprint=False,
         )
 
     def format_row(self, row: Dict[str, Any], **kwargs) -> str:

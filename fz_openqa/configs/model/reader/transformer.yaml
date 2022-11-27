@@ -1,0 +1,5 @@
+_target_: fz_openqa.transformers_utils.init_pretrained_model
+model_id: ${model.reader_id}
+Cls: transformers.AutoModelForCausalLM
+cache_dir: ${sys.shared_cache_dir}
+tokenizer: ${datamodule.reader_tokenizer}

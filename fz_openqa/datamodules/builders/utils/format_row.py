@@ -13,6 +13,7 @@ class Scenario(Enum):
     generative_qa = "generative-qa"
     multiple_choice_qa = "multiple-choice-qa"
     multiple_choice_concat_qa = "multiple-choice-concat-qa"
+    multiple_choice_flat_concat_qa = "multiple-choice-flat_concat-qa"
 
 
 def infer_field_dim(eg: Eg, field: str) -> Optional[int]:
@@ -27,6 +28,7 @@ def infer_field_dim(eg: Eg, field: str) -> Optional[int]:
 def infer_scenario(eg: Eg) -> Scenario:
     q_dim = infer_field_dim(eg, "question")
     a_dim = infer_field_dim(eg, "answer")
+    target = eg.get("answer.target", None)
 
     # handle the case where no question is provided
     if q_dim is None:
@@ -36,13 +38,15 @@ def infer_scenario(eg: Eg) -> Scenario:
         )
 
     # handle the case where no answer is provided
-    if a_dim is None:
+    if a_dim is None and target is None:
         return Scenario.generative_qa
 
     if q_dim == 1 and a_dim == 1:
         return Scenario.generative_qa
     elif q_dim == 2 and a_dim == 2:
         return Scenario.multiple_choice_concat_qa
+    elif q_dim == 1 and isinstance(target, torch.Tensor) and target.dtype == torch.bool:
+        return Scenario.multiple_choice_flat_concat_qa
     elif q_dim == 1 and a_dim == 2:
         return Scenario.multiple_choice_qa
     else:
@@ -59,6 +63,8 @@ def format_qa_eg(eg: Eg, tokenizer: PreTrainedTokenizerFast, **kwargs) -> str:
         canvas = format_multiple_choice_qa_eg(eg, tokenizer, **kwargs)
     elif scenario == Scenario.multiple_choice_concat_qa:
         canvas = format_multiple_choice_concat_qa_eg(eg, tokenizer, **kwargs)
+    elif scenario == Scenario.multiple_choice_flat_concat_qa:
+        canvas = format_multiple_choice_flat_concat_qa_eg(eg, tokenizer, **kwargs)
     else:
         raise ValueError(f"Unknown scenario: {scenario}")
 
@@ -77,14 +83,12 @@ def format_generative_qa_eg(eg, tokenizer, **kwargs):
         answer_str = pretty_decode(a_tokens, style="green", tokenizer=tokenizer)
         canvas += f"\nAnswer: {answer_str}"
 
-        # documents
-        d_tokens = eg.get("document.input_ids", None)
-        d_scores = eg.get("document.proposal_score", None)
-        if d_tokens is not None:
-            doc_info = f"(n={len(d_tokens)})"
-            canvas += (
-                f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
-            )
+    # documents
+    d_tokens = eg.get("document.input_ids", None)
+    d_scores = eg.get("document.proposal_score", None)
+    if d_tokens is not None:
+        doc_info = f"(n={len(d_tokens)})"
+        canvas += f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
 
     return canvas
 
@@ -133,6 +137,27 @@ def format_multiple_choice_concat_qa_eg(eg, tokenizer, **kwargs):
         if d_tokens is not None:
             d_scores_i = d_scores[i] if d_scores is not None else None
             canvas += rf"{format_documents(d_tokens[i], tokenizer, scores=d_scores_i)}"
+
+    return canvas
+
+
+def format_multiple_choice_flat_concat_qa_eg(eg, tokenizer, **kwargs):
+    q_tokens = eg["question.input_ids"]
+    target = eg.get("answer.target", False)
+
+    sep = "\n"
+    canvas = "Question-answer pair:"
+    style = "green" if target else "deep_sky_blue3"
+    marker = "✓" if target else " "
+    q_str = pretty_decode(q_tokens, style=style, tokenizer=tokenizer, only_text=False)
+    canvas += f"{sep}({marker}) {q_str}"
+
+    # documents
+    d_tokens = eg.get("document.input_ids", None)
+    d_scores = eg.get("document.proposal_score", None)
+    if d_tokens is not None:
+        doc_info = f"(n={len(d_tokens)})"
+        canvas += f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
 
     return canvas
 

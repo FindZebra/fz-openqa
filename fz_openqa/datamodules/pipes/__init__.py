@@ -20,6 +20,7 @@ from .torch import Forward
 from .torch import Itemize
 from .torch import ToNumpy
 from .transforms import FlattenMcQuestions
+from .transforms import LanguageModellingTransform
 from .transforms import OptionBinarized
 from .transforms import OptionDropout
 from .transforms import StripAnswer

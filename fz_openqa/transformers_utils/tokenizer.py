@@ -1,14 +1,21 @@
+import string
+
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.normalizers import BertNormalizer
 from transformers import AutoTokenizer
 from transformers import PreTrainedTokenizerFast
 
-from .static import ADDITIONAL_SPECIAL_TOKENS
-from .static import ANS_TOKEN
-from .static import DOC_TOKEN
-from .static import QUERY_MASK
-from .static import QUERY_TOKEN
+QUERY_TOKEN = "<|QUERY|>"
+QUERY_MASK = "<|QMASK|>"
+DOC_TOKEN = "<|DOC|>"
+ANS_TOKEN = "<|ANS|>"
+TRUNCATED_TOKEN = "<|TRUNCATED|>"
+
+ADDITIONAL_SPECIAL_TOKENS = [QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN, QUERY_MASK, TRUNCATED_TOKEN]
 
 SPECIAL_TOKENS = {
-    "pad_token": "[PAD]",
+    "pad_token": "[PAD] ",
     "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
 }
 
@@ -27,17 +34,48 @@ TOKENIZERS_MAPPING = {
 }
 
 
-def init_pretrained_tokenizer(
-    *, pretrained_model_name_or_path: str, **kwargs
-) -> PreTrainedTokenizerFast:
+def init_pretrained_tokenizer(*, model_id: str, **kwargs) -> PreTrainedTokenizerFast:
     """Load a HuggingFace Pretrained Tokenizer and add the special tokens."""
-    pretrained_model_name_or_path = TOKENIZERS_MAPPING.get(
-        pretrained_model_name_or_path, pretrained_model_name_or_path
-    )
-    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+    model_id = TOKENIZERS_MAPPING.get(model_id, model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, **kwargs)
     tokenizer.add_special_tokens(SPECIAL_TOKENS)
     tokenizer.sanitize_special_tokens()
     # test_special_token_encoding(tokenizer)
+    return tokenizer
+
+
+CHAR_SPECIAL_TOKENS = {
+    "pad_token": "[PAD]",
+    "unk_token": "[UNK]",
+    "sep_token": "[SEP]",
+    "mask_token": "[MASK]",
+    "cls_token": "[CLS]",
+    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
+}
+
+
+def init_char_tokenizer() -> PreTrainedTokenizerFast:
+    # initialize tokenizer as Byte Pair Encoder
+    # it won't be trained as a BPE, as we set the vocabulary,
+    # but this allows benefiting from the all the Tokenizer methods
+    tokenizer = Tokenizer(BPE())
+
+    # define vocabulary and special tokens
+    vocab = list(string.printable)
+
+    # get normalizer
+    tokenizer.normalizer = BertNormalizer()
+
+    # set the vocabulary the vocabulary
+    tokenizer.add_tokens(vocab)
+
+    # convert as PreTrainedTokenizerFast
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+
+    # add the special tokens
+    tokenizer.add_special_tokens(CHAR_SPECIAL_TOKENS)
+    tokenizer.sanitize_special_tokens()
+
     return tokenizer
 
 

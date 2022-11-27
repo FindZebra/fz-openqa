@@ -2,7 +2,7 @@
 
 defaults:
   - override /trainer: minimal
-  - override /model: ???
+  - override /model: reader_retriever
   - override /datamodule: openqa
   - override /callbacks:
       - checkpoint

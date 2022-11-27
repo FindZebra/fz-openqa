@@ -34,9 +34,9 @@ from fz_openqa.datamodules.pipelines.preprocessing import FormatAndTokenize
 from fz_openqa.datamodules.pipes.concat_fields import ConcatTokenFields
 from fz_openqa.datamodules.pipes.query_expansion import QueryExpansion
 from fz_openqa.datamodules.utils.transformations import set_index_column
-from fz_openqa.tokenizers.static import ANS_TOKEN
-from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.tokenizers.static import QUERY_TOKEN
+from fz_openqa.transformers_utils.tokenizer import ANS_TOKEN
+from fz_openqa.transformers_utils.tokenizer import DOC_TOKEN
+from fz_openqa.transformers_utils.tokenizer import QUERY_TOKEN
 
 QA_DATASETS = {
     "medqa-us": (medqa.__file__, "us"),

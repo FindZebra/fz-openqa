@@ -38,7 +38,7 @@ from fz_openqa.datamodules.generators import medwiki_corpus
 from fz_openqa.datamodules.generators import meqa_en_corpus
 from fz_openqa.datamodules.generators import quality
 from fz_openqa.datamodules.pipes.sentence import GenerateSentences
-from fz_openqa.tokenizers.static import DOC_TOKEN
+from fz_openqa.transformers_utils.tokenizer import DOC_TOKEN
 
 TXT_PATTERN = r"^.*\.txt$"
 GPT_END_OF_TEXT_TOKEN = "<|endoftext|>"

@@ -1,0 +1,11 @@
+language_model:
+  _target_: fz_openqa.datamodules.pipes.LanguageModellingTransform
+
+  tokenizer: ${datamodule.reader_tokenizer}
+  question_field: question
+  answer_field: answer
+  document_field: document
+  output_field: lm
+  multi_doc: false
+  tokenizer_kwargs: null
+  update: true

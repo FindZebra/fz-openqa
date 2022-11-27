@@ -63,4 +63,4 @@ engines:
       merge_previous_results: false
 
 # logging
-id: dpr
+id: dense

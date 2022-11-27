@@ -1,2 +1,0 @@
-bert: ${model.backbone}
-output_size: ???

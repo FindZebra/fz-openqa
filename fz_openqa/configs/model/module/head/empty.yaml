@@ -1,6 +1,0 @@
-defaults:
-  - base
-
-_target_: fz_openqa.modeling.heads.EmptyHead
-_id: empty
-reference_key: document.proposal_score

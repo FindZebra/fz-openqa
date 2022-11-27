@@ -66,7 +66,8 @@ class Model(LightningModule):
         self,
         *,
         tokenizer: PreTrainedTokenizerFast | DictConfig,
-        backbone: PreTrainedModel | DictConfig,
+        reader: None | PreTrainedModel | DictConfig = None,
+        retriever: None | PreTrainedModel | DictConfig = None,
         module: DictConfig | Module,
         monitor_metric: Optional[str],
         optimizer: torch.optim.Optimizer | DictConfig,
@@ -100,7 +101,8 @@ class Model(LightningModule):
         # instantiate the model
         self.module: Optional[Module] = maybe_instantiate(
             module,
-            backbone=backbone,
+            reader=reader,
+            retriever=retriever,
             tokenizer=tokenizer,
             _recursive_=False,
         )

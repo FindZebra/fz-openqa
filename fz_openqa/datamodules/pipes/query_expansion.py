@@ -7,7 +7,7 @@ from warp_pipes import Batch
 from warp_pipes import HasPrefix
 from warp_pipes import Pipe
 
-from fz_openqa.tokenizers.static import QUERY_MASK
+from fz_openqa.transformers_utils.tokenizer import QUERY_MASK
 
 
 class QueryExpansion(Pipe):

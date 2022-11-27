@@ -13,6 +13,7 @@ from warp_pipes import Eg
 from warp_pipes import Flatten
 from warp_pipes import Nest
 from warp_pipes import Pipe
+from warp_pipes import pprint_batch
 from warp_pipes.core.condition import In
 from warp_pipes.support.functional import iter_batch_egs
 from warp_pipes.support.shapes import infer_shape
@@ -91,6 +92,8 @@ class FlattenMcQuestions(TransformMcQuestions):
         if self.splits is not None and split not in self.splits:
             return {}
 
+        pprint_batch(batch, "FlattenMcQuestions::input")
+
         # get the features
         shape, targets, features = self._gather_features(batch)
 
@@ -117,6 +120,8 @@ class FlattenMcQuestions(TransformMcQuestions):
         output[self.question_loc_key] = torch.arange(
             output[self.question_id_key].shape[0], dtype=torch.long, device=targets.device
         )
+
+        pprint_batch(batch, "FlattenMcQuestions::output")
 
         return output
 
@@ -322,7 +327,7 @@ class LanguageModellingTemplate:
         return canvas
 
 
-class LanguageModelingTransform(Pipe):
+class LanguageModellingTransform(Pipe):
     """Language modeling task"""
 
     def __init__(

@@ -28,10 +28,7 @@ base:
 
 # version info (useful for filtering runs on wandb)
 exp_version: 16
-code_version: "0.2.1"
-
-# base pretrained model
-pretrained_model: ${model.backbone.pretrained_model_name_or_path}
+code_version: "0.3.0"
 
 # use `python run.py debug=true` for easy debugging!
 # this will run 1 train, val and test loop with only 1 batch

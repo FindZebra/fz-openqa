@@ -8,7 +8,7 @@ from warp_pipes.support.pretty import pretty_decode
 from fz_openqa.datamodules.builders.index import IndexBuilder
 from fz_openqa.datamodules.builders.preprocessing import EntityPreprocessing
 from fz_openqa.datamodules.builders.preprocessing import MultipleChoiceToGenerative
-from fz_openqa.datamodules.pipes.transforms import LanguageModelingTransform
+from fz_openqa.datamodules.pipes.transforms import LanguageModellingTransform
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -197,8 +197,11 @@ def run(config):
     lm_tokenizer = init_pretrained_tokenizer(pretrained_model_name_or_path="gpt2")
     if isinstance(transform, str):
         Cls, args = {
-            "lm": (LanguageModelingTransform, {"tokenizer": lm_tokenizer}),
-            "lm_multi": (LanguageModelingTransform, {"tokenizer": lm_tokenizer, "multi_doc": True}),
+            "lm": (LanguageModellingTransform, {"tokenizer": lm_tokenizer}),
+            "lm_multi": (
+                LanguageModellingTransform,
+                {"tokenizer": lm_tokenizer, "multi_doc": True},
+            ),
         }[transform]
         transform = Cls(**args)
 

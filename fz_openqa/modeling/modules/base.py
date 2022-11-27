@@ -15,7 +15,6 @@ import torch.nn.functional as F
 from datasets import Split
 from omegaconf import DictConfig
 from torch import nn
-from torch import Tensor
 from torchmetrics.classification import Accuracy
 from torchmetrics.retrieval import RetrievalMRR
 from transformers import PreTrainedModel
@@ -23,15 +22,13 @@ from transformers import PreTrainedTokenizerFast
 from warp_pipes import Batch
 
 from fz_openqa.modeling.modules.utils.backbone import extend_backbone_embeddings
-from fz_openqa.modeling.modules.utils.backbone import instantiate_backbone_model_with_config
-from fz_openqa.modeling.modules.utils.backbone import process_with_backbone
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
-from fz_openqa.tokenizers.static import ANS_TOKEN
-from fz_openqa.tokenizers.static import DOC_TOKEN
-from fz_openqa.tokenizers.static import QUERY_MASK
-from fz_openqa.tokenizers.static import QUERY_TOKEN
-from fz_openqa.tokenizers.static import TRUNCATED_TOKEN
+from fz_openqa.transformers_utils.tokenizer import ANS_TOKEN
+from fz_openqa.transformers_utils.tokenizer import DOC_TOKEN
+from fz_openqa.transformers_utils.tokenizer import QUERY_MASK
+from fz_openqa.transformers_utils.tokenizer import QUERY_TOKEN
+from fz_openqa.transformers_utils.tokenizer import TRUNCATED_TOKEN
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
@@ -86,7 +83,6 @@ class Module(nn.Module, ABC):
     def __init__(
         self,
         *,
-        backbone: DictConfig | PreTrainedModel,
         tokenizer: DictConfig | PreTrainedTokenizerFast,
         prefix: str = "",
         **kwargs,
@@ -97,43 +93,7 @@ class Module(nn.Module, ABC):
         self._vocabulary_size = len(self.tokenizer.get_vocab())
         self._pad_token_id = self.tokenizer.pad_token_id
         self.spec_tokens = self.get_special_tokens(self.tokenizer)
-        self.backbone: PreTrainedModel = self.instantiate_backbone(
-            backbone=backbone,
-            tokenizer=self.tokenizer,
-        )
         self._init_metrics(prefix=prefix)
-
-    def _backbone(
-        self,
-        batch: Batch,
-        field: Optional[str] = None,
-        max_batch_size: Optional[int] = None,
-        **kwargs,
-    ) -> Union[Tensor, Dict[str, Tensor]]:
-        return process_with_backbone(
-            batch=batch,
-            backbone=self.backbone,
-            field=field,
-            max_batch_size=max_batch_size,
-            max_length=self.max_length,
-            **kwargs,
-        )
-
-    @staticmethod
-    def instantiate_backbone(
-        *,
-        backbone: Union[PreTrainedModel, DictConfig],
-        tokenizer: PreTrainedTokenizerFast,
-    ) -> PreTrainedModel:
-        """Instantiate a backbone model, and extend its embeddings to match the tokenizer"""
-
-        # instantiate the backbone model using `backbone.config`
-        backbone = instantiate_backbone_model_with_config(backbone)
-
-        # extend the embeddings for the added special tokens
-        backbone = extend_backbone_embeddings(backbone, tokenizer)
-
-        return backbone
 
     @staticmethod
     def get_special_tokens(tokenizer: PreTrainedTokenizerFast) -> Dict:

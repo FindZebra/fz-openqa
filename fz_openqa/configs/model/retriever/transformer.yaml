@@ -1,0 +1,5 @@
+_target_: fz_openqa.transformers_utils.init_pretrained_model
+model_id: ${model.retriever_id}
+Cls: transformers.BertModel
+cache_dir: ${sys.shared_cache_dir}
+tokenizer: ${datamodule.tokenizer}

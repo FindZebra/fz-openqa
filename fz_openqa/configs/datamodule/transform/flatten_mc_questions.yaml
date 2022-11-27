@@ -1,16 +1,19 @@
-_target_: fz_openqa.datamodules.pipes.FlattenMcQuestions
-
-splits: null
-target_key: answer.target
-keys:
-  - question.input_ids
-  - question.attention_mask
-  - question.token_type_ids
-  - document.input_ids
-  - document.attention_mask
-  - document.proposal_score
-  - document.proposal_rank
-  - document.match_score
-  - document.row_idx
-  - document.proposal_log_weight
-update: false
+flatten_mc_questions:
+  _target_: fz_openqa.datamodules.pipes.FlattenMcQuestions
+  splits: null
+  target_key: answer.target
+  keys:
+    - question.input_ids
+    - question.attention_mask
+    - question.token_type_ids
+    - document.input_ids
+    - document.attention_mask
+    - document.proposal_score
+    - document.proposal_rank
+    - document.match_score
+    - document.row_idx
+    - document.proposal_log_weight
+    - lm.input_ids
+    - lm.attention_mask
+    - lm.token_type_ids
+  update: false

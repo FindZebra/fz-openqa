@@ -3,7 +3,7 @@
 defaults:
   - mc_openqa
   - override /datamodule/builder: openqa
-  - override /datamodule/transform: none
+  - override /datamodule/transform: language_model
   - override /datamodule/preprocessing_op: mc_to_generative
 base:
   batch_size: 32
@@ -14,20 +14,3 @@ logger:
   wandb:
     group: gen-openqa-${datamodule.dset_name}
     name: ${base.exp_id}
-
-
-datamodule:
-  output_columns:
-    - answer.text
-    - answer.input_ids
-    - answer.attention_mask
-    - question.row_idx
-    - question.input_ids
-    - question.attention_mask
-    - question.token_type_ids
-    - document.input_ids
-    - document.attention_mask
-    - document.row_idx
-    - document.match_score
-    - document.proposal_score
-    - document.proposal_rank

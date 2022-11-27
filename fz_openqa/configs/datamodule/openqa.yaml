@@ -2,6 +2,7 @@ defaults:
   - builder: openqa
   - text_formatter: none
   - tokenizer: pretrained
+  - reader_tokenizer: pretrained
   - index_builder: elasticsearch
   - preprocessing_op: none
   - sampler: priority
@@ -18,7 +19,7 @@ persistent_workers: False
 drop_last: False
 
 # global: dataset preprocessing
-add_qad_tokens: true
+add_qad_tokens: false
 add_special_tokens: true
 subset_size: null
 corpus_subset_size: null

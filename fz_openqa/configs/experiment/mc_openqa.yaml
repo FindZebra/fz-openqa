@@ -3,16 +3,14 @@
 defaults:
   - base
   - override /model: reader_retriever
-  - override /model/backbone: biolink
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
-  - override /model/module/retriever_head: dpr
-  - override /model/module/reader_head: cross_attention
   - override /model/module/gradients: renyi
   - override /datamodule/builder: openqa
-  - override /datamodule/index_builder: ${model/module/retriever_head}
+  - override /datamodule/index_builder: dense
   - override /datamodule/sampler: priority
   - override /datamodule/transform:
+      - language_model
       - flatten_mc_questions
   - override /datamodule/builder/analytics:
       - sequence_lengths
@@ -22,7 +20,6 @@ defaults:
       - lr_monitor
       - log_predictions
       - progress_bar
-      - pympler
 
 base:
   seed: null
@@ -32,7 +29,7 @@ base:
   device_batch_size: 0.5
   eval_device_batch_size: 8
   infer_batch_mul: 300
-  exp_id: ${base.exp_info}-${base.version}-${cleanup_bert_name:${model.backbone.pretrained_model_name_or_path}}-${datamodule.dset_name}-${datamodule.corpus_name}-${model.module.gradients._id}-${model.module.retriever_head._id}-${model.module.reader_head._id}-${hostname:}-${base.seed}
+  exp_id: ${base.exp_info}-${base.version}-${datamodule.dset_name}-${datamodule.corpus_name}-${cleanup_bert_name:${model.retriever_id}}-${cleanup_bert_name:${model.reader_id}}-${model.module.gradients._id}-${hostname:}-${base.seed}
 
 trainer:
   gradient_clip_val: 0.5
@@ -42,11 +39,13 @@ trainer:
   max_steps: 1_000_000
 
 model:
+  retriever_id: prajjwal1/bert-tiny
+  reader_id: sshleifer/tiny-gpt2
+
   # global model configuration
   metric_size: 768
   metric_type: inner_product
   period: 20_000
-  weight_init_mult: null
 
   # optimizer configuration
   optimizer:
@@ -69,30 +68,6 @@ model:
 
   # Module definition
   module:
-    mask_punctuation: true
-    max_batch_size: 160
-    retriever_head:
-      output_size: ${model.metric_size}
-      metric_type: ${model.metric_type}
-      weight_init_mult: ${model.weight_init_mult}
-      id: retriever
-      normalize: false
-      scale_init: 1
-      target_scale_init: 0.1
-      learn_scale: false
-      auto_scale: false
-      bias: false
-    reader_head:
-      output_size: ${model.metric_size}
-      metric_type: ${model.metric_type}
-      weight_init_mult: ${model.weight_init_mult}
-      id: reader
-      normalize: false
-      scale_init: 1
-      target_scale_init: 0.1
-      learn_scale: false
-      auto_scale: false
-      bias: false
     gradients:
       cartesian_max_size: ${eval:"1<<20"}
 
@@ -119,11 +94,14 @@ datamodule:
   add_qad_tokens: false
   num_proc: 16
   output_columns:
+    - answer.text
     - answer.target
     - question.row_idx
+    - question.text
     - question.input_ids
     - question.attention_mask
     - question.token_type_ids
+    - document.text
     - document.input_ids
     - document.attention_mask
     - document.row_idx
