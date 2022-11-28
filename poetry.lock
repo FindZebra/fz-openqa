@@ -148,6 +148,20 @@ optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 
 [[package]]
+name = "coloredlogs"
+version = "15.0.1"
+description = "Colored terminal output for Python's logging module"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.dependencies]
+humanfriendly = ">=9.1"
+
+[package.extras]
+cron = ["capturer (>=2.4)"]
+
+[[package]]
 name = "colorlog"
 version = "6.7.0"
 description = "Add colours to the output of Python's logging module."
@@ -245,13 +259,13 @@ xxhash = "*"
 apache-beam = ["apache-beam (>=2.26.0)"]
 audio = ["librosa"]
 benchmarks = ["numpy (==1.18.5)", "tensorflow (==2.3.0)", "torch (==1.7.1)", "transformers (==3.0.2)"]
-dev = ["absl-py", "pytest", "pytest-datadir", "pytest-xdist", "apache-beam (>=2.26.0)", "elasticsearch (<8.0.0)", "aiobotocore (>=2.0.1)", "boto3 (>=1.19.8)", "botocore (>=1.22.8)", "faiss-cpu (>=1.6.4)", "fsspec", "lz4", "moto[server,s3] (==2.0.4)", "rarfile (>=4.0)", "s3fs (>=2021.11.1)", "tensorflow (>=2.3,!=2.6.0,!=2.6.1)", "torch", "torchaudio (<0.12.0)", "soundfile", "transformers", "bs4", "conllu", "h5py", "lxml", "mwparserfromhell", "openpyxl", "py7zr", "zstandard", "sentencepiece", "rouge-score", "sacremoses", "bert-score (>=0.3.6)", "jiwer", "langdetect", "mauve-text", "nltk", "sacrebleu", "scikit-learn", "scipy", "seqeval", "tldextract", "toml (>=0.10.1)", "requests-file (>=1.5.1)", "tldextract (>=3.1.0)", "texttable (>=1.6.3)", "Werkzeug (>=1.0.1)", "six (>=1.15.0,<1.16.0)", "Pillow (>=6.2.1)", "librosa", "black (>=22.0,<23.0)", "flake8 (>=3.8.3)", "isort (>=5.0.0)", "pyyaml (>=5.3.1)"]
+dev = ["absl-py", "pytest", "pytest-datadir", "pytest-xdist", "apache-beam (>=2.26.0)", "elasticsearch (<8.0.0)", "aiobotocore (>=2.0.1)", "boto3 (>=1.19.8)", "botocore (>=1.22.8)", "faiss-cpu (>=1.6.4)", "fsspec", "lz4", "moto[s3,server] (==2.0.4)", "rarfile (>=4.0)", "s3fs (>=2021.11.1)", "tensorflow (>=2.3,!=2.6.0,!=2.6.1)", "torch", "torchaudio (<0.12.0)", "soundfile", "transformers", "bs4", "conllu", "h5py", "lxml", "mwparserfromhell", "openpyxl", "py7zr", "zstandard", "sentencepiece", "rouge-score", "sacremoses", "bert-score (>=0.3.6)", "jiwer", "langdetect", "mauve-text", "nltk", "sacrebleu", "scikit-learn", "scipy", "seqeval", "tldextract", "toml (>=0.10.1)", "requests-file (>=1.5.1)", "tldextract (>=3.1.0)", "texttable (>=1.6.3)", "Werkzeug (>=1.0.1)", "six (>=1.15.0,<1.16.0)", "Pillow (>=6.2.1)", "librosa", "black (>=22.0,<23.0)", "flake8 (>=3.8.3)", "isort (>=5.0.0)", "pyyaml (>=5.3.1)"]
 docs = ["s3fs"]
 quality = ["black (>=22.0,<23.0)", "flake8 (>=3.8.3)", "isort (>=5.0.0)", "pyyaml (>=5.3.1)"]
 s3 = ["fsspec", "boto3", "botocore", "s3fs"]
 tensorflow = ["tensorflow (>=2.2.0,!=2.6.0,!=2.6.1)"]
 tensorflow_gpu = ["tensorflow-gpu (>=2.2.0,!=2.6.0,!=2.6.1)"]
-tests = ["absl-py", "pytest", "pytest-datadir", "pytest-xdist", "apache-beam (>=2.26.0)", "elasticsearch (<8.0.0)", "aiobotocore (>=2.0.1)", "boto3 (>=1.19.8)", "botocore (>=1.22.8)", "faiss-cpu (>=1.6.4)", "fsspec", "lz4", "moto[server,s3] (==2.0.4)", "rarfile (>=4.0)", "s3fs (>=2021.11.1)", "tensorflow (>=2.3,!=2.6.0,!=2.6.1)", "torch", "torchaudio (<0.12.0)", "soundfile", "transformers", "bs4", "conllu", "h5py", "lxml", "mwparserfromhell", "openpyxl", "py7zr", "zstandard", "sentencepiece", "rouge-score", "sacremoses", "bert-score (>=0.3.6)", "jiwer", "langdetect", "mauve-text", "nltk", "sacrebleu", "scikit-learn", "scipy", "seqeval", "tldextract", "toml (>=0.10.1)", "requests-file (>=1.5.1)", "tldextract (>=3.1.0)", "texttable (>=1.6.3)", "Werkzeug (>=1.0.1)", "six (>=1.15.0,<1.16.0)", "Pillow (>=6.2.1)", "librosa"]
+tests = ["absl-py", "pytest", "pytest-datadir", "pytest-xdist", "apache-beam (>=2.26.0)", "elasticsearch (<8.0.0)", "aiobotocore (>=2.0.1)", "boto3 (>=1.19.8)", "botocore (>=1.22.8)", "faiss-cpu (>=1.6.4)", "fsspec", "lz4", "moto[s3,server] (==2.0.4)", "rarfile (>=4.0)", "s3fs (>=2021.11.1)", "tensorflow (>=2.3,!=2.6.0,!=2.6.1)", "torch", "torchaudio (<0.12.0)", "soundfile", "transformers", "bs4", "conllu", "h5py", "lxml", "mwparserfromhell", "openpyxl", "py7zr", "zstandard", "sentencepiece", "rouge-score", "sacremoses", "bert-score (>=0.3.6)", "jiwer", "langdetect", "mauve-text", "nltk", "sacrebleu", "scikit-learn", "scipy", "seqeval", "tldextract", "toml (>=0.10.1)", "requests-file (>=1.5.1)", "tldextract (>=3.1.0)", "texttable (>=1.6.3)", "Werkzeug (>=1.0.1)", "six (>=1.15.0,<1.16.0)", "Pillow (>=6.2.1)", "librosa"]
 torch = ["torch"]
 vision = ["Pillow (>=6.2.1)"]
 
@@ -492,6 +506,17 @@ torch = ["torch"]
 typing = ["types-pyyaml", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3"]
 
 [[package]]
+name = "humanfriendly"
+version = "10.0"
+description = "Human friendly output for text interfaces using Python"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.dependencies]
+pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_version >= \"3.8\""}
+
+[[package]]
 name = "hydra-colorlog"
 version = "1.2.0"
 description = "Enables colorlog for Hydra apps"
@@ -676,6 +701,18 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "mpmath"
+version = "1.2.1"
+description = "Python library for arbitrary-precision floating-point arithmetic"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+develop = ["pytest (>=4.6)", "pycodestyle", "pytest-cov", "codecov", "wheel"]
+tests = ["pytest (>=4.6)"]
+
+[[package]]
 name = "multidict"
 version = "6.0.2"
 description = "multidict implementation"
@@ -751,6 +788,39 @@ python-versions = ">=3.6"
 [package.dependencies]
 antlr4-python3-runtime = ">=4.9.0,<4.10.0"
 PyYAML = ">=5.1.0"
+
+[[package]]
+name = "optimum"
+version = "1.5.1"
+description = "Optimum Library is an extension of the Hugging Face Transformers library, providing a framework to integrate third-party libraries from Hardware Partners and interface with their specific functionality."
+category = "main"
+optional = false
+python-versions = ">=3.7.0"
+
+[package.dependencies]
+coloredlogs = "*"
+huggingface-hub = ">=0.8.0"
+numpy = "*"
+packaging = "*"
+sympy = "*"
+torch = ">=1.9"
+transformers = {version = ">=4.20.1", extras = ["sentencepiece"]}
+
+[package.extras]
+benchmark = ["optuna", "tqdm", "sklearn", "seqeval", "torchvision", "evaluate (>=0.2.0)"]
+dev = ["pytest", "requests", "parameterized", "pytest-xdist", "pillow", "black (>=22.0,<23.0)", "flake8 (>=3.8.3)", "isort (>=5.5.4)"]
+exporters = ["onnx", "onnxruntime", "timm"]
+exporters-tf = ["tensorflow", "tf2onnx", "onnx", "onnxruntime", "timm"]
+graphcore = ["optimum-graphcore"]
+habana = ["optimum-habana"]
+intel = ["optimum-intel"]
+neural-compressor = ["optimum-intel"]
+nncf = ["optimum-intel"]
+onnxruntime = ["onnx", "onnxruntime (>=1.9.0)", "datasets (>=1.2.1)", "evaluate", "protobuf (==3.20.1)"]
+onnxruntime-gpu = ["onnx", "onnxruntime-gpu (>=1.9.0)", "datasets (>=1.2.1)", "evaluate", "protobuf (==3.20.1)"]
+openvino = ["optimum-intel"]
+quality = ["black (>=22.0,<23.0)", "flake8 (>=3.8.3)", "isort (>=5.5.4)"]
+tests = ["pytest", "requests", "parameterized", "pytest-xdist", "pillow"]
 
 [[package]]
 name = "packaging"
@@ -899,7 +969,7 @@ test = ["pytest (>=2.7.3)", "pytest-cov", "coveralls", "futures", "pytest-benchm
 
 [[package]]
 name = "protobuf"
-version = "3.20.3"
+version = "3.20.2"
 description = "Protocol Buffers"
 category = "main"
 optional = false
@@ -979,6 +1049,14 @@ python-versions = ">=3.6.8"
 
 [package.extras]
 diagrams = ["railroad-diagrams", "jinja2"]
+
+[[package]]
+name = "pyreadline3"
+version = "3.4.1"
+description = "A python implementation of GNU readline."
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
 name = "pysocks"
@@ -1416,6 +1494,17 @@ optional = false
 python-versions = ">=3.4"
 
 [[package]]
+name = "sympy"
+version = "1.11.1"
+description = "Computer algebra system (CAS) in Python"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.dependencies]
+mpmath = ">=0.19"
+
+[[package]]
 name = "tensorboardx"
 version = "2.5"
 description = "TensorBoardX lets you watch Tensors Flow without Tensorflow"
@@ -1596,9 +1685,11 @@ filelock = "*"
 huggingface-hub = ">=0.10.0,<1.0"
 numpy = ">=1.17"
 packaging = ">=20.0"
+protobuf = {version = "<=3.20.2", optional = true, markers = "extra == \"sentencepiece\""}
 pyyaml = ">=5.1"
 regex = "!=2019.12.17"
 requests = "*"
+sentencepiece = {version = ">=0.1.91,<0.1.92 || >0.1.92", optional = true, markers = "extra == \"sentencepiece\""}
 tokenizers = ">=0.11.1,<0.11.3 || >0.11.3,<0.14"
 tqdm = ">=4.27"
 
@@ -1836,7 +1927,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "4dcc6c78eef81695797085536a441655aa4b043ad91baf1b4b1d9483ba54506d"
+content-hash = "01caf41b531a3f7bb7161b5ab3d8810654d4c2edd7c4f18bf5ac061d46729368"
 
 [metadata.files]
 aiohttp = []
@@ -1853,6 +1944,7 @@ cfgv = []
 charset-normalizer = []
 click = []
 colorama = []
+coloredlogs = []
 colorlog = []
 commonmark = []
 confection = []
@@ -1877,6 +1969,7 @@ gitdb = []
 gitpython = []
 html2text = []
 huggingface-hub = []
+humanfriendly = []
 hydra-colorlog = []
 hydra-core = []
 hypothesis = []
@@ -1892,6 +1985,7 @@ loguru = []
 markupsafe = []
 matplotlib = []
 more-itertools = []
+mpmath = []
 multidict = []
 multiprocess = []
 murmurhash = []
@@ -1899,6 +1993,7 @@ nltk = []
 nodeenv = []
 numpy = []
 omegaconf = []
+optimum = []
 packaging = []
 pandas = []
 parameterized = []
@@ -1918,6 +2013,7 @@ pydantic = []
 pydeprecate = []
 pygments = []
 pyparsing = []
+pyreadline3 = []
 pysocks = []
 pytest = []
 python-dateutil = []
@@ -1948,6 +2044,7 @@ spacy-legacy = []
 spacy-loggers = []
 srsly = []
 stackprinter = []
+sympy = []
 tensorboardx = []
 tensorstore = []
 termcolor = []

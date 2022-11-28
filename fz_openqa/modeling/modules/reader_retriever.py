@@ -84,6 +84,8 @@ class ReaderRetriever(Module):
 
         # TODO: handle pretrained VOD (remove tanh)
         # TODO: check that special tokens are encoded (CLS, SEP, PAD)
+        # TODO: check that EOS token is appended
+        # TODO: implement `use token_type_ids` as mask
         self.retriever: Optional[PreTrainedModel] = maybe_instantiate(retriever)
 
         rich.print(f"Retriever: {type(self.retriever)}")

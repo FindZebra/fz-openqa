@@ -1,4 +1,5 @@
 from copy import copy
+from pathlib import Path
 from typing import Dict
 from typing import Optional
 from typing import Tuple
@@ -6,6 +7,9 @@ from typing import Tuple
 import pytorch_lightning as pl
 import rich
 import torch
+from jinja2 import Template
+from loguru import logger
+from pydantic import BaseModel
 from pytorch_lightning import Callback
 from pytorch_lightning.utilities import move_data_to_device
 from transformers import PreTrainedModel
@@ -14,8 +18,24 @@ from warp_pipes import Batch
 from warp_pipes import pprint_batch
 from warp_pipes.support.pretty import get_console_separator
 
+import wandb
+from fz_openqa.callbacks import templates
 from fz_openqa.modeling import Model
 from fz_openqa.modeling.modules import ReaderRetriever
+
+
+class Completion(BaseModel):
+    question: str
+    answer: str
+    completion: str
+    id: str
+
+    def rich_repr(self) -> str:
+        canvas = ""
+        canvas += f"Question ({self.id}): `[white]{self.question}[/white]`\n"
+        canvas += f"Answer: `[green]{self.answer}[/green]`\n"
+        canvas += f"Completion: `[red]{self.completion}[/red]`\n"
+        return canvas
 
 
 class GenerateCompletionsCallback(Callback):
@@ -95,17 +115,20 @@ class GenerateCompletionsCallback(Callback):
         # decode the completions and format them
         in_q_len = questions["input_ids"].size(1)
         decode_kwargs = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
-        completion_reprs = []
+        completions = []
         for i, gen in enumerate(generated):
             q_str = self.tokenizer.decode(gen[:in_q_len], **decode_kwargs)
-            a_str = self.tokenizer.decode(gen[in_q_len:], **decode_kwargs)
-            exp_str = self.tokenizer.decode(answers["input_ids"][i], **decode_kwargs)
-            repr = f"Question: #{i + 1}: `[white]{q_str}[/white]`\n"
-            repr += f"Completion: `[green]{a_str}[/green]`\n"
-            repr += f"Expected: `[red]{exp_str}[/red]`\n"
-            completion_reprs.append(repr)
+            comp_str = self.tokenizer.decode(gen[in_q_len:], **decode_kwargs)
+            a_str = self.tokenizer.decode(answers["input_ids"][i], **decode_kwargs)
+            comp = Completion(
+                question=q_str,
+                answer=a_str,
+                completion=comp_str,
+                id=str(i + 1),
+            )
+            completions.append(comp)
 
-        canvas = f"{get_console_separator('.')}\n".join(completion_reprs)
+        canvas = f"{get_console_separator('.')}\n".join([c.rich_repr() for c in completions])
         canvas = f"{get_console_separator('=')}\n{canvas}{get_console_separator('=')}"
 
         # print
@@ -113,7 +136,25 @@ class GenerateCompletionsCallback(Callback):
             rich.print(canvas)
 
         # log
-        # TODO: log to wandb
+        with open(Path(templates.__file__).parent / "completions.html", "r") as f:
+            html_template = Template(f.read())
+        html = html_template.render(
+            {
+                "info": reader.config.model_type,
+                "completions": completions,
+            }
+        )
+
+        # save the HTML file
+        output = Path() / "completions.html"
+        with open(output, "w") as f:
+            f.write(html)
+
+        try:
+            name = "completions/html"
+            wandb.log({name: wandb.Html(html, inject=False)}, commit=False)
+        except wandb.errors.Error as e:
+            logger.warning(e)
 
     def separate_questions_and_answers(self, batch: Batch) -> Tuple[Batch, Batch]:
         """Remove the answer tokens from the input_ids and pad all the sequences left."""
