@@ -3,6 +3,7 @@ from typing import Type
 import torch
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from loguru import logger
+from optimum.bettertransformer import BetterTransformer
 from transformers import AutoModel
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizer
@@ -27,6 +28,7 @@ def init_pretrained_model(
     Cls: Type[PreTrainedModel] = AutoModel,
     tokenizer: PreTrainedTokenizer,
     extend_vocabulary: bool = True,
+    use_optimum: bool = False,
     **kwargs,
 ) -> PreTrainedModel:
     """Load a pretrained model from the HuggingFace model hub."""
@@ -35,6 +37,11 @@ def init_pretrained_model(
     model = Cls.from_pretrained(model_id, **kwargs)
     if extend_vocabulary:
         model = extend_vocabulary_fn(model, tokenizer=tokenizer)
+    if use_optimum and "vod-retriever-medical-v1.0" not in model_id:
+        try:
+            model = BetterTransformer.transform(model)
+        except Exception as exc:
+            logger.warning(f"Failed to transform model {model_id} to optimum model: {exc}")
     model = handle_special_cases(model_id, model)
     return model
 

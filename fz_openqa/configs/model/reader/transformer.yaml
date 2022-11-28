@@ -4,3 +4,4 @@ Cls: transformers.AutoModelForCausalLM
 cache_dir: ${sys.shared_cache_dir}
 tokenizer: ${datamodule.reader_tokenizer}
 extend_vocabulary: false
+use_optimum: true
