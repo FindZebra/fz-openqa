@@ -19,6 +19,7 @@ from warp_pipes import pprint_batch
 
 from fz_openqa.modeling.gradients import Gradients
 from fz_openqa.modeling.gradients import RenyiGradients
+from fz_openqa.modeling.gradients.base import GradientsOutput
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
 
@@ -142,28 +143,30 @@ class ReaderRetriever(Module):
         retriever_output = self._process_with_transformer(
             self.retriever, batch, self.retriever_fields
         )
-        step_output = {**reader_output, **retriever_output}
-
-        pprint_batch(step_output, "ReaderRetriever::Output::step_output", silent=silent)
-        exit()
+        model_output = {**reader_output, **retriever_output}
+        pprint_batch(model_output, "ReaderRetriever::Output::step_output", silent=silent)
 
         # compute the gradients
-        gradient_output = self.gradients.step(batch=batch, output=step_output)
+        gradient_output = self.gradients.step(
+            data={
+                **model_output,
+                **batch,
+                **kwargs,
+            }
+        )
 
-        # gather all outputs
-        step_output = {
-            **step_output,
-            **gradient_output,
-            **kwargs,
-        }
+        pprint_batch(
+            gradient_output, "ReaderRetriever::Output::gradient_step_output", silent=silent
+        )
 
-        return step_output
+        return gradient_output.dict()
 
     def _reduce_step_output(self, step_output: Batch) -> Batch:
         """
         Gather scores and compute the gradients
         """
-        output = self.gradients.step_end(**step_output)
+        output: GradientsOutput = self.gradients.step_end(step_output)
+        output: Batch = output.dict()
 
         pprint_batch(output, "reduce_step_output::estimator::output", silent=not VERBOSE_MODEL)
 

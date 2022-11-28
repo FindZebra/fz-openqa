@@ -5,7 +5,84 @@ from typing import List
 from typing import Optional
 
 import torch
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import validate_arguments
 from torch import nn
+from warp_pipes import pprint_batch
+
+
+class GradientsInput(BaseModel):
+    """Base class for model outputs."""
+
+    class Config:
+        arbitrary_types_allowed = True
+        allow_population_by_field_name = True
+
+    log_p_a__d: torch.Tensor = Field(
+        ...,
+        alias="lm.logp",
+        description="Log probability of the reader model",
+    )
+    document_vector: torch.Tensor = Field(
+        ...,
+        alias="document.pooler_output",
+        description="Document vector",
+    )
+    question_vector: torch.Tensor = Field(
+        ...,
+        alias="question.pooler_output",
+        description="Question vector",
+    )
+    f_phi: torch.Tensor = Field(
+        ...,
+        alias="document.proposal_score",
+        description="Score of the proposal distribution",
+    )
+    log_s: torch.Tensor = Field(
+        ...,
+        alias="document.proposal_log_weight",
+        description="Log importance weight of the proposal distribution",
+    )
+
+
+class GradientsStepOutput(BaseModel):
+    """Base class for gradients step outputs."""
+
+    class Config:
+        arbitrary_types_allowed = True
+        allow_population_by_field_name = True
+
+    log_p_a__d: torch.Tensor = Field(
+        ...,
+        alias="lm.logp",
+        description="Log probability of the reader model",
+    )
+    f_theta: torch.Tensor = Field(
+        ...,
+        alias="document.retriever_score",
+        description="Score of the retriever",
+    )
+    f_phi: torch.Tensor = Field(
+        ...,
+        alias="document.proposal_score",
+        description="Score of the proposal distribution",
+    )
+    log_s: torch.Tensor = Field(
+        ...,
+        alias="document.proposal_log_weight",
+        description="Log importance weight of the proposal distribution",
+    )
+
+
+class GradientsOutput(BaseModel):
+    """Base class for gradients step outputs."""
+
+    class Config:
+        arbitrary_types_allowed = True
+        allow_population_by_field_name = True
+
+    loss: torch.Tensor
 
 
 class Gradients(nn.Module):
@@ -14,15 +91,26 @@ class Gradients(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
 
+    def __call__(self, data: GradientsInput) -> GradientsOutput:
+        step_output = self.step(data)
+        output = self.step_end(step_output)
+        return output
+
+    @validate_arguments
+    def step(self, data: GradientsInput) -> GradientsStepOutput:
+        # compute the document score
+        hd = data.document_vector
+        hq = data.question_vector
+        retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
+        return GradientsStepOutput(f_theta=retriever_score, **data.dict())
+
+    @validate_arguments
+    def step_end(self, step_output: GradientsStepOutput) -> GradientsOutput:
+        return self._step_end(step_output)
+
     @abc.abstractmethod
-    def __call__(self, **kwargs) -> Dict:
+    def _step_end(self, step_output: GradientsStepOutput) -> GradientsOutput:
         ...
-
-    def step(self, **data) -> Dict:
-        return self.__call__(**data)
-
-    def step_end(self, **data) -> Dict:
-        return {}
 
     @staticmethod
     def _get_relevance_metrics(retriever_scores, match_score: Optional[torch.Tensor]) -> Dict:

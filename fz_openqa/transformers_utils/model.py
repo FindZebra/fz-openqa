@@ -1,13 +1,9 @@
 from typing import Type
 
-import rich
 import torch
 from hydra._internal.instantiate._instantiate2 import _resolve_target
 from loguru import logger
 from transformers import AutoModel
-from transformers import AutoModelForCausalLM
-from transformers import AutoModelForSequenceClassification
-from transformers import GPT2LMHeadModel
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizer
 

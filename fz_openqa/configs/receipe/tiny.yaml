@@ -1,0 +1,5 @@
+# @package _global_
+
+model:
+  retriever_id: prajjwal1/bert-tiny
+  reader_id: sshleifer/tiny-gpt2
