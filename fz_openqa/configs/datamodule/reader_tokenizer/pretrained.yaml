@@ -3,3 +3,6 @@ _target_: fz_openqa.transformers_utils.init_pretrained_tokenizer
 model_id: ${model.reader.model_id}
 use_fast: True
 cache_dir: ${sys.shared_cache_dir}
+set_padding_side: left
+pad_token: "tokenizer.eos_token"
+add_special_tokens: false

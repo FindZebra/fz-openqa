@@ -1,0 +1,4 @@
+generate_completions:
+  _target_: fz_openqa.callbacks.GenerateCompletionsCallback
+  tokenizer: ${datamodule.reader_tokenizer}
+  n_samples: 10

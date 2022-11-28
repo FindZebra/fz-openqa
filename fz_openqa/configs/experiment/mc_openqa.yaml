@@ -5,7 +5,7 @@ defaults:
   - override /model: reader_retriever
   - override /model/optimizer: adamw
   - override /model/lr_scheduler: linear
-  - override /model/module/gradients: renyi
+  - override /model/module/gradients: in_batch
   - override /datamodule/builder: openqa
   - override /datamodule/index_builder: dense
   - override /datamodule/sampler: priority
@@ -19,6 +19,7 @@ defaults:
       - checkpoint
       - lr_monitor
       - log_predictions
+      - generate_completions
       - progress_bar
 
 base:
@@ -39,11 +40,10 @@ trainer:
   max_steps: 1_000_000
 
 model:
-  retriever_id: prajjwal1/bert-tiny
-  reader_id: sshleifer/tiny-gpt2
+  retriever_id: michiyasunaga/BioLinkBERT-base
+  reader_id: gpt2
 
   # global model configuration
-  metric_size: 768
   metric_type: inner_product
   period: 20_000
 
@@ -68,6 +68,7 @@ model:
 
   # Module definition
   module:
+    skip_retriever: false
     gradients:
       cartesian_max_size: ${eval:"1<<20"}
 
@@ -119,13 +120,16 @@ datamodule:
   es_weight: 0.5
   faiss_factory: "IVF1000,Flat"
 
+  # concatenate questions and answers
+  concat_qa: true
+
   # document sampler
   sampler:
     config:
-    total:
-      train: ${datamodule.n_documents}
-      validation: ${datamodule.n_documents}
-      test: ${datamodule.n_documents}
+      total:
+        train: ${datamodule.n_documents}
+        validation: ${datamodule.n_documents}
+        test: ${datamodule.n_documents}
     temperature: 1
 
   # OpenQA builder parameters
@@ -134,7 +138,7 @@ datamodule:
     writer_batch_size: 1_000
     dataset_builder:
       dset_name: ${datamodule.dset_name}
-      concat_qa: true
+      concat_qa: ${datamodule.concat_qa}
       query_expansion: null
       n_query_tokens: 1
       n_answer_tokens: 1

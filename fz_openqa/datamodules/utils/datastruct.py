@@ -1,3 +1,5 @@
+from enum import Enum
+
 from datasets import Dataset
 from datasets import DatasetDict
 from pydantic import BaseModel
@@ -24,3 +26,12 @@ class OpenQaDataset(DatasetDict):
 class OpenQaConfig(BaseModel):
     question_nesting_level: int
     document_nesting_level: int
+
+
+class Scenario(Enum):
+    none = "none"
+    language_modelling = "language-modelling"
+    generative_qa = "generative-qa"
+    multiple_choice_qa = "multiple-choice-qa"
+    multiple_choice_concat_qa = "multiple-choice-concat-qa"
+    multiple_choice_flat_concat_qa = "multiple-choice-flat_concat-qa"

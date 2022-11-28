@@ -1,5 +1,7 @@
 import string
+from typing import Optional
 
+import loguru
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 from tokenizers.normalizers import BertNormalizer
@@ -19,6 +21,15 @@ SPECIAL_TOKENS = {
     "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
 }
 
+CHAR_SPECIAL_TOKENS = {
+    "pad_token": "[PAD]",
+    "unk_token": "[UNK]",
+    "sep_token": "[SEP]",
+    "mask_token": "[MASK]",
+    "cls_token": "[CLS]",
+    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
+}
+
 # lookup the base version of the tokenizer name to avoid duplicating dataset preprocessing
 TOKENIZERS_MAPPING = {
     "bert-large-cased": "bert-base-cased",
@@ -34,24 +45,29 @@ TOKENIZERS_MAPPING = {
 }
 
 
-def init_pretrained_tokenizer(*, model_id: str, **kwargs) -> PreTrainedTokenizerFast:
+def init_pretrained_tokenizer(
+    *,
+    model_id: str,
+    add_special_tokens: bool = True,
+    set_padding_side: Optional[str] = None,
+    pad_token: Optional[str] = None,
+    **kwargs,
+) -> PreTrainedTokenizerFast:
     """Load a HuggingFace Pretrained Tokenizer and add the special tokens."""
     model_id = TOKENIZERS_MAPPING.get(model_id, model_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id, **kwargs)
-    tokenizer.add_special_tokens(SPECIAL_TOKENS)
+    if add_special_tokens:
+        tokenizer.add_special_tokens(SPECIAL_TOKENS)
+    if pad_token is not None:
+        if pad_token == "tokenizer.eos_token":
+            tokenizer.pad_token = tokenizer.eos_token
+        else:
+            tokenizer.pad_token = pad_token
     tokenizer.sanitize_special_tokens()
-    # test_special_token_encoding(tokenizer)
+    if set_padding_side is not None:
+        loguru.logger.info(f"Setting tokenizer padding size to `{set_padding_side}`")
+        tokenizer.padding_side = set_padding_side
     return tokenizer
-
-
-CHAR_SPECIAL_TOKENS = {
-    "pad_token": "[PAD]",
-    "unk_token": "[UNK]",
-    "sep_token": "[SEP]",
-    "mask_token": "[MASK]",
-    "cls_token": "[CLS]",
-    "additional_special_tokens": ADDITIONAL_SPECIAL_TOKENS,
-}
 
 
 def init_char_tokenizer() -> PreTrainedTokenizerFast:
@@ -77,22 +93,3 @@ def init_char_tokenizer() -> PreTrainedTokenizerFast:
     tokenizer.sanitize_special_tokens()
 
     return tokenizer
-
-
-def test_special_token_encoding(tokenizer: PreTrainedTokenizerFast):
-    text = "hello world!"
-    for t in [QUERY_TOKEN, DOC_TOKEN, ANS_TOKEN, QUERY_MASK]:
-        t_id = tokenizer.get_vocab()[t]
-        tokens = tokenizer(f"{t}{text}", add_special_tokens=True).input_ids
-        if not tokens[0] in (tokenizer.cls_token_id, tokenizer.bos_token_id):
-            decoded = tokenizer.decode([tokens[0]])
-            raise ValueError(
-                f"{tokens[0]}={decoded} is not {tokenizer.cls_token} or {tokenizer.bos_token}"
-            )
-        if not tokens[-1] in (tokenizer.sep_token_id, tokenizer.eos_token_id):
-            decoded = tokenizer.decode([tokens[-1]])
-            raise ValueError(
-                f"{tokens[-1]}={decoded} is not {tokenizer.sep_token} or {tokenizer.eos_token}"
-            )
-        assert tokens[1] == t_id
-        assert text == tokenizer.decode(tokens, skip_special_tokens=True)

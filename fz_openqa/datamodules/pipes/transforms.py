@@ -1,4 +1,3 @@
-import string
 import warnings
 from typing import Dict
 from typing import List
@@ -9,7 +8,6 @@ import torch.nn.functional as F
 from datasets import Split
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Batch
-from warp_pipes import Eg
 from warp_pipes import Flatten
 from warp_pipes import Nest
 from warp_pipes import Pipe
@@ -19,7 +17,8 @@ from warp_pipes.support.functional import iter_batch_egs
 from warp_pipes.support.shapes import infer_shape
 
 from fz_openqa.datamodules.builders.utils.format_row import infer_scenario
-from fz_openqa.datamodules.builders.utils.format_row import Scenario
+from fz_openqa.datamodules.utils.datastruct import Scenario
+from fz_openqa.modeling.templates import LanguageModellingTemplateGenerator
 
 
 class Transform(Pipe):
@@ -274,59 +273,6 @@ class StripAnswer(Pipe):
         }
 
 
-class LanguageModellingTemplate:
-    def __init__(
-        self,
-        scenario: Scenario,
-        question_field: str = "question",
-        answer_field: str = "answer",
-        document_field: str = "document",
-    ):
-        self.scenario = scenario
-        self.q_key = f"{question_field}.text"
-        self.a_key = f"{answer_field}.text"
-        self.d_key = f"{document_field}.text"
-        self.a_target_key = f"{answer_field}.target"
-        self.required_keys = [self.q_key, self.a_key]
-        if scenario == Scenario.multiple_choice_qa:
-            self.required_keys.append(self.a_target_key)
-
-    def __call__(self, eg: Eg) -> str:
-        input_keys = set(eg.keys())
-        if not input_keys.issuperset(self.required_keys):
-            raise ValueError(f"Requires keys {self.required_keys}. Found {eg.keys()}")
-
-        canvas = ""
-        if self.d_key in eg:
-            doc = eg[self.d_key]
-            if not isinstance(doc, str):
-                raise ValueError(f"Document should be a string, found {type(doc)}")
-            canvas += f"Context: {doc}\n\n"
-
-        if self.scenario == Scenario.generative_qa:
-            canvas += f"Q: {eg[self.q_key]}\nA: {eg[self.a_key]}"
-        elif self.scenario == Scenario.multiple_choice_qa:
-            canvas += f"Q: {eg[self.q_key]}\n\n"
-            letters = string.ascii_letters.upper()
-            ans_repr = []
-            for letter, opt in zip(letters, eg[self.a_key]):
-                ans_repr.append(f"({letter}) {opt}")
-            canvas += " ".join(ans_repr)
-
-            target = eg[self.a_target_key]
-            canvas += f"\n\nA: The answer is ({letters[target]}) {eg[self.a_key][target]}"
-        elif self.scenario == Scenario.multiple_choice_concat_qa:
-            raise ValueError(
-                "Template cannot be used for this scenario. "
-                "You must run the template with scenario "
-                "`Scenario.generative_qa` for each question-answer pair."
-            )
-        else:
-            raise ValueError(f"Unknown scenario {self.scenario}")
-
-        return canvas
-
-
 class LanguageModellingTransform(Pipe):
     """Language modeling task"""
 
@@ -360,6 +306,8 @@ class LanguageModellingTransform(Pipe):
         tokenizer_kwargs_ = {
             "return_tensors": "pt",
             "padding": True,
+            "truncation": True,
+            "return_token_type_ids": True,
         }
         if tokenizer_kwargs is not None:
             tokenizer_kwargs_ = {**tokenizer_kwargs_, **tokenizer_kwargs}
@@ -386,21 +334,30 @@ class LanguageModellingTransform(Pipe):
 
         eg = {k: v[0] for k, v in batch.items()}
         scenario: Scenario = infer_scenario(eg)
-        template = LanguageModellingTemplate(
+        template_generator = LanguageModellingTemplateGenerator(
             scenario=scenario, question_field=self.question_field, answer_field=self.answer_field
         )
 
         # convert the question, answer and document texts into a single string
-        # using the `template`.
-        texts = [template(eg) for eg in iter_batch_egs(batch)]
+        # using the `template_generator`.
+        templates = [template_generator(eg) for eg in iter_batch_egs(batch)]
 
         # tokenize
-        output = self.tokenizer(texts, **self.tokenizer_kwargs)
+        questions, answers = zip(*[(t.question, t.answer) for t in templates])
+        if all(a is None for a in answers):
+            tokenizer_args = (questions,)
+        else:
+            answers = [f"{a}{self.tokenizer.eos_token}" for a in answers]
+            tokenizer_args = (questions, answers)
+        output = self.tokenizer(*tokenizer_args, **self.tokenizer_kwargs)
         output = {f"{self.output_field}.{k}": v for k, v in output.items()}
-        output[f"{self.output_field}.text"] = texts
+        output[f"{self.output_field}.text"] = [t.text for t in templates]
+
+        # pprint_batch(output, "transform::output")
 
         # reshape the output
         output = Nest(shape=question_shape)(output)
+
         return output
 
     @staticmethod
@@ -461,4 +418,5 @@ class LanguageModellingTransform(Pipe):
                 batch = Nest(shape=target_shape[:-1])(batch)
             if answer_target is not None:
                 batch[f"{self.answer_field}.target"] = answer_target
+
             return batch

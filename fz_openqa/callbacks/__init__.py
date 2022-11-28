@@ -1,3 +1,4 @@
 from .cleanable_checkpoint import CleanableCheckpoint
+from .generate_completion import GenerateCompletionsCallback
 from .log_predictions import LogPredictions
 from .pympler_callback import PymplerCallback

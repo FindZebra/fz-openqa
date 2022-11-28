@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import Optional
 
 import torch
@@ -7,13 +6,7 @@ from warp_pipes import Eg
 from warp_pipes.support.pretty import pretty_decode
 from warp_pipes.support.shapes import infer_shape
 
-
-class Scenario(Enum):
-    none = "none"
-    generative_qa = "generative-qa"
-    multiple_choice_qa = "multiple-choice-qa"
-    multiple_choice_concat_qa = "multiple-choice-concat-qa"
-    multiple_choice_flat_concat_qa = "multiple-choice-flat_concat-qa"
+from fz_openqa.datamodules.utils.datastruct import Scenario
 
 
 def infer_field_dim(eg: Eg, field: str) -> Optional[int]:

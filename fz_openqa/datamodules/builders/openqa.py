@@ -8,13 +8,14 @@ from typing import List
 from typing import Optional
 
 import pytorch_lightning as pl
-import rich
 from datasets import DatasetDict
 from omegaconf import DictConfig
 from omegaconf import ListConfig
 from warp_pipes import ApplyAsFlatten
+from warp_pipes import Batch
 from warp_pipes import BlockSequential
 from warp_pipes import CollateField
+from warp_pipes import FilterKeys
 from warp_pipes import HfDataset
 from warp_pipes import Index
 from warp_pipes import Pipe
@@ -242,6 +243,25 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Sample documents", self.sampler),
                 ("Fetch document data", fetch_documents),
                 ("Transform", self.transform),
+                # TODO: remove this once the `collate_fn` is fixed
+                (
+                    "Cleanup",
+                    FilterKeys(
+                        In(
+                            [
+                                "lm.input_ids",
+                                "lm.attention_mask",
+                                "lm.token_type_ids",
+                                "question.input_ids",
+                                "question.attention_mask",
+                                "document.input_ids",
+                                "document.attention_mask",
+                                "document.proposal_score",
+                                "document.proposal_log_weight",
+                            ]
+                        )
+                    ),
+                ),
             ],
             id="collate-pipeline",
             pprint=False,

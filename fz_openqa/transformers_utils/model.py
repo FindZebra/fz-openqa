@@ -8,7 +8,9 @@ from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizer
 
 
-def extend_vocabulary(model: PreTrainedModel, *, tokenizer: PreTrainedTokenizer) -> PreTrainedModel:
+def extend_vocabulary_fn(
+    model: PreTrainedModel, *, tokenizer: PreTrainedTokenizer
+) -> PreTrainedModel:
     if model.get_input_embeddings().weight.shape[0] != len(tokenizer):
         logger.info(
             f"Extending vocabulary of model {type(model)} from "
@@ -24,13 +26,15 @@ def init_pretrained_model(
     *,
     Cls: Type[PreTrainedModel] = AutoModel,
     tokenizer: PreTrainedTokenizer,
+    extend_vocabulary: bool = True,
     **kwargs,
 ) -> PreTrainedModel:
     """Load a pretrained model from the HuggingFace model hub."""
     if isinstance(Cls, str):
         Cls = _resolve_target(Cls, Cls)
     model = Cls.from_pretrained(model_id, **kwargs)
-    model = extend_vocabulary(model, tokenizer=tokenizer)
+    if extend_vocabulary:
+        model = extend_vocabulary_fn(model, tokenizer=tokenizer)
     model = handle_special_cases(model_id, model)
     return model
 

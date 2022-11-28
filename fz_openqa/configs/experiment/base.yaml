@@ -16,7 +16,7 @@ base:
   target_metric: ???
   target_mode: ???
   exp_info: ""
-  version: 2.0
+  version: 0.3.0
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 8

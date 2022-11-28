@@ -1,5 +1,5 @@
 _target_: fz_openqa.transformers_utils.init_pretrained_tokenizer
 model_id: ${model.retriever.model_id}
-Cls: AutoModelForSequenceClassification
 use_fast: True
 cache_dir: ${sys.shared_cache_dir}
+add_special_tokens: ${datamodule.add_qad_tokens}

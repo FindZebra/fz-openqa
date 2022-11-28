@@ -3,3 +3,4 @@ model_id: ${model.retriever_id}
 Cls: transformers.BertModel
 cache_dir: ${sys.shared_cache_dir}
 tokenizer: ${datamodule.tokenizer}
+extend_vocabulary: ${datamodule.add_qad_tokens}

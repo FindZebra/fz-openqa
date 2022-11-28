@@ -1,4 +1,5 @@
 import abc
+import warnings
 from enum import Enum
 from typing import Dict
 from typing import List
@@ -9,7 +10,6 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import validate_arguments
 from torch import nn
-from warp_pipes import pprint_batch
 
 
 class GradientsInput(BaseModel):
@@ -24,12 +24,12 @@ class GradientsInput(BaseModel):
         alias="lm.logp",
         description="Log probability of the reader model",
     )
-    document_vector: torch.Tensor = Field(
+    document_vector: Optional[torch.Tensor] = Field(
         ...,
         alias="document.pooler_output",
         description="Document vector",
     )
-    question_vector: torch.Tensor = Field(
+    question_vector: Optional[torch.Tensor] = Field(
         ...,
         alias="question.pooler_output",
         description="Question vector",
@@ -101,7 +101,15 @@ class Gradients(nn.Module):
         # compute the document score
         hd = data.document_vector
         hq = data.question_vector
-        retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
+        if hd is None or hq is None:
+            warnings.warn(
+                "Document or question vector is None, "
+                "setting the retriever score to zero for"
+                "Gradient computation."
+            )
+            retriever_score = torch.zeros_like(data.f_phi)
+        else:
+            retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
         return GradientsStepOutput(f_theta=retriever_score, **data.dict())
 
     @validate_arguments
