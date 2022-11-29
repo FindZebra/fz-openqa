@@ -1,0 +1,6 @@
+log_retrieved_documents:
+  _target_: fz_openqa.callbacks.LogRetrievedDocumentsCallback
+  tokenizer: ${datamodule.tokenizer}
+  log_dir: ${getcwd:}/retrieved_documents/
+  top_k: 5
+  n_samples: 20

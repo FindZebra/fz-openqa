@@ -106,8 +106,8 @@ class Gradients(nn.Module):
         if hd is None or hq is None:
             warnings.warn(
                 "Document or question vector is None, "
-                "setting the retriever score to zero for"
-                "Gradient computation."
+                "setting the retriever score to zero for "
+                f"`{type(self).__name__}` computation."
             )
             retriever_score = torch.zeros_like(data.f_phi)
         else:

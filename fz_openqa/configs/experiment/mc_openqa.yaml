@@ -18,7 +18,7 @@ defaults:
   - override /callbacks:
       - checkpoint
       - lr_monitor
-      - log_predictions
+      - log_retrieved_documents
       - generate_completions
       - progress_bar
 

@@ -21,6 +21,7 @@ from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Batch
 
+from fz_openqa.modeling.datastruct import METRIC_PREFIX
 from fz_openqa.modeling.modules.utils.backbone import extend_backbone_embeddings
 from fz_openqa.modeling.modules.utils.metrics import SafeMetricCollection
 from fz_openqa.modeling.modules.utils.metrics import SplitMetrics
@@ -32,11 +33,9 @@ from fz_openqa.transformers_utils.tokenizer import TRUNCATED_TOKEN
 from fz_openqa.utils.functional import batch_reduce
 from fz_openqa.utils.functional import maybe_instantiate
 
-re_feature_pattern = re.compile(r"^_[^_]+_$")
-
 
 def is_feature_name(x):
-    return re_feature_pattern.match(x)
+    return str(x).startswith(METRIC_PREFIX)
 
 
 class Module(nn.Module, ABC):

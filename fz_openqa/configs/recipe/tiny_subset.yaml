@@ -4,6 +4,8 @@ model:
   retriever_id: prajjwal1/bert-tiny
   reader_id: sshleifer/tiny-gpt2
 
+trainer:
+  val_check_interval: 1.0
 
 datamodule:
   corpus_name: medqa

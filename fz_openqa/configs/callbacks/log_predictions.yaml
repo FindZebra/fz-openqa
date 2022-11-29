@@ -1,4 +1,0 @@
-log_predictions:
-  _target_: fz_openqa.callbacks.log_predictions.LogPredictions
-  tokenizer: ${datamodule.tokenizer}
-  log_dir: ${getcwd:}/predictions/

@@ -9,7 +9,7 @@ base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 2
-  infer_batch_mul: 1000
+  infer_batch_mul: 600
   target_mode: max
   target_metric: validation/reader/logp
 

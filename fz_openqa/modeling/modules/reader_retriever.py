@@ -18,16 +18,18 @@ from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from warp_pipes import Batch
 from warp_pipes import pprint_batch
 
+from fz_openqa.modeling.datastruct import GRAD_PREFIX
+from fz_openqa.modeling.datastruct import METRIC_PREFIX
 from fz_openqa.modeling.datastruct import ReaderRetrieverInputs
+from fz_openqa.modeling.datastruct import STATS_PREFIX
 from fz_openqa.modeling.gradients import Gradients
 from fz_openqa.modeling.gradients import RenyiGradients
 from fz_openqa.modeling.gradients.base import GradientsOutput
+from fz_openqa.modeling.modules.base import is_feature_name
 from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
 
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
-STATS_PREFIX = "stats::"
-GRAD_PREFIX = "grad::"
 
 
 def _add_prefix(prefix: str, x: Dict) -> Dict:
@@ -240,7 +242,7 @@ class ReaderRetriever(Module):
                 v = v.detach()
 
             # average loss terms, except the terms transmitted to the metrics
-            if not str(k).startswith("_") and not str(k).endswith("_"):
+            if k != "loss" and not is_feature_name(k):
                 if isinstance(v, torch.Tensor):
                     v = v.float().mean()
 
@@ -257,15 +259,15 @@ class ReaderRetriever(Module):
         """update the metrics of the given split."""
 
         # log the reader accuracy
-        reader_logits = output.get("_reader_logits_", None)
-        reader_targets = output.get("_reader_targets_", None)
+        reader_logits = output.get(f"{METRIC_PREFIX}reader.logits", None)
+        reader_targets = output.get(f"{METRIC_PREFIX}reader.targets", None)
         if reader_targets is not None:
             if reader_logits is not None:
                 self.reader_metrics.update(split, reader_logits, reader_targets)
 
         # log the retriever accuracy
-        retriever_logits = output.get("_retriever_logits_", None)
-        retriever_targets = output.get("_retriever_binary_targets_", None)
+        retriever_logits = output.get(f"{METRIC_PREFIX}retriever.logits", None)
+        retriever_targets = output.get(f"{METRIC_PREFIX}retriever.targets", None)
         if retriever_logits is not None and retriever_logits.numel() > 0:
             if retriever_targets is not None:
                 self.retriever_metrics.update(split, retriever_logits, retriever_targets)

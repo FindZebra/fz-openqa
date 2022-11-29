@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Retrieved documents</title>
+    <link rel="stylesheet"
+          href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <style>
+        .question {
+            background-color: #eee;
+            padding: 10px;
+        }
+        .documents {
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    {% for data in instances %}
+    <div class="row">
+        <div class="question">
+        <h2>Question {{ loop.index }} ({{ info }})</h2>
+        {{ data.question }}
+        </div>
+        <div class="documents">
+            <ul>
+                {% for doc in data.documents %}
+                <li>
+                    <strong>
+                        Document
+                        ({{ loop.index }},
+                        retriever_score: {{ doc.retriever_score }},
+                        proposal_score: {{ doc.proposal_score }})
+                    </strong>
+                    {{ doc.text }}
+                </li>
+
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+</body>
+</html>

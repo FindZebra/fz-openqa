@@ -8,6 +8,10 @@ from pydantic import BaseModel
 from pydantic import root_validator
 from pydantic.fields import Field
 
+STATS_PREFIX = "stats::"
+GRAD_PREFIX = "grad::"
+METRIC_PREFIX = "metric::"
+
 
 class TokenizedField(BaseModel):
     """Represents a tokenized text field."""
@@ -20,7 +24,7 @@ class TokenizedField(BaseModel):
     token_type_ids: Optional[torch.Tensor] = None
 
     def stats(self) -> Dict:
-        return {"length": self.input_ids.shape[-1]}
+        return {"length": float(self.input_ids.shape[-1])}
 
 
 class DocumentTokenizedField(TokenizedField):
@@ -33,13 +37,14 @@ class DocumentTokenizedField(TokenizedField):
         description="Importance-sampling log-weight of the proposal distribution",
     )
 
+    @torch.no_grad()
     def stats(self) -> Dict:
         output = super().stats()
         if self.proposal_score is not None:
             proposal_log_probs = torch.log_softmax(self.proposal_score, dim=-1)
 
             entropy = -torch.sum(torch.exp(proposal_log_probs) * proposal_log_probs, dim=-1)
-            output["proposal_entropy"] = entropy.mean().item()
+            output["proposal_entropy"] = entropy.mean()
         return output
 
 

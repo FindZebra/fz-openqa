@@ -33,7 +33,7 @@ index_cache_config:
 
 query_cache_config:
   cache_dir: ${sys.cache_dir}
-  model_output_key: query.pooler_output
+  model_output_key: question.pooler_output
   dtype: float16
   loader_kwargs:
     batch_size: 100
