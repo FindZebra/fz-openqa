@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from functools import singledispatch
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -17,6 +18,7 @@ from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from warp_pipes import Batch
 from warp_pipes import pprint_batch
 
+from fz_openqa.modeling.datastruct import ReaderRetrieverInputs
 from fz_openqa.modeling.gradients import Gradients
 from fz_openqa.modeling.gradients import RenyiGradients
 from fz_openqa.modeling.gradients.base import GradientsOutput
@@ -24,6 +26,16 @@ from fz_openqa.modeling.modules.base import Module
 from fz_openqa.utils import maybe_instantiate
 
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
+STATS_PREFIX = "stats::"
+GRAD_PREFIX = "grad::"
+
+
+def _add_prefix(prefix: str, x: Dict) -> Dict:
+    return {prefix + k: v for k, v in x.items()}
+
+
+def _with_prefix(prefix: str, x: Dict) -> Dict:
+    return {k[len(prefix) :]: v for k, v in x.items() if k.startswith(prefix)}
 
 
 class ReaderRetriever(Module):
@@ -61,6 +73,7 @@ class ReaderRetriever(Module):
         retriever_fields: str | List[str] = None,
         reader_fields: str = "lm",
         skip_retriever: bool = False,
+        skip_reader: bool = False,
         gradients: Gradients | DictConfig = None,
         **kwargs,
     ):
@@ -71,6 +84,7 @@ class ReaderRetriever(Module):
         if isinstance(reader_fields, str):
             reader_fields = [reader_fields]
         self.reader_fields = reader_fields
+        self.skip_reader = skip_reader
         if retriever_fields is None:
             retriever_fields = ["document", "question"]
         if isinstance(retriever_fields, str):
@@ -93,28 +107,50 @@ class ReaderRetriever(Module):
         # init the estimator
         self.gradients: Gradients = maybe_instantiate(gradients)
 
-    def _forward(self, batch: Batch, **kwargs) -> Batch:
-        output = {}
-        # field_names = {"question", "document"}
+    def _forward(
+        self,
+        batch: Batch,
+        skip_reader: bool = True,
+        skip_retriever: bool = False,
+        strict: bool = False,
+        **kwargs,
+    ) -> Batch:
+        models_outputs = {}
+        # process the batch with the reader
+        if not skip_reader:
+            reader_output = self._process_with_transformer(
+                self.reader, batch, self.reader_fields, strict=strict
+            )
+            models_outputs.update(reader_output)
 
-        return output
+        # process the batch with the retriever
+        if not skip_retriever:
+            retriever_output = self._process_with_transformer(
+                self.retriever, batch, self.retriever_fields, strict=strict
+            )
+            models_outputs.update(retriever_output)
+
+        return models_outputs
 
     @staticmethod
     def _process_with_transformer(
         model: PreTrainedModel,
         batch: Batch,
         fields: List[str],
+        strict: bool = True,
     ) -> Batch:
         keys = ["input_ids", "attention_mask"]
         output = {}
         for field in fields:
             in_keys = [f"{field}.{k}" for k in keys]
             if not set(in_keys).issubset(batch.keys()):
-                raise ValueError(
-                    f"Missing keys {set(in_keys) - set(batch.keys())}"
-                    f" in batch for field {field}. "
-                    f"Found keys: {batch.keys()}"
-                )
+                if strict:
+                    raise ValueError(
+                        f"Missing keys {set(in_keys) - set(batch.keys())} "
+                        f"in batch for field {field}. "
+                        f"Found keys: {batch.keys()}"
+                    )
+                continue
             batch_field = {k.replace(f"{field}.", ""): batch[k] for k in in_keys}
             ref_shape = batch_field["input_ids"].shape[:-1]
             batch_field = {k: v.view(-1, *v.shape[-1:]) for k, v in batch_field.items()}
@@ -141,57 +177,66 @@ class ReaderRetriever(Module):
         """
         Compute the forward pass for the question and the documents.
         """
+
+        inputs = ReaderRetrieverInputs(**batch)
+
         pprint_batch(batch, "ReaderRetriever::_step::batch", silent=silent)
-        models_outputs = {}
-        # process the batch with the reader
-        reader_output = self._process_with_transformer(self.reader, batch, self.reader_fields)
-        models_outputs.update(reader_output)
-
-        # process the batch with the retriever
-        if not self.skip_retriever:
-            retriever_output = self._process_with_transformer(
-                self.retriever, batch, self.retriever_fields
-            )
-            models_outputs.update(retriever_output)
-        else:
-            models_outputs.update({"document.pooler_output": None, "question.pooler_output": None})
-
+        models_outputs = self._forward(
+            inputs.flatten(),
+            skip_reader=self.skip_reader,
+            skip_retriever=self.skip_retriever,
+            strict=True,
+            **kwargs,
+        )
         pprint_batch(models_outputs, "ReaderRetriever::_step::models_outputs", silent=silent)
 
         # compute the gradients
         gradient_step_output = self.gradients.step(
-            data={
+            {
                 **models_outputs,
                 **batch,
                 **kwargs,
             }
         )
 
-        pprint_batch(gradient_step_output, "ReaderRetriever::_step::gradient_output", silent=silent)
-
-        return gradient_step_output.dict()
+        # prepare the output
+        step_output = {
+            **_add_prefix(STATS_PREFIX, inputs.stats()),
+            **_add_prefix(GRAD_PREFIX, gradient_step_output.dict()),
+        }
+        pprint_batch(step_output, "ReaderRetriever::_step::step_output", silent=silent)
+        return step_output
 
     def _reduce_step_output(self, step_output: Batch) -> Batch:
         """
         Gather scores and compute the gradients
         """
-        output: GradientsOutput = self.gradients.step_end(step_output)
-        output: Batch = output.dict()
-
         pprint_batch(
-            output,
-            "ReaderRetriever::_reduce_step_output::gradient_output",
+            step_output,
+            "ReaderRetriever::_step_output::step_output",
             silent=not VERBOSE_MODEL,
         )
 
-        # average losses
+        output = _with_prefix(STATS_PREFIX, step_output)
+        output_grad: GradientsOutput = self.gradients.step_end(
+            _with_prefix(GRAD_PREFIX, step_output)
+        )
+        output.update(output_grad.dict())
+
+        pprint_batch(
+            output,
+            "ReaderRetriever::_reduce_step_output::output",
+            silent=not VERBOSE_MODEL,
+        )
+
+        # average losses and detach grads
         for k, v in output.items():
+            if k != "loss" and isinstance(v, torch.Tensor):
+                v = v.detach()
             if not str(k).startswith("_") and not str(k).endswith("_"):
                 if isinstance(v, torch.Tensor):
                     v = v.float().mean()
-                output[k] = v
-
-        # rich.print(f'>> loss: {output["loss"]}')
+            output[k] = v
 
         pprint_batch(output, "reduce_step_output::final_output", silent=not VERBOSE_MODEL)
 

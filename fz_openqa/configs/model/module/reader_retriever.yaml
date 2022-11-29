@@ -6,3 +6,5 @@ defaults:
 _id: reader_retriever
 reader_fields: lm
 retriever_fields: [question, document]
+skip_retriever: false
+skip_reader: false

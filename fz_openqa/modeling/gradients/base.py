@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import warnings
 from enum import Enum
@@ -8,7 +10,6 @@ from typing import Optional
 import torch
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import validate_arguments
 from torch import nn
 
 
@@ -25,12 +26,12 @@ class GradientsInput(BaseModel):
         description="Log probability of the reader model",
     )
     document_vector: Optional[torch.Tensor] = Field(
-        ...,
+        None,
         alias="document.pooler_output",
         description="Document vector",
     )
     question_vector: Optional[torch.Tensor] = Field(
-        ...,
+        None,
         alias="question.pooler_output",
         description="Question vector",
     )
@@ -96,8 +97,9 @@ class Gradients(nn.Module):
         output = self.step_end(step_output)
         return output
 
-    @validate_arguments
-    def step(self, data: GradientsInput) -> GradientsStepOutput:
+    def step(self, data: Dict | GradientsInput) -> GradientsStepOutput:
+        if isinstance(data, dict):
+            data = GradientsInput(**data)
         # compute the document score
         hd = data.document_vector
         hq = data.question_vector
@@ -112,8 +114,9 @@ class Gradients(nn.Module):
             retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
         return GradientsStepOutput(f_theta=retriever_score, **data.dict())
 
-    @validate_arguments
-    def step_end(self, step_output: GradientsStepOutput) -> GradientsOutput:
+    def step_end(self, step_output: Dict | GradientsStepOutput) -> GradientsOutput:
+        if isinstance(step_output, dict):
+            step_output = GradientsStepOutput(**step_output)
         return self._step_end(step_output)
 
     @abc.abstractmethod

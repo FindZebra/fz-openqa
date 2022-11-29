@@ -1,3 +1,4 @@
+import os
 from typing import Type
 
 import torch
@@ -32,6 +33,10 @@ def init_pretrained_model(
     **kwargs,
 ) -> PreTrainedModel:
     """Load a pretrained model from the HuggingFace model hub."""
+    if "DISABLE_OPTIMUM" in os.environ:
+        logger.info("Optimum is disabled.")
+        use_optimum = False
+
     if isinstance(Cls, str):
         Cls = _resolve_target(Cls, Cls)
     model = Cls.from_pretrained(model_id, **kwargs)

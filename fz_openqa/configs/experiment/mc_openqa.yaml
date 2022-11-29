@@ -69,8 +69,6 @@ model:
   # Module definition
   module:
     skip_retriever: false
-    gradients:
-      cartesian_max_size: ${eval:"1<<20"}
 
 
 datamodule:
@@ -126,11 +124,11 @@ datamodule:
   # document sampler
   sampler:
     config:
+      temperature: 1
       total:
         train: ${datamodule.n_documents}
         validation: ${datamodule.n_documents}
         test: ${datamodule.n_documents}
-    temperature: 1
 
   # OpenQA builder parameters
   builder:

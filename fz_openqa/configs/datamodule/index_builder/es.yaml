@@ -24,7 +24,7 @@ engines:
 
 index_cache_config:
   cache_dir: ${sys.cache_dir}
-  model_output_key: _hd_
+  model_output_key: document.pooler_output
   dtype: float16
   loader_kwargs:
     batch_size: 100
@@ -33,7 +33,7 @@ index_cache_config:
 
 query_cache_config:
   cache_dir: ${sys.cache_dir}
-  model_output_key: _hq_
+  model_output_key: query.pooler_output
   dtype: float16
   loader_kwargs:
     batch_size: 100
