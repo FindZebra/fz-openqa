@@ -91,6 +91,7 @@ datamodule:
   corpus_name: medwiki
   corpus_max_length: 200
   add_qad_tokens: false
+  lm_max_length: 800
   num_proc: 16
   output_columns:
     - answer.text

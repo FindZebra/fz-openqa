@@ -15,7 +15,6 @@ from pytorch_lightning.utilities import move_data_to_device
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Batch
-from warp_pipes import pprint_batch
 from warp_pipes.support.pretty import get_console_separator
 
 import wandb
@@ -94,7 +93,6 @@ class GenerateCompletionsCallback(Callback):
         # fetch, reshape and clone the input data
         batch = {k.replace("lm.", ""): v for k, v in batch.items() if k.startswith("lm.")}
         batch = {k: v.view(-1, v.size(-1))[: self.n_samples] for k, v in batch.items()}
-        pprint_batch(batch, "GenerateCompletionsCallback")
 
         questions, answers = self.separate_questions_and_answers(batch)
         answer_max_length = batch["input_ids"].size(1) - questions["input_ids"].size(1)

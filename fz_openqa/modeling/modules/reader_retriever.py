@@ -217,7 +217,10 @@ class ReaderRetriever(Module):
             silent=not VERBOSE_MODEL,
         )
 
+        # retrieve the stats
         output = _with_prefix(STATS_PREFIX, step_output)
+
+        # compute the gradients (step_end)
         output_grad: GradientsOutput = self.gradients.step_end(
             _with_prefix(GRAD_PREFIX, step_output)
         )
@@ -229,18 +232,25 @@ class ReaderRetriever(Module):
             silent=not VERBOSE_MODEL,
         )
 
-        # average losses and detach grads
+        # preprare the final output
+        final_output = {}
         for k, v in output.items():
+            # detach all grads, except the loss
             if k != "loss" and isinstance(v, torch.Tensor):
                 v = v.detach()
+
+            # average loss terms, except the terms transmitted to the metrics
             if not str(k).startswith("_") and not str(k).endswith("_"):
                 if isinstance(v, torch.Tensor):
                     v = v.float().mean()
-            output[k] = v
 
-        pprint_batch(output, "reduce_step_output::final_output", silent=not VERBOSE_MODEL)
+            # format name and store
+            k = k.replace(".", "/")
+            final_output[k] = v
 
-        return output
+        pprint_batch(final_output, "reduce_step_output::final_output", silent=not VERBOSE_MODEL)
+
+        return final_output
 
     @torch.no_grad()
     def update_metrics(self, output: Batch, split: Split) -> None:

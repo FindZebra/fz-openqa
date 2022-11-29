@@ -3,6 +3,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -349,11 +350,10 @@ class LanguageModellingTransform(Pipe):
         else:
             answers = [f"{a}{self.tokenizer.eos_token}" for a in answers]
             tokenizer_args = (questions, answers)
+
         output = self.tokenizer(*tokenizer_args, **self.tokenizer_kwargs)
         output = {f"{self.output_field}.{k}": v for k, v in output.items()}
         output[f"{self.output_field}.text"] = [t.text for t in templates]
-
-        # pprint_batch(output, "transform::output")
 
         # reshape the output
         output = Nest(shape=question_shape)(output)
