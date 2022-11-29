@@ -1,0 +1,13 @@
+# @package _global_
+
+model:
+  retriever_id: prajjwal1/bert-tiny
+  reader_id: sshleifer/tiny-gpt2
+
+
+datamodule:
+  corpus_name: medqa
+  corpus_subset_size: 2
+  subset_size: 100
+  num_proc: 4
+  num_workers: 0
