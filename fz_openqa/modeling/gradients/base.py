@@ -94,6 +94,11 @@ class GradientsStepOutput(BaseModel):
         alias="document.proposal_log_weight",
         description="Log importance weight of the proposal distribution",
     )
+    retriever_entropy: torch.Tensor = Field(
+        ...,
+        alias="document.retriever_entropy",
+        description="Entropy of the retriever",
+    )
 
 
 class GradientsOutput(BaseModel):
@@ -103,7 +108,15 @@ class GradientsOutput(BaseModel):
         arbitrary_types_allowed = True
         allow_population_by_field_name = True
 
-    loss: torch.Tensor
+    loss: torch.Tensor = Field(
+        ...,
+        description="Final loss to be differentiated. Shape is (batch_size,).",
+    )
+    retriever_entropy: torch.Tensor = Field(
+        ...,
+        alias="document.retriever_entropy",
+        description="Entropy of the retriever",
+    )
 
 
 class Gradients(nn.Module):
@@ -120,9 +133,12 @@ class Gradients(nn.Module):
     def step(self, data: Dict | GradientsInput) -> GradientsStepOutput:
         if isinstance(data, dict):
             data = GradientsInput(**data)
-        # compute the document score
+
+        # get the document and question embeddings
         hd = data.document_vector
         hq = data.question_vector
+
+        # compute the inner product between the document and question embeddings
         if hd is None or hq is None:
             warnings.warn(
                 "Document or question vector is None, "
@@ -132,7 +148,11 @@ class Gradients(nn.Module):
             retriever_score = torch.zeros_like(data.f_phi)
         else:
             retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
-        return GradientsStepOutput(f_theta=retriever_score, **data.dict())
+
+        # format the output
+        return GradientsStepOutput(
+            f_theta=retriever_score, **data.dict(), **self._get_retriever_metrics(retriever_score)
+        )
 
     def step_end(self, step_output: Dict | GradientsStepOutput) -> GradientsOutput:
         if isinstance(step_output, dict):
@@ -144,18 +164,12 @@ class Gradients(nn.Module):
         ...
 
     @staticmethod
-    def _get_relevance_metrics(retriever_scores, match_score: Optional[torch.Tensor]) -> Dict:
-        diagnostics = {}
-        if match_score is None:
-            return diagnostics
-        targets = (match_score > 0).view(-1, match_score.size(-1)).detach()
-        retriever_scores = retriever_scores.view(-1, retriever_scores.size(-1)).detach()
-        logits = retriever_scores.log_softmax(dim=-1)
-        diagnostics["_retriever_binary_targets_"] = targets
-        diagnostics["_retriever_logits_"] = logits
-        diagnostics["retrieval/n_total"] = torch.ones_like(targets.float()).sum(-1)
-        diagnostics["retrieval/n_positive"] = targets.float().sum(-1)
-        return diagnostics
+    def _get_retriever_metrics(retriever_scores) -> Dict:
+        retriever_log_probs = torch.log_softmax(retriever_scores, dim=-1)
+        entropy = -torch.sum(torch.exp(retriever_log_probs) * retriever_log_probs, dim=-1)
+        return {
+            "retriever_entropy": entropy.view(entropy.shape[0], -1).mean(dim=1),
+        }
 
     @staticmethod
     @torch.no_grad()
@@ -165,8 +179,3 @@ class Gradients(nn.Module):
         diagnostics[f"{key}/mean"] = log_ess.exp().mean()
         diagnostics[f"{key}/ratio-mean"] = log_ess.exp().mean() / K
         diagnostics[f"{key}/max"] = log_W.max().exp()
-
-
-class Space(Enum):
-    EXP = "exp"
-    LOG = "log"

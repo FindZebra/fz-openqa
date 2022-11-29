@@ -117,7 +117,7 @@ class GenerateCompletionsCallback(Callback):
         for i, gen in enumerate(generated):
             q_str = self.tokenizer.decode(gen[:in_q_len], **decode_kwargs)
             comp_str = self.tokenizer.decode(gen[in_q_len:], **decode_kwargs)
-            a_str = self.tokenizer.decode(answers["input_ids"][i], **decode_kwargs)
+            a_str = self.tokenizer.decode(answers["input_ids"][i], skip_special_tokens=False)
             comp = Completion(
                 question=q_str,
                 answer=a_str,

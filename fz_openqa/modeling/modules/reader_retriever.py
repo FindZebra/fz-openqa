@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from functools import singledispatch
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -31,6 +33,22 @@ from fz_openqa.utils import maybe_instantiate
 
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
 
+from functools import wraps
+
+
+def pprint_input_output(silent: bool = False, prefix: str = ""):
+    def pprint_input_output_(fn):
+        @wraps(fn)
+        def wrapper(self, batch: Batch, *args, **kwargs):
+            pprint_batch(batch, f"{prefix}{fn.__name__}::input (kwargs={kwargs})", silent=silent)
+            output: Batch = fn(self, batch, *args, **kwargs)
+            pprint_batch(output, f"{prefix}{fn.__name__}::output", silent=silent)
+            return output
+
+        return wrapper
+
+    return pprint_input_output_
+
 
 def _add_prefix(prefix: str, x: Dict) -> Dict:
     return {prefix + k: v for k, v in x.items()}
@@ -38,6 +56,31 @@ def _add_prefix(prefix: str, x: Dict) -> Dict:
 
 def _with_prefix(prefix: str, x: Dict) -> Dict:
     return {k[len(prefix) :]: v for k, v in x.items() if k.startswith(prefix)}
+
+
+def process_by_chunk(fn: Callable, batch: Batch, *, chunksize: Optional[int], **kwargs) -> Batch:
+    """Call `fn` on a batch of `torch.Tensor` by chunk `chunksize`."""
+
+    if chunksize is None:
+        return fn(batch, **kwargs)
+    else:
+        batch_size = next(iter(batch.values())).shape[0]
+        outputs = defaultdict(list)
+        for i in range(0, batch_size, chunksize):
+            chunk = {k: v[i : i + chunksize] for k, v in batch.items()}
+            out = fn(chunk, **kwargs)
+            for k, v in out.items():
+                outputs[k].append(v)
+        return {k: torch.cat(v, dim=0) for k, v in outputs.items()}
+
+
+def process_by_chunk_wrapper(fn):
+    @wraps(fn)
+    def wrapper(batch: Batch, chunksize: Optional[int] = None, **kwargs):
+        output: Batch = process_by_chunk(fn, batch, chunksize=chunksize, **kwargs)
+        return output
+
+    return wrapper
 
 
 class ReaderRetriever(Module):
@@ -77,6 +120,7 @@ class ReaderRetriever(Module):
         skip_retriever: bool = False,
         skip_reader: bool = False,
         gradients: Gradients | DictConfig = None,
+        eval_chunksize: Optional[int] = None,
         **kwargs,
     ):
         if gradients is None:
@@ -93,6 +137,7 @@ class ReaderRetriever(Module):
             retriever_fields = [retriever_fields]
         self.retriever_fields = retriever_fields
         self.skip_retriever = skip_retriever
+        self.eval_chunksize = eval_chunksize
 
         # register the heads
         self.reader: Optional[PreTrainedModel] = maybe_instantiate(reader)
@@ -101,7 +146,7 @@ class ReaderRetriever(Module):
         # TODO: handle pretrained VOD (remove tanh)
         # TODO: check that special tokens are encoded (CLS, SEP, PAD)
         # TODO: check that EOS token is appended
-        # TODO: implement `use token_type_ids` as mask
+        # TODO: output `token_type_ids` for document, question and answer
         self.retriever: Optional[PreTrainedModel] = maybe_instantiate(retriever)
 
         rich.print(f"Retriever: {type(self.retriever)}")
@@ -109,6 +154,7 @@ class ReaderRetriever(Module):
         # init the estimator
         self.gradients: Gradients = maybe_instantiate(gradients)
 
+    @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
     def _forward(
         self,
         batch: Batch,
@@ -117,35 +163,48 @@ class ReaderRetriever(Module):
         strict: bool = False,
         **kwargs,
     ) -> Batch:
+        process_kwargs = {
+            "strict": strict,
+            "chunksize": None if self.training else self.eval_chunksize,
+        }
         models_outputs = {}
         # process the batch with the reader
         if not skip_reader:
-            reader_output = self._process_with_transformer(
-                self.reader, batch, self.reader_fields, strict=strict
+            reader_output = self._process_fields_with_transformer(
+                batch,
+                model=self.reader,
+                fields=self.reader_fields,
+                **process_kwargs,
             )
             models_outputs.update(reader_output)
 
         # process the batch with the retriever
         if not skip_retriever:
-            retriever_output = self._process_with_transformer(
-                self.retriever, batch, self.retriever_fields, strict=strict
+            retriever_output = self._process_fields_with_transformer(
+                batch,
+                model=self.retriever,
+                fields=self.retriever_fields,
+                **process_kwargs,
             )
             models_outputs.update(retriever_output)
 
         return models_outputs
 
     @staticmethod
-    def _process_with_transformer(
-        model: PreTrainedModel,
+    def _process_fields_with_transformer(
         batch: Batch,
+        *,
+        model: PreTrainedModel,
         fields: List[str],
+        chunksize: Optional[int] = None,
         strict: bool = True,
     ) -> Batch:
         keys = ["input_ids", "attention_mask", "token_type_ids"]
         output = {}
         for field in fields:
             in_keys = [f"{field}.{k}" for k in keys]
-            if not set(in_keys).issubset(batch.keys()):
+            in_keys = set(in_keys).intersection(batch.keys())
+            if len(in_keys) == 0:
                 if not strict:
                     continue
                 raise ValueError(
@@ -154,35 +213,35 @@ class ReaderRetriever(Module):
                     f"Found keys: {batch.keys()}"
                 )
 
+            # get batch subset and flatten inputs
             batch_field = {k.replace(f"{field}.", ""): batch[k] for k in in_keys}
             ref_shape = batch_field["input_ids"].shape[:-1]
             batch_field = {k: v.view(-1, *v.shape[-1:]) for k, v in batch_field.items()}
 
-            pprint_batch(
-                batch_field,
-                f"process_with_transformer::batch_field::{field} (model={type(model)})",
-                silent=not VERBOSE_MODEL,
+            # forward the model and format the output
+            output_field = ReaderRetriever._process_with_transformer(
+                batch_field, model=model, chunksize=chunksize
             )
-            output_field = model(**batch_field)
-            output_field = format_transformer_output(output_field, batch=batch_field)
-            pprint_batch(
-                output_field,
-                f"process_with_transformer::output_field::{field}",
-                silent=not VERBOSE_MODEL,
-            )
+
+            # un-flatten the output
             for k, v in output_field.items():
                 output[f"{field}.{k}"] = v.view(*ref_shape, *v.shape[1:])
 
         return output
 
-    def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
-        """
-        Compute the forward pass for the question and the documents.
-        """
+    @staticmethod
+    @process_by_chunk_wrapper
+    def _process_with_transformer(batch: Batch, *, model: PreTrainedModel) -> Batch:
+        output_field = model(**batch)
+        output_field = format_transformer_output(output_field, batch=batch)
+        return output_field
 
+    @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
+    def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
+        # validate the batch
         inputs = ReaderRetrieverInputs(**batch)
 
-        pprint_batch(batch, "ReaderRetriever::_step::batch", silent=silent)
+        # process the batch with the models
         models_outputs = self._forward(
             inputs.flatten(),
             skip_reader=self.skip_reader,
@@ -190,9 +249,8 @@ class ReaderRetriever(Module):
             strict=True,
             **kwargs,
         )
-        pprint_batch(models_outputs, "ReaderRetriever::_step::models_outputs", silent=silent)
 
-        # compute the gradients
+        # compute the gradients given the outputs from the models
         gradient_step_output = self.gradients.step(
             {
                 **models_outputs,
@@ -201,24 +259,15 @@ class ReaderRetriever(Module):
             }
         )
 
-        # prepare the output
+        # append prefixes to the outputs for bookkeeping
         step_output = {
             **_add_prefix(STATS_PREFIX, inputs.stats()),
             **_add_prefix(GRAD_PREFIX, gradient_step_output.dict()),
         }
-        pprint_batch(step_output, "ReaderRetriever::_step::step_output", silent=silent)
         return step_output
 
+    @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
     def _reduce_step_output(self, step_output: Batch) -> Batch:
-        """
-        Gather scores and compute the gradients
-        """
-        pprint_batch(
-            step_output,
-            "ReaderRetriever::_step_output::step_output",
-            silent=not VERBOSE_MODEL,
-        )
-
         # retrieve the stats
         output = _with_prefix(STATS_PREFIX, step_output)
 
@@ -228,12 +277,6 @@ class ReaderRetriever(Module):
         )
         output.update(output_grad.dict())
 
-        pprint_batch(
-            output,
-            "ReaderRetriever::_reduce_step_output::output",
-            silent=not VERBOSE_MODEL,
-        )
-
         # preprare the final output
         final_output = {}
         for k, v in output.items():
@@ -242,9 +285,8 @@ class ReaderRetriever(Module):
                 v = v.detach()
 
             # average loss terms, except the terms transmitted to the metrics
-            if k != "loss" and not is_feature_name(k):
-                if isinstance(v, torch.Tensor):
-                    v = v.float().mean()
+            if isinstance(v, torch.Tensor) and not is_feature_name(k):
+                v = v.float().mean()
 
             # format name and store
             k = k.replace(".", "/")
@@ -336,15 +378,21 @@ def _(output: CausalLMOutputWithCrossAttentions, *, batch: Batch) -> Batch:
             f"The output of the transformer must have a `logits` attribute. "
             f"Found {dict(output).keys()}"
         ) from exc
+
+    # get the tensors
     labels = batch["input_ids"]
     mask = batch["attention_mask"]
     token_type_ids = batch.get("token_type_ids", None)
+
     # Shift so that tokens < n predict n
     shift_logits = lm_logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
     shift_mask = mask[..., 1:].contiguous()
     if token_type_ids is not None:
         shift_token_type_ids = token_type_ids[..., 1:].contiguous()
+    else:
+        shift_token_type_ids = None
+
     # Flatten the tokens and compute log `p(x[1:T])`
     loss_fct = CrossEntropyLoss(reduction="none")
     logp_tokens = -loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))

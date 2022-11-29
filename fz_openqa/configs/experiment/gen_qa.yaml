@@ -3,14 +3,14 @@
 defaults:
   - gen_openqa
 
-# setup_with_model: true
+setup_with_model: true
 
 base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 2
-  target_mode: max
-  target_metric: validation/reader/logp
+  target_mode: min
+  target_metric: validation/loss
 
 model:
   retriever_id: findzebra/vod-retriever-medical-v1.0
