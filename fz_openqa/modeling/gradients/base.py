@@ -20,10 +20,20 @@ class GradientsInput(BaseModel):
         arbitrary_types_allowed = True
         allow_population_by_field_name = True
 
-    log_p_a__d: torch.Tensor = Field(
+    log_p_a__qd: torch.Tensor = Field(
+        ...,
+        alias="lm.logp_a",
+        description="Log reader probability `p(a | [q;d])`",
+    )
+    log_p_qd: torch.Tensor = Field(
+        ...,
+        alias="lm.logp_q",
+        description="Log reader probability `p([q;d])`",
+    )
+    log_p_lm: torch.Tensor = Field(
         ...,
         alias="lm.logp",
-        description="Log probability of the reader model",
+        description="Log reader probability `p([a;q;d])`",
     )
     document_vector: Optional[torch.Tensor] = Field(
         None,
@@ -54,10 +64,20 @@ class GradientsStepOutput(BaseModel):
         arbitrary_types_allowed = True
         allow_population_by_field_name = True
 
-    log_p_a__d: torch.Tensor = Field(
+    log_p_a__qd: torch.Tensor = Field(
+        ...,
+        alias="lm.logp_a",
+        description="Log reader probability `p(a | [q;d])`",
+    )
+    log_p_qd: torch.Tensor = Field(
+        ...,
+        alias="lm.logp_q",
+        description="Log reader probability `p([q;d])`",
+    )
+    log_p_lm: torch.Tensor = Field(
         ...,
         alias="lm.logp",
-        description="Log probability of the reader model",
+        description="Log reader probability `p([a;q;d])`",
     )
     f_theta: torch.Tensor = Field(
         ...,
@@ -89,7 +109,7 @@ class GradientsOutput(BaseModel):
 class Gradients(nn.Module):
     required_features: List[str] = []
 
-    def __init__(self, **kwargs):
+    def __init__(self, **_):
         super().__init__()
 
     def __call__(self, data: GradientsInput) -> GradientsOutput:

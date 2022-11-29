@@ -1,3 +1,4 @@
 _target_: fz_openqa.modeling.gradients.InBatchGradients
 
+model_context: false
 _id: "in-batch"

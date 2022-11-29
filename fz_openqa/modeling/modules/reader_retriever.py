@@ -141,18 +141,19 @@ class ReaderRetriever(Module):
         fields: List[str],
         strict: bool = True,
     ) -> Batch:
-        keys = ["input_ids", "attention_mask"]
+        keys = ["input_ids", "attention_mask", "token_type_ids"]
         output = {}
         for field in fields:
             in_keys = [f"{field}.{k}" for k in keys]
             if not set(in_keys).issubset(batch.keys()):
-                if strict:
-                    raise ValueError(
-                        f"Missing keys {set(in_keys) - set(batch.keys())} "
-                        f"in batch for field {field}. "
-                        f"Found keys: {batch.keys()}"
-                    )
-                continue
+                if not strict:
+                    continue
+                raise ValueError(
+                    f"Missing keys {set(in_keys) - set(batch.keys())} "
+                    f"in batch for field {field}. "
+                    f"Found keys: {batch.keys()}"
+                )
+
             batch_field = {k.replace(f"{field}.", ""): batch[k] for k in in_keys}
             ref_shape = batch_field["input_ids"].shape[:-1]
             batch_field = {k: v.view(-1, *v.shape[-1:]) for k, v in batch_field.items()}
@@ -162,7 +163,6 @@ class ReaderRetriever(Module):
                 f"process_with_transformer::batch_field::{field} (model={type(model)})",
                 silent=not VERBOSE_MODEL,
             )
-
             output_field = model(**batch_field)
             output_field = format_transformer_output(output_field, batch=batch_field)
             pprint_batch(
@@ -338,16 +338,30 @@ def _(output: CausalLMOutputWithCrossAttentions, *, batch: Batch) -> Batch:
         ) from exc
     labels = batch["input_ids"]
     mask = batch["attention_mask"]
+    token_type_ids = batch.get("token_type_ids", None)
     # Shift so that tokens < n predict n
     shift_logits = lm_logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
     shift_mask = mask[..., 1:].contiguous()
-    # Flatten the tokens and compute the loss
+    if token_type_ids is not None:
+        shift_token_type_ids = token_type_ids[..., 1:].contiguous()
+    # Flatten the tokens and compute log `p(x[1:T])`
     loss_fct = CrossEntropyLoss(reduction="none")
-    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    loss = loss.view_as(shift_mask)
-    loss = (loss * shift_mask).sum(dim=1)
-    return {"logp": -loss}
+    logp_tokens = -loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    logp_tokens = logp_tokens.view_as(shift_mask)
+    logp_tokens = logp_tokens * shift_mask
+
+    # compute the loss terms
+    output = {"logp": logp_tokens.sum(dim=-1)}
+    if token_type_ids is not None:
+        output.update(
+            {
+                "logp_q": (logp_tokens * (shift_token_type_ids == 0).float()).sum(dim=1),
+                "logp_a": (logp_tokens * (shift_token_type_ids == 1).float()).sum(dim=1),
+            }
+        )
+
+    return output
 
 
 @format_transformer_output.register(BaseModelOutputWithPoolingAndCrossAttentions)
