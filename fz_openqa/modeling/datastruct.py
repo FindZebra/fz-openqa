@@ -10,14 +10,32 @@ from pydantic.fields import Field
 
 STATS_PREFIX = "stats::"
 GRAD_PREFIX = "grad::"
-METRIC_PREFIX = "metric::"
+METRICS_PREFIX = "metrics::"
 
 
-class TokenizedField(BaseModel):
+class InputField(BaseModel):
     """Represents a tokenized text field."""
 
     class Config:
         arbitrary_types_allowed = True
+
+    def stats(self) -> Dict:
+        return {}
+
+
+class AnswerField(InputField):
+    """Represents the answer field."""
+
+    target: Optional[torch.Tensor] = Field(
+        None, description="The answer target (e.g. multiple-choice idx)."
+    )
+
+    def stats(self) -> Dict:
+        return {}
+
+
+class TokenizedField(InputField):
+    """Represents a tokenized text field."""
 
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
@@ -35,6 +53,10 @@ class DocumentTokenizedField(TokenizedField):
     proposal_log_weight: Optional[torch.Tensor] = Field(
         None,
         description="Importance-sampling log-weight of the proposal distribution",
+    )
+    target: Optional[torch.Tensor] = Field(
+        None,
+        description="Document target (binary) for supervised retrieval tasks.",
     )
 
     @torch.no_grad()
@@ -63,6 +85,10 @@ class ReaderRetrieverInputs(BaseModel):
         None,
         description="language model input field (e.g., tokenized prompt + expected completion)",
     )
+    answer: Optional[AnswerField] = Field(
+        None,
+        description="Models the answer field (e.g., multiple-choice idx)",
+    )
 
     @root_validator(pre=True)
     def parse_nested_fields(cls, values):
@@ -74,6 +100,8 @@ class ReaderRetrieverInputs(BaseModel):
                 nested_values[field][subfield] = v
 
         for field, attrs in nested_values.items():
+            if field not in ReaderRetrieverInputs.__fields__:
+                continue
             Cls = ReaderRetrieverInputs.__fields__[field].type_
             values[field] = Cls(**attrs)
 
@@ -83,7 +111,7 @@ class ReaderRetrieverInputs(BaseModel):
         output = {}
         for k in self.__fields_set__:
             v = getattr(self, k)
-            if isinstance(v, TokenizedField):
+            if isinstance(v, InputField):
                 v = v.dict()
                 keys_ = keys or list(v.keys())
                 v = {f"{k}.{ks}": vs for ks, vs in v.items() if ks in keys_}
@@ -101,7 +129,7 @@ class ReaderRetrieverInputs(BaseModel):
 
         for k in list(self.__fields_set__):
             v = getattr(self, k)
-            if k not in fields or not isinstance(v, TokenizedField):
+            if k not in fields or not isinstance(v, InputField):
                 continue
 
             v = v.stats()

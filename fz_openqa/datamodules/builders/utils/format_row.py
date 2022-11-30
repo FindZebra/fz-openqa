@@ -1,6 +1,13 @@
+from __future__ import annotations
+
+from typing import Dict
+from typing import List
 from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import torch
+from pydantic import BaseModel
 from transformers import PreTrainedTokenizerFast
 from warp_pipes import Eg
 from warp_pipes.support.pretty import pretty_decode
@@ -9,16 +16,62 @@ from warp_pipes.support.shapes import infer_shape
 from fz_openqa.datamodules.utils.datastruct import Scenario
 
 
-def infer_field_dim(eg: Eg, field: str) -> Optional[int]:
-    if f"{field}.input_ids" in eg:
-        return len(infer_shape(eg[f"{field}.input_ids"]))
-    elif f"{field}.text" in eg:
-        return 1 + len(infer_shape(eg[f"{field}.text"]))
-    else:
-        return None
+class TextField(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
+    input_ids: Optional[torch.Tensor] = None
+    text: Optional[Union[str, List[str]]] = None
+
+    @property
+    def batch_shape(self) -> Optional[Tuple[int, ...]]:
+        if not self.exists:
+            return None
+
+        if self.input_ids is not None:
+            return self.input_ids.shape[:-1]
+
+        if self.text is not None:
+            return infer_shape(self.text)
+
+    @classmethod
+    def from_field(cls, field: str, data: Dict):
+        prefix = f"{field}."
+        data_field = {
+            str(k)[len(prefix) :]: v for k, v in data.items() if str(k).startswith(prefix)
+        }
+        return cls(**data_field)
+
+    @property
+    def exists(self) -> bool:
+        return self.input_ids is not None or self.text is not None
+
+    def pretty_decode(
+        self, key: Optional[int | slice | Tuple] = None, style: str = "deep_sky_blue3", **kwargs
+    ) -> str:
+        if self.input_ids is not None:
+            input_ids = self.input_ids
+            if key is not None:
+                input_ids = input_ids[key]
+            return pretty_decode(input_ids, style=style, **kwargs)
+        elif self.text is not None:
+            text = self.text
+            if key is not None:
+                text = text[key]
+            return f"[{style}]`{text}`[/{style}] [orange]<raw text>[/orange]"
+        else:
+            raise ValueError("No text or input_ids to decode")
 
 
 def infer_scenario(eg: Eg) -> Scenario:
+    def infer_field_dim(eg: Eg, field: str) -> Optional[int]:
+        if f"{field}.input_ids" in eg:
+            return len(infer_shape(eg[f"{field}.input_ids"]))
+        elif f"{field}.text" in eg:
+            return 1 + len(infer_shape(eg[f"{field}.text"]))
+        else:
+            return None
+
     q_dim = infer_field_dim(eg, "question")
     a_dim = infer_field_dim(eg, "answer")
     target = eg.get("answer.target", None)
@@ -33,7 +86,6 @@ def infer_scenario(eg: Eg) -> Scenario:
     # handle the case where no answer is provided
     if a_dim is None and target is None:
         return Scenario.generative_qa
-
     if q_dim == 1 and a_dim == 1:
         return Scenario.generative_qa
     elif q_dim == 2 and a_dim == 2:
@@ -65,50 +117,54 @@ def format_qa_eg(eg: Eg, tokenizer: PreTrainedTokenizerFast, **kwargs) -> str:
 
 
 def format_generative_qa_eg(eg, tokenizer, **kwargs):
-    question_str = pretty_decode(
-        eg["question.input_ids"], style="deep_sky_blue3", tokenizer=tokenizer
-    )
+    question = TextField.from_field("question", eg)
+    question_str = question.pretty_decode(style="deep_sky_blue3", tokenizer=tokenizer)
     canvas = f"Question: {question_str}"
 
     # answers
-    a_tokens = eg.get("answer.input_ids", None)
-    if a_tokens is not None:
-        answer_str = pretty_decode(a_tokens, style="green", tokenizer=tokenizer)
+    answer = TextField.from_field("question", eg)
+    if answer.exists:
+        answer_str = answer.pretty_decode(style="green", tokenizer=tokenizer)
         canvas += f"\nAnswer: {answer_str}"
 
     # documents
-    d_tokens = eg.get("document.input_ids", None)
-    d_scores = eg.get("document.proposal_score", None)
-    if d_tokens is not None:
-        doc_info = f"(n={len(d_tokens)})"
-        canvas += f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
+    documents = TextField.from_field("document", eg)
+    if documents.exists:
+        d_scores = eg.get("document.proposal_score", None)
+        doc_info = f"(n={documents.batch_shape[0]})"
+        canvas += (
+            f"\nDocuments {doc_info}:{format_documents(documents, tokenizer, scores=d_scores)}"
+        )
 
     return canvas
 
 
 def format_multiple_choice_qa_eg(eg, tokenizer, **kwargs):
-    question_str = pretty_decode(eg["question.input_ids"], style="white", tokenizer=tokenizer)
+    question = TextField.from_field("question", eg)
+    question_str = question.pretty_decode(style="white", tokenizer=tokenizer)
     canvas = f"Question: {question_str}"
 
-    a_tokens = eg.get("answer.input_ids", None)
+    answer = TextField.from_field("answer", eg)
     target = eg.get("answer.target", -1)
-    if a_tokens is not None:
-        n_opts = a_tokens.shape[0]
+    if answer.exists:
+        n_opts = answer.batch_shape[0]
         canvas += "\nAnswer options:"
         for i in range(n_opts):
             style = "green" if i == target else "deep_sky_blue3"
             marker = "✓" if i == target else " "
-            answer_str = pretty_decode(
-                a_tokens[i], style=style, tokenizer=tokenizer, only_text=True
+            answer_str = answer.pretty_decode(
+                key=i, style=style, tokenizer=tokenizer, only_text=True
             )
             canvas += f"\n({marker}) {answer_str}"
 
     # documents
-    d_tokens = eg.get("document.input_ids", None)
-    d_scores = eg.get("document.proposal_score", None)
-    if d_tokens is not None:
-        doc_info = f"(n={len(d_tokens)})"
-        canvas += f"\nDocuments {doc_info}:{format_documents(d_tokens, tokenizer, scores=d_scores)}"
+    documents = TextField.from_field("document", eg)
+    if documents.exists:
+        d_scores = eg.get("document.proposal_score", None)
+        doc_info = f"(n={documents.batch_shape[0]})"
+        canvas += (
+            f"\nDocuments {doc_info}:{format_documents(documents, tokenizer, scores=d_scores)}"
+        )
 
     return canvas
 
@@ -156,7 +212,7 @@ def format_multiple_choice_flat_concat_qa_eg(eg, tokenizer, **kwargs):
 
 
 def format_documents(
-    doc_tokens: torch.Tensor,
+    documents: TextField,
     tokenizer: PreTrainedTokenizerFast,
     style="white",
     scores: Optional[torch.Tensor] = None,
@@ -171,8 +227,8 @@ def format_documents(
             return f", {scores[i]:.2f}"
 
     canvas = ""
-    for i in range(doc_tokens.shape[0])[:top_k]:
-        doc_str = pretty_decode(doc_tokens[i], style=style, tokenizer=tokenizer, only_text=True)
+    for i in range(documents.batch_shape[0])[:top_k]:
+        doc_str = documents.pretty_decode(key=i, style=style, tokenizer=tokenizer, only_text=True)
         loc = f"(#{i + 1}{fmt_score(scores, i)})"
         canvas += f"{sep}{loc} {doc_str}"
     return canvas

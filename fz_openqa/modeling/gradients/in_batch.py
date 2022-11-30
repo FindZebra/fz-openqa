@@ -1,6 +1,7 @@
 from pydantic import Field
 
 from fz_openqa.datamodules.pipes import torch
+from fz_openqa.modeling.datastruct import METRICS_PREFIX
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.base import GradientsOutput
 from fz_openqa.modeling.gradients.base import GradientsStepOutput
@@ -27,6 +28,12 @@ class InBatchGradientsOutput(GradientsOutput):
         ...,
         alias="lm.logp",
         description="Log reader probability `p([a;q;d])`",
+    )
+
+    lm_mc_logits: torch.Tensor = Field(
+        None,
+        alias=f"{METRICS_PREFIX}answer.logits",
+        description="Logits for multiple-choice answers",
     )
 
     def dict(
@@ -56,7 +63,17 @@ class InBatchGradients(Gradients):
             log_p_qd = log_p_qd.view(log_p_qd.shape[0], -1).mean(dim=-1)
             loss = loss - log_p_qd
 
+        # multiple-choice logits
+        if step_output.lm_mc_logits is not None:
+            lm_mc_logits = (step_output.lm_mc_logits).log_softmax(dim=-1)
+            lm_mc_logits = (lm_mc_logits + log_p_d.unsqueeze(-1)).logsumexp(dim=1)
+        else:
+            lm_mc_logits = None
+
+        # format the output
+        step_output = step_output.dict(by_alias=False)
+        step_output["lm_mc_logits"] = lm_mc_logits
         return InBatchGradientsOutput(
             loss=loss,
-            **step_output.dict(by_alias=False),
+            **step_output,
         )

@@ -9,7 +9,7 @@ base:
   batch_size: 32
   device_batch_size: 1
   eval_device_batch_size: 2
-  infer_batch_mul: 2_000
+  infer_batch_mul: 1_600
   target_mode: min
   target_metric: validation/loss
 
@@ -17,7 +17,7 @@ model:
   module:
     skip_retriever: true
     skip_reader: false
-    eval_chunksize: 1_000
+    eval_chunksize: 300
 
 trainer:
   val_check_interval: 500

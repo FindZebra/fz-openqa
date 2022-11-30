@@ -35,6 +35,11 @@ class GradientsInput(BaseModel):
         alias="lm.logp",
         description="Log reader probability `p([a;q;d])`",
     )
+    lm_mc_logits: torch.Tensor = Field(
+        None,
+        alias="lm.mc_logits",
+        description="Logits for multiple-choice answers",
+    )
     document_vector: Optional[torch.Tensor] = Field(
         None,
         alias="document.pooler_output",
@@ -78,6 +83,11 @@ class GradientsStepOutput(BaseModel):
         ...,
         alias="lm.logp",
         description="Log reader probability `p([a;q;d])`",
+    )
+    lm_mc_logits: torch.Tensor = Field(
+        None,
+        alias="lm.mc_logits",
+        description="Logits for multiple-choice answers",
     )
     f_theta: torch.Tensor = Field(
         ...,

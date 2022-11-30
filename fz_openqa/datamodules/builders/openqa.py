@@ -244,6 +244,7 @@ class OpenQaBuilder(DatasetBuilder):
                 ("Fetch document data", fetch_documents),
                 ("Transform", self.transform),
                 # TODO: remove this once the `collate_fn` is fixed
+                #  problem with `List[Tensor]` -> need to concatenate them
                 (
                     "Cleanup",
                     FilterKeys(
@@ -258,6 +259,8 @@ class OpenQaBuilder(DatasetBuilder):
                                 "document.attention_mask",
                                 "document.proposal_score",
                                 "document.proposal_log_weight",
+                                "answer.target",
+                                "answer.text",
                             ]
                         )
                     ),

@@ -67,6 +67,7 @@ def init_pretrained_tokenizer(
     if set_padding_side is not None:
         loguru.logger.info(f"Setting tokenizer padding side to `{set_padding_side}`")
         tokenizer.padding_side = set_padding_side
+        tokenizer.truncation_side = set_padding_side
     return tokenizer
 
 

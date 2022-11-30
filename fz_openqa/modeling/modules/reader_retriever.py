@@ -13,15 +13,18 @@ import rich
 import torch
 from datasets import Split
 from omegaconf import DictConfig
+from pydantic import BaseModel
+from torch import Tensor
 from torch.nn import CrossEntropyLoss
 from transformers import PreTrainedModel
+from transformers import PreTrainedTokenizerFast
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from warp_pipes import Batch
 from warp_pipes import pprint_batch
 
 from fz_openqa.modeling.datastruct import GRAD_PREFIX
-from fz_openqa.modeling.datastruct import METRIC_PREFIX
+from fz_openqa.modeling.datastruct import METRICS_PREFIX
 from fz_openqa.modeling.datastruct import ReaderRetrieverInputs
 from fz_openqa.modeling.datastruct import STATS_PREFIX
 from fz_openqa.modeling.gradients import Gradients
@@ -34,6 +37,16 @@ from fz_openqa.utils import maybe_instantiate
 VERBOSE_MODEL = bool(os.environ.get("VERBOSE_MODEL", False))
 
 from functools import wraps
+
+
+class ModelOutputFormatConfig(BaseModel):
+    """Configuration for the output format of a model."""
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    answer_choices_tokens: Optional[Tensor] = None
+    tokenizer: Optional[PreTrainedTokenizerFast] = None
 
 
 def pprint_input_output(silent: bool = False, prefix: str = ""):
@@ -54,8 +67,19 @@ def _add_prefix(prefix: str, x: Dict) -> Dict:
     return {prefix + k: v for k, v in x.items()}
 
 
-def _with_prefix(prefix: str, x: Dict) -> Dict:
-    return {k[len(prefix) :]: v for k, v in x.items() if k.startswith(prefix)}
+def _with_prefix(prefix: str | List[str], x: Dict, strip_prefix: bool = True) -> Dict:
+    if isinstance(prefix, str):
+        prefix = [prefix]
+    output = {}
+    for k, v in x.items():
+        for p in prefix:
+            if str(k).startswith(p):
+                if strip_prefix:
+                    k = k[len(p) :]
+                output[k] = v
+                break
+
+    return output
 
 
 def process_by_chunk(fn: Callable, batch: Batch, *, chunksize: Optional[int], **kwargs) -> Batch:
@@ -64,6 +88,8 @@ def process_by_chunk(fn: Callable, batch: Batch, *, chunksize: Optional[int], **
     if chunksize is None:
         return fn(batch, **kwargs)
     else:
+        # TODO: scale chunksize with size
+        # TODO: allocate memory at first chunk
         batch_size = next(iter(batch.values())).shape[0]
         outputs = defaultdict(list)
         for i in range(0, batch_size, chunksize):
@@ -102,12 +128,12 @@ class ReaderRetriever(Module):
 
     # metrics to display in the progress bar
     pbar_metrics = [
-        "train/reader/logp",
-        "validation/reader/logp",
-        "train/reader/Accuracy",
-        "validation/reader/Accuracy",
-        "train/retrieval/MRR",
-        "validation/retrieval/MRR",
+        "train/lm/logp",
+        "validation/lm/logp",
+        "train/answer/Accuracy",
+        "validation/answer/Accuracy",
+        "train/document/MRR",
+        "validation/document/MRR",
     ]
 
     def __init__(
@@ -121,6 +147,8 @@ class ReaderRetriever(Module):
         skip_reader: bool = False,
         gradients: Gradients | DictConfig = None,
         eval_chunksize: Optional[int] = None,
+        reader_tokenizer: None | PreTrainedTokenizerFast | DictConfig = None,
+        infer_multiple_choice_logits: bool = True,
         **kwargs,
     ):
         if gradients is None:
@@ -154,6 +182,24 @@ class ReaderRetriever(Module):
         # init the estimator
         self.gradients: Gradients = maybe_instantiate(gradients)
 
+        # store the answer choices token_ids
+        reader_tokenizer = maybe_instantiate(reader_tokenizer)
+        answer_tokens = reader_tokenizer(
+            ["A", "B", "C", "D"], return_tensors="pt", add_special_tokens=False
+        ).input_ids.squeeze(1)
+        self.register_buffer("answer_tokens", answer_tokens)
+        self.infer_multiple_choice_logits = infer_multiple_choice_logits
+        # todo: remove this
+        self.tokenizer = reader_tokenizer
+
+    @property
+    def model_output_format_config(self) -> ModelOutputFormatConfig:
+        answer_choices_tokens = self.answer_tokens if self.infer_multiple_choice_logits else None
+        return ModelOutputFormatConfig(
+            answer_choices_tokens=answer_choices_tokens,
+            tokenizer=self.tokenizer,
+        )
+
     @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
     def _forward(
         self,
@@ -166,6 +212,7 @@ class ReaderRetriever(Module):
         process_kwargs = {
             "strict": strict,
             "chunksize": None if self.training else self.eval_chunksize,
+            "config": self.model_output_format_config,
         }
         models_outputs = {}
         # process the batch with the reader
@@ -198,6 +245,7 @@ class ReaderRetriever(Module):
         fields: List[str],
         chunksize: Optional[int] = None,
         strict: bool = True,
+        **kwargs,
     ) -> Batch:
         keys = ["input_ids", "attention_mask", "token_type_ids"]
         output = {}
@@ -220,7 +268,10 @@ class ReaderRetriever(Module):
 
             # forward the model and format the output
             output_field = ReaderRetriever._process_with_transformer(
-                batch_field, model=model, chunksize=chunksize
+                batch_field,
+                model=model,
+                chunksize=chunksize,
+                **kwargs,
             )
 
             # un-flatten the output
@@ -231,14 +282,15 @@ class ReaderRetriever(Module):
 
     @staticmethod
     @process_by_chunk_wrapper
-    def _process_with_transformer(batch: Batch, *, model: PreTrainedModel) -> Batch:
+    def _process_with_transformer(
+        batch: Batch, *, model: PreTrainedModel, config: ModelOutputFormatConfig
+    ) -> Batch:
         output_field = model(**batch)
-        output_field = format_transformer_output(output_field, batch=batch)
+        output_field = format_transformer_output(output_field, batch=batch, config=config)
         return output_field
 
     @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
     def _step(self, batch: Batch, silent=not VERBOSE_MODEL, **kwargs: Any) -> Batch:
-        # validate the batch
         inputs = ReaderRetrieverInputs(**batch)
 
         # process the batch with the models
@@ -264,12 +316,22 @@ class ReaderRetriever(Module):
             **_add_prefix(STATS_PREFIX, inputs.stats()),
             **_add_prefix(GRAD_PREFIX, gradient_step_output.dict()),
         }
+
+        # pass the targets to the metrics
+        if inputs.answer is not None and inputs.answer.target is not None:
+            step_output[f"{METRICS_PREFIX}answer.target"] = inputs.answer.target
+        if inputs.document is not None and "target" in inputs.document:
+            step_output[f"{METRICS_PREFIX}document.target"] = inputs.document.target
+
         return step_output
 
     @pprint_input_output(silent=not VERBOSE_MODEL, prefix="ReaderRetriever::")
     def _reduce_step_output(self, step_output: Batch) -> Batch:
         # retrieve the stats
-        output = _with_prefix(STATS_PREFIX, step_output)
+        output = {
+            **_with_prefix(STATS_PREFIX, step_output),
+            **_with_prefix(METRICS_PREFIX, step_output, strip_prefix=False),
+        }
 
         # compute the gradients (step_end)
         output_grad: GradientsOutput = self.gradients.step_end(
@@ -289,7 +351,8 @@ class ReaderRetriever(Module):
                 v = v.float().mean()
 
             # format name and store
-            k = k.replace(".", "/")
+            if not str(k).startswith(METRICS_PREFIX):
+                k = k.replace(".", "/")
             final_output[k] = v
 
         pprint_batch(final_output, "reduce_step_output::final_output", silent=not VERBOSE_MODEL)
@@ -297,19 +360,22 @@ class ReaderRetriever(Module):
         return final_output
 
     @torch.no_grad()
-    def update_metrics(self, output: Batch, split: Split) -> None:
+    def update_metrics(self, final_output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
 
+        final_output = _with_prefix(METRICS_PREFIX, final_output, strip_prefix=True)
+        pprint_batch(final_output, "update_metrics::output", silent=not VERBOSE_MODEL)
+
         # log the reader accuracy
-        reader_logits = output.get(f"{METRIC_PREFIX}reader.logits", None)
-        reader_targets = output.get(f"{METRIC_PREFIX}reader.targets", None)
+        reader_logits = final_output.get("answer.logits", None)
+        reader_targets = final_output.get("answer.target", None)
         if reader_targets is not None:
             if reader_logits is not None:
                 self.reader_metrics.update(split, reader_logits, reader_targets)
 
         # log the retriever accuracy
-        retriever_logits = output.get(f"{METRIC_PREFIX}retriever.logits", None)
-        retriever_targets = output.get(f"{METRIC_PREFIX}retriever.targets", None)
+        retriever_logits = final_output.get("document.logits", None)
+        retriever_targets = final_output.get("document.target", None)
         if retriever_logits is not None and retriever_logits.numel() > 0:
             if retriever_targets is not None:
                 self.retriever_metrics.update(split, retriever_logits, retriever_targets)
@@ -351,10 +417,10 @@ class ReaderRetriever(Module):
 
     def _init_metrics(self, prefix: str):
         """Initialize the metrics for each split."""
-        self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}reader/")
+        self.reader_metrics = self._get_base_metrics(prefix=f"{prefix}answer/")
 
         self.retriever_metrics = self._get_base_metrics(
-            prefix=f"{prefix}retrieval/",
+            prefix=f"{prefix}document/",
             topk=[1, 3, 5, 10, 20, 50, 100],
             retrieval=True,
             allowed_splits=[Split.VALIDATION, Split.TEST],
@@ -362,15 +428,17 @@ class ReaderRetriever(Module):
 
 
 @singledispatch
-def format_transformer_output(output: Any, *, batch: Batch) -> Batch:
-    """
-    Format the output of the transformer to a batch.
-    """
+def format_transformer_output(
+    output: Any, *, batch: Batch, config: ModelOutputFormatConfig
+) -> Batch:
+    """Format the output of the transformer to a batch."""
     raise TypeError(f"Cannot handle output of type {type(output)}")
 
 
 @format_transformer_output.register(CausalLMOutputWithCrossAttentions)
-def _(output: CausalLMOutputWithCrossAttentions, *, batch: Batch) -> Batch:
+def _(
+    output: CausalLMOutputWithCrossAttentions, *, batch: Batch, config: ModelOutputFormatConfig
+) -> Batch:
     try:
         lm_logits = output.logits
     except AttributeError as exc:
@@ -380,24 +448,36 @@ def _(output: CausalLMOutputWithCrossAttentions, *, batch: Batch) -> Batch:
         ) from exc
 
     # get the tensors
-    labels = batch["input_ids"]
-    mask = batch["attention_mask"]
+    input_ids = batch["input_ids"]
+    attention_mask = batch["attention_mask"]
     token_type_ids = batch.get("token_type_ids", None)
 
     # Shift so that tokens < n predict n
     shift_logits = lm_logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    shift_mask = mask[..., 1:].contiguous()
+    shift_input_ids = input_ids[..., 1:].contiguous()
+    shift_attention_mask = attention_mask[..., 1:].contiguous()
     if token_type_ids is not None:
         shift_token_type_ids = token_type_ids[..., 1:].contiguous()
     else:
         shift_token_type_ids = None
 
+    # extract the logits of the answer tokens
+    if config.answer_choices_tokens is not None:
+        logits_mc_answers = extract_mc_answer_logits(
+            shift_logits,
+            shift_input_ids,
+            shift_token_type_ids,
+            config.answer_choices_tokens,
+            config=config,
+        )
+    else:
+        logits_mc_answers = None
+
     # Flatten the tokens and compute log `p(x[1:T])`
     loss_fct = CrossEntropyLoss(reduction="none")
-    logp_tokens = -loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    logp_tokens = logp_tokens.view_as(shift_mask)
-    logp_tokens = logp_tokens * shift_mask
+    logp_tokens = -loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_input_ids.view(-1))
+    logp_tokens = logp_tokens.view_as(shift_attention_mask)
+    logp_tokens = logp_tokens * shift_attention_mask
 
     # compute the loss terms
     output = {"logp": logp_tokens.sum(dim=-1)}
@@ -408,12 +488,68 @@ def _(output: CausalLMOutputWithCrossAttentions, *, batch: Batch) -> Batch:
                 "logp_a": (logp_tokens * (shift_token_type_ids == 1).float()).sum(dim=1),
             }
         )
+    if logits_mc_answers is not None:
+        output["mc_logits"] = logits_mc_answers
 
     return output
 
 
+def extract_mc_answer_logits(logits, input_ids, token_type_ids, answer_choices_tokens, config):
+    """infer the logits of the multiple choice answer tokens
+    this corresponds to the logits of the tokens A,B,C,D at the beginning of
+    the answer (`token_type_ids == 1`)."""
+
+    # find the index of the first answer token
+    # ids = torch.arange(0, token_type_ids.shape[1], device=token_type_ids.device)
+    # ids = ids[None, :].expand_as(token_type_ids)
+    # ids.masked_fill_(mask=token_type_ids == 0, value=1e6)
+    # answer_loc = ids.argmin(dim=-1)
+    # TODO: fix the above code. The line below (temporary) assumes that all the
+    #  answer tokens are at the end of the encoded prompt.
+    answer_loc = token_type_ids.shape[-1] - (token_type_ids == 1).long().sum(dim=-1)
+
+    # debugging
+    # input_ids = input_ids.clone()
+    # input_ids.masked_fill(mask=token_type_ids == 0, value=0)
+    # for i, x in enumerate(input_ids):
+    #     a = answer_loc[i]
+    #     ans_str = config.tokenizer.decode(x[a])
+    #     rich.print(
+    #         f"Target tokens: (L={token_type_ids[i].sum()}) `{config.tokenizer.decode(x[a:])}` "
+    #         f" +  tokens_ans: `{ans_str}`")
+    #     if ans_str not in "ABCD":
+    #         rich.print(f"[magenta] ERROR -> {ans_str}")
+
+    # fetch the corresponding logits
+    # rich.print(f"[green] answer_loc: {answer_loc}")
+    answer_loc = answer_loc[:, None, None]
+    answer_loc = answer_loc.expand(-1, 1, logits.shape[-1])
+    logits_mc_answers = logits.gather(1, index=answer_loc).squeeze(1)
+    # preds = logits_mc_answers.argsort(dim=1, descending=True)[:, 3]
+    # for ls in preds:
+    #     rich.print(f"PREDS_AT_ANS: {config.tokenizer.decode(ls, skip_special_tokens=False)}")
+    # for i, logits_i in enumerate(logits):
+    #     ans_id = answer_loc[i, 0, 0]
+    #     preds_i = logits[i].argmax(dim=-1)
+    #     # preds_i = preds_i[ans_id - 5: ans_id + 5]
+    #     rich.print(f">> ({i}, {preds_i})
+    #     {config.tokenizer.decode(preds_i, skip_special_tokens=False)}")
+
+    # fetch the logits corresponding to the answer tokens (A, B, C, D)
+    mc_tokens_index = answer_choices_tokens[None, :]
+    mc_tokens_index = mc_tokens_index.expand(logits_mc_answers.shape[0], -1)
+    logits_mc_answers = logits_mc_answers.gather(1, index=mc_tokens_index)
+    # rich.print(f">> mc_answer_probs: {logits_mc_answers.softmax(dim=1)}")
+    return logits_mc_answers
+
+
 @format_transformer_output.register(BaseModelOutputWithPoolingAndCrossAttentions)
-def _(output: BaseModelOutputWithPoolingAndCrossAttentions, *, batch: Batch) -> Batch:
+def _(
+    output: BaseModelOutputWithPoolingAndCrossAttentions,
+    *,
+    batch: Batch,
+    config: ModelOutputFormatConfig,
+) -> Batch:
     return {
         "pooler_output": output.pooler_output,
     }

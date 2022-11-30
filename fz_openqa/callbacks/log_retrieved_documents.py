@@ -18,7 +18,7 @@ from transformers import PreTrainedTokenizerFast
 import wandb
 from fz_openqa.callbacks import templates
 from fz_openqa.modeling import Model
-from fz_openqa.modeling.datastruct import METRIC_PREFIX
+from fz_openqa.modeling.datastruct import METRICS_PREFIX
 from fz_openqa.modeling.modules import ReaderRetriever
 from fz_openqa.utils.exceptions import catch_exception_as_warning
 
@@ -80,7 +80,7 @@ class LogRetrievedDocumentsCallback(Callback):
         keys = [
             "question.input_ids",
             "document.input_ids",
-            f"{METRIC_PREFIX}retriever.logits",
+            f"{METRICS_PREFIX}retriever.logits",
             "document.proposal_score",
         ]
         shape = batch["question.input_ids"].shape[:-1]
@@ -124,7 +124,7 @@ class LogRetrievedDocumentsCallback(Callback):
         q_str = self.tokenizer.decode(row["question.input_ids"], skip_special_tokens=True)
         docs = []
         document_input_ids = row["document.input_ids"]
-        doc_scores = row.get(f"{METRIC_PREFIX}retriever.logits", None)
+        doc_scores = row.get(f"{METRICS_PREFIX}retriever.logits", None)
         proposal_scores = row.get("document.proposal_score", None)
         for i in range(document_input_ids.shape[0]):
             doc_str = self.tokenizer.decode(document_input_ids[i], skip_special_tokens=True)
@@ -132,8 +132,10 @@ class LogRetrievedDocumentsCallback(Callback):
             docs.append(
                 {
                     "text": doc_str,
-                    "retriever_score": doc_scores[i].item() if doc_scores is not None else None,
-                    "proposal_score": proposal_scores[i].item()
+                    "retriever_score": f"{doc_scores[i].item():.1f}"
+                    if doc_scores is not None
+                    else None,
+                    "proposal_score": f"{proposal_scores[i].item():.1f}"
                     if proposal_scores is not None
                     else None,
                 }

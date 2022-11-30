@@ -2,6 +2,7 @@
 
 defaults:
   - gen_openqa
+  - override /model/module/gradients: in_batch
 
 setup_with_model: true
 
@@ -16,6 +17,8 @@ model:
   retriever_id: findzebra/vod-retriever-medical-v1.0
   module:
     skip_retriever: true
+  gradients:
+    model_context: false
 
 datamodule:
   n_documents: 4

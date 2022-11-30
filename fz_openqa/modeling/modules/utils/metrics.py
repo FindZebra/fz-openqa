@@ -56,6 +56,7 @@ class SplitMetrics(nn.Module):
         else:
             pass
 
+    @torch.inference_mode()
     def update(self, split: Split, *args: torch.Tensor | None) -> None:
         """update the metrics of the given split."""
         if split in self.splits:
@@ -93,6 +94,7 @@ class SafeMetricCollection(MetricCollection):
         2. automatically fills the `index` attribute for `RetrievalMetric`
     """
 
+    @torch.inference_mode()
     def update(self, *args: Any, **kwargs: Any) -> None:
         args = list(args)
 
@@ -147,6 +149,7 @@ class NestedMetricCollections(MetricCollection):
         nn.Module.__init__(self)
         self.metrics = nn.ModuleDict(metrics)
 
+    @torch.inference_mode()
     def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
         for k, v in values.items():
             self.metrics[k].update(*v)

@@ -352,6 +352,9 @@ class LanguageModellingTransform(Pipe):
             tokenizer_args = (questions, answers)
 
         output = self.tokenizer(*tokenizer_args, **self.tokenizer_kwargs)
+        # for x, m in zip(output.input_ids, output.token_type_ids):
+        #     rich.print(f">> (L={len(x[m > 0])}) "
+        #                f"[cyan]`{self.tokenizer.decode(x[m > 0], skip_special_tokens=False)}`")
         output = {f"{self.output_field}.{k}": v for k, v in output.items()}
         output[f"{self.output_field}.text"] = [t.text for t in templates]
 
