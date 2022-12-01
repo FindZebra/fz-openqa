@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 from datasets import Dataset
 from datasets import DatasetDict
@@ -7,7 +8,13 @@ from warp_pipes import Index
 
 
 class OpenQaDataset(DatasetDict):
-    def __init__(self, *, dataset: DatasetDict, corpus: Dataset, index: Index):
+    def __init__(
+        self,
+        *,
+        dataset: DatasetDict,
+        corpus: Optional[Dataset],
+        index: Optional[Index],
+    ):
         super(OpenQaDataset, self).__init__(dataset)
         self.corpus = corpus
         self.index = index

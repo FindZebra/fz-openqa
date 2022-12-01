@@ -4,6 +4,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import dill  # type: ignore
 from datasets import concatenate_datasets
@@ -43,23 +44,6 @@ from fz_openqa.transformers_utils.tokenizer import DOC_TOKEN
 TXT_PATTERN = r"^.*\.txt$"
 GPT_END_OF_TEXT_TOKEN = "<|endoftext|>"
 
-CORPUS_GENERATORS = {
-    "medqa": (meqa_en_corpus.__file__,),
-    "medwiki": (medwiki_corpus.__file__, "v6"),
-    "medwiki-v6": (medwiki_corpus.__file__, "v6"),
-    "medwiki-v1": (medwiki_corpus.__file__, "v1"),
-    "medwiki-v2": (medwiki_corpus.__file__, "v2"),
-    "medwiki-v3": (medwiki_corpus.__file__, "v3"),
-    "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
-    "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
-    "findzebra": (fz_corpus.__file__,),
-    "findzebra-latest": ("findzebra/corpus.latest",),
-    "file": (file_corpus.__file__,),
-    "wikipedia": ("wikipedia", "20200501.en"),
-    "quality": (quality.__file__, None),
-    "race": ("race", "all"),
-}
-
 DEFAULT_COLUMNS = ["text"]
 
 
@@ -81,6 +65,23 @@ class CorpusBuilder(HfDatasetBuilder):
         name of the columns
     """
 
+    DATASETS: Dict[str, Tuple[str, ...]] = {
+        "medqa": (meqa_en_corpus.__file__,),
+        "medwiki": (medwiki_corpus.__file__, "v6"),
+        "medwiki-v6": (medwiki_corpus.__file__, "v6"),
+        "medwiki-v1": (medwiki_corpus.__file__, "v1"),
+        "medwiki-v2": (medwiki_corpus.__file__, "v2"),
+        "medwiki-v3": (medwiki_corpus.__file__, "v3"),
+        "medwiki-v3-us": (medwiki_corpus.__file__, "v3-us"),
+        "medwiki-v3-tw": (medwiki_corpus.__file__, "v3-tw"),
+        "findzebra": (fz_corpus.__file__,),
+        "findzebra-latest": ("findzebra/corpus.latest",),
+        "file": (file_corpus.__file__,),
+        "wikipedia": ("wikipedia", "20200501.en"),
+        "quality": (quality.__file__, None),
+        "race": ("race", "all"),
+    }
+
     pt_attributes: List[str] = [
         "document.input_ids",
         "document.attention_mask",
@@ -97,7 +98,7 @@ class CorpusBuilder(HfDatasetBuilder):
 
     def __init__(
         self,
-        dset_name: Optional[str] = None,
+        dset_name: Optional[str] = "medqa",
         passage_length: int = 200,
         passage_stride: int = 100,
         input_dir: Optional[str] = None,
@@ -105,14 +106,7 @@ class CorpusBuilder(HfDatasetBuilder):
         max_length: Optional[int] = None,
         **kwargs,
     ):
-        super(CorpusBuilder, self).__init__(max_length=max_length, **kwargs)
-
-        if dset_name is not None:
-            for dn in dset_name.split("+"):
-                if dn not in CORPUS_GENERATORS:
-                    raise ValueError(
-                        f"Unknown corpus {dn}, available: {list(CORPUS_GENERATORS.keys())}"
-                    )
+        super(CorpusBuilder, self).__init__(max_length=max_length, dset_name=dset_name, **kwargs)
 
         if self.max_length is not None:
             raise ValueError(
@@ -121,7 +115,6 @@ class CorpusBuilder(HfDatasetBuilder):
                 "Use the argument `passage_length` instead."
             )
 
-        self.dset_name = dset_name
         self.input_dir = input_dir
         self.passage_length = passage_length
         self.passage_stride = passage_stride
@@ -150,7 +143,7 @@ class CorpusBuilder(HfDatasetBuilder):
         # load datasets
         dsets = []
         for dn in dset_names:
-            dset_args = CORPUS_GENERATORS[dn]
+            dset_args = self.DATASETS[dn]
             # load dataset
             dset = self._load_dataset(*dset_args, **kwargs)
 

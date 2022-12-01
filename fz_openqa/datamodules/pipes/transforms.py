@@ -3,7 +3,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 import torch
 import torch.nn.functional as F
 from datasets import Split
@@ -372,9 +371,16 @@ class LanguageModellingTransform(Pipe):
         This method makes sure that the questions and documents have the same shape.
         This handles the case where multiple documents are joined into a single one,
         and this other case where the question is repeated for each document.
+
+        If no documents are provided, return the batch as.
         """
+        if f"{self.document_field}.text" not in batch:
+            return batch
         question_shape = infer_shape(batch[f"{self.question_field}.text"])
         document_shape = infer_shape(batch[f"{self.document_field}.text"])
+        if len(question_shape) == len(document_shape):
+            # the question and document are already of the same shape
+            return batch
 
         # handle the answer target key
         if f"{self.answer_field}.target" in batch:
@@ -386,15 +392,11 @@ class LanguageModellingTransform(Pipe):
         else:
             answer_target = None
 
-        if len(question_shape) == len(document_shape):
-            # the question and document are already of the same shape
-            return batch
-        elif len(question_shape) != len(document_shape) - 1:
+        if len(question_shape) != len(document_shape) - 1:
             raise ValueError(
                 f"Question shape {question_shape} is not "
                 f"compatible with document shape {document_shape}"
             )
-
         else:
             # flatten the batch
             flatten_pipe = Flatten(level=len(question_shape) - 1)

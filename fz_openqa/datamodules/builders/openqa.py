@@ -12,7 +12,6 @@ from datasets import DatasetDict
 from omegaconf import DictConfig
 from omegaconf import ListConfig
 from warp_pipes import ApplyAsFlatten
-from warp_pipes import Batch
 from warp_pipes import BlockSequential
 from warp_pipes import CollateField
 from warp_pipes import FilterKeys
@@ -54,8 +53,8 @@ class OpenQaBuilder(DatasetBuilder):
         self,
         *,
         dataset_builder: QaBuilder,
-        corpus_builder: CorpusBuilder,
-        index_builder: IndexBuilder,
+        corpus_builder: Optional[CorpusBuilder],
+        index_builder: Optional[IndexBuilder],
         sampler: Optional[Sampler],
         num_proc: int = 4,
         batch_size: int = 100,
@@ -84,6 +83,7 @@ class OpenQaBuilder(DatasetBuilder):
 
         # objects
         self.index_builder = index_builder
+        self.index_enabled = index_builder is not None and corpus_builder.dset_name is not None
 
         # arguments
         self.output_columns = output_columns
@@ -112,6 +112,7 @@ class OpenQaBuilder(DatasetBuilder):
             "dataset_builder": self.dataset_builder,
             "corpus_builder": self.corpus_builder,
             "index_builder": self.index_builder,
+            "index_enabled": self.index_enabled,
             **self.map_args,
         }
 
@@ -154,36 +155,40 @@ class OpenQaBuilder(DatasetBuilder):
         # de-activate formatting for the dataset to avoid messing up
         # with the newly added columns in map_dataset
         dataset = self.dataset_builder(format=None)
-        corpus = self.corpus_builder()
 
         # select splits
         if splits is not None:
             dataset = DatasetDict({k: v for k, v in dataset.items() if k in splits})
 
         # build the index, potentially using a model
-        index = self.index_builder(
-            corpus,
-            model=model,
-            trainer=trainer,
-            index_collate_fn=self.corpus_builder._get_collate_pipe(),
-            query_collate_fn=CollateField("question", tokenizer=self.tokenizer),
-            input_filter=In(
-                [
-                    "question.text",
-                    "question.input_ids",
-                    "question.attention_mask",
-                    "question.answer",
-                    "question.document_idx",
-                ]
-            ),
-        )
+        if self.index_enabled:
+            corpus = self.corpus_builder()
+            index = self.index_builder(
+                corpus,
+                model=model,
+                trainer=trainer,
+                index_collate_fn=self.corpus_builder._get_collate_pipe(),
+                query_collate_fn=CollateField("question", tokenizer=self.tokenizer),
+                input_filter=In(
+                    [
+                        "question.text",
+                        "question.input_ids",
+                        "question.attention_mask",
+                        "question.answer",
+                        "question.document_idx",
+                    ]
+                ),
+            )
 
-        # map the corpus to the dataset
-        map_args = copy(self.map_args)
-        for k in list(kwargs.keys()):
-            if k in map_args:
-                map_args[k] = kwargs.pop(k)
-        dataset = self.search_corpus(dataset=dataset, index=index, **map_args, **kwargs)
+            # map the corpus to the dataset
+            map_args = copy(self.map_args)
+            for k in list(kwargs.keys()):
+                if k in map_args:
+                    map_args[k] = kwargs.pop(k)
+            dataset = self.search_corpus(dataset=dataset, index=index, **map_args, **kwargs)
+        else:
+            corpus = None
+            index = None
 
         # format the dataset
         if format is not None:
@@ -230,18 +235,26 @@ class OpenQaBuilder(DatasetBuilder):
         """Build a Pipe to transform examples into a Batch."""
 
         # fetch documents attributes from `self.corpus` (e.g. document.input_ids, document.text)
-        fetch_documents = NestedFetchDocuments(
-            dataset=self.corpus_builder(columns=self.output_columns),
-            collate_pipe=self.corpus_builder._get_collate_pipe(),
-            index_key="document.row_idx",
-            pprint=False,
-        )
+
+        if self.index_enabled:
+            fetch_documents = NestedFetchDocuments(
+                dataset=self.corpus_builder(columns=self.output_columns),
+                collate_pipe=self.corpus_builder._get_collate_pipe(),
+                index_key="document.row_idx",
+                pprint=False,
+            )
+
+            index_pipes = [
+                ("Sample documents", self.sampler),
+                ("Fetch document data", fetch_documents),
+            ]
+        else:
+            index_pipes = []
 
         return BlockSequential(
             [
                 ("Collate Q&A + document indexes", self.dataset_builder._get_collate_pipe()),
-                ("Sample documents", self.sampler),
-                ("Fetch document data", fetch_documents),
+                *index_pipes,
                 ("Transform", self.transform),
                 # TODO: remove this once the `collate_fn` is fixed
                 #  problem with `List[Tensor]` -> need to concatenate them

@@ -6,6 +6,7 @@ from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import datasets
 from datasets import DatasetDict
@@ -74,9 +75,8 @@ def cache_hf_dataset(func):
 class HfDatasetBuilder(DatasetBuilder):
     """This class allows loading a preprocessing a `dataset.Dataset`"""
 
-    # HuggingFace dataset id or local path to script
-    dset_script_path_or_id = "ptb_text_only"
-    dset_name: Optional[str] = None
+    # compatible datasets
+    DATASETS: Dict[str, Tuple[str, ...]] = {}
 
     # text field from the raw datasets that should be tokenized
     text_field = "sentence"
@@ -91,6 +91,7 @@ class HfDatasetBuilder(DatasetBuilder):
     def __init__(
         self,
         *,
+        dset_name: str = "ptb",
         tokenizer: PreTrainedTokenizerFast,
         add_qad_tokens: bool = True,
         add_special_tokens: bool = True,
@@ -120,13 +121,24 @@ class HfDatasetBuilder(DatasetBuilder):
         self.add_qad_tokens = add_qad_tokens
         self.add_special_tokens = add_special_tokens
 
+        # handle the dataset name
+        # set the dataset attributes
+        if dset_name is not None:
+            for dn in dset_name.split("+"):
+                if dn not in self.DATASETS:
+                    raise ValueError(
+                        f"Unknown dataset {dn}, available: {list(self.DATASETS.keys())}"
+                    )
+
+        self.dset_name = dset_name
+
     # @cache_hf_dataset
     def _call(
         self,
         format: Optional[str] = "torch",
         columns: Optional[List[str]] = None,
         **kwargs,
-    ) -> HfDataset:
+    ) -> Optional[HfDataset]:
         """
         Loads the dataset and preprocesses it
         Parameters
@@ -143,6 +155,8 @@ class HfDatasetBuilder(DatasetBuilder):
         HfDataset
             The preprocessed dataset.
         """
+        if self.dset_name is None:
+            return None
         dataset = self.load_and_filter_dataset()
         dataset = self.preprocess_dataset(dataset)
         if format is not None:

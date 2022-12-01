@@ -114,14 +114,9 @@ class ReaderRetriever(Module):
     A reader-retriever model for OpenQA.
     """
 
+    # TODO: refactor/unify input validation
     _required_feature_names = []
-
-    _required_eval_feature_names = [
-        "question.input_ids",
-        "question.attention_mask",
-        "document.input_ids",
-        "document.attention_mask",
-    ]
+    _required_eval_feature_names = []
 
     # prefix for the logged metrics
     task_id: Optional[str] = None

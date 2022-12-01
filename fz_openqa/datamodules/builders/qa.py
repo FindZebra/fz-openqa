@@ -2,6 +2,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import dill  # type: ignore
 from datasets import concatenate_datasets
@@ -38,21 +39,21 @@ from fz_openqa.transformers_utils.tokenizer import ANS_TOKEN
 from fz_openqa.transformers_utils.tokenizer import DOC_TOKEN
 from fz_openqa.transformers_utils.tokenizer import QUERY_TOKEN
 
-QA_DATASETS = {
-    "medqa-us": (medqa.__file__, "us"),
-    "medqa-tw": (medqa.__file__, "tw"),
-    "quality": (quality.__file__, None),
-    "race": ("race", "all"),
-    "race-hard": ("race", "hard"),
-    "race-middle": ("race", "middle"),
-    "medmcqa": ("medmcqa", None),
-    "fz-queries": (fz_queries.__file__, None),
-}
-
 REQUIRED_INPUT_COLUMNS = ["question.text"]
 
 
 class QaBuilder(HfDatasetBuilder):
+    DATASETS: Dict[str, Tuple[str, ...]] = {
+        "medqa-us": (medqa.__file__, "us"),
+        "medqa-tw": (medqa.__file__, "tw"),
+        "quality": (quality.__file__, None),
+        "race": ("race", "all"),
+        "race-hard": ("race", "hard"),
+        "race-middle": ("race", "middle"),
+        "medmcqa": ("medmcqa", None),
+        "fz-queries": (fz_queries.__file__, None),
+    }
+
     # name of the attributes that will be converted to
     # tensors in the preprocessing function
     pt_attributes = [
@@ -81,16 +82,16 @@ class QaBuilder(HfDatasetBuilder):
     def __init__(
         self,
         *args,
+        dset_name: str = "medqa-us",
         n_query_tokens: int = 1,
         n_answer_tokens: int = 1,
         query_expansion: Optional[int] = None,
-        dset_name: str = "medqa-us",
         drop_documents: bool = True,
         preprocessing_op: Optional[DatasetPreprocessing] = None,
         concat_qa: bool = False,
         **kwargs,
     ):
-        super(QaBuilder, self).__init__(*args, **kwargs)
+        super(QaBuilder, self).__init__(*args, dset_name=dset_name, **kwargs)
         self.query_expansion = query_expansion
         self.n_query_tokens = n_query_tokens
         self.n_answer_tokens = n_answer_tokens
@@ -98,16 +99,9 @@ class QaBuilder(HfDatasetBuilder):
         self.preprocessing_op = preprocessing_op
         self.concat_qa = concat_qa
 
-        # set the dataset attributes
-        for dn in dset_name.split("+"):
-            if dn not in QA_DATASETS:
-                raise ValueError(f"Unknown dataset {dn}, available: {list(QA_DATASETS.keys())}")
-
-        self.dset_name = dset_name
-
     def load_one_dataset(self, dset_name, **kwargs):
         # load the dataset
-        dset_args = QA_DATASETS.get(dset_name, (dset_name,))
+        dset_args = self.DATASETS.get(dset_name, (dset_name,))
         dataset = load_dataset(*dset_args, **kwargs)
 
         # adapt the dataset
@@ -123,7 +117,7 @@ class QaBuilder(HfDatasetBuilder):
         """
         dset_names = sorted(self.dset_name.split("+"))
         for dset_name in dset_names:
-            script_id, name = QA_DATASETS[dset_name]
+            script_id, name = self.DATASETS[dset_name]
             logger.info(f"Loading dataset `{script_id}` with `{name}`")
 
         # load the base datasets
