@@ -110,14 +110,14 @@ datamodule:
     - document.proposal_rank
 
   # documents: retrieval & sampling
-  n_max_retrieved_documents: 1_000
+  n_max_retrieved_documents: 300
   n_retrieved_documents: 100
   n_documents: 8
 
   # ES parameters
   es_temp: 5.0
   es_weight: 0.5
-  faiss_factory: "IVF1000,Flat"
+  faiss_factory: "IVF128,Flat"
 
   # concatenate questions and answers
   concat_qa: true
@@ -155,10 +155,12 @@ datamodule:
     engines:
       elasticsearch:
         config:
+          k: ${datamodule.n_max_retrieved_documents}
           es_temperature: ${datamodule.es_temp}
           auxiliary_weight: ${datamodule.es_weight}
       faiss:
         config:
+          k: ${datamodule.n_max_retrieved_documents}
           index_factory: ${datamodule.faiss_factory}
           shard: true
           train_size: 1_000_000
@@ -166,6 +168,9 @@ datamodule:
           add_batch_size: 65536
           faiss_metric: inner_product
           nprobe: 32
+      topk:
+        config:
+          k: ${datamodule.n_retrieved_documents}
     query_cache_config:
       loader_kwargs:
         batch_size: ${int_mul:${base.n_devices},${base.infer_batch_mul},${base.device_batch_size}}

@@ -207,11 +207,13 @@ class Module(nn.Module, ABC):
         step_output["loss"] = step_output["loss"].mean()
         return step_output
 
+    @torch.inference_mode()
     def update_metrics(self, output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
         logits, targets = (output[k] for k in ("_logits_", "_targets_"))
         self.reader_metrics.update(split, logits, targets)
 
+    @torch.inference_mode()
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
@@ -219,6 +221,7 @@ class Module(nn.Module, ABC):
         """
         self.reader_metrics.reset(split)
 
+    @torch.inference_mode()
     def compute_metrics(self, split: Optional[Split] = None) -> Batch:
         """
         Compute the metrics for the given `split` else compute the metrics for all splits.

@@ -9,7 +9,7 @@ engines:
     config:
       name: elasticsearch
       config:
-        k: ${datamodule.n_retrieved_documents}
+        k: ${datamodule.n_max_retrieved_documents}
         es_temperature: 1
         auxiliary_weight: 0
         timeout: 360
@@ -28,7 +28,6 @@ engines:
     name: dense
     config:
       k: ${datamodule.n_max_retrieved_documents}
-      k_max: ${datamodule.n_retrieved_documents}
       index_factory: "shard:IVF1000,Flat"
       train_size: 1_000_000
       max_add_per_gpu: 10_000

@@ -58,7 +58,7 @@ class TextField(BaseModel):
             text = self.text
             if key is not None:
                 text = text[key]
-            return f"[{style}]`{text}`[/{style}] [orange]<raw text>[/orange]"
+            return f"[{style}]`{text}`[/{style}] [gray]<raw text>[/gray]"
         else:
             raise ValueError("No text or input_ids to decode")
 

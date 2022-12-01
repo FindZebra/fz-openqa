@@ -1,4 +1,5 @@
 from copy import copy
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict
 from typing import Optional
@@ -52,12 +53,12 @@ class GenerateCompletionsCallback(Callback):
         n_samples: int = 10,
     ):
         super(GenerateCompletionsCallback, self).__init__()
-        self.tokenizer = copy(tokenizer)
-        if self.tokenizer.padding_side != "left":
-            raise ValueError(
-                f"Tokenizer must have padding_side='left'. "
-                f"Found padding_side='{self.tokenizer.padding_side}'"
-            )
+        self.tokenizer_left = deepcopy(tokenizer)
+        self.tokenizer_left.padding_side = "left"
+        self.tokenizer_left.truncation_side = "left"
+        self.tokenizer_right = deepcopy(tokenizer)
+        self.tokenizer_right.padding_side = "right"
+        self.tokenizer_right.truncation_side = "right"
         self.log_dir = log_dir
         self.verbose = verbose
         self.n_samples = n_samples
@@ -94,14 +95,16 @@ class GenerateCompletionsCallback(Callback):
         batch = {k.replace("lm.", ""): v for k, v in batch.items() if k.startswith("lm.")}
         batch = {k: v.view(-1, v.size(-1))[: self.n_samples] for k, v in batch.items()}
 
+        # split the input into question and answer, so that we can generate the completion
+        # from the questions and compare it to the answers
         questions, answers = self.separate_questions_and_answers(batch)
         answer_max_length = batch["input_ids"].size(1) - questions["input_ids"].size(1)
 
-        # generate completions
+        # generate the completions
         gen_kwargs = {
             **self.generate_kwargs,
             "max_new_tokens": answer_max_length + 10,
-            "pad_token_id": self.tokenizer.pad_token_id,
+            "pad_token_id": self.tokenizer_left.pad_token_id,
         }
         questions = move_data_to_device(questions, pl_module.device)
         generated = reader.generate(
@@ -115,9 +118,10 @@ class GenerateCompletionsCallback(Callback):
         decode_kwargs = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
         completions = []
         for i, gen in enumerate(generated):
-            q_str = self.tokenizer.decode(gen[:in_q_len], **decode_kwargs)
-            comp_str = self.tokenizer.decode(gen[in_q_len:], **decode_kwargs)
-            a_str = self.tokenizer.decode(answers["input_ids"][i], skip_special_tokens=False)
+            q_ids = gen[:in_q_len]
+            q_str = self.tokenizer_left.decode(q_ids, **decode_kwargs)
+            comp_str = self.tokenizer_left.decode(gen[in_q_len:], **decode_kwargs)
+            a_str = self.tokenizer_left.decode(answers["input_ids"][i], skip_special_tokens=False)
             comp = Completion(
                 question=q_str,
                 answer=a_str,
@@ -129,11 +133,9 @@ class GenerateCompletionsCallback(Callback):
         canvas = f"{get_console_separator('.')}\n".join([c.rich_repr() for c in completions])
         canvas = f"{get_console_separator('=')}\n{canvas}{get_console_separator('=')}"
 
-        # print
+        # log
         if self.verbose:
             rich.print(canvas)
-
-        # log
         with open(Path(templates.__file__).parent / "completions.html", "r") as f:
             html_template = Template(f.read())
         html = html_template.render(
@@ -156,7 +158,6 @@ class GenerateCompletionsCallback(Callback):
 
     def separate_questions_and_answers(self, batch: Batch) -> Tuple[Batch, Batch]:
         """Remove the answer tokens from the input_ids and pad all the sequences left."""
-        assert self.tokenizer.padding_side == "left"
         input_ids = batch["input_ids"].clone()
         attention_mask = batch["attention_mask"].clone()
         token_type_ids = batch["token_type_ids"].clone()
@@ -171,7 +172,7 @@ class GenerateCompletionsCallback(Callback):
         question_start_ids = 1 + (ids + is_pad).min(dim=1).values
 
         # fetch the question tokens and pad
-        questions = self.tokenizer.pad(
+        questions = self.tokenizer_left.pad(
             {
                 "input_ids": [
                     input_ids[i, question_start_ids[i] : question_end_ids[i]]
@@ -190,7 +191,7 @@ class GenerateCompletionsCallback(Callback):
         )
 
         # fetch the answer tokens and pad
-        answers = self.tokenizer.pad(
+        answers = self.tokenizer_right.pad(
             {
                 "input_ids": [
                     input_ids[i, question_end_ids[i] :] for i in range(input_ids.size(0))

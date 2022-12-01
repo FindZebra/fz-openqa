@@ -359,7 +359,7 @@ class ReaderRetriever(Module):
 
         return final_output
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def update_metrics(self, final_output: Batch, split: Split) -> None:
         """update the metrics of the given split."""
 
@@ -380,6 +380,7 @@ class ReaderRetriever(Module):
             if retriever_targets is not None:
                 self.retriever_metrics.update(split, retriever_logits, retriever_targets)
 
+    @torch.inference_mode()
     def reset_metrics(self, split: Optional[Split] = None) -> None:
         """
         Reset the metrics corresponding to `split` if provided, else
@@ -388,6 +389,7 @@ class ReaderRetriever(Module):
         self.reader_metrics.reset(split)
         self.retriever_metrics.reset(split)
 
+    @torch.inference_mode()
     def compute_metrics(self, split: Optional[Split] = None) -> Batch:
         """
         Compute the metrics for the given `split` else compute the metrics for all splits.
@@ -506,7 +508,13 @@ def extract_mc_answer_logits(logits, input_ids, token_type_ids, answer_choices_t
     # answer_loc = ids.argmin(dim=-1)
     # TODO: fix the above code. The line below (temporary) assumes that all the
     #  answer tokens are at the end of the encoded prompt.
-    answer_loc = token_type_ids.shape[-1] - (token_type_ids == 1).long().sum(dim=-1)
+    # answer_loc = token_type_ids.shape[-1] - (token_type_ids == 1).long().sum(dim=-1)
+
+    # correct code?
+    ids = torch.arange(input_ids.size(1), device=input_ids.device)[None, :].expand_as(input_ids)
+    mask = token_type_ids.clone()
+    mask[mask == 1] = -1e9
+    answer_loc = 1 + (ids + mask).max(dim=1).values
 
     # debugging
     # input_ids = input_ids.clone()
@@ -525,15 +533,16 @@ def extract_mc_answer_logits(logits, input_ids, token_type_ids, answer_choices_t
     answer_loc = answer_loc[:, None, None]
     answer_loc = answer_loc.expand(-1, 1, logits.shape[-1])
     logits_mc_answers = logits.gather(1, index=answer_loc).squeeze(1)
+
     # preds = logits_mc_answers.argsort(dim=1, descending=True)[:, 3]
-    # for ls in preds:
-    #     rich.print(f"PREDS_AT_ANS: {config.tokenizer.decode(ls, skip_special_tokens=False)}")
+    # # for ls in preds:
+    # #     rich.print(f"PREDS_AT_ANS: {config.tokenizer.decode(ls, skip_special_tokens=False)}")
     # for i, logits_i in enumerate(logits):
     #     ans_id = answer_loc[i, 0, 0]
     #     preds_i = logits[i].argmax(dim=-1)
-    #     # preds_i = preds_i[ans_id - 5: ans_id + 5]
-    #     rich.print(f">> ({i}, {preds_i})
-    #     {config.tokenizer.decode(preds_i, skip_special_tokens=False)}")
+    #     preds_i = preds_i[ans_id - 5: ans_id + 5]
+    #     rich.print(f">> ({i}, {preds_i})"
+    #                f"{config.tokenizer.decode(preds_i, skip_special_tokens=False)}")
 
     # fetch the logits corresponding to the answer tokens (A, B, C, D)
     mc_tokens_index = answer_choices_tokens[None, :]

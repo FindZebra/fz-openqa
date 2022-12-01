@@ -149,8 +149,7 @@ class NestedMetricCollections(MetricCollection):
         nn.Module.__init__(self)
         self.metrics = nn.ModuleDict(metrics)
 
-    @torch.inference_mode()
-    def update(self, values=Dict[str, Tuple[Tensor]]) -> None:
+    def update(self, values: Dict[str, Tuple[Tensor]]) -> None:
         for k, v in values.items():
             self.metrics[k].update(*v)
 
