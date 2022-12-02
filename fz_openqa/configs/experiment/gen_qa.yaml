@@ -18,14 +18,12 @@ model:
   retriever_id: findzebra/vod-retriever-medical-v1.0
   module:
     skip_retriever: true
-  gradients:
-    model_context: false
   optimizer:
-    lr: 1e-5
+    lr: 1e-4
     weight_decay: 1e-3
     eps: 1e-8
   lr_scheduler:
-    num_warmup_steps: 1_000
+    num_warmup_steps: 10_000
     num_training_steps: 1_000_000 # constant learning rate
 
 datamodule:

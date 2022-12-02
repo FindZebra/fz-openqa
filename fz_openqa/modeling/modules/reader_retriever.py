@@ -163,12 +163,12 @@ class ReaderRetriever(Module):
         self.eval_chunksize = eval_chunksize
 
         # freeze parameters
-        if self.skip_retriever:
-            for param in self.retriever.parameters():
-                param.requires_grad = False
-        if self.skip_reader:
-            for param in self.reader.parameters():
-                param.requires_grad = False
+        # if self.skip_retriever:
+        #     for param in self.retriever.parameters():
+        #         param.requires_grad = False
+        # if self.skip_reader:
+        #     for param in self.reader.parameters():
+        #         param.requires_grad = False
 
         # register the heads
         self.reader: Optional[PreTrainedModel] = maybe_instantiate(reader)
