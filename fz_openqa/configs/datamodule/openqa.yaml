@@ -7,6 +7,7 @@ defaults:
   - preprocessing_op: none
   - sampler: priority
   - transform: none
+  - dataset_update: no_update
 
 _target_: fz_openqa.datamodules.DataModule
 

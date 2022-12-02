@@ -9,6 +9,7 @@ defaults:
   - override /datamodule/builder: openqa
   - override /datamodule/index_builder: dense
   - override /datamodule/sampler: priority
+  - override /datamodule/dataset_update: periodic
   - override /datamodule/transform:
       - language_model
       - flatten_mc_questions
@@ -72,13 +73,6 @@ model:
 
 
 datamodule:
-  # how often to map the dataset
-  dataset_update:
-    freq: ${model.period}
-    reset_optimizer: true
-    reset_parameters: false
-    test_every_update: false # might cause a bug with checkpointing
-
   # dataloader
   train_batch_size: ${base.step_batch_size}
   eval_batch_size: ${int_mul:${base.eval_device_batch_size},${base.n_devices}}

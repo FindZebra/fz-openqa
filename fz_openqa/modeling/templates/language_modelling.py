@@ -62,6 +62,7 @@ class LanguageModellingTemplateGenerator:
 
             target = eg[self.a_target_key]
             canvas += "\n\nA: The answer is ("
+            # answer_canvas = f"{letters[target]}"
             answer_canvas = f"{letters[target]}) {eg[self.a_key][target]}"
         elif self.scenario == Scenario.multiple_choice_concat_qa:
             raise ValueError(

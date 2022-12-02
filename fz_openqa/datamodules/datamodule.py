@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,6 +13,7 @@ from datasets import Split
 from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
+from pytorch_lightning import LightningModule
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
@@ -24,6 +26,14 @@ from warp_pipes import pprint_batch
 from fz_openqa.datamodules.builders.base import DatasetBuilder
 from fz_openqa.utils import maybe_instantiate
 from fz_openqa.utils.functional import infer_batch_size
+
+
+def _format_kwargs(kwargs: Dict[str, Any]) -> str:
+    def fmt(x):
+        if isinstance(x, (LightningModule, torch.nn.Module)):
+            return x.__class__.__name__
+
+    return ", ".join([f"{k}={fmt(v)}" for k, v in kwargs.items()])
 
 
 class DataModule(LightningDataModule):
@@ -83,7 +93,10 @@ class DataModule(LightningDataModule):
     def prepare_data(self, **kwargs):
         """Download data if needed. This method is called only from a single GPU.
         Do not use it to assign state (self.x = y)."""
-        logger.info(f"Preparing data with <{self.builder.__class__.__name__}>")
+        logger.info(
+            f"Preparing data with <{self.builder.__class__.__name__}> "
+            f"(kwargs={_format_kwargs(kwargs)})"
+        )
         self.builder(**kwargs)
 
     def setup(self, stage: Optional[str] = None, **kwargs):
@@ -92,7 +105,10 @@ class DataModule(LightningDataModule):
         1. Store all data into the attribute `self.dataset` using `self.preprocess_dataset`
         2. Build the operator to collate examples into a batch (`self.collate_pipe`).
         """
-        logger.info(f"Setting up with <{self.builder.__class__.__name__}>")
+        logger.info(
+            f"Setting up with <{self.builder.__class__.__name__}> "
+            f"(kwargs={_format_kwargs(kwargs)})"
+        )
         self.update_dataset(stage=stage, **kwargs)
 
     def update_dataset(self, stage: Optional[str] = None, **kwargs):

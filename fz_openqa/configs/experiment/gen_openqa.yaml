@@ -20,7 +20,7 @@ model:
     eval_chunksize: 300
 
 trainer:
-  val_check_interval: 500
+  val_check_interval: 1_000
 
 datamodule:
   n_documents: 4

@@ -6,16 +6,17 @@ authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
-hydra-core = "^1.1.1"
-torchmetrics = "^0.7.2"
-wandb = "^0.12.10"
+torch = ">=1.12"
 einops = "^0.4.0"
+torchmetrics = "^0.7.2"
+hydra-core = "^1.1.1"
+wandb = "^0.12.10"
 gdown = "^4.2.1"
 hydra-colorlog = "^1.1.0"
 unicode = "^2.8"
 nltk = "^3.7"
 sentencepiece = "^0.1.96"
-warp-pipes = { git = "https://github.com/vlievin/warp-pipes.git", tag = "v0.1.1" }
+warp-pipes = { git = "https://github.com/vlievin/warp-pipes.git", tag = "v0.1.2" }
 spacy = "^3.4.2"
 python-dotenv = "^0.21.0"
 html2text = "^2020.1.16"

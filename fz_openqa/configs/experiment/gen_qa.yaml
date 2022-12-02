@@ -2,7 +2,8 @@
 
 defaults:
   - gen_openqa
-  - override /model/module/gradients: in_batch
+  - override /model/module/gradients: language_modelling
+  - override /datamodule/dataset_update: no_update
 
 setup_with_model: true
 
@@ -19,12 +20,18 @@ model:
     skip_retriever: true
   gradients:
     model_context: false
+  optimizer:
+    lr: 1e-5
+    weight_decay: 1e-3
+    eps: 1e-8
+  lr_scheduler:
+    num_warmup_steps: 1_000
+    num_training_steps: 1_000_000 # constant learning rate
 
 datamodule:
   n_documents: 4
   concat_qa: false
   es_weight: 0
-  dataset_update: null
 
 logger:
   wandb:

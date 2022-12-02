@@ -1,0 +1,9 @@
+_target_: fz_openqa.training.DatasetUpdateConfig
+freq: ${model.period}
+reset_optimizer: true
+reset_parameter_scheduler: false
+test_every_update: false # might cause a bug with checkpointing
+index_on_first_step: false
+spawn_es: true
+update_kwargs:
+  keep_in_memory: false

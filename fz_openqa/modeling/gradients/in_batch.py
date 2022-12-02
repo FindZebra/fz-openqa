@@ -1,3 +1,4 @@
+import rich
 from pydantic import Field
 
 from fz_openqa.datamodules.pipes import torch
@@ -43,6 +44,32 @@ class InBatchGradientsOutput(GradientsOutput):
         **kwargs,
     ):
         return super().dict(by_alias=by_alias, **kwargs)
+
+
+class LanguageModellingGradients(Gradients):
+    def _step_end(self, step_output: GradientsStepOutput) -> InBatchGradientsOutput:
+
+        # estimate log p(a | q)
+        log_p_d = step_output.f_theta.log_softmax(dim=-1)
+        log_p_lm = (step_output.log_p_lm + step_output.log_s).logsumexp(dim=-1)
+
+        # loss (negative log likelihood)
+        loss = -log_p_lm.view(log_p_lm.shape[0], -1).sum(dim=-1)
+
+        # multiple-choice logits
+        if step_output.lm_mc_logits is not None:
+            lm_mc_logits = (step_output.lm_mc_logits).log_softmax(dim=-1)
+            lm_mc_logits = (lm_mc_logits + log_p_d.unsqueeze(-1)).logsumexp(dim=1)
+        else:
+            lm_mc_logits = None
+
+        # format the output
+        step_output = step_output.dict(by_alias=False)
+        step_output["lm_mc_logits"] = lm_mc_logits
+        return InBatchGradientsOutput(
+            loss=loss,
+            **step_output,
+        )
 
 
 class InBatchGradients(Gradients):

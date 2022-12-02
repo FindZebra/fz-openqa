@@ -120,8 +120,8 @@ class GenerateCompletionsCallback(Callback):
         for i, gen in enumerate(generated):
             q_ids = gen[:in_q_len]
             q_str = self.tokenizer_left.decode(q_ids, **decode_kwargs)
-            comp_str = self.tokenizer_left.decode(gen[in_q_len:], **decode_kwargs)
-            a_str = self.tokenizer_left.decode(answers["input_ids"][i], skip_special_tokens=False)
+            a_str = self.tokenizer_left.decode(answers["input_ids"][i], **decode_kwargs)
+            comp_str = self.tokenizer_left.decode(gen[in_q_len:], skip_special_tokens=False)
             comp = Completion(
                 question=q_str,
                 answer=a_str,

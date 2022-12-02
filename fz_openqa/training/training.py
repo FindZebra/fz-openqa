@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import time
 import warnings
 from functools import partial
 from typing import List
@@ -11,26 +10,22 @@ from typing import Optional
 
 import datasets
 import jsondiff
-import pytorch_lightning as pl
 import rich
 import torch
-from datasets import Split
 from hydra.utils import instantiate
 from loguru import logger as log
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from pytorch_lightning import Callback
-from pytorch_lightning import LightningModule
 from pytorch_lightning import seed_everything
 from pytorch_lightning import Trainer
-from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import LightningLoggerBase
-from pytorch_lightning.trainer.states import TrainerStatus
 from warp_pipes import get_console_separator
 
 from fz_openqa.datamodules import DataModule
 from fz_openqa.inference.checkpoint import CheckpointLoader
 from fz_openqa.modeling import Model
+from fz_openqa.training.train_and_update import train_with_dataset_updates
 from fz_openqa.utils import train_utils
 from fz_openqa.utils.elasticsearch import ElasticSearchInstance
 from fz_openqa.utils.train_utils import setup_safe_env
@@ -82,7 +77,7 @@ def train(config: DictConfig) -> Optional[float]:
         seed_everything(config.base.seed, workers=True)
 
     with ElasticSearchInstance(
-        disable=not config.get("spawn_es", False),
+        disable=not config.datamodule.dataset_update.spawn_es,
         stdout=open("es.stdout.log", "w"),
     ):
 
@@ -158,28 +153,15 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Training...
     patch_signal_connector(trainer)
-    dataset_update = config.datamodule.get("dataset_update", None)
-    if dataset_update is not None:
-        dataset_update_freq = dataset_update["freq"]
-        log.info(
-            f"Starting training with dataset updates "
-            f"(max_steps={trainer.max_steps}, freq={dataset_update_freq} steps).."
-        )
-        train_with_dataset_updates(
-            datamodule,
-            model=model,
-            trainer=trainer,
-            update_freq=dataset_update_freq,
-            test_every_update=dataset_update.get("test_every_update", False),
-            reset_optimizer=dataset_update.get("reset_optimizer", True),
-            reset_parameters=dataset_update.get("reset_parameters", False),
-            load_best_model=config.get("test_with_best_model", True),
-            spawn_es=config.get("spawn_es", False),
-            **dataset_update.get("builder_args", {}),
-        )
-    else:
-        log.info(f"Starting training (max_steps={trainer.max_steps})..")
-        trainer.fit(model=model, datamodule=datamodule)
+    dataset_update = instantiate(config.datamodule.dataset_update)
+
+    train_with_dataset_updates(
+        datamodule,
+        model=model,
+        trainer=trainer,
+        config=dataset_update,
+        load_best_model=config.get("test_with_best_model", True),
+    )
 
     # Evaluate Module on test set after training
     if not config.trainer.get("fast_dev_run"):
@@ -314,134 +296,3 @@ def patch_signal_connector(trainer: Trainer):
 
     trainer.signal_connector._is_on_windows = lambda *_: True
     trainer.signal_connector.teardown = partial(_no_signal_teardown, trainer.signal_connector)
-
-
-def train_with_dataset_updates(
-    datamodule: DataModule,
-    *,
-    model: Model,
-    trainer: Trainer,
-    update_freq: int,
-    reset_optimizer: bool = False,
-    reset_parameters: bool = False,
-    test_every_update: bool = True,
-    load_best_model: bool = False,
-    index_on_first_step: bool = False,
-    keep_in_memory: bool = False,
-    spawn_es: bool = False,
-    **kwargs,
-) -> LightningModule:
-    """Fit the model to the dataset, updating the dataset every `update_freq` epochs."""
-    max_steps = trainer.max_steps
-    trainer.fit_loop.max_steps = min(update_freq, max_steps)
-    dataset_iter = 0
-    if trainer.logger is not None:
-        trainer.logger.log_metrics({"dataset_update/step": dataset_iter}, step=trainer.global_step)
-    while trainer.global_step < max_steps - 1:
-
-        # update the dataset
-        try:
-            if trainer.global_step > 0 or index_on_first_step:
-                dataset_iter += 1
-                update_dataset(
-                    datamodule,
-                    model=model,
-                    trainer=trainer,
-                    keep_in_memory=keep_in_memory,
-                    dataset_iter=dataset_iter,
-                    spawn_es=spawn_es,
-                    **kwargs,
-                )
-                if test_every_update:
-                    log.info(f"Starting testing (update={dataset_iter})..")
-                    trainer.test(model=model, dataloaders=datamodule.test_dataloader())
-        except Exception:
-            log.exception("Dataset update interrupted.")
-            break
-
-        # fit the model for `update_freq` epochs
-        try:
-            log.info(
-                f"Starting training for "
-                f"{trainer.fit_loop.max_steps - trainer.global_step} steps"
-                f" (update={dataset_iter}).."
-            )
-            trainer.fit(
-                model=model,
-                train_dataloaders=datamodule.train_dataloader(),
-                val_dataloaders=datamodule.val_dataloader(),
-            )
-            log.info(f"Step {trainer.global_step} completed, epoch {trainer.current_epoch}.")
-
-            if trainer.max_steps > max_steps:
-                break
-            if trainer.state.status == TrainerStatus.INTERRUPTED:
-                log.info(
-                    f"Training interrupted. " f"Steps remaining: {max_steps - trainer.global_step}"
-                )
-                break
-
-            # update trainer parameters
-            trainer.fit_loop.max_steps += update_freq
-            trainer.num_sanity_val_steps = 0
-
-            # get optimizer state and store it into the model, so it can be
-            # set in the beginning of `trainer.fit()`
-            if not reset_optimizer:
-                set_model_opt_states(model)
-            if reset_parameters:
-                try:
-                    param_names = list(model._params.parameters.keys())
-                    log.info(f"Resetting model parameter schedules {param_names}")
-                    model._params.reset()
-                except Exception as exc:
-                    log.error(f"Couldn't reset parameters: {exc}")
-        except KeyboardInterrupt:
-            log.info("Training interrupted.")
-            break
-
-    # load the best model and return it
-    log.info("Training completed. Loading best model and re-indexing the dataset")
-    if load_best_model and trainer.checkpoint_callback.last_model_path is not None:
-        model = model.load_from_checkpoint(trainer.checkpoint_callback.last_model_path)
-    else:
-        log.info("No checkpoint found. Using the last model.")
-
-    update_dataset(
-        datamodule, model=model, trainer=trainer, splits=[Split.TEST], spawn_es=spawn_es, **kwargs
-    )
-
-    return model
-
-
-def set_model_opt_states(model):
-    optimizer = model.optimizers()
-    if isinstance(optimizer, LightningOptimizer):
-        optimizer = optimizer.optimizer
-    scheduler = model.lr_schedulers()
-    model.opt_states = {"optimizer": optimizer.state_dict(), "lr_scheduler": scheduler.state_dict()}
-
-
-def update_dataset(
-    datamodule: DataModule,
-    *,
-    model: pl.LightningModule,
-    trainer: Trainer,
-    keep_in_memory=True,
-    dataset_iter: int = 0,
-    spawn_es: bool = False,
-    **kwargs,
-):
-    log.info("Updating dataset...")
-    with ElasticSearchInstance(disable=not spawn_es, stdout=open("es.stdout.log", "w")):
-        start_time = time.time()
-        datamodule.update_dataset(
-            model=model, trainer=trainer, keep_in_memory=keep_in_memory, **kwargs
-        )
-        # datamodule.display_samples(n_samples=1)
-        elapsed_time = time.time() - start_time
-        log.info(f"Dataset updated in {elapsed_time:.2f}s")
-        trainer.logger.log_metrics(
-            {"dataset_update/step": dataset_iter, "dataset_update/time": elapsed_time},
-            step=trainer.global_step,
-        )
