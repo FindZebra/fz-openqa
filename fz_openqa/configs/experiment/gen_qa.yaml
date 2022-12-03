@@ -19,7 +19,7 @@ model:
   module:
     skip_retriever: true
   optimizer:
-    lr: 1e-4
+    lr: 5e-5
     weight_decay: 1e-3
     eps: 1e-8
   lr_scheduler:

@@ -267,6 +267,8 @@ class Model(LightningModule):
 
         # defile the learning rate scheduler
         lr_scheduler = maybe_instantiate(lr_scheduler_cfg, _args_=[optimizer], _convert_="all")
+        rich.print(optimizer)
+        rich.print(lr_scheduler)
 
         # if an optimizer state is available, set it
         # this is a trick to avoid resetting the state between multiple `trainer.fit()` steps

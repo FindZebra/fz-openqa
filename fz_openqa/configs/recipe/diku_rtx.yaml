@@ -1,0 +1,12 @@
+# @package _global_
+
+
+
+base:
+  device_batch_size: 2
+  eval_device_batch_size: 4
+  infer_batch_mul: 500
+
+model:
+  module:
+    eval_chunksize: 500

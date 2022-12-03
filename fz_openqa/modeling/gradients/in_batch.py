@@ -1,4 +1,3 @@
-import rich
 from pydantic import Field
 
 from fz_openqa.datamodules.pipes import torch
@@ -30,6 +29,11 @@ class InBatchGradientsOutput(GradientsOutput):
         alias="lm.logp",
         description="Log reader probability `p([a;q;d])`",
     )
+    lm_ppl: torch.Tensor = Field(
+        None,
+        alias="lm.ppl",
+        description="Perplexity of the language model",
+    )
 
     lm_mc_logits: torch.Tensor = Field(
         None,
@@ -52,6 +56,7 @@ class LanguageModellingGradients(Gradients):
         # estimate log p(a | q)
         log_p_d = step_output.f_theta.log_softmax(dim=-1)
         log_p_lm = (step_output.log_p_lm + step_output.log_s).logsumexp(dim=-1)
+        # todo: perplexity
 
         # loss (negative log likelihood)
         loss = -log_p_lm.view(log_p_lm.shape[0], -1).sum(dim=-1)
