@@ -265,7 +265,9 @@ class ReaderRetriever(Module):
                 )
 
             # get batch subset and flatten inputs
-            batch_field = {k.replace(f"{field}.", ""): batch[k] for k in in_keys}
+            batch_field = {
+                k.replace(f"{field}.", ""): batch[k] for k in in_keys if batch[k] is not None
+            }
             ref_shape = batch_field["input_ids"].shape[:-1]
             batch_field = {k: v.view(-1, *v.shape[-1:]) for k, v in batch_field.items()}
 

@@ -274,6 +274,7 @@ class OpenQaBuilder(DatasetBuilder):
                                 "document.proposal_log_weight",
                                 "answer.target",
                                 "answer.text",
+                                "question.text",
                             ]
                         )
                     ),

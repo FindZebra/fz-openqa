@@ -3,9 +3,12 @@
 
 
 base:
-  device_batch_size: 2
-  eval_device_batch_size: 4
+  device_batch_size: 1
+  eval_device_batch_size: 2
   infer_batch_mul: 500
+
+datamodule:
+  n_documents: 8
 
 model:
   module:

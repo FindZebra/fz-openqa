@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - gen_qa
+
+setup_with_model: false
+
+base:
+  exp_id: no-context
+  device_batch_size: 4
+  eval_device_batch_size: 8
+
+datamodule:
+  n_documents: 0

@@ -6,6 +6,7 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import rich
 import torch
 from pydantic import BaseModel
 from transformers import PreTrainedTokenizerFast
@@ -58,7 +59,7 @@ class TextField(BaseModel):
             text = self.text
             if key is not None:
                 text = text[key]
-            return f"[{style}]`{text}`[/{style}] [gray]<raw text>[/gray]"
+            return f"[{style}]`{text}`[/{style}] [gray]<str>[/gray]"
         else:
             raise ValueError("No text or input_ids to decode")
 
@@ -100,6 +101,7 @@ def infer_scenario(eg: Eg) -> Scenario:
 
 def format_qa_eg(eg: Eg, tokenizer: PreTrainedTokenizerFast, **kwargs) -> str:
     scenario = infer_scenario(eg)
+    rich.print(f"##### Scenario: {scenario}")
     if scenario == "none":
         canvas = f"<couldn't represent example {type(eg)}>"
     elif scenario == Scenario.generative_qa:
@@ -122,7 +124,7 @@ def format_generative_qa_eg(eg, tokenizer, **kwargs):
     canvas = f"Question: {question_str}"
 
     # answers
-    answer = TextField.from_field("question", eg)
+    answer = TextField.from_field("answer", eg)
     if answer.exists:
         answer_str = answer.pretty_decode(style="green", tokenizer=tokenizer)
         canvas += f"\nAnswer: {answer_str}"

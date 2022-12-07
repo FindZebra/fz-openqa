@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - mc_openqa
+  - override /datamodule/builder: openqa
+  - override /datamodule/transform: language_model
+
+base:
+  batch_size: 32
+  device_batch_size: 1
+  eval_device_batch_size: 2
+  infer_batch_mul: 1_600
+  target_mode: min
+  target_metric: validation/loss
+
+model:
+  module:
+    skip_retriever: false
+    skip_reader: false
+    eval_chunksize: 300
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-3
+    eps: 1e-8
+  lr_scheduler:
+    num_warmup_steps: 1_000
+    num_training_steps: 1_000_000 # constant learning rate
+
+trainer:
+  val_check_interval: 1_000
+
+datamodule:
+  n_documents: 4
+  concat_qa: true
+  es_weight: 0.5
+
+logger:
+  wandb:
+    group: gen-openqa-${datamodule.dset_name}
+    name: ${base.exp_id}

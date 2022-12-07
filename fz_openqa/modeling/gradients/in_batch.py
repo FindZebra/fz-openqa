@@ -1,6 +1,6 @@
+import torch
 from pydantic import Field
 
-from fz_openqa.datamodules.pipes import torch
 from fz_openqa.modeling.datastruct import METRICS_PREFIX
 from fz_openqa.modeling.gradients.base import Gradients
 from fz_openqa.modeling.gradients.base import GradientsOutput
@@ -55,8 +55,12 @@ class LanguageModellingGradients(Gradients):
 
         # estimate log p(a | q)
         log_p_d = step_output.f_theta.log_softmax(dim=-1)
-        log_p_lm = (step_output.log_p_lm + step_output.log_s).logsumexp(dim=-1)
-        # todo: perplexity
+        if step_output.log_s is not None:
+            log_p_lm = (step_output.log_p_lm + step_output.log_s).logsumexp(dim=-1)
+            # todo: perplexity
+        else:
+            assert step_output.log_p_lm.ndim == 1
+            log_p_lm = step_output.log_p_lm
 
         # loss (negative log likelihood)
         loss = -log_p_lm.view(log_p_lm.shape[0], -1).sum(dim=-1)
@@ -64,7 +68,8 @@ class LanguageModellingGradients(Gradients):
         # multiple-choice logits
         if step_output.lm_mc_logits is not None:
             lm_mc_logits = (step_output.lm_mc_logits).log_softmax(dim=-1)
-            lm_mc_logits = (lm_mc_logits + log_p_d.unsqueeze(-1)).logsumexp(dim=1)
+            if lm_mc_logits.ndim > 2:
+                lm_mc_logits = (lm_mc_logits + log_p_d.unsqueeze(-1)).logsumexp(dim=1)
         else:
             lm_mc_logits = None
 

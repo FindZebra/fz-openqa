@@ -7,6 +7,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import rich
 import torch
 from pydantic import BaseModel
 from pydantic import Field
@@ -51,12 +52,12 @@ class GradientsInput(BaseModel):
         description="Question vector",
     )
     f_phi: torch.Tensor = Field(
-        ...,
+        None,
         alias="document.proposal_score",
         description="Score of the proposal distribution",
     )
     log_s: torch.Tensor = Field(
-        ...,
+        None,
         alias="document.proposal_log_weight",
         description="Log importance weight of the proposal distribution",
     )
@@ -84,28 +85,28 @@ class GradientsStepOutput(BaseModel):
         alias="lm.logp",
         description="Log reader probability `p([a;q;d])`",
     )
-    lm_mc_logits: torch.Tensor = Field(
+    lm_mc_logits: Optional[torch.Tensor] = Field(
         None,
         alias="lm.mc_logits",
         description="Logits for multiple-choice answers",
     )
-    f_theta: torch.Tensor = Field(
+    f_theta: Optional[torch.Tensor] = Field(
         ...,
         alias="document.retriever_score",
         description="Score of the retriever",
     )
-    f_phi: torch.Tensor = Field(
+    f_phi: Optional[torch.Tensor] = Field(
         ...,
         alias="document.proposal_score",
         description="Score of the proposal distribution",
     )
-    log_s: torch.Tensor = Field(
+    log_s: Optional[torch.Tensor] = Field(
         ...,
         alias="document.proposal_log_weight",
         description="Log importance weight of the proposal distribution",
     )
-    retriever_entropy: torch.Tensor = Field(
-        ...,
+    retriever_entropy: Optional[torch.Tensor] = Field(
+        None,
         alias="document.retriever_entropy",
         description="Entropy of the retriever",
     )
@@ -122,7 +123,7 @@ class GradientsOutput(BaseModel):
         ...,
         description="Final loss to be differentiated. Shape is (batch_size,).",
     )
-    retriever_entropy: torch.Tensor = Field(
+    retriever_entropy: Optional[torch.Tensor] = Field(
         ...,
         alias="document.retriever_entropy",
         description="Entropy of the retriever",
@@ -155,7 +156,10 @@ class Gradients(nn.Module):
                 "setting the retriever score to zero for "
                 f"`{type(self).__name__}` computation."
             )
-            retriever_score = torch.zeros_like(data.f_phi)
+            if data.f_phi is not None:
+                retriever_score = torch.zeros_like(data.f_phi)
+            else:
+                retriever_score = torch.zeros_like(data.log_p_lm)
         else:
             retriever_score = torch.einsum("...h, ...dh -> ... d", hq, hd)
 
@@ -175,6 +179,8 @@ class Gradients(nn.Module):
 
     @staticmethod
     def _get_retriever_metrics(retriever_scores) -> Dict:
+        if retriever_scores.ndim <= 1:
+            return {}
         retriever_log_probs = torch.log_softmax(retriever_scores, dim=-1)
         entropy = -torch.sum(torch.exp(retriever_log_probs) * retriever_log_probs, dim=-1)
         return {

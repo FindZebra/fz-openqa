@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - gen_openqa
+  - gen_mc_openqa
   - override /model/module/gradients: language_modelling
   - override /datamodule/dataset_update: no_update
 
@@ -18,13 +18,6 @@ model:
   retriever_id: findzebra/vod-retriever-medical-v1.0
   module:
     skip_retriever: true
-  optimizer:
-    lr: 5e-5
-    weight_decay: 1e-3
-    eps: 1e-8
-  lr_scheduler:
-    num_warmup_steps: 10_000
-    num_training_steps: 1_000_000 # constant learning rate
 
 datamodule:
   n_documents: 4
