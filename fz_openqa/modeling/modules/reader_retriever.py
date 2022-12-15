@@ -20,6 +20,7 @@ from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from warp_pipes import Batch
 from warp_pipes import pprint_batch
 
@@ -443,8 +444,12 @@ def format_transformer_output(
 
 
 @format_transformer_output.register(CausalLMOutputWithCrossAttentions)
+@format_transformer_output.register(CausalLMOutputWithPast)
 def _(
-    output: CausalLMOutputWithCrossAttentions, *, batch: Batch, config: ModelOutputFormatConfig
+    output: CausalLMOutputWithCrossAttentions | CausalLMOutputWithPast,
+    *,
+    batch: Batch,
+    config: ModelOutputFormatConfig,
 ) -> Batch:
     try:
         lm_logits = output.logits
