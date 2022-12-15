@@ -54,7 +54,11 @@ class LanguageModellingTemplateGenerator:
             canvas += f"Q: {eg[self.q_key]}\nA: "
             answer_canvas = ""
             if self.r_key in eg:
-                answer_canvas += f"{eg[self.r_key]}\nThe answer is: "
+                cot = eg[self.r_key]
+                if cot is not None and len(cot):
+                    if cot[-1] == ".":
+                        cot = cot[:-1]
+                    answer_canvas += f"{cot}.\nThe answer is: "
             answer_canvas += eg[self.a_key]
         elif self.scenario == Scenario.multiple_choice_qa:
             canvas += f"Q: {eg[self.q_key]}\n\n"
