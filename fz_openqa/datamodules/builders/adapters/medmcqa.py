@@ -1,3 +1,4 @@
+import re
 from typing import Dict
 
 import datasets
@@ -5,6 +6,17 @@ from datasets import Dataset
 from datasets import DatasetDict
 
 from fz_openqa.datamodules.builders.adapters.base import DatasetAdapter
+
+
+# https://regex101.com/r/9YNTyr/1
+medmcqa_ans_pattern = re.compile(
+    (
+        r"^((ans|answer)?(\.|:|-)?( *)?(is )?)?"
+        r"((\(|\"| |')?[a-d](?!\w))(\)|\"| |')?"
+        r"([ ]+i.e.[(,|.)])?( +)?"
+    ),
+    flags=re.IGNORECASE,
+)
 
 
 class NestColumns:
@@ -15,6 +27,25 @@ class NestColumns:
     def __call__(self, row: Dict) -> Dict:
         output = [row[c] for c in self.input_columns]
         return {self.output_column: output}
+
+
+class MedMCQACleanupReasoning(object):
+    def __init__(self, reasoning_column: str = "exp"):
+        self.reasoning_column = reasoning_column
+
+    def __call__(self, row: Dict) -> Dict:
+        reasoning = row[self.reasoning_column]
+        if reasoning is None:
+            cleaned_reasoning = ""
+        else:
+            cleaned_reasoning = re.sub(medmcqa_ans_pattern, "", reasoning)
+            # color = "red" if "ans" in cleaned_reasoning.lower() else "green"
+            # rich.print(
+            #     f"[gray]>>> {reasoning}\n"
+            #     f"[{color}]>> {len(cleaned_reasoning)} "
+            #     f">> ({type(cleaned_reasoning)}) {cleaned_reasoning}"
+            # )
+        return {self.reasoning_column: cleaned_reasoning}
 
 
 class MedMCQAAdapter(DatasetAdapter):
@@ -31,11 +62,16 @@ class MedMCQAAdapter(DatasetAdapter):
             desc="Cleanup answer options",
             **kwargs
         )
+        # cleanup reasoning
+        dataset = dataset.map(
+            MedMCQACleanupReasoning(reasoning_column="exp"), desc="Cleaning up reasoning", **kwargs
+        )
+
         dataset = dataset.rename_columns(
             {
                 "question": "question.text",
                 "cop": "answer.target",
-                "exp": "reasoning",
+                "exp": "question.reasoning",
                 "id": "question.uid",
             }
         )

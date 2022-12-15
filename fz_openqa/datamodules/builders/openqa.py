@@ -257,7 +257,7 @@ class OpenQaBuilder(DatasetBuilder):
                 *index_pipes,
                 ("Transform", self.transform),
                 # TODO: remove this once the `collate_fn` is fixed
-                #  problem with `List[Tensor]` -> need to concatenate them
+                #  problem with inputs of type `List[Tensor]` -> need to concatenate them
                 (
                     "Cleanup",
                     FilterKeys(
@@ -275,6 +275,7 @@ class OpenQaBuilder(DatasetBuilder):
                                 "answer.target",
                                 "answer.text",
                                 "question.text",
+                                "question.reasoning",
                             ]
                         )
                     ),

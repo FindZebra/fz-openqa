@@ -30,6 +30,7 @@ class LanguageModellingTemplateGenerator:
     ):
         self.scenario = scenario
         self.q_key = f"{question_field}.text"
+        self.r_key = f"{question_field}.reasoning"
         self.a_key = f"{answer_field}.text"
         self.d_key = f"{document_field}.text"
         self.a_target_key = f"{answer_field}.target"
@@ -51,7 +52,10 @@ class LanguageModellingTemplateGenerator:
 
         if self.scenario == Scenario.generative_qa:
             canvas += f"Q: {eg[self.q_key]}\nA: "
-            answer_canvas = eg[self.a_key]
+            answer_canvas = ""
+            if self.r_key in eg:
+                answer_canvas += f"{eg[self.r_key]}\nThe answer is: "
+            answer_canvas += eg[self.a_key]
         elif self.scenario == Scenario.multiple_choice_qa:
             canvas += f"Q: {eg[self.q_key]}\n\n"
             letters = string.ascii_letters.upper()

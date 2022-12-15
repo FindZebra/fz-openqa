@@ -92,6 +92,7 @@ datamodule:
     - answer.target
     - question.row_idx
     - question.text
+    - question.reasoning
     - question.input_ids
     - question.attention_mask
     - question.token_type_ids

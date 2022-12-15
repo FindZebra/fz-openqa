@@ -36,6 +36,10 @@ class TextField(BaseModel):
             return infer_shape(self.text)
 
     @classmethod
+    def from_text(cls, txt: str):
+        return cls(text=txt)
+
+    @classmethod
     def from_field(cls, field: str, data: Dict):
         prefix = f"{field}."
         data_field = {
@@ -122,6 +126,13 @@ def format_generative_qa_eg(eg, tokenizer, **kwargs):
     question = TextField.from_field("question", eg)
     question_str = question.pretty_decode(style="deep_sky_blue3", tokenizer=tokenizer)
     canvas = f"Question: {question_str}"
+
+    # reasoning
+    rich.print(f">> EG: {eg.keys()}")
+    cot = TextField.from_text(eg.get("question.reasoning", None))
+    if cot.exists:
+        cot_str = cot.pretty_decode(style="cyan", tokenizer=tokenizer)
+        canvas += f"\nReasoning: {cot_str}"
 
     # answers
     answer = TextField.from_field("answer", eg)

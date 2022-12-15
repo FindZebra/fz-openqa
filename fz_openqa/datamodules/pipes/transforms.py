@@ -297,6 +297,7 @@ class LanguageModellingTransform(Pipe):
         self.multi_doc = multi_doc
         self.input_keys = [
             f"{self.question_field}.text",
+            f"{self.question_field}.reasoning",
             f"{self.answer_field}.text",
             f"{self.answer_field}.target",
             f"{self.document_field}.text",
@@ -412,6 +413,7 @@ class LanguageModellingTransform(Pipe):
                 target_shape = document_shape
                 for key in [
                     f"{self.question_field}.text",
+                    f"{self.question_field}.reasoning",
                     f"{self.answer_field}.text",
                     f"{self.answer_field}.target",
                 ]:

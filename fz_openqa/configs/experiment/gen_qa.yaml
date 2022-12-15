@@ -1,0 +1,5 @@
+# @package _global_
+
+defaults:
+  - gen_mc_qa
+  - override /datamodule/preprocessing_op: mc_to_generative
