@@ -1,4 +1,3 @@
-from copy import copy
 from copy import deepcopy
 from pathlib import Path
 from typing import Dict
@@ -50,6 +49,7 @@ class GenerateCompletionsCallback(Callback):
         log_dir: str = None,
         generate_kwargs: Optional[Dict] = None,
         verbose: bool = True,
+        batch_size: int = 50,
         n_samples: int = 10,
     ):
         super(GenerateCompletionsCallback, self).__init__()
@@ -61,6 +61,7 @@ class GenerateCompletionsCallback(Callback):
         self.tokenizer_right.truncation_side = "right"
         self.log_dir = log_dir
         self.verbose = verbose
+        self.batch_size = batch_size
         self.n_samples = n_samples
 
         generate_kwargs_ = {"temperature": 0.0, "max_new_tokens": 100, "num_beams": 1}
@@ -79,7 +80,7 @@ class GenerateCompletionsCallback(Callback):
         if batch_idx == 0 and dataloader_idx == 0:
             return self.on_first_validation_batch_start(trainer, pl_module, batch)
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def on_first_validation_batch_start(
         self,
         trainer: "pl.Trainer",
@@ -107,11 +108,15 @@ class GenerateCompletionsCallback(Callback):
             "pad_token_id": self.tokenizer_left.pad_token_id,
         }
         questions = move_data_to_device(questions, pl_module.device)
-        generated = reader.generate(
-            inputs=questions["input_ids"],
-            attention_mask=questions["attention_mask"],
-            **gen_kwargs,
-        )
+        generated = []
+        for i in range(0, questions["input_ids"].size(0), self.batch_size):
+            generated_i = reader.generate(
+                inputs=questions["input_ids"][i : i + self.batch_size],
+                attention_mask=questions["attention_mask"][i : i + self.batch_size],
+                **gen_kwargs,
+            )
+            generated.append(generated_i)
+        generated = torch.cat(generated, dim=0)
 
         # decode the completions and format them
         in_q_len = questions["input_ids"].size(1)

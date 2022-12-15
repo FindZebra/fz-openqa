@@ -2,5 +2,6 @@ generate_completions:
   _target_: fz_openqa.callbacks.GenerateCompletionsCallback
   tokenizer: ${datamodule.reader_tokenizer}
   log_dir: ${getcwd:}/completions/
-  n_samples: 10
+  n_samples: 50
+  batch_size: ${base.eval_device_batch_size}
   verbose: false
