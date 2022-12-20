@@ -1,0 +1,12 @@
+# @package _global_
+
+base:
+  infer_batch_mul: 1000
+
+datamodule:
+  n_documents: 3
+
+model:
+  reader_id: gpt2-large
+  module:
+    eval_chunksize: 1000

@@ -4,8 +4,9 @@ base:
   infer_batch_mul: 500
 
 datamodule:
-  n_documents: 4
+  n_documents: 3
 
 model:
+  reader_id: gpt2-medium
   module:
     eval_chunksize: 500
