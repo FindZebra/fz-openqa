@@ -7,6 +7,7 @@ language_model:
   document_field: document
   output_field: lm
   multi_doc: false
+  use_reasoning: false
   tokenizer_kwargs:
     max_length: ${datamodule.lm_max_length}
   update: true

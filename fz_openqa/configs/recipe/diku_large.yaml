@@ -1,0 +1,11 @@
+# @package _global_
+
+base:
+  infer_batch_mul: 500
+
+datamodule:
+  n_documents: 4
+
+model:
+  module:
+    eval_chunksize: 500

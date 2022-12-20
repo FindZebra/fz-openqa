@@ -14,6 +14,7 @@ from pytorch_lightning import Callback
 from pytorch_lightning.utilities import move_data_to_device
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizerFast
+from transformers.utils import PaddingStrategy
 from warp_pipes import Batch
 from warp_pipes.support.pretty import get_console_separator
 
@@ -116,8 +117,11 @@ class GenerateCompletionsCallback(Callback):
                 **gen_kwargs,
             )
             generated.append(generated_i)
-        generated = torch.cat(generated, dim=0)
-
+        generated = self.tokenizer_right.pad(
+            [{"input_ids": y} for x in generated for y in x],
+            padding=PaddingStrategy.MAX_LENGTH,
+            return_tensors="pt",
+        ).input_ids
         # decode the completions and format them
         in_q_len = questions["input_ids"].size(1)
         decode_kwargs = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
@@ -126,7 +130,7 @@ class GenerateCompletionsCallback(Callback):
             q_ids = gen[:in_q_len]
             q_str = self.tokenizer_left.decode(q_ids, **decode_kwargs)
             a_str = self.tokenizer_left.decode(answers["input_ids"][i], **decode_kwargs)
-            comp_str = self.tokenizer_left.decode(gen[in_q_len:], skip_special_tokens=False)
+            comp_str = self.tokenizer_left.decode(gen[in_q_len:], **decode_kwargs)
             comp = Completion(
                 question=q_str,
                 answer=a_str,

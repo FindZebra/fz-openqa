@@ -285,6 +285,7 @@ class LanguageModellingTransform(Pipe):
         document_field: str = "document",
         output_field: str = "lm",
         multi_doc: bool = False,
+        use_reasoning: bool = False,
         tokenizer_kwargs: Optional[Dict] = None,
         update: bool = True,
         **kwargs,
@@ -295,6 +296,7 @@ class LanguageModellingTransform(Pipe):
         self.document_field = document_field
         self.output_field = output_field
         self.multi_doc = multi_doc
+        self.use_reasoning = use_reasoning
         self.input_keys = [
             f"{self.question_field}.text",
             f"{self.question_field}.reasoning",
@@ -336,7 +338,10 @@ class LanguageModellingTransform(Pipe):
         eg = {k: v[0] for k, v in batch.items()}
         scenario: Scenario = infer_scenario(eg)
         template_generator = LanguageModellingTemplateGenerator(
-            scenario=scenario, question_field=self.question_field, answer_field=self.answer_field
+            scenario=scenario,
+            question_field=self.question_field,
+            answer_field=self.answer_field,
+            use_reasoning=self.use_reasoning,
         )
 
         # convert the question, answer and document texts into a single string

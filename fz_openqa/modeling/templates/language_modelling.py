@@ -27,6 +27,7 @@ class LanguageModellingTemplateGenerator:
         question_field: str = "question",
         answer_field: str = "answer",
         document_field: str = "document",
+        use_reasoning: bool = False,
     ):
         self.scenario = scenario
         self.q_key = f"{question_field}.text"
@@ -34,6 +35,7 @@ class LanguageModellingTemplateGenerator:
         self.a_key = f"{answer_field}.text"
         self.d_key = f"{document_field}.text"
         self.a_target_key = f"{answer_field}.target"
+        self.use_reasoning = use_reasoning
         self.required_keys = [self.q_key, self.a_key]
         if scenario == Scenario.multiple_choice_qa:
             self.required_keys.append(self.a_target_key)
@@ -53,7 +55,7 @@ class LanguageModellingTemplateGenerator:
         if self.scenario == Scenario.generative_qa:
             canvas += f"Q: {eg[self.q_key]}\nA: "
             answer_canvas = ""
-            if self.r_key in eg:
+            if self.use_reasoning and self.r_key in eg:
                 cot = eg[self.r_key]
                 if cot is not None and len(cot):
                     if cot[-1] == ".":
