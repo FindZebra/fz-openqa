@@ -25,7 +25,7 @@
 1. Install poetry
 
 ```shell
-curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+curl -sSL https://install.python-poetry.org | python -
 ```
 
 2. Install dependencies (within the project directory `fz-openqa/`)
