@@ -11,6 +11,10 @@
 <a href="https://hydra.cc/"><img alt="Config: hydra" src="https://img.shields.io/badge/config-hydra-89b8cd?style=for-the-badge&labelColor=gray"></a>
 <a href="https://black.readthedocs.io/en/stable/"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-black.svg?style=for-the-badge&labelColor=gray"></a>
 
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/variational-open-domain-question-answering/question-answering-on-medqa-usmle)](https://paperswithcode.com/sota/question-answering-on-medqa-usmle?p=variational-open-domain-question-answering)
+
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/variational-open-domain-question-answering/multiple-choice-question-answering-mcqa-on-21)](https://paperswithcode.com/sota/multiple-choice-question-answering-mcqa-on-21?p=variational-open-domain-question-answering)
+
  </div>
 
 ## Abstract
