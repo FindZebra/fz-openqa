@@ -1,7 +1,9 @@
 <div align="center">
 
-> **Warning** Work in progress
+> **Warning** We are currently working on extending this code to other NLP tasks at [VodLM](https://github.com/VodLM).
 
+ > **Note** Find an implementation of the sampling methods and the VOD objective [VodLM/vod](https://github.com/VodLM/vod).
+ 
 # Variational Open-Domain Question Answering
 
 <p align="center">
