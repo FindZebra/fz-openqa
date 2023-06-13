@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fz-openqa"
-version = "0.2.1"
+version = "0.2.2"
 description = "Medical Open Domain Question Answering"
 authors = ["Valentin Liévin <valentin.lievin@gmail.com>"]
 
